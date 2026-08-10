@@ -8,7 +8,13 @@ load-bearing summary.
 
 A **monorepo** (npm workspaces + Turborepo) of Blackcode's internal apps:
 
-- **`apps/issues`** — an AI-native, Linear-style issue tracker. The product.
+**Two apps are in production**, on one database and one login —
+`issues.blackcode.ch` and `sales.blackcode.ch` (live 2026-08-10).
+
+- **`apps/issues`** — an AI-native, Linear-style issue tracker. The first app.
+- **`apps/sales`** — prospects, meetings, communications. The second app, and the
+  reason the platform is shaped the way it is: it was the second question every
+  shared thing had ever been asked.
 - **`apps/_scaffold`** — the scaffold. A real, minimal app that builds and passes
   every guardrail. **Copy it to add an app; do not edit it in place.**
 
@@ -19,7 +25,8 @@ Run every command from the **repo root**; Turborepo delegates into the workspace
 
 **The platform migration is finished — all nine phases (0–8) have landed.**
 `packages/platform-{db,api,ui,auth,agent,storage,testing}` exist; the database is
-`platform.*` + `issues.*` (never `public`) with a bounded per-app role; apps are
+`platform.*` + `issues.*` + `sales.*` (never `public`), one bounded role per app;
+apps are
 real data and every workspace-scoped route enforces per-app access; the CLI,
 guide, changelog, `bk meta` and docs are split per app; everything is addressable
 by URN; storage is shared, app-prefixed and reference-counted across apps.
