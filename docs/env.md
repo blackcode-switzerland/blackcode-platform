@@ -71,12 +71,31 @@ DATABASE_URL="<new-url>" npm run db:migrate
 > apps work in isolation, nothing appears in the logs, and the symptom is one
 > person saying "it keeps asking me to sign in again". **Provisioning a new app
 > is where this gets got wrong**, because generating a secret is what every
-> NextAuth guide tells you to do:
+> NextAuth guide tells you to do.
+>
+> ### But you may not be able to copy it. Check before you plan around copying.
+>
+> This value is typically stored as a **sensitive** variable, and Vercel will not
+> reveal one — not in the dashboard, and not to `vercel env pull`, which writes
+> the literal string `[SENSITIVE]` in place of the value. Found on 2026-08-10
+> while provisioning the second app; the instruction here until then was "copy
+> it", with no way to.
 >
 > ```bash
-> vercel env pull                              # from an EXISTING app's project
-> vercel env add NEXTAUTH_SECRET production    # paste the SAME value verbatim
+> vercel env pull .env.check       # from an EXISTING app's project
+> grep NEXTAUTH_SECRET .env.check  # a real value, or "[SENSITIVE]"?
 > ```
+>
+> - **A real value** → paste it verbatim into the new project. Done.
+> - **`[SENSITIVE]`** → there is nothing to copy. **Rotate instead:** generate ONE
+>   new value and set it on EVERY project, then redeploy every project. Follow
+>   *How to rotate* below — it is the same procedure, and the requirement it
+>   satisfies is unchanged: all apps hold the same value. Whether that value is
+>   the old one is irrelevant.
+>
+> Rotating signs everyone out once, so prefer to do it on a day when a sign-out
+> is already happening — the deploy that introduces `AUTH_COOKIE_DOMAIN` signs
+> everyone out anyway, and that is the cheapest moment to absorb it.
 
 **How to rotate** (e.g. if compromised — invalidates every active session, in
 every app, and signs everyone out once):
@@ -103,6 +122,13 @@ vercel env add NEXTAUTH_SECRET production --value "<the same new secret>" --yes
 Rotating one app and not the others produces exactly the split-brain above,
 except now it is the app you *did* rotate that cannot read anyone's cookie.
 `./devops/release.sh apps` is the authoritative list.
+
+**Setting the variable is not the change; the redeploy is.** A build that has
+already happened keeps serving the value it was built with, so between the
+`env add` and the redeploy the apps genuinely disagree. This bites hardest when
+one of the apps is NEW: it goes live on the new secret while every existing app
+is still serving the old one, and the split-brain looks identical to having
+mistyped the value. Redeploy every app before testing sign-in-once behaviour.
 
 ---
 
