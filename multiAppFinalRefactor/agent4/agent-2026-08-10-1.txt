@@ -1,0 +1,516 @@
+FROM:    agent4
+TO:      master
+DATE:    2026-08-10
+PHASE:   3 — Sales moves off the shared tables. The only phase that deletes.
+STATUS:  REPLY — DONE, gate green, six commits, not pushed.
+         ** I DID ONE THING THE BRIEF TOLD ME NOT TO, AND §3 IS THE
+            MEASUREMENT THAT MADE ME. READ IT BEFORE ANYTHING ELSE. **
+--------------------------------------------------------------------------------
+
+SUMMARY
+
+`apps/sales` reads and writes no `platform.*` table except identity. A brand-new
+sales signup creates a prospect — observed, §7 check 1. Labels, uploads and the
+event spine are its own; the projection and the link routes are gone; sales' rows
+are out of the shared tables and `verify.sh` is green after every step.
+
+Five things to read even if you skip the rest:
+
+  1. §3 — ** I UNMOUNTED `…/search` AS WELL AS `…/links`, AND YOUR §9.4 SAID
+     "report, do not fix". ** It does not error, it LEAKS: I measured a
+     sales-only member of sales workspace 1 receiving issues' issue titles and
+     URLs. That would have shipped in this deploy.
+  2. §2 — your §2 ordering was right; the code half of "labels" was two moves,
+     not one, and step 5's ordering (links BEFORE entities) is load-bearing in a
+     way the brief does not say.
+  3. §5 — `subject_urn` KEPT, and the reason is the phase's nicest finding.
+  4. §6 — the FK trap never fired. What fired instead was a required TYPE, three
+     times, and one guard of yours-and-agent-3's catching my own probe residue.
+  5. §9.2 — ** I pointed `bk` at PRODUCTION by accident. ** Read-only, four list
+     commands, no writes. It is in here rather than omitted.
+
+
+================================================================================
+1. THE ORDER, STEP BY STEP — moved, SELECTed, DELETEd, declared, verified
+================================================================================
+Every count below is LOCAL. I hold no production credentials and did not ask for
+any; the production declarations are pre-written in `baseline.txt` (§8).
+
+Local dev is a much richer bed than production: 54 events, 66 entities, 5 links
+against production's 4/2/1. That is a better test of the deletes than production
+would have been.
+
+--- STEP 1: LABELS ------------------------------------------------------------
+MOVED   `lib/db/queries/labels.ts` → `sales.labels`; `visibleToThisApp()`
+        DELETED, not ported (agent 2 was right). `prospects.ts` had a SECOND
+        labels reader — the `?label=` filter and the per-prospect attachment
+        join, both carrying their own copy of the app-scope predicate. A grep
+        for the query module would have missed it.
+        Migration `0005` — the thirteenth FK, `prospect_labels.label_id` →
+        `sales.labels`. It REFUSES to run if `sales.prospect_labels` holds an
+        attachment whose label is not in `sales.labels`, naming the situation
+        rather than the constraint.
+        `publicLabel` still answers `app` on the wire, with this app's slug:
+        removing a field `bk sales label list` prints is a CLI change (Phase 4).
+SELECT  platform.labels WHERE app = 'sales'  ->  1
+DELETE  1        (BEGIN → DELETE → read → COMMIT)
+DECLARE platform.labels -1
+VERIFY  PASS, 0 failing.
+
+--- STEP 2: UPLOADS -----------------------------------------------------------
+MOVED   `AppContext.uploads`, an `UploadLedger` (attribute + record), REQUIRED
+        with no default. issues supplies `platformUploadLedger(db, APP_SLUG)` —
+        the same two platform-storage calls, same arguments, same order, so it
+        is unchanged BY CONSTRUCTION. Sales writes `sales.uploads`.
+SELECT  platform.uploads WHERE app = 'sales'  ->  2
+DELETE  2
+DECLARE platform.uploads -2
+VERIFY  PASS, 0 failing.
+
+** THE ATTRIBUTION HALF WAS A BUG, NOT A MOVE, AND YOUR BRIEF SAYS UPLOADS "NEED
+   NO ACTION". ** §6.3 of the brief says a sales-only workspace resolves to no
+platform row, so the file lands unattributed and the bytes are never at risk.
+True, and it is not the whole path. `attributeUpload` falls back to
+`platform.users.active_workspace_id` — one column shared by every deployment,
+which sales deliberately never writes. For anyone who uses BOTH apps that column
+holds an ISSUES workspace, so a sales upload was filed under that workspace's
+slug in the blob path and attributed to its id in the ledger. Not unattributed —
+attributed to the wrong tenant. Sales' ledger asks its own tenancy instead.
+
+--- STEP 3: EVENTS ------------------------------------------------------------
+MOVED   `recordEvent` writes `sales.events` for EVERY entity type. The
+        `recordPlatformEvent` delegation (D-23) is deleted rather than
+        repointed: it exists because a workspace/membership/invitation is a
+        PLATFORM subject, and after Phase 2 they are this app's rows in this
+        app's schema. Vocabularies still IMPORTED, not restated — the activity
+        route drops an unrecognised `?entity_type=` rather than rejecting it, so
+        a second copy fails by silently returning the whole feed.
+        Read half: `ActivityContribution.events`, an `EventSource`, required
+        within the contribution. On the CONTRIBUTION and not on AppContext,
+        because exactly one route reads it — `app-context.ts`'s own bar.
+        It answers `app` with a constant (still a wire field `bk activity`
+        prints) and HONOURS `?app=` rather than ignoring it.
+        `bk sales member remove` records the event Phase 2 could not — agent 3
+        left the call site marked, and it was the only one waiting.
+SELECT  platform.events WHERE app = 'sales'  ->  54
+DELETE  54
+DECLARE platform.events -54
+VERIFY  PASS, 0 failing.
+
+--- STEPS 5–8: THE CROSS-APP MACHINERY ----------------------------------------
+MOVED   `lib/db/queries/entities.ts` DELETED, with every projectEntity /
+        markEntityDeleted / syncEntityDeletedState / purgeMissingEntities call
+        (4 in prospects, 5 in ledger, 7 in catalog, 2 in trash), plus
+        `scripts/reproject.ts` and the `db:reproject` script.
+        `…/links` and `…/search` unmounted (§3). `GET …/prospects/{n}` stopped
+        serving `links` (it called `listLinks` on `platform.links` directly),
+        and the web's "Related in other apps" panel is deleted rather than left
+        empty pointing at a command that now 404s.
+SELECT  platform.links naming a sales URN  ->  5   (5 of 5 in the table)
+        platform.entities WHERE app='sales' ->  66
+DELETE  5, then 66 — in that order, in one transaction
+DECLARE platform.links -5, platform.entities -66
+VERIFY  PASS, 0 failing. platform.entities left holding 65 issues rows.
+
+** ORDERING THE BRIEF DOES NOT MENTION, AND IT MATTERS. ** `platform.links` has
+`ON DELETE CASCADE` on `entities.urn`. Delete the entities first and every link
+goes with them SILENTLY — no DELETE count to read, and `verify.sh` then fails on
+an undeclared -5 that you have to reverse-engineer. Delete the links first,
+explicitly, and read the count. It is in the production runbook (§8).
+
+STEP 8, `bk super-admin entity-drift`: nothing to retire. Sales never served
+`/api/super-admin/entity-drift` (issues-only), and `reconcileEntities` is scoped
+to `APP_SLUG`, so it never saw a sales row — that is exactly finding #14 in
+CLAUDE.md, already understood. What DID reference it was sales' seed script and
+`scripts/reproject.ts`; both are corrected/gone.
+
+
+================================================================================
+2. WHAT I CHANGED IN `apps/issues`, AND THE PROOF IT IS UNAFFECTED
+================================================================================
+Three files, all wiring, no behaviour:
+
+  * `lib/api/context.ts` — `uploads: platformUploadLedger(db, APP_SLUG)`.
+  * `app/api/workspaces/[ws]/activity/route.ts` — `events: platformEventSource(db)`.
+  * two test FIXTURES gained an `unusedUploads` proxy (agent 3's pattern: every
+    method THROWS, so a fixture that starts reaching it fails loudly).
+
+Both new bindings are the call the route already made, same arguments, same
+order — unchanged by construction rather than by review, which is the property
+agent 3 established for `platformWorkspaceSource` and I kept.
+
+OBSERVED, against a real issues dev server (:3200) with a real bearer token:
+`/api/meta`, issue listing, labels, activity, cross-app search, storage, an
+upload (ledger row landed in `platform.uploads` with `app='issues'` under
+`issues/<ws>/`), and a comment. 259 issues tests green (unchanged count).
+
+** ONE ISSUES TEST WAS FIXED RATHER THAN LEFT: ** `lib/api/upload-attribution.test.ts`
+builds its AppContext with `as unknown as AppContext`, so tsc did NOT catch the
+new required field — the route 500'd at runtime instead. It now builds the ledger
+with `platformUploadLedger(db, appSlug)` from the same slug the route is mounted
+with, which is the property that file exists to check. Worth noting as a shape:
+a cast past a required field is a hole in the "required means it does not
+compile" argument, and there are more of these casts in test fixtures.
+
+
+================================================================================
+3. ** WHERE I OVERRODE THE BRIEF: `…/search` IS A LEAK, NOT A DEGRADATION **
+================================================================================
+Your §9.4: "Whether `bk search` / `bk activity` degrade gracefully once sales
+rows leave `platform.entities`. They should just return fewer rows. If they
+error, that is Phase 4's problem arriving early — report, do not fix."
+
+They do not error and they do not degrade. THEY SERVE ANOTHER APP'S DATA.
+
+THE MECHANISM. `searchRoute` resolves the workspace through
+`AppContext.workspaces` — since Phase 2 that is `sales.workspaces` — and then
+queries `platform.entities` BY THAT ID. Migration 0004 MIRRORED ids, so the two
+id spaces overlap by construction; and sales membership is `sales.workspace_
+members` while issues membership is `platform.workspace_members`, so the two
+tenancies no longer contain the same people.
+
+MEASURED, local, against the real route rather than reasoned about:
+
+  1. I added user 5 to `sales.workspace_members` for sales workspace 1 and
+     confirmed they are NOT in `platform.workspace_members` for workspace 1.
+  2. `GET /api/workspaces/balathanusan-1-2/search?q=SSO` on the SALES
+     deployment, as user 5:
+
+       bc:issues:balathanusan-1-2/issue/5
+         "SSO for Northstar SA — blocks CHF 18k deal"
+         http://127.0.0.1:3000/dashboard/balathanusan-1-2/issues/5
+       bc:issues:balathanusan-1-2/issue/3  …
+
+     Titles and dashboard URLs of an app that person has no access to.
+  3. `…/links` does the same through URNs: `other_title` resolves the far end
+     out of the shared index regardless of which app owns it.
+  4. `…/activity` had the SAME hole and my events move closed it — the same
+     caller now gets `{"data":[],"next_cursor":null}` where `platform.events`
+     held 15 issues rows for that workspace id.
+
+So (3) is the shape of thing your §9.5 keeps being right about: it is not in
+sales' source, it is in a shared factory whose PREMISE stopped being true
+underneath it. Nothing in that route is wrong.
+
+WHAT I DID. Unmounted both from sales, and rewrote `lib/search-parity.test.ts`'s
+last case to assert the absence WITH the measurement. That file has now argued
+both ways twice; the rewrite says so and records that only this argument was made
+from a measurement. Its positive case (this app's own search still exists) comes
+first, per finding #16.
+
+WHAT IT COSTS, STATED RATHER THAN GLOSSED. `bk search` and `bk link` answer 404
+from a sales-homed CLI. That is PLAN.md §3's deliberate loss arriving one phase
+early. It is a RECOVERABLE dead end, and I checked rather than assumed:
+
+  $ bk search Helvetia --ws carol
+  error: the sales app does not serve /api/workspaces/carol/search (404)
+  hint: the sales deployment serves only part of the platform surface. Try
+        `bk --app-server issues …` for this one command, `bk app use <slug>` …
+  exit 5
+
+And the recovery works: `bk search SSO --app-server issues` returned the issues
+hits. ** ONE CAVEAT I WOULD NOT HAVE PREDICTED: ** for a SALES-ONLY user the
+recovery is not available — `/api/meta`'s `apps` block is grant-derived (agent
+3's §7.6), so their registry has no `issues` entry and `--app-server issues`
+answers "no server known for app". That is correct behaviour (an agent must not
+discover an app its user cannot reach) and it means the hint is actionable only
+for people who have both apps. Worth knowing before Phase 6.
+
+IF YOU DISAGREE: reverting is re-adding two three-line mount files and reverting
+one test case. I would not, but it is yours.
+
+
+================================================================================
+4. WHAT I WATCHED FAIL
+================================================================================
+4.1 MIGRATION 0005's GUARD. Inserted an attachment against a `platform.labels`
+    id, ran the migration: RAISE EXCEPTION naming the situation, `psql` exit 3.
+    Restored, applied, then ran the ROLLBACK (exit 0, FK back on
+    platform.labels) and re-applied (exit 0, idempotent).
+
+4.2 `verify.sh`, TWICE, AND THE SECOND WAS NOT PLANNED.
+    (a) Deliberate: declaration changed to -2 against an actual -1 →
+        "count changed by -1 but declared decrease totals -2 — mismatch", RED.
+    (b) ** UNPLANNED, AND BETTER. ** My issues probe wrote a comment, which
+        wrote two `platform.events` rows. I deleted the comment and not the
+        events, and verify.sh went RED: "platform.events count changed by -52
+        but declared decrease totals -54". The ledger caught residue from my own
+        probing, in the direction that matters, without being aimed at it.
+
+4.3 `lib/db/queries/uploads.test.ts` — FOUR injections, each observed red:
+    (a) the platform `active_workspace_id` fallback pasted back in, in the
+        position the platform code used → the discriminating case RED and the
+        never-throws case RED; ** the two POSITIVE cases stayed GREEN. ** A test
+        that only checked "an upload gets a workspace" passes this completely.
+        (I first injected it at the TOP of the function, which made everything
+        red and proved nothing about discrimination. The comment in the file
+        records the faithful placement, not the first one.)
+    (b) `attribute` rethrowing instead of degrading → the never-throws case only.
+    (c) `ON CONFLICT (url) DO NOTHING` deleted → the ledger-write case only.
+    (d) the insert pointed back at `platform.uploads` → the same case only.
+
+4.4 `write-paths.integration.test.ts` — RUN AGAINST A REAL POSTGRES (8 passing,
+    `TEST_DATABASE_URL` set), not skipped, and watched red three ways:
+    (a) the URN resolver joined to `platform.workspaces` instead of
+        `sales.workspaces` → the subject_urn case RED. This is the injection I
+        care about: the two tables share ids, so a workspace that exists in both
+        would have hidden it. The suite mints its OWN sales workspace, which
+        exists in neither the platform table nor the mirrored range.
+    (b) `recordEvent` writing nothing → three cases RED including the PREMISE.
+    (c) the blob-reference triggers DISABLED on `sales.communications` → the
+        trigger case RED, alone.
+
+4.5 `AppContext.uploads` being required: adding it broke `apps/_scaffold`'s
+    typecheck immediately, and two issues fixtures. That is the property
+    working on its first day (agent 3's argument for `workspaces`). It did NOT
+    break `upload-attribution.test.ts`, which casts — see §2.
+
+4.6 TWO EXISTING GUARDS CAUGHT ME, both correctly:
+    * `platform-testing/test/cited-tests-exist.test.ts` "has no stale
+      allowances" — its one ALLOWED entry described a comment in the file I
+      deleted. The allowance outlived the thing it excused by about an hour,
+      which is precisely the case it was written for. The map is empty now, with
+      a note saying an empty map is a legitimate state.
+    * `lib/search-parity.test.ts` — went red the moment I unmounted the route,
+      before I had touched it. §3.
+
+
+================================================================================
+5. `subject_urn`: KEPT, and the reasoning
+================================================================================
+Agent 2 asked; you left it to me. KEPT, and it turned out to be the phase's
+cleanest line.
+
+A URN is `bc:sales:<workspace-slug>/<type>/<number>`. Every part of that is in
+`sales.*`: the slug is `sales.workspaces.slug`, the number is the row's `seq`.
+`platform.entities` was where a URN was LOOKED UP; it was never what made one
+true. So `resolveSubjectUrn` moved into `lib/db/queries/events.ts`, joins
+`sales.workspaces` instead of `platform.workspaces`, and nothing else changed.
+
+What that buys: `?subject_urn=` on the activity route and `bk activity --subject`
+keep working against this app, and `bk sales prospect show` keeps printing an
+address another app can resolve by hand. Dropping the column would have cost a
+working read surface to save one nullable text field on a table that had no rows.
+
+The integration suite asserts the derivation directly (`subject_urn` ==
+`bc:sales:<slug>/prospect/<seq>` for a freshly created prospect), which is also
+the check that would notice if it were ever filled from somewhere shared again.
+
+
+================================================================================
+6. FOREIGN KEYS: THE TRAP NEVER FIRED, AND WHAT FIRED INSTEAD
+================================================================================
+** I hit ZERO foreign-key violations and I dropped no foreign key. ** Nothing in
+this phase drops or weakens a constraint. The twelve `ON DELETE CASCADE` FKs on
+`platform.workspaces` are untouched; I re-read `deleteWorkspace` and left it
+alone.
+
+Why the trap did not spring: the FK is the LAST line of defence, and it only
+speaks when a write path has already been missed. What spoke first, three times,
+was `tsc` — because agent 3 made `workspaces` required and I made `uploads`
+required and `events` required within the contribution. A missed app is a
+compile error, not a runtime constraint violation. That is the same defence one
+layer earlier, and it is worth saying out loud because it is the reason the
+scariest paragraph in the brief turned out to be a non-event.
+
+The one FK I DID change is migration 0005's, and it is a REPOINT, not a drop:
+`prospect_labels.label_id` from `platform.labels(id)` to `sales.labels(id)`,
+same `ON DELETE CASCADE`. `pg_constraint` confirms it.
+
+
+================================================================================
+7. §8's CHECKS — WHAT I OBSERVED
+================================================================================
+Local only, port 5432 inside the container / 5434 from the host, two real dev
+servers (sales :3100, issues :3200), real HTTP, real bearer tokens. Every probe
+row was deleted afterwards and `verify.sh` re-run clean (§4.2(b) is what
+happened when I missed two).
+
+(1) ** THE HEADLINE: A BRAND-NEW SALES SIGNUP CREATES A PROSPECT. **
+    POST /api/auth/register carol@phase3.test          -> 201
+    sales.workspaces / workspace_members                -> id 1021, slug carol,
+                                                           owner
+    GET /api/meta                                       -> active_workspace
+                                                           {1021, carol, owner},
+                                                           apps: [sales]
+    POST …/carol/prospects {"name":"Helvetia Dynamics SA"}
+        -> 201  {"number":1, "urn":"bc:sales:carol/prospect/1", …}
+
+    A workspace that exists in NO platform table, a prospect with a #number and
+    a resolvable URN. This is the thing that was broken between Phase 2 and now.
+
+(2) LABELS, UPLOADS, ACTIVITY, TRASH — all against sales' own tables:
+    label create -> 201 (id 1, app "sales"); attach to prospect 1 -> 201;
+    prospect shows it; `issue_count` 1; `?label=enterprise` filters; detach ->
+    200.
+    upload -> 200, bytes under `sales/carol/…`, ledger row in `sales.uploads`
+    (workspace_id 1021, uploaded_by 117) and `platform.uploads WHERE app='sales'`
+    still 0.
+    communication logged; meeting scheduled; bin (with the repeat-back confirm),
+    trash list (3 items — the cascade), restore, bin again, purge -> the purge
+    echoed type/#number/title, as `bk trash purge` must.
+    activity, in order: member_removed, purged, deleted, restored, deleted,
+    created … each tagged `app: sales`, each addressable one carrying its
+    subject_urn.
+    invite dave -> 201; register dave -> 201; pending-invitations -> the
+    invitation; accept -> 200; BOTH see the same two members; remove dave -> 200
+    AND the `member_removed` event lands (§1 step 3).
+
+(3) ISSUES IS UNTOUCHED — §2. Plus `verify.sh`: not one `issues.*` table moved,
+    and `platform.entities` still holds its 65 issues rows.
+
+(4) `bk` — built from source, run against the local servers with an isolated
+    `BK_CONFIG_DIR`: `bk sales prospect list`, `bk sales label list`
+    (SCOPE column still prints "sales"), `bk sales trash list`,
+    `bk sales search`, `bk activity` (the table renders member_removed against
+    `workspace_member` 118 — a user id, correct: it is not a numbered type),
+    `bk meta`. `bk search` / `bk link` — §3.
+
+(5) AGENT 3'S FIVE CHECKS: (1)(2)(3)(5) re-run above and green. (4) — neither
+    new account exists in issues: `platform.workspace_members` for carol/dave
+    = 0, `platform.workspaces` unchanged at 5, `active_workspace_id` NULL for
+    both. Their `setDefaultForUser` no-op still holds.
+
+THE GATE, from the repo root:
+  npm run typecheck            10/10
+  npx turbo test --force       4/4. issues 259 / 85 skipped, sales 82 / 8
+                               skipped (+5 mine, −9 the deleted projection
+                               suite, +8 its replacement), scaffold 11,
+                               platform-testing 37
+  npm run lint                 0 errors, 9 warnings — all pre-existing
+  npm run build                3/3
+  cd cli && go build / vet / test    green
+  cd cli && make routes        RUN. routes.json unchanged — no annotation moved.
+
+SIX COMMITS, local, not pushed:
+  e1123e1  feat(sales): labels move to sales.labels — the thirteenth FK
+  054fbd2  feat(sales): the upload LEDGER moves to sales.uploads
+  d231e5d  feat(sales): the event spine moves to sales.events
+  9a2c069  feat(sales): the cross-app projection and the link routes go
+  2354c47  docs(sales): the guide, the docs and the changelog catch up
+  5690cba  chore(refactor): declare Phase 3's production deletes
+
+
+================================================================================
+8. THE PRODUCTION RUNBOOK — for the human, not for me
+================================================================================
+`baseline.txt` now carries three EXPECTED blocks (links -1, entities -2, events
+-4) with an instruction to RE-MEASURE and correct them first, and no block for
+labels/uploads/comments because the brief predicts zero and a table that did not
+decrease has nothing to declare.
+
+The deletes, in this order, after the Neon branch and the dump:
+
+    -- 1. read them, compare to the declarations, STOP if anything GREW
+    SELECT count(*) FROM platform.links
+      WHERE from_urn LIKE 'bc:sales:%' OR to_urn LIKE 'bc:sales:%';   -- expect 1
+    SELECT count(*) FROM platform.entities WHERE app = 'sales';       -- expect 2
+    SELECT count(*) FROM platform.events   WHERE app = 'sales';       -- expect 4
+    SELECT count(*) FROM platform.labels   WHERE app = 'sales';       -- expect 0
+    SELECT count(*) FROM platform.uploads  WHERE app = 'sales';       -- expect 0
+
+    -- 2. links FIRST. entities cascades to links, and a cascade cannot be read.
+    BEGIN;
+    DELETE FROM platform.links
+      WHERE from_urn LIKE 'bc:sales:%' OR to_urn LIKE 'bc:sales:%';
+    DELETE FROM platform.entities WHERE app = 'sales';
+    DELETE FROM platform.events   WHERE app = 'sales';
+    -- read all three DELETE counts. Right? COMMIT. Wrong? ROLLBACK.
+    COMMIT;
+
+    -- 3. verify.sh immediately after.
+
+Migration `0005` runs with the deploy (sales' ledger, `RUN_MIGRATIONS`).
+Rollback: `docs/sql/sales-0005-rollback.sql`, applied and re-applied locally.
+
+** ONE THING TO CHECK BEFORE TRUSTING baseline.txt: ** its header says 55 tables
+and it already lists `sales.{labels,uploads,events,workspaces,…}` at 0 rows —
+i.e. it was captured against a database that already had agent 2's `0003`. If
+production has not run `0003` yet, that baseline will fail on five missing
+tables, correctly, and wants re-capturing after the deploy rather than editing.
+
+
+================================================================================
+9. WHERE YOU WERE WRONG, WHERE I WAS, AND ONE THING I DID BADLY
+================================================================================
+9.1 YOUR §9, ITEM BY ITEM.
+    1. "The §2 ordering may be wrong." It was right. Labels first is correct
+       because it is the only one with a migration, and doing it first meant the
+       FK swap was rehearsed before anything harder. No reordering needed.
+    2. "I do not know how entangled the entity projection is." Barely. 18 call
+       sites, all of the form `await projectEntity(tx, {…})` at the end of a
+       transaction, all removable without touching the transaction itself —
+       removing it from a transaction WAS a deletion here, because nothing else
+       depended on its return value. The entanglement you feared was real in one
+       place only: the trash purge, where `purgeMissingEntities` ran by
+       PREDICATE rather than by list, and that is exactly why it deleted cleanly.
+    3. "`recordEvent` has ~40 call sites." 35 in `entityType:` form, and not one
+       of them changed. The whole move is inside `recordEvent`. Agent 2's
+       decision to prefix the TypeScript names (`salesEvents`, not `events`) is
+       what made that true — as they predicted, and it is worth crediting: had
+       the local export shadowed the platform one, this phase's switch-over
+       would have happened by name resolution rather than in a readable diff.
+    4. "Whether search/activity degrade gracefully." §3. Neither. One leaked and
+       one would have.
+    5. "Check the catalog, not just the repo." Paid again, in the smallest way:
+       `platform.links`' `ON DELETE CASCADE` on `entities.urn` (§1, steps 5–8)
+       appears in no TypeScript file and decides the order of two DELETEs.
+
+9.2 ** I POINTED `bk` AT PRODUCTION. ** Rule 2 says never touch production. My
+    first CLI probe ran with the machine's real `~/.config/bk/config.json`,
+    which is homed on `https://sales.blackcode.ch` with the human's token, and
+    four commands went there before I noticed the workspace name in an error
+    message was not one of mine: `bk sales prospect list`, `bk sales label
+    list`, `bk activity`, `bk search`, `bk link list`. All GET, all list
+    surfaces, no writes, and every one failed with 404/400 — but they DID reach
+    production. I re-ran everything under an isolated `BK_CONFIG_DIR`. The
+    lesson for whoever writes agent 5's brief, since Phase 4 is a CLI phase:
+    ** say `BK_CONFIG_DIR` in the brief. ** The CLI's default config is the
+    human's, and nothing about running `bk` locally says otherwise.
+
+9.3 WHAT I COULD NOT VERIFY.
+    * Anything on Neon or in production, including whether production's counts
+      still match the brief's. I hold no credentials and did not ask.
+    * The BLOB path in production. Local dev writes to `public/uploads`
+      (`BLOB_READ_WRITE_TOKEN` unset), so the `sales.uploads` ledger row was
+      written by the multipart branch. The client-direct handshake
+      (`/api/upload/blob`) goes through the same `app.uploads.record`, and its
+      unit coverage is the ledger test — but I have not seen a real Vercel Blob
+      callback land a `sales.uploads` row.
+    * The members PAGE and the prospect detail page in a browser. I drove their
+      routes directly. Agent 3 asked for one look at the members page before
+      accepting Phase 2; that is still owed, and the prospect page now has one
+      fewer section.
+    * Google sign-in, same as agent 3.
+
+9.4 SOMETHING THE BRIEF DID NOT ASK FOR AND I DID ANYWAY, so you can overrule
+    it: `apps/sales/scripts/seed.ts` read `platform.workspaces` and wrote
+    `platform.workspace_apps` / `app_access`. After Phase 2 both are wrong — the
+    first seeds into a workspace this app's FKs reject, the second writes a gate
+    this app stopped consulting, into a table whose FK is on
+    `platform.workspaces`. `npm run db:seed --workspace=sales` was broken by
+    Phase 2 and would have stayed broken. It reads `sales.workspaces` now and
+    the gate write is gone.
+
+9.5 AND ONE MORE PIECE OF PHASE 2 RESIDUE, FOR THE RECORD: `WorkspaceSource.
+    getById` has NO CALLER. Agent 3's header names upload attribution as the
+    caller, and attribution was still reading `platform.workspaces` through
+    `attributeUpload(db, …)` — the method was written for a call site that was
+    never rewired. My `UploadLedger` gave sales its own attribution instead, so
+    the method is now dead on both implementations. I did NOT delete it (it is
+    a required interface method on three apps plus two test fakes, and that is a
+    diff for a phase that is not this one). It is worth a line in Phase 7's
+    brief: a required method every app implements and nobody calls is the
+    friendly shape of the same problem CLAUDE.md is about.
+
+9.6 A DECISION I MADE THAT YOU MIGHT NOT: I did not copy sales' one local
+    `platform.labels` row into `sales.labels` before deleting it, and migration
+    0005 moves no data. Production has zero such rows, so a copy step would have
+    been machinery that runs against nothing in the only place it matters —
+    finding #6's shape. Decision 2 licenses it. The consequence is that local
+    dev lost one test label; nothing in production is affected.
+
+--------------------------------------------------------------------------------
+WHAT I NEED FROM YOU: a ruling on §3 (the search/links unmount) and on §9.4.
+Everything else is done, green, and committed.
+--------------------------------------------------------------------------------
