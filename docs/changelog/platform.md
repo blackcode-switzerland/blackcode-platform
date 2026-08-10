@@ -30,6 +30,33 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-10 — `apps/sales` is live, and two shared accounts were made generic
+
+**Not breaking. Nothing to adapt** — this is a record of what changed underneath.
+
+`sales.blackcode.ch` went to production, the platform's second app. One database,
+one login, one CLI: a token minted against either app authenticates against both,
+and `bk search` / `bk activity` / `bk link` span them. Nothing about the existing
+`issues` surface changed.
+
+Two shared accounts were named after the first app and are now platform-wide:
+
+| | Was | Is |
+|---|---|---|
+| Google OAuth | project `Blackcode-issues`, one client per app | project `blackcode-platform`, **one client for every app** |
+| Email sender | `admin@issues.blackcode.ch` | **`admin@blackcode.ch`** — the apex domain |
+
+**If you filter our transactional email by sender address, update it.**
+Invitations and password-reset codes now come from `admin@blackcode.ch`. The
+reason is structural: Resend's free plan verifies one domain per account, so a
+per-app subdomain meant the second app needing email would take the slot from
+the first.
+
+Existing accounts were not affected by the OAuth change — sign-in matches on
+email address, not on the Google account identifier.
+
+---
+
 ## 2026-08-07 — A 409 conflict now exits 2, not 1
 
 **Behaviour change to `bk`'s exit codes. Read this if you branch on them.**
