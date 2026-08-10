@@ -27,9 +27,9 @@ with `vercel env ls` rather than trusting it; it is a snapshot, not a mechanism.
 | `BLOB_READ_WRITE_TOKEN` | ✅ prod + preview | ✅ prod + preview | **prod → real store, preview → preview store** |
 | `RUN_MIGRATIONS` | ✅ prod only | ✅ prod only | on preview it writes to the production database |
 | `SUPER_ADMINS` | ✅ | ✅ | issues has two addresses, sales one — deliberate, per app |
-| `GOOGLE_CLIENT_ID` / `_SECRET` | ✅ | ✅ | same OAuth client, **different secret** — a client can hold two |
+| `GOOGLE_CLIENT_ID` / `_SECRET` | ✅ | ✅ | **the same client and secret on both**, project `blackcode-platform` since 2026-08-10 |
 | `PLATFORM_ENFORCE_APP_ACCESS` | ❌ unset | ✅ `1` | unset on issues by design: it is the app everyone has |
-| `RESEND_API_KEY` / `_FROM_EMAIL` | ✅ | ❌ unset | sales cannot send email, deliberately |
+| `RESEND_API_KEY` / `_FROM_EMAIL` | ✅ | ❌ unset | sales has no email module, deliberately. Sender is `admin@blackcode.ch` on the apex domain since 2026-08-10 |
 
 **Set on `bc-issues` and read by NOTHING:** 17 `NEON_*` variables
 (`NEON_PGPASSWORD`, `NEON_DATABASE_URL`, …) injected by the Neon integration,
@@ -235,29 +235,74 @@ vercel env add SUPER_ADMINS production --value "admin1@example.com,admin2@exampl
 
 | | |
 |---|---|
-| **Purpose** | Enables "Continue with Google" OAuth sign-in button |
-| **Status** | Set ✓ |
-| **Source** | Google Cloud Console → Project `Blackcode-issues` → APIs & Services → Credentials → OAuth 2.0 Client `bc-issues` |
-| **Impact if missing** | Google sign-in button hidden; only email/password login available |
+| **Purpose** | Enables "Continue with Google" OAuth sign-in |
+| **Status** | Set ✓ on **both** apps — the SAME client, deliberately |
+| **Source** | Google Cloud Console → project **`blackcode-platform`** → APIs & Services → Credentials → OAuth client `blackcode-platform-web` |
+| **Impact if missing** | Google sign-in hidden; email/password still works |
 
-**Where to find credentials:**
-[console.cloud.google.com](https://console.cloud.google.com) → select project `Blackcode-issues` → APIs & Services → Credentials → click `bc-issues` client → copy Client ID and Client Secret.
+### One OAuth client, every app
 
-**How to update if credentials are rotated:**
+Moved 2026-08-10 off the old project `Blackcode-issues` (`431515708156`), which
+was created for the first app and could not be renamed. `blackcode-platform`
+(`740837313186`) is generic, and app #3 adds two lines to the existing client
+rather than standing up its own project.
+
+**Both apps hold the same client id and secret.** The apps are distinguished by
+their redirect URIs, not by separate clients:
+
+    origins   https://issues.blackcode.ch      https://sales.blackcode.ch
+    redirect  https://issues.blackcode.ch/api/auth/callback/google
+              https://sales.blackcode.ch/api/auth/callback/google
+
+> **Which project a client belongs to is the number in front of its id**, and
+> nothing else — not its name, not the folder you downloaded it into. A client id
+> beginning `740837313186-` is on `blackcode-platform`; `431515708156-` is the
+> retired project. Check this before wiring a client into anything.
+
+**Consent screen: `Internal`.** Available because `blackcode.ch` is a Google
+Workspace org, and it avoids Google's verification review, the publishing step
+and the 100-user cap. The cost: only `blackcode.ch` accounts can use *Google*
+sign-in. Email/password is unaffected. Letting an outside address sign in with
+Google means switching the screen to External and accepting verification.
+
+**Switching clients does not disturb existing users.** `upsertUserFromOAuth`
+(`packages/platform-db/src/sign-in.ts`) matches on `users.email` — the
+`onConflictDoUpdate` target — not on `google_id`. Everyone lands on their
+existing account with their workspaces intact, whatever identifier Google sends.
+
+**How to update, if rotated — every app, or Google sign-in breaks on the ones
+you missed:**
 ```bash
-vercel env rm GOOGLE_CLIENT_ID production --yes
-vercel env rm GOOGLE_CLIENT_SECRET production --yes
+# per project: the repo root is linked to bc-issues; use --cwd for others
+vercel env rm  GOOGLE_CLIENT_ID production --yes
 vercel env add GOOGLE_CLIENT_ID production --value "<id>" --yes
+vercel env rm  GOOGLE_CLIENT_SECRET production --yes
 vercel env add GOOGLE_CLIENT_SECRET production --value "<secret>" --yes
-./devops/release.sh web issues   # the project you changed
+./devops/release.sh web issues
+./devops/release.sh web sales
 ```
 
-**When you switch to a custom domain** — no new OAuth client needed, just update the existing one:
-1. Go to Google Cloud Console → Credentials → click `bc-issues` client
-2. Under **Authorized JavaScript origins** → add `https://yourdomain.com`
-3. Under **Authorized redirect URIs** → add `https://yourdomain.com/api/auth/callback/google`
-4. Save (takes up to a few hours to propagate)
-5. Update `NEXTAUTH_URL` (see above) and redeploy
+**Verify what is actually live** — the env listing only proves a value was
+stored, not which client the running app sends. Drive the handshake:
+```bash
+CSRF=$(curl -sS -c /tmp/c "https://issues.blackcode.ch/api/auth/csrf" | jq -r .csrfToken)
+curl -sS -b /tmp/c -X POST "https://issues.blackcode.ch/api/auth/signin/google" \
+     -d "csrfToken=$CSRF&json=true" | grep -o 'client_id=[^&]*'
+```
+
+**Adding an app:** add its two URLs to the existing client. Do not create a
+second client, and do not create a project.
+
+**Adding a domain to an app** — no new OAuth client needed, ever:
+1. Google Cloud Console → project `blackcode-platform` → Credentials → the
+   `blackcode-platform-web` client
+2. **Authorised JavaScript origins** → add `https://<new-host>`
+3. **Authorised redirect URIs** → add `https://<new-host>/api/auth/callback/google`
+4. Save. It is usually live in seconds; Google warns it can take longer
+5. Update that app's `NEXTAUTH_URL` and redeploy it
+
+`redirect_uri_mismatch` means step 3 is missing or unsaved — the error names the
+exact URI Google expected, so add that string verbatim rather than retyping it.
 
 ---
 
