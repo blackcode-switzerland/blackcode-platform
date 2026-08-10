@@ -1,0 +1,247 @@
+FROM:    agent1
+TO:      master
+DATE:    2026-08-10
+PHASE:   0 — Backup tooling, the baseline, and verify.sh
+STATUS:  REPLY
+--------------------------------------------------------------------------------
+
+================================================================================
+1. WHAT I BUILT
+================================================================================
+All under multiAppFinalRefactor/. No files in apps/, packages/ or cli/ touched.
+
+  lib-db.sh                shared psql plumbing. Resolves native psql vs.
+                            `docker exec blackcode-postgres psql` (this dev
+                            machine has no native psql — confirmed). Exposes
+                            db_check_connection, db_capture_stats,
+                            db_current_database, all used by the three
+                            executable scripts below.
+  capture-baseline.sh      writes schema.table / count / min(id) / max(id) for
+                            every base table in platform/issues/sales to a
+                            file. Refuses to write if it finds 0 tables. NOID
+                            for tables with no integer id (not skipped).
+  verify.sh                re-measures and diffs against a baseline. Per-table
+                            PASS/INFO/FAIL, exits non-zero on any failure.
+                            Implements the six required failure modes (§3
+                            below) plus the EXPECTED-decrease declaration
+                            mechanism from the brief §2c, taken as given.
+  verify-diff.awk           the actual comparison logic, called by verify.sh.
+                            Portable POSIX awk (no gawk-only features — this
+                            machine's awk is the BSD/onetrueawk derivative,
+                            not gawk).
+  backup.sh                thin pg_dump wrapper. Refuses without a
+                            destination; after dumping, checks the file is
+                            non-empty, ≥1KB, and — via `pg_restore --list` —
+                            an actually-valid custom-format archive.
+  baseline.local-example.txt   a real baseline captured against local
+                            Postgres, committed as a clearly-named example.
+                            NOT the production baseline.local artifact — that
+                            one is `baseline.txt`, produced by the human
+                            against production, never by me (per brief §4).
+  SAFETY.md                 "nothing lost ledger" section rewritten to
+                            describe the actual scripts, actual filenames,
+                            actual invocations, and the actual watched-fail
+                            evidence, replacing description of a script that
+                            didn't exist yet (CLAUDE.md finding #18).
+
+No changelog entry, no `bk` command, no route — these are operational scripts,
+per brief §4, and the gate ran clean without touching TypeScript or Go (see §5).
+
+
+================================================================================
+2. THE PROVE-IT-FIRES TABLE
+================================================================================
+Everything below ran against LOCAL Postgres only (docker compose, port 5434,
+via `docker exec blackcode-postgres psql`). Nothing touched a Neon URL or
+production. Every mutation was restored and the real local baseline re-verified
+clean (0 failing tables) after every single injection — the "FINAL regression"
+row confirms the last one.
+
+Two real bugs were found and fixed DURING this exercise, both below the table.
+
+  Case                                              | Injected                                                    | Result
+  ----------------------------------------------------------------------------------------------------------------------------------------
+  (a) undeclared count decrease                      | DELETE one row from platform.password_reset_otps            | RED — "count DECREASED by 1 ... undeclared data loss". Restored, re-verified clean.
+  (b) min(id) increased                               | DELETE the row holding MIN(id) in the same table            | RED — same message; count decrease dominates the report since both fire together (by design — see §3). Restored, re-verified clean.
+  (c) table in baseline missing from DB               | ALTER TABLE ... RENAME (simulates a drop)                   | RED — flagged BOTH halves at once: the missing baseline table AND the unexpected renamed one. Restored, re-verified clean.
+  (d) table in DB missing from baseline                | CREATE TABLE platform.zz_surprise_table (+1 row)            | RED — "exists in the database but is NOT in the baseline". Dropped, re-verified clean.
+  (e) zero tables found                                | pointed at a scratch DB with platform/issues/sales schemas created but 0 tables in them | RED — "found 0 tables ... must never pass", both in verify.sh AND capture-baseline.sh (capture-baseline.sh refused to write a baseline at all — confirmed no file was created)
+  (f) connection failed                                | bad port, bad database name, unreachable host                | RED on all three, clear one-line ERROR with the psql output attached. See "bug #1" below — this did NOT go red cleanly on the first attempt.
+  (f, could not fully test) bad password                | wrong password, correct host/port/db                        | Did NOT go red — but this is NOT a script gap. Local pg_hba.conf trusts 127.0.0.1 unconditionally (`host all all 127.0.0.1/32 trust`), so Postgres itself never checks the password for local dev. Confirmed by reading pg_hba.conf inside the container. Untestable locally; should behave correctly against Neon, which enforces scram-sha-256, but nobody has watched that specific case go red. Flagging as genuinely unverified, not verified-and-passing.
+  ----------------------------------------------------------------------------------------------------------------------------------------
+  empty baseline file                                  | `touch` a 0-byte file                                        | RED — "baseline file is empty"
+  baseline truncated before any header line             | wrote 11 bytes, no header, no data                          | RED — "no valid '# tables: N' header ... malformed or truncated"
+  baseline with a truncated DATA line                   | valid header + one line cut mid-field ("platform.us")       | RED — "malformed data line(s) (expected 4 tab-separated fields): 1: platform.us"
+  nonexistent baseline path                             | pointed at a file that doesn't exist                         | RED — "baseline file not found"
+  delete from the MIDDLE of a table (not min, not max)  | DELETE id=7 out of {4,5,6,7,8,9}                             | RED via the ordinary count-decrease path — confirms min/max unchanged does not create a false pass when count moves
+  delete + insert, COUNT IDENTICAL (the hard one)       | DELETE the min-id row, INSERT one new row (count 6→6, min 4→5, max 9→10) | RED — "row count unchanged (6) but id range shifted ... a row was deleted and another inserted; this can never be declared away". This is the case the brief called out specifically ("does min/max catch it?") — yes, unconditionally, no declaration can waive it.
+  declared decrease matches exactly                     | declared -2 for password_reset_otps, deleted exactly 2       | INFO, not a failure — "-2 rows (declared: ...)"
+  declared decrease, actual is LARGER (declared -2, deleted 3) | as stated                                              | RED — "count changed by -3 but declared decrease totals -2 ... mismatch"
+  declared decrease, actual is SMALLER (declared -2, deleted 1) | as stated                                             | RED — same mismatch message, other direction. Confirms a declaration is not a ceiling that anything under it satisfies — it must match exactly, both directions.
+  NOID table (no integer id), undeclared row loss        | DELETE one row from platform.workspace_apps (composite PK, no `id` column) | RED — "count DECREASED by 1 ... undeclared data loss", proving NOID tables are still count-tracked, not silently exempted
+  the header's own worked example accidentally being live syntax | the header capture-baseline.sh writes into every baseline file quotes the EXPECTED format verbatim as documentation | Confirmed NOT parsed as a real declaration — deliberately written as `#   # EXPECTED ...` (nested-comment indent) rather than `# EXPECTED ...`, so it fails the parser's `^# EXPECTED ` anchor. Verified directly against the awk extraction, not just inferred.
+  FINAL regression: baseline.local-example.txt vs. local DB after every restore above | —                                                          | PASS, 0 failing tables, 49/49 tables match
+
+--- Bug #1, found and fixed: verify.sh crashed silently on connection failure ---
+First run of case (f) printed NOTHING and exited 2 — not the intended clean
+"ERROR: could not connect..." and exit 1. Root cause: `set -euo pipefail` at
+the top of verify.sh, combined with `out="$(... | db_run "$url" 2>&1)"` inside
+db_check_connection — a failing command substitution inside a plain assignment
+trips `set -e` immediately, before the function's own error-handling code (the
+`if [ $rc -ne 0 ]...` block) ever runs. The intended error message never
+printed. Fixed by wrapping every such capture in lib-db.sh
+(db_check_connection, db_current_database, and the three internal queries in
+db_capture_stats) with `set +e` / `set -e` pairs, and by wrapping the two call
+sites in capture-baseline.sh and verify.sh that assign db_capture_stats's
+output. Re-tested after the fix — see the table above, all (f) cases now fail
+loudly with a clear message.
+
+--- Bug #2, found and fixed: file-role tracking broke on an empty declarations file ---
+First real run of verify.sh (clean baseline, no EXPECTED declarations at all —
+the normal case for Phase 0) reported ALL 49 tables as "MISSING from the
+database" while also claiming 49 tables live — total nonsense, and it would
+have been the very first thing the next six agents saw from this tool. Root
+cause: verify-diff.awk originally tracked which of its three input files
+(declarations / baseline / live) it was reading by counting FNR==1 events. The
+declarations file is legitimately EMPTY on a normal run — no line in it ever
+triggers FNR==1 — so the counter never advanced past 0, and the baseline
+file's first line was read as if it were the declarations file, live data as
+if it were the baseline, and the real live data was never read as live data at
+all. Every table looked baseline-only. This is worth naming explicitly: it is
+the same *shape* as CLAUDE.md finding #5 (a check that silently measures less,
+or the wrong thing, than it claims) but inverted — instead of a false PASS, it
+produced a false, total, RED. A red-when-it-shouldn't-be is much easier to
+notice than a false green, which is presumably why it surfaced this fast — but
+it would still have cost the next agent real time debugging a "database"
+that appeared to have lost everything. Fixed by matching each input line's
+FILENAME against the actual paths (passed in via `-v declfile=... -v
+basefile=... -v livefile=...`) instead of counting reads. Re-verified clean
+immediately after.
+
+
+================================================================================
+3. WHAT THIS LEDGER CANNOT CATCH — BE SPECIFIC
+================================================================================
+Ordered by how much I think each one matters:
+
+1. **Right count, wrong rows.** This is the sharpest gap and worth stating
+   plainly: verify.sh confirms HOW MANY rows a table has and the SHAPE of its
+   id range. It does not confirm WHICH rows. A bug that deletes exactly the
+   number of rows a declaration expects, but the WRONG rows (e.g. Phase 3's
+   sales-only delete accidentally matches some issues rows too, netting the
+   same row count as the sales-only delete would have), passes clean. This is
+   exactly why SAFETY.md's "run the SELECT form first and read the count, read
+   the DELETE count, then COMMIT" steps are not redundant with verify.sh —
+   they're the identity check; this ledger is the magnitude-and-omission
+   check. Say this to whoever runs Phase 3: verify.sh passing does not mean
+   the right 8 rows went, only that 8 went and were declared.
+
+2. **No content corruption detection.** An UPDATE that blanks out, corrupts,
+   or silently truncates a column (e.g. a bad migration nulling every
+   comment's body) changes nothing this ledger looks at — count, min(id) and
+   max(id) are all unaffected. Out of scope for a shell+SQL, no-new-dependency
+   tool without per-row checksums, which nobody asked for, but worth writing
+   down rather than letting the ledger's coverage look bigger than it is.
+
+3. **The min/max mechanism assumes monotonically-assigned ids.** It works
+   because Postgres `serial`/identity columns hand out ever-increasing values,
+   so a genuine delete-and-insert always moves the extremes. A table using
+   externally-supplied, non-monotonic, or resettable ids would defeat this —
+   not present in this schema today (checked: every integer `id` column here
+   is a `nextval(...)` sequence default), but worth a note if a future app or
+   migration introduces one.
+
+4. **Batched query, not per-table isolation.** db_capture_stats builds ONE big
+   UNION ALL across every table and runs it in a single round trip (fast, and
+   avoids the N-round-trip alternative). This means a permissions problem on
+   ANY single table — e.g. running this as the bounded `issues_app` role
+   instead of `MIGRATE_DATABASE_URL` — would fail the ENTIRE capture/verify
+   run with one Postgres error, not degrade to "48 tables checked, 1 access
+   denied." I did not test this against a restricted role; SAFETY.md already
+   says migrations run as `MIGRATE_DATABASE_URL`, and I'm making explicit here
+   that baseline/verify should follow the same rule for the same reason —
+   worth a one-line addition next time SAFETY.md gets touched, not something I
+   added since it's not what this phase's code needs to do (both scripts
+   already work correctly under the owner role I tested with).
+
+5. **The adversarial "reset the sequence and refill" case is unfalsifiable by
+   design.** If a table were TRUNCATEd and refilled with fabricated rows whose
+   ids happen to span the exact same [min, max] range as the originals, with
+   the same final count, this ledger cannot tell the difference — no
+   count/min/max-only check can. Only a per-row content hash would, which is
+   out of scope here. I did not attempt to build or fake this scenario locally
+   since it requires no real assertion to write down as untested — it's a
+   structural limit of the approach, not a bug to chase.
+
+6. **Only schemas platform/issues/sales, only BASE TABLEs.** `drizzle` (the
+   migration-history schema) and `public` are not tracked; neither are views.
+   Not required by the brief and not a data-loss surface issues/sales users
+   would notice, but naming it so nobody assumes coverage that isn't there.
+
+
+================================================================================
+4. THINGS IN PLAN.md / SAFETY.md I THINK ARE WRONG OR WORTH A SECOND LOOK
+================================================================================
+1. **SAFETY.md's original "watch it fail" example invoked `./verify.sh` with
+   NO arguments.** verify.sh requires both a connection URL and a baseline
+   file path — that example could never have run. This is CLAUDE.md finding
+   #18's shape (a citation of something that doesn't match reality), just
+   caught before it shipped rather than after. Fixed in my SAFETY.md edit —
+   flagging it here anyway per the brief's instruction to report what I found
+   wrong, not just what I fixed.
+
+2. **PLAN.md §4b claims `platform.transaction_log` has no writer and expects
+   `count(*) = 0` at drop time (Phase 5). On local dev it has 4 rows, not 0.**
+   I did not investigate further — Phase 0's brief is explicit that I write no
+   product code and touch nothing beyond this ledger — but I want this on
+   record before Phase 5 gets anywhere near a DROP TABLE: the plan's own gate
+   ("confirm count(*) = 0 first; if it is not, stop") is written correctly and
+   will presumably fire, but local evidence says it's likely to actually fire,
+   not just exist as a hypothetical safety net. Whoever owns Phase 5 should
+   expect to stop, not assume the check is decorative. (Grepped the current
+   codebase: only `apps/issues/app/api/undo/route.ts`, now a 410, and the
+   Drizzle schema definition reference `transaction_log` — no active writer in
+   present-day code, consistent with these being stale rows from before undo
+   was retired, not an undiscovered live writer. But "consistent with" isn't
+   "confirmed," and I have no visibility into whether production's row count
+   is 0, 4, or something else entirely.)
+
+3. **The brief's own suggested EXPECTED-block format (§2c) works exactly as
+   specified once I built it, but it is easy to write one that accidentally
+   collides with the auto-generated header example capture-baseline.sh puts in
+   every baseline file** (the "e.g." block showing the syntax). I deliberately
+   indented that example as a comment-inside-a-comment (`#   # EXPECTED ...`)
+   specifically so it can never parse as a real declaration, and verified this
+   directly rather than assuming it. Worth keeping in mind if anyone hand-edits
+   a baseline file's header later: the real syntax is `# EXPECTED ...` at the
+   START of the line (single `#`, one space), not indented.
+
+4. Everything else in PLAN.md and SAFETY.md that this phase touches reads
+   correctly against what I built — no other corrections.
+
+
+================================================================================
+5. THE GATE
+================================================================================
+Run from the repo root, as instructed, even though nothing in apps/, packages/
+or cli/ changed:
+
+  npm run typecheck    → 10/10 tasks green
+  npx turbo test --force → all green (issues: 251 passed/85 skipped across 24
+                          files; sales: 64 passed/9 skipped across 13 files —
+                          skips are this repo's existing integration-test gate,
+                          unrelated to this phase)
+  npm run lint          → 0 errors, 7 pre-existing warnings (unrelated files:
+                          layout.tsx custom-font warning, a few
+                          react-hooks/exhaustive-deps in components this phase
+                          never touched)
+  npm run build          → all 3 build tasks green; postbuild correctly skipped
+                          migrations (RUN_MIGRATIONS unset, as expected locally)
+  go build ./... / go vet ./... / go test ./...  → all green, all packages
+  make routes             → not run; no `routes` annotation changed (no CLI
+                          code touched this phase)
+
+Committed locally (not pushed): one commit, 7 files
+(lib-db.sh, capture-baseline.sh, verify.sh, verify-diff.awk, backup.sh,
+baseline.local-example.txt, SAFETY.md).
+--------------------------------------------------------------------------------
