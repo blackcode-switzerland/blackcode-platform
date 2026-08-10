@@ -1,6 +1,6 @@
-# baseline captured 2026-08-10T17:27:01Z
+# baseline captured 2026-08-10T18:17:55Z
 # database: neondb
-# tables: 49
+# tables: 55
 # NOID = table has no integer id column; only count is tracked, min/max read NOID
 # NULL  = table had zero rows at capture time
 #
@@ -48,6 +48,9 @@ sales.counters	2	NOID	NOID
 sales.document_products	0	NOID	NOID
 sales.document_prospects	0	NOID	NOID
 sales.documents	0	NULL	NULL
+sales.events	0	NULL	NULL
+sales.invitations	0	NULL	NULL
+sales.labels	0	NULL	NULL
 sales.match_documents	0	NOID	NOID
 sales.matches	0	NULL	NULL
 sales.meetings	0	NULL	NULL
@@ -58,4 +61,7 @@ sales.prospects	1	1	1
 sales.stage_entries	2	1	2
 sales.template_documents	0	NOID	NOID
 sales.templates	0	NULL	NULL
+sales.uploads	0	NULL	NULL
 sales.user_preferences	0	NOID	NOID
+sales.workspace_members	0	NULL	NULL
+sales.workspaces	0	NULL	NULL
