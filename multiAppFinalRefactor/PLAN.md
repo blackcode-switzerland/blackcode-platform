@@ -294,6 +294,33 @@ work — without issues existing.
 - Remove the "No access to b/sales" gate and the `PLATFORM_ENFORCE_APP_ACCESS`
   check. A member of a sales workspace is a sales user, full stop.
 
+**ADDED 2026-08-10, and this plan missed it entirely: TWELVE of sales' tables
+have a foreign key on `platform.workspaces`** — prospects, contacts,
+stage_entries, meetings, communications and seven more. Once sales' workspaces
+live in `sales.workspaces`, every one of them points at the wrong table. A
+prospect that references an issues workspace is precisely the coupling this
+refactor removes, so this is not deferrable to Phase 3.
+
+Do it by MIRRORING, not wiping: copy the `platform.workspaces` rows sales
+actually uses into `sales.workspaces` **preserving the id**, copy the matching
+memberships, advance the sequence, then swap each constraint. Preserving ids
+makes the swap a constraint change with no data movement — **so Phase 2 still
+deletes nothing, and Phase 3 remains the only phase that does.** That property
+is what makes "where did the row go?" answerable.
+
+The two workspace tables then drift apart, which is correct: after this, a
+person's issues workspace and their sales workspace are different things that
+happen to share an id today.
+
+`sales.prospect_labels → platform.labels` is a thirteenth FK and belongs to
+Phase 3, with the rest of labels.
+
+**There is also a design decision this plan never named**, left to agent 3:
+sales' routes use the SHARED `resolveWorkspace`, which reads `platform.*`.
+Either `AppContext` gains a workspace resolver so each app supplies its own
+source, or sales writes its own resolver. The first keeps the split honest —
+plumbing shared, data not — but touches a file both apps depend on.
+
 **Still hidden:** no switcher, no create-workspace flow, no workspace settings.
 One workspace per user, invisible.
 
