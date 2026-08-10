@@ -100,6 +100,77 @@ Measured 2026-08-10 — files in `apps/sales` that touch each shared thing:
 
 ---
 
+## 4b. Every `platform.*` table, and what happens to it
+
+All 21, so nothing is decided by omission. **Nothing in the "stays" column has a
+single row moved or deleted.**
+
+| Table | Fate | Why |
+|---|---|---|
+| `users` | **stays shared** | identity. The whole point |
+| `api_tokens` | **stays shared** | one token, every app |
+| `password_reset_otps` | **stays shared** | identity |
+| `email_whitelist` | **stays shared** | who may hold an account at all |
+| `apps` | **stays shared** | the CLI address book (`base_url`) and the blob registry |
+| `blob_references` | **stays shared** | Phase 5 keeps it — see there. Already carries `app`, and its `workspace_id` has **no FK on purpose**, so it survives the split untouched |
+| `uploads` | **issues keeps it; sales gets `sales.uploads`** | ledger, not storage. One Blob store either way |
+| `comments` | **issues keeps it; sales gets `sales.comments`** | |
+| `labels` | **issues keeps it; sales gets `sales.labels`** | |
+| `events` | **issues keeps it; sales gets `sales.events`** | |
+| `deletion_batches` | **issues keeps it; sales gets `sales.deletion_batches`** | sales touches it in 0 files today |
+| `workspaces` | **issues keeps it; sales gets `sales.workspaces`** | |
+| `workspace_members` | **issues keeps it; sales gets `sales.workspace_members`** | |
+| `workspace_invitations` | **issues keeps it; sales gets `sales.invitations`** | |
+| `inbox_messages` | **issues keeps it, alone** | sales touches it in 0 files. Nothing to move |
+| `entities` | **issues keeps it; sales stops projecting** | sales' rows deleted in Phase 3 |
+| `links` | **emptied of sales, then left to issues** | `bk link` retires; issues may keep intra-app links |
+| `workspace_apps` | **DROPPED** | Phase 5. Meaningless once apps do not share workspaces |
+| `app_access` | **DROPPED** | Phase 5. Same |
+| `error_events` | **stays shared, and gains an `app` column** | see below — this is a real gap |
+| `transaction_log` | **DROPPED** | see below — it is dead |
+
+### `error_events` — the gap this refactor creates
+
+Today it has a bare `workspace_id` **with no foreign key**, and **no `app`
+column**. Both apps write to it and it works, because there is one set of
+workspaces.
+
+After the split there are two, and `workspace_id = 1` means two different
+things depending on who wrote it. Every error becomes ambiguous and
+`bk super-admin errors` starts reporting confidently wrong workspaces.
+
+**Fix, in Phase 1, expand-only:**
+
+1. `ALTER TABLE platform.error_events ADD COLUMN app varchar(40)` — nullable
+2. Backfill existing rows to `'issues'`: every row predates the split, and
+   issues is the only app whose workspace ids they can mean
+3. The shared `apiHandler` sets it from `AppContext.appSlug` — every app gets it
+   for free, which is the reason the error log is shared in the first place
+4. Later, once both apps are writing it, `SET NOT NULL`
+
+**Keep it shared.** It is an operator surface, not app data — one place to look
+when something breaks, and an app inherits it by existing. Splitting it would
+mean two error logs and a super-admin page that has to ask both.
+
+### `transaction_log` — dead, drop it
+
+`apps/issues/app/api/undo/route.ts` says so in its own header: *"the feature
+never worked (`platform.transaction_log` had no writer, so every undo…)"*. The
+undo route is a 410 now. Nothing in the codebase writes the table.
+
+**Phase 5, after backup, and only after confirming it is empty:**
+
+```sql
+SELECT count(*) FROM platform.transaction_log;   -- expect 0
+DROP TABLE platform.transaction_log;
+```
+
+If that count is **not** 0, stop and tell someone — it would mean something
+writes it that this audit did not find, and that is more interesting than the
+table.
+
+---
+
 ## 5. The phases
 
 Each phase is independently shippable and independently revertible. **Do not
@@ -161,6 +232,20 @@ Notes that matter:
 - Blob references: sales keeps a trigger maintaining `platform.blob_references`
   for now (Phase 5 decides its fate). **Do not touch that trigger in this
   phase** — read `packages/platform-storage/src/references.ts` first.
+
+**One expand-only change to a SHARED table, and it is the exception to
+"issues is not touched":**
+
+```sql
+ALTER TABLE platform.error_events ADD COLUMN app varchar(40);
+UPDATE platform.error_events SET app = 'issues' WHERE app IS NULL;
+```
+
+Additive and backfilled — no row is removed and no existing reader is affected,
+because nothing selects on a column that did not exist. See §4b for why it is
+needed: after the split, `error_events.workspace_id` is ambiguous without it.
+The shared `apiHandler` starts setting it in the same phase. `SET NOT NULL`
+waits until Phase 5, once both apps have been writing it for a while.
 
 **Code:** schema + migration only. No route changes.
 
@@ -283,6 +368,10 @@ restores them.
 **Backup first — this phase drops tables.**
 
 - Drop `platform.workspace_apps` and `platform.app_access`
+- Drop `platform.transaction_log` — dead since before the monorepo, no writer,
+  and `/api/undo` is a 410. **Confirm `count(*) = 0` first; if it is not, stop**
+- `ALTER TABLE platform.error_events ALTER COLUMN app SET NOT NULL` — only after
+  confirming no row has a NULL `app`, i.e. both apps have been writing it
 - Remove `PLATFORM_ENFORCE_APP_ACCESS` from both Vercel projects and from
   `packages/platform-api/src/require-app-access.ts`
 - Remove the Apps panel from issues' workspace settings page
@@ -361,7 +450,7 @@ Optional because nothing depends on it. Do it if you miss the feature.
 | Phase | Risk to production | Rough size |
 |---|---|---|
 | 0 Backup + baseline | none | half a day |
-| 1 Sales foundations | none — additive | half a day |
+| 1 Sales foundations | none — additive, incl. one expand-only column on `error_events` | half a day |
 | 2 Sales bootstraps | none — sales only | 1 day |
 | 3 Sales moves off shared tables | **low, and the only phase that deletes** | 1–2 days |
 | 4 CLI re-tiering | none to data; a real change for users | 1 day |
