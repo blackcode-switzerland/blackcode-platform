@@ -127,6 +127,52 @@ deliberate: a declaration is not a blanket "ignore this table", and the two
 directions of mismatch were both watched to fail before this was trusted (see
 below).
 
+> ### DECLARATIONS ASSUME A QUIET DATABASE. THEY DO NOT GET ONE.
+>
+> Found 2026-08-10 running Phase 3's deletes against live production.
+>
+> `verify.sh` compares a table's **net** change against the sum of its
+> declarations. People were using issues while the deletes ran, so:
+>
+> | | baseline | deleted | inserted meanwhile | net |
+> |---|---|---|---|---|
+> | `platform.events` | 4197 | −4 | +3 | **−1** |
+> | `platform.entities` | 900 | −2 | +1 | **−1** |
+>
+> Declared −4 and −2, saw −1 and −1, and it reported FAIL on both. The deletes
+> were exactly right; the arithmetic could not know that.
+>
+> **The false-FAIL is the harmless direction. The false-PASS is the one to fear:**
+> delete 5 rows when you declared 4, have 1 inserted concurrently, and the net is
+> −4 — it matches the declaration exactly and passes. **A declaration cannot
+> distinguish "you deleted what you said" from "you deleted more and the app
+> backfilled it".**
+>
+> **So the guard is the DELETE itself, not the ledger.** Run every delete inside
+> a transaction that asserts its own row count and rolls back if it is wrong:
+>
+> ```sql
+> BEGIN;
+> DO $$
+> DECLARE n int;
+> BEGIN
+>   DELETE FROM platform.events WHERE app = 'sales';
+>   GET DIAGNOSTICS n = ROW_COUNT;
+>   IF n <> 4 THEN
+>     RAISE EXCEPTION 'REFUSING: deleted % rows, declared 4', n;
+>   END IF;
+> END $$;
+> COMMIT;
+> ```
+>
+> That asserts the ACTUAL delete count, not the net, and rolls itself back on a
+> mismatch. It is the identity half of agent 1's distinction, enforced rather
+> than remembered — and on 2026-08-10 it is what made the ledger's FAIL
+> diagnosable instead of frightening.
+>
+> After a delete on a live table, expect to re-capture the baseline rather than
+> to see a clean PASS.
+
 **Taking a backup:**
 
 ```bash
