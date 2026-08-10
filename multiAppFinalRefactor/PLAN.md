@@ -158,16 +158,32 @@ mean two error logs and a super-admin page that has to ask both.
 never worked (`platform.transaction_log` had no writer, so every undo…)"*. The
 undo route is a 410 now. Nothing in the codebase writes the table.
 
-**Phase 5, after backup, and only after confirming it is empty:**
+> **CORRECTED 2026-08-10, after agent 1.** This section said "expect
+> `count(*) = 0`". **That is wrong**, and had it survived, Phase 5 would have
+> stopped on a gate that was mis-specified rather than on a real problem — or
+> worse, someone would have "fixed" the gate to let the drop through.
+>
+> Local dev has **4 rows**. They are stale: newest `created_at` is 2026-05-22,
+> nearly three months old, from before undo was retired. Independently confirmed
+> that nothing writes it — the only trigger in the entire `platform` schema is
+> `trg_blob_refs on comments`. **Grepping the TypeScript was not sufficient to
+> establish that; a Postgres trigger is not code any grep of `apps/` would
+> find.** Check the catalog, not the repo.
+
+**So the gate is "is anything still writing it?", not "is it empty?":**
 
 ```sql
-SELECT count(*) FROM platform.transaction_log;   -- expect 0
-DROP TABLE platform.transaction_log;
+SELECT count(*) AS rows, max(created_at) AS newest
+FROM platform.transaction_log;
 ```
 
-If that count is **not** 0, stop and tell someone — it would mean something
-writes it that this audit did not find, and that is more interesting than the
-table.
+- **`newest` is months old** → stale residue. Rows are expected. Back up, then
+  `DROP TABLE platform.transaction_log`.
+- **`newest` is recent** → **STOP.** Something writes it that this audit did not
+  find, and that is far more interesting than the table. Do not drop it.
+
+Declare the row count as an EXPECTED decrease before dropping, or `verify.sh`
+will correctly fail on the table vanishing.
 
 ---
 

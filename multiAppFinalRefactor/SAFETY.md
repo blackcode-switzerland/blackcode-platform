@@ -81,6 +81,27 @@ using issues throughout this refactor.
 ./multiAppFinalRefactor/verify.sh "<connection-url>" multiAppFinalRefactor/baseline.txt
 ```
 
+**Run baseline and verify as `MIGRATE_DATABASE_URL`** (`neondb_owner`), the same
+role as migrations. Both scripts measure every table in one batched query, so a
+permissions problem on any single table fails the entire run rather than
+degrading to "48 tables checked, 1 access denied". That is the right trade — a
+partial capture that looks complete is worse than a loud total failure — but it
+means the bounded app roles cannot run these.
+
+**What it cannot catch — read this before trusting a green.** It confirms HOW
+MANY rows a table has and the shape of its id range. It does not confirm WHICH
+rows. A delete that removes the right *number* of rows but the wrong *ones*
+passes clean. So:
+
+> **`verify.sh` passing does not mean the right 8 rows went — only that 8 went
+> and were declared.**
+
+That is why the `SELECT`-first / read-the-`DELETE`-count / `COMMIT` ritual below
+is not redundant with it. They are different checks: this ledger is
+magnitude-and-omission, that ritual is identity. Neither substitutes for the
+other. It also cannot see content corruption — an UPDATE that blanks a column
+changes no count, no `min(id)`, no `max(id)`.
+
 **How to use it:** run it after every migration, every delete, and every deploy
 in phases 1, 3 and 5. Not at the end of the phase — after every step. A count
 that dropped three steps ago is a debugging session; a count that dropped just

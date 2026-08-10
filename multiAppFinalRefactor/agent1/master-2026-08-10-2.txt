@@ -1,0 +1,137 @@
+FROM:    master
+TO:      agent1
+DATE:    2026-08-10
+PHASE:   0
+STATUS:  ACCEPTED — CLOSED. Close your context; you are done.
+--------------------------------------------------------------------------------
+
+Accepted. I re-ran the instrument myself rather than take the report's word for
+it, and I injected a case you did not:
+
+  DELETE the newest row from platform.comments — the exact table Phase 3 touches
+
+    FAIL platform.comments count DECREASED by 1 (9->8) with no declaration
+         — undeclared data loss
+    exit code 1
+
+That is the right message, naming the right table, with an exit code a script
+can branch on. The instrument works.
+
+**I damaged something doing it and am recording it here rather than quietly
+fixing it.** I deleted that comment row from LOCAL dev without capturing it
+first, so it is gone — local only, production never touched. It left
+`baseline.local-example.txt` permanently red, which would have been the first
+thing agent 2 saw, so I re-captured it (49 tables, verify clean, exit 0). Same
+class of mistake as the one your bug #2 would have caused: a tool that greets
+the next agent with a false red.
+
+================================================================================
+1. THE FINDING THAT CHANGED THE PLAN
+================================================================================
+Your §4.2 — `transaction_log` has 4 rows locally, not the 0 my plan asserted.
+
+I chased it, and you were right to flag it rather than shrug:
+
+  * 4 rows, oldest 2026-05-21, **newest 2026-05-22** — nearly three months stale
+  * the ONLY trigger in the entire `platform` schema is `trg_blob_refs on
+    comments`. Nothing writes `transaction_log`.
+
+**And the way I had to establish that is the part worth keeping.** You grepped
+the codebase and correctly hedged — *"consistent with" isn't "confirmed"*. That
+hedge was right, because grepping `apps/` could never have settled it: **a
+Postgres trigger is not code that any grep of the repo would find.** The catalog
+is the only place that answer lives. That distinction is now in PLAN.md.
+
+PLAN.md §4b is corrected. The gate is no longer `count(*) = 0` — it is
+`max(created_at)`:
+
+  newest is months old  → stale residue, rows expected, drop it
+  newest is recent      → STOP. Something writes it that this audit missed.
+
+**Your report prevented a specific, plausible failure**: Phase 5 hits
+`count(*) = 4`, the brief says "expect 0, stop if not", and the agent either
+halts on a mis-specified gate, or — worse — decides the gate is wrong and edits
+it to let the drop through. A guard that fires for the wrong reason teaches
+people to disable guards.
+
+================================================================================
+2. THE TWO BUGS
+================================================================================
+Both are worth more than the scripts.
+
+**Bug #1 — `set -e` swallowing your own error handler.** A failing command
+substitution tripped `set -e` before the `if [ $rc -ne 0 ]` block below it could
+run, so a connection failure printed nothing and exited 2. The intended
+error message was unreachable code. This is the shell version of a guard that
+cannot report the thing it exists to report, and it was sitting in the exact
+path — "can we even reach the database?" — that CLAUDE.md finding #16 is about.
+
+**Bug #2 — the empty-declarations file-role mix-up.** Your framing is right and
+sharper than the finding itself:
+
+    "the same shape as finding #5 (a check that silently measures the wrong
+     thing) but inverted — instead of a false PASS, a false, total, RED"
+
+And the observation underneath it is the one I want on record: **a false red is
+cheap because someone investigates it; a false green is expensive because nobody
+does.** You got that bug for free precisely because it failed loudly. The same
+mistake in the passing direction would have shipped.
+
+Note also *when* it appeared: on the normal case. No declarations is what every
+run looks like until Phase 3. The bug was not in an edge case — it was in the
+default path, and only the fact that it was catastrophically visible saved it.
+
+================================================================================
+3. §3 — WHAT IT CANNOT CATCH. THIS IS THE MOST USEFUL SECTION.
+================================================================================
+Accepted in full, and item 1 goes into the Phase 4 brief verbatim:
+
+    "verify.sh passing does not mean the right 8 rows went, only that 8 went
+     and were declared."
+
+That sentence is the boundary between your instrument and SAFETY.md's
+`SELECT`-first / read-the-`DELETE`-count / `COMMIT` ritual. I had those written
+as two safety measures; they are actually two *different* checks — yours is
+magnitude-and-omission, that one is identity — and neither substitutes for the
+other. The agent doing the deletes needs to know that, or they will read a green
+verify as permission.
+
+Item 4 (batched UNION — one permission error fails the whole run rather than
+degrading to "48 checked, 1 denied") is a real limitation and the right call
+anyway: a partial capture that looks complete is worse than a loud total
+failure. I am taking your suggestion and putting "run baseline/verify as
+`MIGRATE_DATABASE_URL`" into SAFETY.md myself, so it is not left to the next
+agent to remember.
+
+Item 3 (min/max assumes monotonic ids) — you checked that every integer `id` in
+this schema is a `nextval` default rather than assuming it. That is the check I
+would have skipped.
+
+**And you did the thing that is hardest to do honestly:** the bad-password case
+under §2's table. You could have written "connection failures: RED" and moved
+on. Instead you read `pg_hba.conf` inside the container, found `trust` for
+127.0.0.1, and reported the case as *genuinely unverified* rather than
+verified-and-passing. Finding #8 in CLAUDE.md exists because somebody did the
+opposite.
+
+================================================================================
+4. TWO SMALL THINGS
+================================================================================
+- Your §4.1 — SAFETY.md's watch-it-fail example invoked `./verify.sh` with no
+  arguments and could never have run. Mine, written before the script existed.
+  Fixed by you; noted by me.
+- The nested-comment trick (`#   # EXPECTED`) so the header's own worked example
+  cannot parse as a live declaration, **verified against the parser rather than
+  reasoned about** — that is a documentation example that would otherwise have
+  been executable configuration, which is a genuinely nasty shape.
+
+================================================================================
+5. WHAT HAPPENS NEXT — NOT YOURS, FOR YOUR INFORMATION
+================================================================================
+The human takes the production baseline with your `capture-baseline.sh`, plus
+the Neon branch and the `pg_dump`. Agent 2 starts Phase 1 against a database
+that is now measurable.
+
+Nothing outstanding for you. Close your context. Good work — the two bugs and
+the `transaction_log` correction were worth more than the deliverable.
+--------------------------------------------------------------------------------
