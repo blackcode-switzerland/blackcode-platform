@@ -6,14 +6,15 @@
 // `workspaceMemberRoute` in platform-api removes a `platform.workspace_members`
 // row and records the event through `recordPlatformEvent`, which writes
 // `platform.events`. Neither is right here: the membership lives in
-// `sales.workspace_members`, and an event for it would carry a sales workspace
-// id into a table whose foreign key still points at `platform.workspaces`.
+// `sales.workspace_members`, and its event belongs in `sales.events`.
 //
-// So this is nine lines of this app's own, and the event is deliberately NOT
-// recorded yet — see the note below.
+// So this is this app's own — and since Phase 3 it records its event too, in
+// `sales.events`, beside everything else that happens in this workspace.
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace, requireOwner } from '@/lib/api'
+import { getDb } from '@/lib/db/client'
+import { resolveActor } from '@/lib/actor'
 import { removeMember } from '@/lib/db/queries/workspaces'
 
 interface Params {
@@ -43,13 +44,10 @@ export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) =>
     )
   }
 
-  // NO EVENT ROW, and that is a Phase 2 constraint rather than a decision.
-  // `recordEvent` still writes `platform.events`, whose `workspace_id` foreign
-  // key points at `platform.workspaces` — so an event carrying this workspace's
-  // id would either fail loudly or, worse, land against a DIFFERENT app's
-  // workspace that happens to share the number. Phase 3 points the event spine
-  // at `sales.events`, and this is the first call site to add back.
-  const removed = await removeMember(ctx.workspace.id, targetId)
+  // The event is recorded inside `removeMember`'s transaction — Phase 2 left
+  // this write without one because the spine was still `platform.events`.
+  const actor = await resolveActor(getDb(), req, ctx.user)
+  const removed = await removeMember(ctx.workspace.id, targetId, actor)
   if (!removed) throw Errors.notFound('member')
   return NextResponse.json({ removed: true })
 })

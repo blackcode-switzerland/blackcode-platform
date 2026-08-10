@@ -1,18 +1,26 @@
-// This app's event recorder — the write half of the spine behind `bk activity`.
+// This app's event spine — `sales.events`, since Phase 3.
 //
 // ---------------------------------------------------------------------------
-// WHY THIS FILE EXISTS AT ALL, WHEN `platform-db` ALREADY WRITES EVENTS
+// IT IS THIS APP'S TABLE NOW, AND THAT REMOVED A SEAM RATHER THAN MOVING IT
 // ---------------------------------------------------------------------------
-// `recordPlatformEvent` (@blackcode/platform-db) owns the FOUR platform entity
-// types — workspace, workspace_member, workspace_app, invitation — and nothing
-// else (D-23). It cannot own a prospect: writing that row needs two things only
-// this app has, a `subject_urn` derived from `sales.*`, and a fan-out rule
-// written in this app's nouns. So each app carries this recorder and delegates
-// the platform half here, in ONE place rather than at every call site.
+// Until 2026-08-10 this wrote `platform.events`, one table holding every app's
+// activity, and it delegated four entity types — workspace, workspace_member,
+// workspace_app, invitation — to `recordPlatformEvent` in @blackcode/platform-db
+// (D-23). That delegation existed because those four rows are about PLATFORM
+// subjects: a shared workspace, a membership in it, an invitation to it.
 //
-// It is the same split `apps/issues/lib/db/queries/events.ts` describes; read
-// that file's header for the reasoning in full. What is written below is only
-// what differs for sales.
+// None of that is true here any more. A workspace is `sales.workspaces`, a
+// membership is `sales.workspace_members`, an invitation is `sales.invitations`
+// — this app's rows, in this app's schema — and an event about one of them has
+// to land in this app's table beside the rest. So the delegation is GONE, and
+// with it the split: there is one recorder, writing one table.
+//
+// **The two VOCABULARIES are still imported, not restated.** `PLATFORM_ENTITY_
+// TYPES` and `PLATFORM_EVENT_ACTIONS` remain the platform's lists because the
+// shared activity route validates `?entity_type=` and `?action=` against them,
+// and that route DROPS an unrecognised filter rather than rejecting it — so a
+// second copy here would fail by silently returning the whole feed. What moved
+// is where the row goes, not what a row may say.
 //
 // ---------------------------------------------------------------------------
 // THREE DIFFERENCES FROM THE ISSUES RECORDER, EACH DELIBERATE
@@ -23,7 +31,11 @@
 //    nobody watching. A fan-out call here would be a call into a rule set that
 //    does not exist. When assignment notifications arrive, they arrive as a
 //    `fanout.ts` beside this file — not as a shared one, because "everyone
-//    watching this prospect" is this app's sentence.
+//    watching this prospect" is this app's sentence. (Note that dropping the
+//    `recordPlatformEvent` delegation dropped `fanOutPlatformEvent` with it, and
+//    that changes nothing: this app has no inbox, and the four platform actions
+//    that fan out there are ABOUT a platform workspace, which this app no longer
+//    has.)
 //
 // 2. **No coalescing.** The issues recorder collapses consecutive `updated`
 //    events because its web UI autosaves every ~1.2s while a human types. This
@@ -42,28 +54,27 @@
 // permanently.
 
 import {
-  isPlatformEntityType,
-  recordPlatformEvent,
-  type Event,
-  type NewEvent,
   type PlatformEntityType,
   type PlatformEventAction,
   type PlatformTx,
 } from '@blackcode/platform-db'
-import { inArray } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
 import {
   communications,
   documents,
-  events,
   meetings,
   products,
   prospects,
+  salesEvents,
+  salesWorkspaces,
   templates,
 } from '../schema'
-import { getDb } from '../client'
+import type { SalesEvent, NewSalesEvent } from '../schema'
+import { users } from '../schema'
+import type { EventSource, EventsPage, ListEventsFilter } from '@blackcode/platform-api'
 import { APP_SLUG } from '@/lib/app'
-import { ENTITY_TYPES, type SalesEntityType } from '@/lib/entity-address'
-import { resolveSubjectUrn } from './entities'
+import { getDb } from '../client'
+import { ENTITY_TYPES, entityUrnOrNull, type SalesEntityType } from '@/lib/entity-address'
 
 /**
  * What an event can be about.
@@ -158,46 +169,26 @@ export interface RecordEventInput {
 /**
  * Record one event inside the caller's transaction.
  *
- * `app: APP_SLUG` is what makes `platform.events.app` the PRODUCING app: this
- * deployment is sales, so a workspace created through it is a sales event even
- * though a workspace belongs to no app. Never hardcode a slug at a call site.
+ * ONE table, ONE path — including the platform entity types. Until Phase 3 the
+ * four of them were delegated to `recordPlatformEvent`, which writes
+ * `platform.events`; that row's `workspace_id` has a foreign key on
+ * `platform.workspaces`, so after Phase 2 it would either fail loudly or land
+ * against another tenant's workspace that happened to share the number. Neither
+ * is a thing to keep. A sales workspace's events belong in sales' feed.
+ *
+ * There is no `app` column to fill: `platform.events.app` recorded WHICH app
+ * produced a row in a shared table, and the schema name answers that here.
+ * `salesEventSource` re-attaches it on the READ side, because it is still a
+ * field on the wire that `bk activity` prints.
  */
-export async function recordEvent(tx: PlatformTx, input: RecordEventInput): Promise<Event> {
-  // The platform half (D-23), delegated here rather than at the call sites.
-  if (isPlatformEntityType(input.entityType)) {
-    // Not supported on the platform side, and it would be dropped in silence.
-    // No call site passes it today; this exists so the day one does, it says so.
-    if (input.subjectUrn !== undefined) {
-      throw new Error(
-        `recordEvent: '${input.entityType}' is a platform entity type (D-23), and ` +
-          'recordPlatformEvent takes no explicit subjectUrn — a workspace, a membership ' +
-          'and an invitation are real subjects with no cross-app address. Drop the ' +
-          'parameter rather than working around this check.'
-      )
-    }
-    return recordPlatformEvent(tx, {
-      app: APP_SLUG,
-      workspaceId: input.workspaceId,
-      actorUserId: input.actorUserId,
-      actorTokenId: input.actorTokenId,
-      entityType: input.entityType,
-      entityId: input.entityId,
-      action: input.action as PlatformEventAction,
-      diff: input.diff,
-      meta: input.meta,
-      idempotencyKey: input.idempotencyKey,
-      occurredAt: input.occurredAt,
-    })
-  }
-
+export async function recordEvent(tx: PlatformTx, input: RecordEventInput): Promise<SalesEvent> {
   const subjectUrn =
     input.subjectUrn !== undefined
       ? input.subjectUrn
       : await resolveSubjectUrn(tx, input.workspaceId, input.entityType, input.entityId)
 
-  const values: NewEvent = {
+  const values: NewSalesEvent = {
     workspace_id: input.workspaceId,
-    app: APP_SLUG,
     subject_urn: subjectUrn,
     actor_user_id: input.actorUserId ?? null,
     actor_token_id: input.actorTokenId ?? null,
@@ -209,11 +200,141 @@ export async function recordEvent(tx: PlatformTx, input: RecordEventInput): Prom
     idempotency_key: input.idempotencyKey ?? null,
     occurred_at: input.occurredAt ?? new Date(),
   }
-  const [row] = await tx.insert(events).values(values).returning()
+  const [row] = await tx.insert(salesEvents).values(values).returning()
   if (!row) throw new Error('event insert returned nothing')
   // NO FAN-OUT. See difference (1) in the header — this is an absence with a
   // reason, not a line somebody forgot.
   return row
+}
+
+// ---------------------------------------------------------------------------
+// THE SUBJECT URN — DERIVED FROM `sales.*`, NOT LOOKED UP IN A SHARED INDEX
+// ---------------------------------------------------------------------------
+// `sales.events.subject_urn` is KEPT (Phase 3's open question from agent 2), and
+// this is why it could be: a URN is `bc:<app>:<workspace-slug>/<type>/<number>`,
+// and every part of that is in `sales.*`. `platform.entities` was where it used
+// to be looked UP; it was never what made it true. The projection is gone and
+// the address is not.
+//
+// Keeping it keeps `?subject_urn=` on the activity route and `bk activity
+// --subject` working against this app — a read surface with a flag behind it,
+// and the column costs one text field on a table that had no rows.
+//
+// The contract is narrow and strict: **null, never a throw.** This runs inside
+// every create, update and delete this app performs, and a URN that cannot be
+// built must cost an untagged event rather than a failed write.
+//
+// Null is also the CORRECT answer, not a gap, for the four sales entity types
+// with no #number — a contact, a stage entry, an objection and a match are all
+// reached through their prospect and have no address of their own. `entityType`
+// is a plain string for exactly that reason: the caller's union is wider than
+// the addressable six, and narrowing it is the whole job.
+
+/** The source table behind each addressable type. `Record<>` so a seventh is a compile error. */
+const URN_SOURCE: Record<SalesEntityType, typeof prospects | typeof meetings | typeof communications | typeof products | typeof templates | typeof documents> = {
+  prospect: prospects,
+  meeting: meetings,
+  communication: communications,
+  product: products,
+  template: templates,
+  document: documents,
+}
+
+function isAddressableType(t: string): t is SalesEntityType {
+  return (ENTITY_TYPES as readonly string[]).includes(t)
+}
+
+export async function resolveSubjectUrn(
+  tx: PlatformTx,
+  workspaceId: number,
+  entityType: string,
+  entityId: number
+): Promise<string | null> {
+  if (!isAddressableType(entityType)) return null
+  const table = URN_SOURCE[entityType]
+  // `sales.workspaces`, not `platform.workspaces`: the slug in a sales URN is
+  // this app's workspace slug, and after Phase 2 the two tables are different
+  // things that happen to share some ids.
+  const res = await tx.execute(sql`
+    SELECT w.slug AS slug, x.seq AS seq
+    FROM ${table} x
+    JOIN ${salesWorkspaces} w ON w.id = x.workspace_id
+    WHERE x.id = ${entityId} AND x.workspace_id = ${workspaceId}
+    LIMIT 1
+  `)
+  const row = res.rows[0]
+  if (!row || row.seq == null) return null
+  return entityUrnOrNull(String(row.slug), entityType, Number(row.seq))
+}
+
+// ---------------------------------------------------------------------------
+// THE READ HALF — this app's activity feed
+// ---------------------------------------------------------------------------
+// `GET /api/workspaces/{ws}/activity` is still the shared factory: the filters,
+// the cursor, the envelope and the #number substitution are the same everywhere.
+// What it can no longer do for itself is name the table, so the mount supplies
+// this (`EventSource`, packages/platform-api/src/event-source.ts).
+//
+// TWO THINGS IT DOES THAT A NAIVE PORT WOULD NOT:
+//
+//  1. **It answers `app`.** `sales.events` has no such column — the schema name
+//     is the answer — but `app` is a FIELD ON THE WIRE that `bk activity`
+//     prints, and a column that silently went empty would read as "unknown app"
+//     rather than "this one". It is a constant, which is what it always meant.
+//
+//  2. **`?app=` filters, rather than being ignored.** A caller asking for
+//     another app's rows gets an empty page, because this deployment genuinely
+//     has none of them. Dropping the filter would return THIS app's feed to
+//     somebody who asked for a different one, which is the same failure shape as
+//     `parseList` silently dropping an unrecognised `?action=`.
+
+const publicEventApp = APP_SLUG
+
+export const salesEventSource: EventSource = {
+  async list(filter: ListEventsFilter): Promise<EventsPage> {
+    const limit = Math.min(Math.max(filter.limit ?? 50, 1), 200)
+
+    // See (2) above: this app produces exactly one app's events.
+    if (filter.apps && filter.apps.length > 0 && !filter.apps.includes(publicEventApp)) {
+      return { data: [], next_cursor: null }
+    }
+
+    const wheres = [eq(salesEvents.workspace_id, filter.workspaceId)]
+    if (filter.actorUserIds?.length) {
+      wheres.push(inArray(salesEvents.actor_user_id, filter.actorUserIds))
+    }
+    if (filter.entityTypes?.length) {
+      wheres.push(inArray(salesEvents.entity_type, filter.entityTypes))
+    }
+    if (filter.actions?.length) wheres.push(inArray(salesEvents.action, filter.actions))
+    if (filter.subjectUrn) wheres.push(eq(salesEvents.subject_urn, filter.subjectUrn))
+    if (filter.fromOccurredAt) wheres.push(gte(salesEvents.occurred_at, filter.fromOccurredAt))
+    if (filter.toOccurredAt) wheres.push(lte(salesEvents.occurred_at, filter.toOccurredAt))
+    if (filter.cursor) wheres.push(lt(salesEvents.id, filter.cursor))
+
+    const rows = await getDb()
+      .select({ e: salesEvents, actor_name: users.name, actor_email: users.email })
+      .from(salesEvents)
+      // LEFT, not INNER: `actor_user_id` is null for anything an agent did with
+      // a token and no user behind it, and an inner join would drop those rows
+      // from the feed entirely.
+      .leftJoin(users, eq(users.id, salesEvents.actor_user_id))
+      .where(and(...wheres))
+      .orderBy(desc(salesEvents.id))
+      .limit(limit + 1)
+
+    const hasMore = rows.length > limit
+    const data = rows.slice(0, limit).map((r) => ({
+      ...r.e,
+      app: publicEventApp,
+      actor_name: r.actor_name,
+      actor_email: r.actor_email,
+    }))
+    return {
+      data: data as unknown as EventsPage['data'],
+      next_cursor: hasMore ? (data[data.length - 1]?.id ?? null) : null,
+    }
+  },
 }
 
 // ---------------------------------------------------------------------------

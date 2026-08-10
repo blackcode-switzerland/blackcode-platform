@@ -4,11 +4,14 @@
 // THE FIRST CLASS-B FACTORY (D-22)
 // ---------------------------------------------------------------------------
 // This route is 90% platform and 10% not, and the 10% is the interesting part.
-// `platform.events` holds every app's events, so the query, the filters and the
-// envelope are shared — but an event's `entity_id` is an INTERNAL ROW ID, and
-// the API must never expose one. For an app's own entities it has to be swapped
-// for the workspace #number, which means reading that app's tables. This package
-// cannot do that and must not try.
+// The query, the filters and the envelope are shared — but an event's
+// `entity_id` is an INTERNAL ROW ID, and the API must never expose one. For an
+// app's own entities it has to be swapped for the workspace #number, which means
+// reading that app's tables. This package cannot do that and must not try.
+//
+// Since Phase 3 (2026-08-10) the TABLE is app-shaped too: `platform.events` was
+// every app's, and `apps/sales` now writes `sales.events`. So the contribution
+// carries an `events` source as well — see `../event-source.ts`.
 //
 // So the factory takes a SECOND ARGUMENT: a named, typed contribution from the
 // app. Not a field on `AppContext` — AppContext is what every app supplies for
@@ -17,6 +20,7 @@
 // to an app that does not mount this route.
 //
 //     export const GET = activityRoute(appContext, {
+//       events: platformEventSource(db),
 //       entityTypes: [...],
 //       actions: [...],
 //       numberedEntityTypes: ['issue', 'task', 'project'],
@@ -27,12 +31,8 @@
 // events — workspace, membership, invitations, app access.
 
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  listEvents,
-  parseUrn,
-  PLATFORM_ENTITY_TYPES,
-  PLATFORM_EVENT_ACTIONS,
-} from '@blackcode/platform-db'
+import { parseUrn, PLATFORM_ENTITY_TYPES, PLATFORM_EVENT_ACTIONS } from '@blackcode/platform-db'
+import type { EventSource } from '../event-source'
 import type { AppContext } from '../app-context'
 import { Errors } from '../errors'
 import { createApiHandler, createResolveWorkspace } from '../handler'
@@ -57,6 +57,17 @@ interface Params {
  * it is what Phase 4's `app_*` actions did here for months.
  */
 export interface ActivityContribution {
+  /**
+   * WHERE THIS APP'S EVENTS LIVE — see `../event-source.ts`.
+   *
+   * Required, with no default (Phase 3, 2026-08-10). `platform.events` used to
+   * hold every app's rows; `apps/sales` now writes `sales.events`, and a
+   * default here would mean an app serving another app's feed for a workspace
+   * id that means a different team. `apps/issues` supplies
+   * `platformEventSource(db)`, which is the call this route already made.
+   */
+  events: EventSource
+
   /** This app's own entity types, beyond the platform ones above. */
   entityTypes?: readonly string[]
   /** This app's own actions, beyond the platform ones above. */
@@ -261,7 +272,7 @@ export function activityRoute(app: AppContext, contribution: ActivityContributio
       fromOccurredAt = new Date(Date.now() - ms)
     }
 
-    const page = await listEvents(app.db, {
+    const page = await contribution.events.list({
       workspaceId: ctx.workspace.id,
       actorUserIds: parseInts(sp.get('actor')),
       entityTypes: parseList(sp.get('entity_type'), entityTypes),

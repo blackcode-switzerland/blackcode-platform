@@ -32,6 +32,11 @@ export type {
 export { platformUploadLedger } from './upload-ledger'
 export type { UploadLedger, UploadAttribution, UploadRecord } from './upload-ledger'
 
+// WHERE AN APP'S ACTIVITY FEED IS READ FROM (2026-08-10, Phase 3). On the
+// activity route's CONTRIBUTION rather than on AppContext — one route reads it.
+export { platformEventSource } from './event-source'
+export type { EventSource, EventsPage, ListEventsFilter } from './event-source'
+
 export {
   createApiHandler,
   createResolveWorkspace,

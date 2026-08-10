@@ -33,6 +33,8 @@ import type {
 } from '@blackcode/platform-api'
 import { getDb } from '../client'
 import { salesWorkspaceMembers, salesWorkspaces, users } from '../schema'
+import { recordEvent } from './events'
+import type { Actor } from '@/lib/actor'
 
 /** The five columns shared code reads. Selected explicitly, never `SELECT *`. */
 const WS_COLUMNS = {
@@ -165,18 +167,50 @@ export async function getMembership(
  * Refusing to remove the OWNER is the ROUTE's job, not this function's — the
  * route has the workspace record and can say "transfer ownership first" with the
  * slug in the message.
+ *
+ * ── THE EVENT, ADDED IN PHASE 3 ────────────────────────────────────────────
+ * Phase 2 left this write with NO event row, and said so in the route: at that
+ * point `recordEvent` still wrote `platform.events`, whose `workspace_id` has a
+ * foreign key on `platform.workspaces`, so an event carrying a sales workspace
+ * id would either fail loudly or land against a different app's workspace with
+ * the same number. The spine is `sales.events` now, and this is the call site
+ * that was waiting for it — the only place in this app where a membership
+ * changes after the workspace exists.
+ *
+ * In the same transaction as the delete, for the reason `recordEvent`'s header
+ * gives: there are no event triggers, so a mutation that commits without its
+ * event has lost it permanently.
  */
-export async function removeMember(workspaceId: number, userId: number): Promise<boolean> {
-  const rows = await getDb()
-    .delete(salesWorkspaceMembers)
-    .where(
-      and(
-        eq(salesWorkspaceMembers.workspace_id, workspaceId),
-        eq(salesWorkspaceMembers.user_id, userId)
+export async function removeMember(
+  workspaceId: number,
+  userId: number,
+  actor: Actor
+): Promise<boolean> {
+  return await getDb().transaction(async (tx) => {
+    const rows = await tx
+      .delete(salesWorkspaceMembers)
+      .where(
+        and(
+          eq(salesWorkspaceMembers.workspace_id, workspaceId),
+          eq(salesWorkspaceMembers.user_id, userId)
+        )
       )
-    )
-    .returning({ id: salesWorkspaceMembers.id })
-  return rows.length > 0
+      .returning({ id: salesWorkspaceMembers.id })
+    if (rows.length === 0) return false
+
+    await recordEvent(tx, {
+      workspaceId,
+      actorUserId: actor.userId,
+      actorTokenId: actor.tokenId,
+      entityType: 'workspace_member',
+      entityId: userId,
+      action: 'member_removed',
+      meta: { user_id: userId },
+      // A membership has no cross-app address, and never had one.
+      subjectUrn: null,
+    })
+    return true
+  })
 }
 
 // ---------------------------------------------------------------------------

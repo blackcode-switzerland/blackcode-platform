@@ -71,3 +71,6 @@ sales.workspaces	0	NULL	NULL
 
 # EXPECTED 2026-08-10 phase-3 agent4 (LOCAL)
 # platform.uploads -2   sales rows, app = 'sales' — the ledger is sales.uploads now
+
+# EXPECTED 2026-08-10 phase-3 agent4 (LOCAL)
+# platform.events -54   sales rows, app = 'sales' — the spine is sales.events now

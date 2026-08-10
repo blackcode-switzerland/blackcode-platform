@@ -1,14 +1,15 @@
 // GET /api/workspaces/{ws}/activity — mounted from the shared Class-B factory.
 //
 // ---------------------------------------------------------------------------
-// THIS IS NOT A THREE-LINE MOUNT, AND THE FOURTH ARGUMENT IS THE POINT
+// THIS IS NOT A THREE-LINE MOUNT, AND THE SECOND ARGUMENT IS THE POINT
 // ---------------------------------------------------------------------------
 // `docs/frontend.md` §8 wrote this mount as three lines (`activityRoute(appContext)`)
 // while the page it describes did not exist. It does not compile: the factory is
-// Class B (D-22), so it takes a SECOND argument. `platform.events` holds every
-// app's rows and the query over them is shared, but an event's `entity_id` is an
-// internal serial and the API must never serve one — swapping it for the
-// workspace #number means reading `sales.*`, which a platform package cannot do.
+// Class B (D-22), so it takes a SECOND argument. The query over the feed is
+// shared, but an event's `entity_id` is an internal serial and the API must
+// never serve one — swapping it for the workspace #number means reading
+// `sales.*`, which a platform package cannot do. Since Phase 3 the same argument
+// also says WHICH TABLE the feed is: this app's events are `sales.events`.
 //
 // So the app-shaped half arrives here, named and typed, rather than as a field
 // on `AppContext` that every future app would pay for whether it mounts this
@@ -31,10 +32,16 @@ import {
   SALES_EVENT_ACTIONS,
   SALES_EVENT_ENTITY_TYPES,
   resolveEventEntitySeqs,
+  salesEventSource,
 } from '@/lib/db/queries/events'
 import { ENTITY_TYPES } from '@/lib/entity-address'
 
 export const GET = activityRoute(appContext, {
+  // WHERE THIS APP'S EVENTS LIVE — `sales.events` since Phase 3. Required by the
+  // contribution with no default: `platform.events` used to be everybody's, and
+  // an app serving another app's feed for a workspace id that means a different
+  // team is precisely what this refactor removes.
+  events: salesEventSource,
   entityTypes: SALES_EVENT_ENTITY_TYPES,
   actions: SALES_EVENT_ACTIONS,
   // The six whose `entity_id` is a serial that must be swapped for the #number.
