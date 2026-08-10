@@ -51,24 +51,9 @@ die()     { error "$*"; exit 1; }
 app_registry() {
   cat <<'APPS'
 issues|bc-issues|prj_bueHX5y2f7uaemskB5Q1Plwbry2p|https://issues.blackcode.ch
+sales|bc-sales|prj_p5A74QYKnig8696ES87bT6rvHMdZ|https://sales.blackcode.ch
 APPS
 }
-
-# ── sales, pending provisioning ────────────────────────────────────────────
-# The line below is the ONE addition sales needs. It is commented out because the
-# Vercel project does not exist yet: an uncommented line with a placeholder id
-# would make `release.sh web sales` resolve and then deploy to whatever project
-# the working copy happens to be linked to, which is the exact failure
-# VERCEL_PROJECT_ID exists to prevent.
-#
-# TO ENABLE (salesImplementation/DEPLOY-TODO.txt, Release 2, step 8):
-#   1. Create the Vercel project, Root Directory `apps/sales`.
-#   2. `vercel project ls` — or the project's Settings page — gives the id.
-#   3. Paste it over `prj_REPLACE_ME`, move the line INSIDE the heredoc above,
-#      and delete this block.
-#   4. `./devops/release.sh apps` must then list two apps. That is the check.
-#
-# sales|bc-sales|prj_REPLACE_ME|https://sales.blackcode.ch
 
 VERCEL_ORG_ID_VALUE="team_b4wX7DvsnUaeqJyLi5cGrlbQ"
 
