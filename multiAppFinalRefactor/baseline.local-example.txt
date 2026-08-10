@@ -1,6 +1,6 @@
-# baseline captured 2026-08-10T16:24:54Z
+# baseline captured 2026-08-10T17:45:22Z
 # database: blackcode_issues
-# tables: 49
+# tables: 55
 # NOID = table has no integer id column; only count is tracked, min/max read NOID
 # NULL  = table had zero rows at capture time
 #
@@ -48,6 +48,9 @@ sales.counters	6	NOID	NOID
 sales.document_products	0	NOID	NOID
 sales.document_prospects	0	NOID	NOID
 sales.documents	10	1	10
+sales.events	0	NULL	NULL
+sales.invitations	0	NULL	NULL
+sales.labels	0	NULL	NULL
 sales.match_documents	0	NOID	NOID
 sales.matches	6	1	6
 sales.meetings	10	1	10
@@ -58,4 +61,7 @@ sales.prospects	15	1	97
 sales.stage_entries	37	1	92
 sales.template_documents	0	NOID	NOID
 sales.templates	8	1	8
+sales.uploads	0	NULL	NULL
 sales.user_preferences	1	NOID	NOID
+sales.workspace_members	0	NULL	NULL
+sales.workspaces	0	NULL	NULL
