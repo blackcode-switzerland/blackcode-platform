@@ -1,0 +1,530 @@
+FROM:    agent2
+TO:      master
+DATE:    2026-08-10
+PHASE:   1 — Sales' own tables (additive), and one expand-only column on a shared table
+STATUS:  REPLY
+--------------------------------------------------------------------------------
+
+SUMMARY: done, gate green, three commits, not pushed. I built SIX tables, not
+eight — §2's list has two entries that do not survive reading sales' code, and
+one column list is missing a NOT NULL UNIQUE key. The `apiHandler` change was
+indeed bigger than one line, but not in the way you expected: there are THREE
+writers of `error_events`, not one, and only one of them can be held by tsc.
+Details in §1, §2 and §6.
+
+
+================================================================================
+1. THE TABLES I CREATED, AND THE TWO I DID NOT
+================================================================================
+
+Migration `apps/sales/lib/db/migrations/0003_sales_own_foundations.sql`, sales'
+own ledger (`__drizzle_migrations_sales`), journal entry idx 3. Hand-written,
+like 0001 and 0002. Applied locally; both ledgers settle clean.
+
+TypeScript names are PREFIXED, Postgres names are not: `salesWorkspaces` →
+`sales.workspaces`. That is not cosmetic. `apps/sales/lib/db/schema.ts` does
+`export * from '@blackcode/platform-db/schema'`, so a local `export const
+workspaces` would SHADOW `platform.workspaces` at every one of this app's
+existing import sites, silently, and Phase 3's switch-over would happen by name
+resolution rather than in a diff agent 4 can read. Agent 4 should keep this.
+
+  ┌─ sales.workspaces ────────────────────────────────────────────────────────
+  │ USED BY: `workspacesRoute` / `workspaceShowRoute` (sales mounts GET only —
+  │   no create, no delete, no update), `resolveWorkspace` on every route, and
+  │   Phase 2's first-sign-in bootstrap.
+  │ NOT CARRIED, and why:
+  │   logo_url             sales renders no workspace chrome. There is no
+  │                        switcher to put a logo in, by product decision.
+  │   storage_limit_bytes  never enforced by anything, in either app. A quota
+  │                        over ONE shared Blob store is not a per-app fact —
+  │                        splitting it per app would be inventing a second
+  │                        answer to a question with one.
+  │   deleted_at           HAS NO WRITER, in either app. `workspace-listing.ts`
+  │                        says so at length: issues never filtered on it,
+  │                        _scaffold did, and they behaved identically because
+  │                        nothing has ever set it. Carrying an unwritten
+  │                        column into a new table is how it acquires two
+  │                        different meanings in two apps.
+  │ KEPT despite looking droppable: `updated_at` — `listMyWorkspaces` ORDERs by
+  │   it. `slug` — routes are `/api/workspaces/{ws}` and {ws} is the slug.
+  └───────────────────────────────────────────────────────────────────────────
+
+  ┌─ sales.workspace_members ─────────────────────────────────────────────────
+  │ USED BY: `workspaceMembersRoute`, `workspaceMemberRoute` (sales mounts
+  │   both), `resolveWorkspace`'s membership check, Phase 2's members page.
+  │ NOT CARRIED: nothing. This table is already minimal.
+  │ NOTE: a grep for `workspaceMembers` in apps/sales returns ZERO files, which
+  │   is why your survey may have missed it. Sales uses the table entirely
+  │   through the shared platform-api factories, which import platform-db
+  │   directly. Same for invitations. **A file-count survey cannot see a
+  │   dependency that goes through a shared factory** — that is the mechanism
+  │   behind two of the three corrections below, in both directions.
+  └───────────────────────────────────────────────────────────────────────────
+
+  ┌─ sales.invitations ───────────────────────────────────────────────────────
+  │ USED BY: `workspaceInvitationsRoute` (mounted, with a no-op sender by
+  │   design), `/api/me/pending-invitations`, `invite-candidates`.
+  │ NAME: I took your short spelling — §6.2. Reasoning in §6.
+  │ NOT CARRIED:
+  │   app                  This is the one that selects an app WITHIN a shared
+  │                        workspace, under `workspace_apps` / `app_access` —
+  │                        both DROPPED in Phase 5. An invitation to a sales
+  │                        workspace is an invitation to sales.
+  │   status 'declined'    Kept the CHECK, dropped that one value: nothing in
+  │                        either app has ever written it. An accepted value is
+  │                        a promise that some code path produces it. Phase 2
+  │                        adds it back with the route that writes it, if any.
+  └───────────────────────────────────────────────────────────────────────────
+
+  ┌─ sales.labels ────────────────────────────────────────────────────────────
+  │ USED BY: `lib/db/queries/labels.ts` (list/get/create/update/delete/attach/
+  │   detach), the labels routes, `prospect_labels` (which FKs into it today).
+  │ NOT CARRIED:
+  │   app                  and therefore not the `app IS NULL OR app='sales'`
+  │                        predicate either. **Agent 4: delete
+  │                        `visibleToThisApp()`, do not port it.** It is D-14's
+  │                        workaround for one table serving two apps; over a
+  │                        table that CANNOT hold a foreign row it is a no-op
+  │                        that reads as protection, which is the whole subject
+  │                        of CLAUDE.md.
+  │ CHANGED from the platform shape:
+  │   workspace_id NOT NULL (platform's is nullable — a stated backfill
+  │     artefact, "Phase 1: nullable during backfill", on a table with live
+  │     rows. A new table starts with the constraint the code assumes.)
+  │   ADDED uq_sales_labels_ws_name. Platform has none, which lets one
+  │     workspace hold two labels called "Enterprise" and leaves
+  │     `bk sales label attach enterprise` with no defensible answer.
+  │   The colour default is IMPORTED from lib/pipeline.ts — see §4, a real
+  │     guard caught me copying issues' grey into it.
+  └───────────────────────────────────────────────────────────────────────────
+
+  ┌─ sales.uploads ───────────────────────────────────────────────────────────
+  │ USED BY: `uploadRoute` and `uploadBlobRoute` (both mounted) via
+  │   `recordUpload`. Sales WRITES this ledger and does not currently read it.
+  │ ** YOUR COLUMN LIST IS MISSING `url`, AND IT IS NOT OPTIONAL. ** §2 lists
+  │   "workspace_id, pathname, filename, size, uploaded_by". `url` is the join
+  │   key the whole ledger is addressed by, it is NOT NULL and UNIQUE in the
+  │   platform table, and that uniqueness is the ONLY reason `recordUpload` is
+  │   idempotent. Without it a repeated blob callback (which arrives
+  │   server-to-server from Vercel and can retry) writes a second row. I added
+  │   it plus `mime_type`, which `recordUpload` also passes.
+  │ NOT CARRIED: `app`.
+  │ workspace_id STAYS NULLABLE, unlike labels — this one is load-bearing in
+  │   the source table: an upload whose workspace could not be determined is
+  │   still RECORDED rather than lost. An unattributed ledger row is
+  │   recoverable; a missing one hides bytes nobody can find again.
+  │ NOT TOUCHED: platform.blob_references, its triggers, and anything reaching
+  │   del(). Read references.ts first as instructed. One Blob store, one bill,
+  │   one quota, one shared delete gate — unchanged.
+  └───────────────────────────────────────────────────────────────────────────
+
+  ┌─ sales.events ────────────────────────────────────────────────────────────
+  │ USED BY: `lib/db/queries/events.ts` `recordEvent` (~40 call sites via
+  │   prospects/meetings/communications/labels/trash), `activityRoute`,
+  │   `bk sales activity`.
+  │ NOT CARRIED: `app`.
+  │ KEPT AND FLAGGED FOR YOU — `subject_urn`. This is the one column I am
+  │   genuinely unsure about and I did not want to decide it silently. It is
+  │   the cross-app address, resolved today from `platform.entities` via
+  │   `resolveSubjectUrn` — which Phase 3 deletes. I kept it because it is a
+  │   READ surface with a flag behind it (`?subject_urn=` on the activity
+  │   route, `bk activity --subject`, `cli/internal/client/client.go:531`), and
+  │   a sales URN is derivable from `sales.*` alone: the shared index is how it
+  │   is looked up, not what makes it true. Dropping an unused column from an
+  │   EMPTY table is free; adding one back to a populated one is not. Agent 4
+  │   should confirm or drop it.
+  │ KEPT despite no writer: `idempotency_key` (every call site leaves it unset
+  │   today). The UNIQUE index on it is what stops a retried agent command
+  │   double-logging, and the column costs one nullable varchar.
+  │ `actor_token_id` → platform.api_tokens, a shared identity table. Sales is
+  │   the app that actually fills it ("by Andrea / by Companion"), so it is not
+  │   speculative here.
+  └───────────────────────────────────────────────────────────────────────────
+
+  ╔═ NOT BUILT: sales.comments ═══════════════════════════════════════════════
+  ║ **D-13: this app has no platform comments and never had any.** A grep for
+  ║ the TABLE in apps/sales returns zero call sites. The 8 files PLAN.md §4
+  ║ counted are the word "comments" in prose and in `communications`. Five
+  ║ separate source files say so in as many words — lib/pipeline.ts:121,
+  ║ schema.ts:455, storage/scanner.ts:96, queries/events.ts:21, and the
+  ║ communications route header — and sales' equivalent already exists:
+  ║ `sales.communications` with `channel = 'note'`, created by 0001.
+  ║ Building it would have created an empty table for agent 4 to point a
+  ║ non-existent comments query layer at.
+  ╚═══════════════════════════════════════════════════════════════════════════
+
+  ╔═ NOT BUILT: sales.deletion_batches ═══════════════════════════════════════
+  ║ Sales' bin is `deleted_at` on the row plus a cascade that stamps ONE
+  ║ instant (`lib/db/queries/trash.ts`), and there are no batches. The trash
+  ║ route says it outright — "there are no delete batches here, so `batch_id`
+  ║ is absent rather than invented, and the CLI prints '—'" — and the restore
+  ║ route REFUSES `--batch` with a named error rather than ignoring it.
+  ║ PLAN.md §4 measured 0 files itself and §4b still says "sales gets
+  ║ sales.deletion_batches". A batch table with no writer is a shape for
+  ║ somebody to later mistake for a feature.
+  ╚═══════════════════════════════════════════════════════════════════════════
+
+Also confirmed absent, as PLAN.md predicted: `inbox_messages` (0 files),
+`workspace_apps` / `app_access` (not created, per §2d).
+
+
+================================================================================
+2. THE error_events CHANGE
+================================================================================
+
+** THERE ARE THREE WRITERS, NOT ONE. This is the answer to §6.4. **
+
+The brief names `apiHandler`. Had I done only that, `error_events.app` would
+have been NULL forever for a whole class of rows and Phase 5's `SET NOT NULL`
+would have failed on data written AFTER the deploy — the exact condition the
+NOT NULL exists to catch, produced by the migration itself.
+
+  1. `packages/platform-api/src/handler.ts` → safeLog. Two lines: `app` in the
+     column list, `${truncate(app.appSlug, 40)}` in VALUES. It already holds
+     the AppContext, so nothing had to be threaded — your §6.4 worry does not
+     materialise.
+  2. `packages/platform-api/src/routes/telemetry.ts` → `clientErrorsRoute`,
+     the client error beacon. A shared factory; only issues mounts it today,
+     but sales will inherit it. Also has `app.appSlug` in scope.
+  3. `apps/issues/lib/email/send.ts` → issues' own wrapper around
+     `insertErrorEvent`, for failed invitation/password emails.
+
+I did not just add `app` at three call sites. `packages/platform-db`'s
+`insertErrorEvent` now REQUIRES it in its parameter type
+(`Omit<NewErrorEvent,'id'|'occurred_at'|'app'> & { app: string }`), even though
+the column is nullable — the nullability is about rows written by code that
+predates the column, not a licence for new code to omit it. Issues' wrapper
+injects `APP_SLUG` and does not accept one, so no call site in that app can
+supply the wrong slug either. That is the `uploads.app` pattern verbatim, and
+it is the reason that column reached 0 NULLs.
+
+MIGRATION: `apps/issues/lib/db/migrations/0044_error_events_app.sql`, journal
+idx 44. In the ISSUES ledger, not sales' — every `platform.*` migration lives
+there (0037, 0041–0043), and two ledgers with independent high-water marks give
+no ordering between them, so "which app's migration ran first" must not be a
+question a shared column depends on. Applied locally: 327 rows, all backfilled
+to 'issues', 0 NULL.
+
+    ALTER TABLE platform.error_events ADD COLUMN IF NOT EXISTS app varchar(40);
+    UPDATE platform.error_events SET app = 'issues' WHERE app IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_error_events_app_occurred
+      ON platform.error_events (app, occurred_at);
+
+Three things I decided that the brief did not specify:
+
+  * The `WHERE app IS NULL` on the backfill is load-bearing, not decoration.
+    It is what makes re-running the migration a no-op instead of relabelling
+    sales' rows as issues'.
+  * Added `idx_error_events_app_occurred`. "What has app X been throwing
+    lately" is the question the column exists to answer and the one the
+    super-admin Errors tab asks.
+  * NO foreign key to `apps.slug`, unlike `events.app`, `uploads.app` and
+    `labels.app`. Those tables hold an app's DATA, so `ON DELETE set null` is
+    survivable. This one holds the record of an app FAILING, and deregistering
+    an app must not erase the attribution of exactly the rows somebody is
+    reading at 3am to find out what went wrong.
+
+ROLLBACK: `docs/sql/0044-error-events-app-rollback.sql`, `\set ON_ERROR_STOP on`
+at the top (watched — §4). TWO STEPS, deliberately unequal: step 1 drops the
+index and is free; step 2 drops the column and ships COMMENTED OUT, because it
+destroys attribution that cannot be recomputed — `workspace_id` is precisely
+the value that stopped being self-describing, so there is no second source. Its
+header also says the usual case needs neither: the column is additive, so a bad
+deploy is a Vercel rollback and nothing here.
+
+Also `docs/sql/sales-0003-rollback.sql`, which the brief did not ask for but
+SAFETY.md's Migrations section requires of every migration. It carries the
+count query that distinguishes "Phase 1, a no-op on data" from "Phase 2+, this
+is data loss with a reassuring filename", and uses RESTRICT rather than CASCADE
+so an unexpected dependant fails the drop instead of being taken with it.
+
+** DO I AGREE IT IS SAFE AGAINST A RUNNING DEPLOYMENT? Yes, and here is the
+   reasoning rather than the assertion, because you asked for it. **
+
+  * No existing reader selects a column that did not exist — and I checked
+    rather than assumed that no reader uses `SELECT *`: both listings
+    (`listPublicErrorEvents`, `listAdminErrorEvents`) project explicit column
+    lists. `getErrorEvent` DOES `select()` with no projection, i.e. `SELECT *`,
+    and is still safe: it returns the whole row to a super-admin detail view,
+    so an extra column is extra data, not a shape mismatch.
+  * The ALTER takes ACCESS EXCLUSIVE, but a nullable column with NO DEFAULT is
+    a catalog-only change in PG 11+ — no table rewrite, so the lock is held for
+    microseconds rather than for a scan. **A DEFAULT would have changed this**
+    on older versions and is one more reason not to add one.
+  * The UPDATE does rewrite every row and takes ROW EXCLUSIVE, blocking no
+    reader. 327 rows locally; production is the same order of magnitude.
+  * The one genuine ordering constraint: the migration must land BEFORE the
+    deploy that writes the column, never after. The code in this commit names
+    `app` in its INSERT, so a deploy that reaches production ahead of the
+    migration makes every error-log write fail — and safeLog SWALLOWS that, so
+    the symptom is the error log silently ceasing, not an alarm. Standard
+    Vercel order (postbuild migrates, then the deployment goes live) gets this
+    right; it is worth not doing by hand.
+
+
+================================================================================
+3. verify.sh — BEFORE, AFTER, AND WHAT I ADDED TO THE BASELINE
+================================================================================
+Local only. Nothing touched Neon or production; I hold no production
+credentials and did not ask for any.
+
+Note for whoever runs it next: the URL is `...@localhost:5432/...`, not 5434.
+This machine has no native psql, so lib-db.sh runs `docker exec`, and 5434 is
+the port on the HOST side. 5434 fails with "connection refused", which reads
+like a stopped container.
+
+  BEFORE anything                          PASS, 0 failing, 49/49 tables
+  AFTER 0044 (error_events.app)            PASS, 0 failing — no count moved,
+                                           which is what an ADD COLUMN should
+                                           look like in this ledger
+  AFTER 0003 (the six tables)              FAIL, exit 1, 6 failing tables:
+      FAIL sales.workspaces / workspace_members / invitations / labels /
+           uploads / events — "exists in the database but is NOT in the
+           baseline"
+  AFTER re-capturing the local example     PASS, 0 failing, 55/55 tables
+
+That FAIL is case (d) and it is the ledger working. I re-captured
+`baseline.local-example.txt` (49 → 55 tables) rather than teaching verify.sh to
+ignore new tables, as instructed. **`baseline.txt` — the production one — is
+untouched; it is yours to re-capture after deploy.**
+
+verify.sh was re-run and green after every step since, including after the
+rollback rehearsals and after the bounded-role probe (§4), which was how I
+confirmed the probe left no rows behind.
+
+Agent 1's §3 limits held up in practice and are worth restating for agent 4,
+who owns the deletes: this ledger is magnitude-and-omission, not identity. It
+cannot see that 8 rows went and they were the WRONG 8. My phase deletes
+nothing, so it did not bite here.
+
+
+================================================================================
+4. WHAT I WATCHED FAIL, AND HOW
+================================================================================
+You offered "nothing broke because nothing reads these yet" as an acceptable
+answer. It would have been the wrong one: this phase writes a migration, a
+rollback, two type-level guards and two new test files, and every one of them
+is a check that can be inert. Nine injections below, each observed red by name
+and restored. Two of them found real defects in my own work.
+
+(a) verify.sh case (d) — see §3. Six tables, named individually, exit 1.
+
+(b) `insertErrorEvent`'s required `app`, from the telemetry beacon.
+    Deleted `app: app.appSlug` from clientErrorsRoute → tsc:
+      "Property 'app' is missing ... but required in type '{ app: string; }'"
+    Restored.
+
+(c) The same guard from issues' wrapper. Replaced `{...row, app: APP_SLUG}`
+    with `row` → same error at error-events.ts:85. Restored.
+    (b) and (c) together are what let Phase 5 run SET NOT NULL without
+    auditing call sites: it is tsc's job now, not a reviewer's.
+
+(d) ** A GUARD OF MINE THAT WAS INERT, FOUND BY WRITING ITS PREMISE. **
+    My first `error-events-app.test.ts` asserted `expect(strings).toContain
+    ('app')` for the column list. That assertion CANNOT FAIL. The statement
+    interpolates `${errorEvents}` — the Drizzle TABLE OBJECT — and the string-
+    walk borrowed from redact-body.test.ts descends into it, so the bare string
+    'app' is present in every captured statement purely because the schema has
+    a column of that name, whether or not the INSERT mentions it. This is
+    finding #11's mechanism exactly: the granularity of a text scan is part of
+    what it checks. I only saw it because the premise assertion failed for a
+    different reason and made me dump the real chunk list. Rewritten to anchor
+    on the raw `(app, …) VALUES` fragment and on POSITION.
+
+(e) safeLog drops the value, keeps the column (the silent-outage case).
+    Deleted the VALUES line → RED, and for the right reason:
+      "the INSERT names 11 columns but binds 10 values — Postgres would reject
+       this and safeLog would swallow the rejection, so the error log would
+       silently stop gaining rows"
+    This is the failure that has no other symptom: safeLog catches everything
+    and prints to stderr, so a broken INSERT there does not fail a request, it
+    just stops the error log. Restored.
+
+(f) safeLog hardcodes 'issues' instead of reading the AppContext → RED on all
+    four tests. Restored.
+
+(g) safeLog drops `truncate(..., 40)` → RED on the truncation test ONLY, the
+    other three correctly green. A 60-char slug bound in full is `value too
+    long for type character varying(40)`, which safeLog also swallows.
+
+(h) ** THE ONE THAT JUSTIFIES THE TEST'S SHAPE. ** safeLog with 11 columns and
+    11 values, but the slug bound into the WRONG slot (app ⇄ level swapped).
+    The length check correctly PASSED — nothing is malformed — and the two
+    positional tests went RED. **A `toContain`-based test passes this
+    injection completely**: the slug is in the statement, just assigned to the
+    wrong column, and every row would be misattributed with nothing to see.
+
+(i) ** A REAL GUARD IN THIS REPO CAUGHT ME, AND IT WAS RIGHT. **
+    `apps/sales/lib/palette.test.ts` failed the build on
+    `sales.labels.color.default('#6b7280')` — I had copied the platform
+    table's default, which is ISSUES' cool grey, into the app whose D-4
+    decision is "sales must not feel like issues". Fixed by exporting
+    `DEFAULT_LABEL_COLOR` from `lib/pipeline.ts`, where D-4 says every colour
+    is decided, and importing it. Worth recording as evidence the standing
+    rule pays: this was a guard nobody in this phase wrote, doing its job.
+
+(j) That fix created a NEW two-copies-of-one-fact problem — SQL cannot import a
+    TS constant, so the hex is written out again in migration 0003. Added
+    `lib/db/label-default-color.test.ts` (the `scanner.test.ts` pattern) and
+    watched it fail three ways: migration edited alone → RED naming both
+    values; constant edited alone → RED (and palette.test.ts does NOT catch
+    this one, since pipeline.ts is the file it excludes from the scan);
+    column renamed in the SQL → the PREMISE test RED, which is the case where
+    the equality would otherwise have compared undefined to undefined.
+
+(k) `\set ON_ERROR_STOP on`, the claim I put in both rollback headers.
+      without it:  ERROR: index "no_such_index" does not exist / PSQL EXIT=0
+      with it:     same ERROR / PSQL EXIT=3
+    Findings #7 and #15 reproduced on demand, so the header now states
+    something I have seen rather than something I inherited.
+
+(l) ** THE GRANTS, which is where I expected to find the next #15. **
+    Migration 0003 creates six tables that `sales_app` must be able to read and
+    write, and `GRANT ... ON ALL TABLES IN SCHEMA` means "all tables that exist
+    RIGHT NOW" — it would NOT cover them. The claim that step 5's
+    `ALTER DEFAULT PRIVILEGES` does is a claim about a script a human ran once,
+    months ago, so I tested it rather than repeating it:
+      1. dropped the six tables
+      2. created `probe_sales_app` and ran sales-app-role.sql's grants against
+         a schema that did NOT yet contain them — the finding-#15 ordering
+      3. re-applied the migration as the migrator
+      4. as the probe role, with NO re-grant of any kind: INSERT + SELECT on
+         workspaces, labels and events — all succeeded, sequences included
+    And the negative half, which per finding #16 only means something because
+    the positive half above passed first: refused `issues.*` (permission
+    denied for schema issues), refused DDL on its own table (must be owner of
+    table labels), owns 0 objects. Probe rows deleted, role dropped, verify.sh
+    green after.
+
+(m) Both rollback scripts actually run. sales-0003-rollback.sql: exit 0, my six
+    tables gone, 0001's SEVENTEEN still standing (it does not drop the schema).
+    0044's step 1: exit 0, index gone, column and all 327 rows intact — i.e.
+    step 2 really is commented out rather than merely described as such.
+
+(n) Re-runnability, since both files claim it. Each migration applied twice
+    more via psql with ON_ERROR_STOP: exit 0 both times, output only
+    "already exists, skipping". The 0044 backfill's `WHERE app IS NULL` means
+    pass 2 relabels nothing.
+
+NOT VERIFIED, and I am flagging it rather than letting it read as covered: I
+have not seen a row written by the SALES deployment carry `app='sales'`,
+because that needs sales to actually throw against a running server. The unit
+test proves the AppContext's slug is what lands, for any slug; it does not
+prove sales' AppContext says 'sales'. Worth one glance at
+`SELECT app, count(*) FROM platform.error_events GROUP BY app` after both apps
+have been deployed, and it is the precondition for Phase 5 anyway.
+
+
+================================================================================
+5. THE GATE
+================================================================================
+From the repo root.
+
+  npm run typecheck        10/10 green
+  npx turbo test --force   4/4 tasks. issues 255 passed / 85 skipped (33 files),
+                           sales 67 passed / 9 skipped (15 files), scaffold 11,
+                           platform-testing 37. The skips are this repo's
+                           existing TEST_DATABASE_URL integration gate, which
+                           announces itself loudly, unrelated to this phase.
+                           +4 tests in issues, +3 in sales, both mine.
+  npm run lint             0 errors, 8 warnings — all pre-existing
+                           (no-img-element, no-page-custom-font, four
+                           exhaustive-deps) in files this phase never touched.
+  npm run build            3/3 green. postbuild skipped migrations
+                           (RUN_MIGRATIONS unset locally), as expected.
+  cd cli && go build / go vet / go test    all green, all packages.
+  cd cli && make routes    NOT RUN — no `routes` annotation changed, because no
+                           CLI file changed at all this phase.
+
+Three commits, local, not pushed:
+  15a8dcb  feat(platform): error_events gains `app` — the expand half
+  d9b32fb  feat(sales): its own workspaces, members, invitations, labels, …
+  970a890  chore(refactor): declare the six new sales tables in the local baseline
+
+DOCS (mandatory, done in-phase):
+  docs/platform-db.md        `error_events.app` added to the app-dimension
+                             table with why it differs from the other three
+                             (no FK, and it is about ambiguity not collision);
+                             new section on an app owning its workspaces,
+                             including the grants finding from §4(l).
+  docs/backend.md            the apiHandler error-logging bullet now states
+                             `app`; plus a DATED correction note on the
+                             transaction_log section — see §6.5.
+  apps/sales/docs/backend.md §3.1 lists the six tables and the two deliberate
+                             absences; §6.1 lists migration 0003; §6.2 the
+                             rollback order and when it stops being safe.
+
+CHANGELOG: **no entry, deliberately — overrule me if you disagree.** The rule
+is "any change to an API route or a user-facing feature". This phase changes no
+route, no CLI command, no `bk meta` value and no limit; there is nothing an
+agent consuming the changelog could act on. The changelog is an agent surface,
+and an entry announcing a column nobody can observe makes it noisier without
+making it truer. Phase 1 is invisible by construction — that is its design.
+Agent 1's Phase 0 reported the same conclusion and you accepted it. The `app`
+column becomes user-visible when `bk super-admin errors` starts showing or
+filtering on it, which is where I would put the entry.
+
+
+================================================================================
+6. WHAT I THINK YOU GOT WRONG
+================================================================================
+
+6.1 ** §2's TABLE LIST — you were right to distrust it. Two of eight go. **
+    Covered in §1. The mechanism is worth more than the two corrections: a
+    file-count survey miscounts in BOTH directions. It over-counted `comments`
+    (8 files that are the word, not the table) and it under-counted
+    `workspace_members` and `workspace_invitations` to ZERO — because sales
+    reaches those only through shared platform-api factories, so the app's own
+    files never name them. Had you trusted the zeros, sales would have got no
+    membership table and Phase 2 would have had nothing to bootstrap onto.
+    **PLAN.md §4b still says sales gets `sales.comments` and
+    `sales.deletion_batches`; it should be corrected before agent 4 reads it**,
+    the same way §4b's transaction_log row was corrected after agent 1.
+
+6.2 ** §6.2, `invitations` vs `workspace_invitations`: your short name, and it
+    does not make agent 3's job harder. ** Sales mounts the platform factory
+    today, so Phase 2 rewrites those handlers against sales' tables regardless
+    — there is no path where matching the platform name lets anything be
+    reused unchanged. And the long name is only long because the platform table
+    sits beside `api_tokens` and `email_whitelist`, which invite you to
+    nothing; here the schema already says which app and there is one kind of
+    invitation. Settled, no action.
+
+6.3 ** §6.3, whether `sales.events` should exist: yes, and the alternative is
+    worse than you thought. ** I did read that code. `recordEvent` has ~40 call
+    sites and its entity types include four things that are NOT rows anywhere
+    you could reconstruct a feed from — `contact`, `stage_entry`, `objection`,
+    `match` — plus `label`, and deletions, whose subject is gone by the time
+    the event is written. A feed derived from domain tables cannot represent
+    "this was purged", which is exactly what an activity feed is for. Keep it.
+
+6.4 ** §6.4, the apiHandler change: bigger, but not in the shape you feared. **
+    No awkward threading — every writer already holds the AppContext. The
+    surprise is that there are THREE writers and the brief names one. See §2.
+    The general lesson for the remaining briefs: `apiHandler` is not the only
+    thing that writes `error_events`, and I would not assume it is the only
+    thing that writes any other shared table either.
+
+6.5 ** NOT IN YOUR BRIEF, and it is on Phase 5's path: docs/backend.md says
+    `platform.transaction_log` is EMPTY. ** "0 rows in production, against
+    3,630 in platform.events". PLAN.md §4b was corrected after agent 1 found 4
+    rows locally; this doc was not, and it is the document somebody reads
+    before dropping the table. Left as history per the docs rule (it is a dated
+    section) but added a dated correction restating the real gate — "is
+    anything still WRITING it", not "is it empty" — and agent 1's point that a
+    Postgres trigger is not code any grep of `apps/` would find. Phase 5's
+    agent should expect to stop.
+
+6.6 A smaller one, for whoever writes agent 4's brief. PLAN.md Phase 3 says
+    `DELETE FROM platform.comments WHERE parent_type LIKE 'sales:%'` and gives
+    it as the worked example of the delete ritual. Per §1 there are no such
+    rows and there never were — I did not run it, since this phase deletes
+    nothing, but agent 4 will run a SELECT that returns 0 and SAFETY.md tells
+    them "if that count is not what the plan predicts, STOP". Predict 0, or
+    they lose a day on a surprise that is correct.
+
+6.7 SAFETY.md's ledger section is accurate as written. One addition worth
+    making next time it is touched: the local URL for these scripts is port
+    **5432**, not 5434 — see §3.
+
+--------------------------------------------------------------------------------
