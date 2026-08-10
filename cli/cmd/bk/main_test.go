@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -251,5 +253,62 @@ func TestServerConflictAndLocalPrecheckAgree(t *testing.T) {
 			"the same --confirm mistake exits %d when the server catches it and %d when the "+
 				"binary does. One condition, two exit codes: an agent cannot write one recovery.",
 			serverSide, localSide)
+	}
+}
+
+// A HINT MUST NOT NAME A DOOR THE CALLER CANNOT OPEN.
+//
+// `hintFor` used to answer a NotServedError by naming the "other" app from a
+// hardcoded pair — issues if you were on sales, sales if you were on issues.
+// Two things wrong with that, and the second is the one that bit:
+//
+//  1. It is the platform binary knowing two app slugs, which is false the day
+//     app #3 exists.
+//  2. `/api/meta`'s app block is GRANT-DERIVED (measured by agent 4). A user who
+//     only has sales has no `issues` entry in their registry, so the suggested
+//     `bk --app-server issues …` answers "no server known for app issues". The
+//     agent burns a retry and learns nothing.
+//
+// Both cases are asserted, because either alone passes on the wrong code: a
+// one-app config that still printed a suggestion, and a two-app config that
+// printed none, are different bugs.
+func TestNotServedHintOnlySuggestsAppsTheConfigKnows(t *testing.T) {
+	notServed := &client.NotServedError{App: "sales", Status: 404}
+
+	t.Run("names an app the config actually has", func(t *testing.T) {
+		dir := t.TempDir()
+		t.Setenv("BK_CONFIG_DIR", dir)
+		writeTestConfig(t, dir, `{"token":"t","home_app":"sales","home_server":"https://s",
+			"app_servers":{"sales":"https://s","issues":"https://i"}}`)
+
+		hint := hintFor(notServed)
+		if !strings.Contains(hint, "--app-server issues") {
+			t.Errorf("a config that knows issues must be told to try it:\n  %s", hint)
+		}
+	})
+
+	t.Run("says so when there is no other app", func(t *testing.T) {
+		dir := t.TempDir()
+		t.Setenv("BK_CONFIG_DIR", dir)
+		// A sales-only account: exactly what a grant-derived registry produces.
+		writeTestConfig(t, dir, `{"token":"t","home_app":"sales","home_server":"https://s",
+			"app_servers":{"sales":"https://s"}}`)
+
+		hint := hintFor(notServed)
+		if strings.Contains(hint, "--app-server") {
+			t.Errorf("a sales-only account was told to redirect to another app, which its "+
+				"registry does not have — the retry cannot work:\n  %s", hint)
+		}
+		if !strings.Contains(hint, "not available to you") {
+			t.Errorf("the hint must SAY the capability is unreachable rather than trailing "+
+				"off — an agent needs to stop, not guess:\n  %s", hint)
+		}
+	})
+}
+
+func writeTestConfig(t *testing.T, dir, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(body), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
 	}
 }

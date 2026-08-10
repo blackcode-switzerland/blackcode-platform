@@ -359,6 +359,80 @@ func TestTheSameVerbUnderTwoAppsAsksTwoTenancies(t *testing.T) {
 	}
 }
 
+// THE SECOND RESOLVER, which the test above does NOT cover.
+//
+// There are two, and finding that out was the point of injecting a regression
+// into each: `ResolveWorkspaceRef` builds the PATH every workspace-scoped
+// command asks for, and `ClientWorkspaceSlug` sets the client's implicit
+// workspace. The test above is discriminating for the first and stayed GREEN
+// when the second was pointed back at the shared legacy field — because
+// `member list` passes its workspace explicitly and never reads it.
+//
+// That is not a harmless second copy. `ClientWorkspaceSlug` is sent as
+// `?workspace=` on `GET /api/upload`, and the server answers with the folder the
+// blob is written to and the workspace the ledger row records. A wrong value
+// there files a SALES contract under an ISSUES workspace's prefix — the same
+// mis-attribution agent 4 fixed on the server in Phase 3, arriving from the
+// client instead.
+//
+// So it gets its own case, asserting on the query string rather than on the path.
+func TestUploadAsksAboutItsOwnAppsWorkspace(t *testing.T) {
+	salesHits := &[]string{}
+	salesSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		*salesHits = append(*salesHits, r.URL.RequestURI())
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer salesSrv.Close()
+
+	dir := t.TempDir()
+	t.Setenv("BK_CONFIG_DIR", dir)
+	writeConfig(t, dir, map[string]any{
+		"token":       "bk_live_test",
+		"home_app":    "issues",
+		"home_server": "https://issues.example.test",
+		"active_workspaces": map[string]any{
+			"issues": map[string]any{"id": 1, "slug": "acme-issues"},
+			"sales":  map[string]any{"id": 2, "slug": "acme-sales"},
+		},
+		"app_servers": map[string]string{
+			"issues": "https://issues.example.test",
+			"sales":  salesSrv.URL,
+		},
+	})
+
+	// A real (tiny) file: the command opens it, probes for capabilities, and then
+	// fails against a fixture that returns nothing useful. The PROBE is what is
+	// being measured — asserting on a successful upload would make this about
+	// response shapes rather than routing.
+	f := filepath.Join(dir, "contract.txt")
+	if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	resetRoutingState()
+	_ = runRoot(t, "sales", "upload", f)
+
+	// The FIRST /api/upload hit is the capabilities GET; the POST that follows
+	// carries the same path with no query, so taking the last one would compare
+	// against a request that never had a workspace to lose.
+	var probe string
+	for _, h := range *salesHits {
+		if strings.HasPrefix(h, "/api/upload") {
+			probe = h
+			break
+		}
+	}
+	if probe == "" {
+		t.Fatalf("`bk sales upload` never asked the sales server about upload capabilities "+
+			"(hits: %v) — this test is measuring nothing", *salesHits)
+	}
+	if !strings.Contains(probe, "workspace=acme-sales") {
+		t.Errorf("`bk sales upload` probed %q — it must name the SALES active workspace. "+
+			"The server answers with the folder the blob is written to, so the home app's "+
+			"workspace here files a sales file under another tenant's prefix.", probe)
+	}
+}
+
 // Setting one app's active workspace must not move another app's. The write half
 // of the property above: `bk sales workspace use` writing a shared field is
 // exactly how the two got confused before Phase 4.

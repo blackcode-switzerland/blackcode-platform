@@ -46,6 +46,9 @@ import (
 func everyVerb() appverbs.Config {
 	return appverbs.Config{
 		App:            "probe",
+		Uploads:        true,
+		Trash:          true,
+		Labels:         true,
 		Workspace:      true,
 		WorkspaceAdmin: true,
 		Members:        true,
@@ -126,57 +129,26 @@ func TestLinkIsGoneFromEveryTier(t *testing.T) {
 	}
 }
 
-// The THREE UNCONDITIONAL verbs must be on every app group, whole.
+// A Config that declares NOTHING must build NOTHING.
 //
-// `upload`, `trash` and `label` are not declared per app: an app that stores
-// nothing has no reason to exist, and `apps/_scaffold` proves the mount works
-// with nothing else configured. A PARTIAL mount is the realistic mistake —
-// someone adds `upload` to a new app and stops, leaving `bk sales trash list`
-// to fail with "unknown command", which reads as "sales has no recycle bin"
-// rather than "this was not wired up".
+// This is the property that replaced "every app mounts upload/trash/label or
+// none of them", and the replacement was forced by `apps/_scaffold`: it serves
+// no /api/upload, no /trash and no /labels, so an unconditional mount claimed
+// three routes it has no file for. The tier is fully declared now.
 //
-// It cannot assert that a given app mounts them at all: `bk scaffold …` is the
-// scaffold and its deployment serves no platform routes. What catches a REAL app
-// that forgets the mount is its own lib/cli-parity.test.ts — the route is in its
-// tree and no `bk` command claims it, checked against the filesystem rather than
-// a list.
-func TestAppGroupsMountTheUnconditionalVerbsOrNoneOfThem(t *testing.T) {
-	probe := appverbs.New(appverbs.Config{App: "probe"})
-	var always []string
-	for _, c := range probe.All() {
-		always = append(always, c.Name())
-	}
-	if len(always) != 3 {
-		t.Fatalf("a Config with no capabilities set built %v — the unconditional set is "+
-			"upload/trash/label, and this test is now checking something else", always)
-	}
-
-	root := NewRoot()
-	groups := 0
-	for _, group := range root.Commands() {
-		if !group.HasSubCommands() || group.Hidden {
-			continue
+// The risk that creates is the opposite one — a constructor that ignores Config
+// and builds everything — so it is asserted directly. Without this, every
+// per-app expectation in TestEachAppMountsExactlyWhatItDeclares could be
+// satisfied by a New() that mounted the lot.
+func TestAConfigThatDeclaresNothingBuildsNothing(t *testing.T) {
+	built := appverbs.New(appverbs.Config{App: "probe"}).All()
+	if len(built) != 0 {
+		var names []string
+		for _, c := range built {
+			names = append(names, c.Name())
 		}
-		var have, missing []string
-		for _, v := range always {
-			if found := findChild(group, v); found != nil {
-				have = append(have, v)
-			} else {
-				missing = append(missing, v)
-			}
-		}
-		if len(have) == 0 {
-			continue
-		}
-		groups++
-		if len(missing) > 0 {
-			t.Errorf("`bk %s` mounts %v but not %v — every app takes upload/trash/label "+
-				"whole (appverbs.New(...).All()) or none of them", group.Name(), have, missing)
-		}
-	}
-	if groups == 0 {
-		t.Fatal("no command group mounts the app-owned verbs — either the tier was removed " +
-			"or this walk is looking in the wrong place; either way it is checking nothing")
+		t.Errorf("a Config with no capabilities set built %v — every verb is declared, so "+
+			"an app gets exactly what its `app/api/**` tree serves and nothing else", names)
 	}
 }
 

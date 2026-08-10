@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -114,19 +115,36 @@ func hintFor(err error) string {
 	// could not tell it from a crash, and there was nothing in it to act on.
 	var nse *client.NotServedError
 	if errors.As(err, &nse) {
-		other := "issues"
-		if nse.App == "issues" {
-			other = "sales"
-		}
 		if nse.App == "" {
 			return "another app's deployment may serve it — `bk app list` shows every app's " +
 				"server, and `bk --app-server <slug> …` sends one command there"
+		}
+		// THE ALTERNATIVES COME FROM THE REGISTRY, NEVER FROM A HARDCODED PAIR.
+		//
+		// This used to read `other := "issues"; if nse.App == "issues" { other =
+		// "sales" }` — the platform binary naming two apps, which is wrong twice
+		// over. It breaks the moment app #3 exists, and it was ALREADY breaking:
+		// agent 4 measured that `/api/meta`'s app block is grant-derived, so a
+		// user who only has sales has no `issues` entry, and the suggested
+		// recovery answers "no server known for app issues". A hint that names a
+		// door the caller cannot open is worse than one that admits there is no
+		// door — the agent burns a retry and learns nothing.
+		//
+		// So the suggestion is drawn from the apps this config actually knows,
+		// and when there are none the hint says so and stops.
+		others := otherKnownApps(nse.App)
+		if len(others) == 0 {
+			return fmt.Sprintf(
+				"the %s deployment does not serve that route, and your account reaches no other "+
+					"app that might — this capability is not available to you. `bk %s --help` "+
+					"lists what this app does offer",
+				nse.App, nse.App)
 		}
 		return fmt.Sprintf(
 			"the %s deployment serves only part of the platform surface. Try "+
 				"`bk --app-server %s …` for this one command, `bk app use <slug>` to move the "+
 				"bare verbs for good, or `bk app list` to see every app's server",
-			nse.App, other)
+			nse.App, strings.Join(others, "` or `bk --app-server "))
 	}
 
 	var ue *client.UnreachableError
@@ -278,4 +296,25 @@ func classify(err error) int {
 		return exitUsage
 	}
 	return exitGeneric
+}
+
+// otherKnownApps returns the apps this config has a server for, excluding the
+// one that just refused. Sorted, so the hint is stable between runs.
+//
+// Best-effort: an unreadable config yields no suggestions rather than an error,
+// because this is running inside the error path already. Empty is a legitimate
+// and INFORMATIVE answer — see the NotServedError branch in hintFor().
+func otherKnownApps(exclude string) []string {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for slug := range cfg.AppServers {
+		if slug != exclude {
+			out = append(out, slug)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
