@@ -129,6 +129,38 @@ below).
 ./multiAppFinalRefactor/backup.sh "<neondb_owner url>" ~/Documents/BAK/blackcode-platform-backups/pre-phase-N.dump
 ```
 
+> ### `backup.sh` cannot dump production as written — version mismatch
+>
+> Found 2026-08-10 taking the Phase 1 backup. `blackcode-postgres` (local dev)
+> ships **pg_dump 16.14**; Neon runs **PostgreSQL 17.10**. `pg_dump` refuses
+> outright:
+>
+> ```
+> pg_dump: error: aborting because of server version mismatch
+> pg_dump: detail: server version: 17.10; pg_dump version: 16.14
+> ```
+>
+> **It refuses loudly and writes nothing, which is the good outcome** — the bad
+> version of this bug is a dump that succeeds and silently omits what the older
+> tool does not understand. Phase 0 only ever tested against local PG16, so this
+> never surfaced.
+>
+> Until `backup.sh` is fixed, take production dumps with a version-matched
+> `pg_dump` from a throwaway container:
+>
+> ```bash
+> URL=$(tr -d '\n\r' < multiAppFinalRefactor/.prod-url)
+> OUT=~/Documents/BAK/blackcode-platform-backups/pre-phase-N.dump
+> docker run --rm -i postgres:17 pg_dump "$URL" --format=custom --no-owner --no-acl > "$OUT"
+> docker run --rm -i postgres:17 pg_restore --list < "$OUT" | grep -c "TABLE DATA"
+> ```
+>
+> That last line is the check that matters: a count of 0 means a valid-looking
+> archive containing no data. The 2026-08-10 dump had **60**.
+>
+> `psql` is unaffected — a 16.x client queries a 17.x server fine, so
+> `capture-baseline.sh` and `verify.sh` work as they are.
+
 Refuses to run without a destination path. After `pg_dump` returns, it checks
 the file is non-empty, at least 1 KB, and — via `pg_restore --list` — an
 actually-valid custom-format archive, so a `pg_dump` that exits 0 having
