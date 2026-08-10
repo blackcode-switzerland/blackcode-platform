@@ -331,10 +331,17 @@ that enforces it, and served by `/api/meta`. Never re-type a number.
 Every app carries two test files, copied from the scaffold:
 
 - **`lib/cli-parity.test.ts`** — every route reachable from `bk`, every claimed
-  route real. **Per app**: `bk __routes` tags each route with its app, and
-  exactly one app sets `hostsPlatformRoutes` (today `issues`, because the shared
-  routes physically live in its tree). Without that flag every platform route
-  would go unchecked by everybody.
+  route real. **Per app**: `bk __routes` tags each route with its app, and each
+  app is answerable for the platform routes it actually mounts, **derived from
+  the filesystem** rather than declared. A second, repo-wide check
+  (`platform-route-coverage.test.ts`) then asserts every platform command is
+  mounted by *at least one* app — without it, "nobody serves this" and "another
+  app serves this" are indistinguishable.
+  > The `hostsPlatformRoutes` boolean each app used to set was **retired**
+  > (D-36): a yes/no flag cannot express a subset, so mounting one shared route
+  > forced an app to answer for all of them. A permanent subset is legitimate;
+  > an *accidental* one is a bug, and the test is whether **every bare verb has
+  > a host from this app's login**.
 - **`lib/app-isolation.test.ts`** — no import resolving into another app, no
   query naming another app's schema. **Resolution-based, not glob-based** — see
   finding #4 above.
