@@ -1,0 +1,61 @@
+-- Rollback for apps/issues migration 0044 — `platform.error_events.app`.
+--
+-- ---------------------------------------------------------------------------
+-- \set ON_ERROR_STOP on. NOT OPTIONAL.
+-- ---------------------------------------------------------------------------
+-- Without it `psql` prints an error per failed statement and STILL EXITS 0, so a
+-- rollback that did nothing reports success — CLAUDE.md findings #7 and #15, the
+-- second of which was a provisioning script in this very directory. Watched
+-- rather than assumed: with the line removed, `DROP INDEX platform.no_such_index`
+-- gave `ERROR: index "no_such_index" does not exist` and `PSQL EXIT=0`; with it
+-- restored, the same statement exited 3. See
+-- multiAppFinalRefactor/agent2/agent-2026-08-10-1.txt §4.
+\set ON_ERROR_STOP on
+
+-- ---------------------------------------------------------------------------
+-- WHICH HALF ARE YOU UNDOING? THEY ARE NOT THE SAME EMERGENCY.
+-- ---------------------------------------------------------------------------
+-- Step 1 is safe at any time. Step 2 DESTROYS the attribution of every error
+-- row and is commented out on purpose.
+--
+--   * **The DEPLOY is bad, the migration is fine** — the usual case. Roll the
+--     Vercel deployment back and run NOTHING here. The column is nullable and
+--     additive; code that predates it inserts rows without it and reads that
+--     never mention it are unaffected. There is nothing to undo.
+--
+--   * **The migration itself is the problem** — run step 1 only. It removes the
+--     index, which is the only object here with a cost (write amplification on
+--     an append-heavy table), and leaves the column and its data in place.
+--
+--   * **You are genuinely reverting the whole refactor phase** and something
+--     downstream cannot tolerate the column existing — uncomment step 2. Read
+--     the warning on it first.
+--
+-- The asymmetry is deliberate. This column exists so that after the app split
+-- `error_events.workspace_id` is not ambiguous. Dropping it does not restore a
+-- previous good state; it destroys the only record of which app each row came
+-- from, and there is no second source to recompute it from — `workspace_id` is
+-- precisely the value that stopped being self-describing.
+
+-- ---------------------------------------------------------------------------
+-- STEP 1 — the index. Safe, reversible, no data loss.
+-- ---------------------------------------------------------------------------
+DROP INDEX IF EXISTS platform.idx_error_events_app_occurred;
+
+-- ---------------------------------------------------------------------------
+-- STEP 2 — the column. **DESTRUCTIVE AND UNRECOVERABLE.** Commented out.
+-- ---------------------------------------------------------------------------
+-- Every row's app attribution is gone the moment this runs, including rows
+-- written by sales after the split, which the 0044 backfill can NOT recreate:
+-- re-running it labels them 'issues'.
+--
+-- Only correct when undoing the MIGRATION together with the code — the running
+-- `apiHandler`, `clientErrorsRoute` and `insertErrorEvent` all name this column
+-- in their INSERT, so dropping it under a live deployment turns every error log
+-- write into a failure. Errors are logged best-effort, so that failure is
+-- swallowed and printed to stderr: the table simply stops gaining rows and
+-- nothing says so.
+--
+-- Take a backup first (multiAppFinalRefactor/SAFETY.md), then uncomment:
+--
+-- ALTER TABLE platform.error_events DROP COLUMN IF EXISTS app;

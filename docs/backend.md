@@ -198,6 +198,15 @@ canonical JSON body:
   (with route, method, status, sanitized context — see
   [`sanitize.ts`](#error-responses--sanitization)) and surfaced as a generic
   500.
+- Every logged row carries **`app`** — the serving deployment, stamped from
+  `AppContext.appSlug`, never from a call site (migration `0044`). It is not
+  decoration: `error_events.workspace_id` has no foreign key, and once each app
+  owns its workspaces the same id means different things in different apps, so
+  the workspace is only readable together with the app. `insertErrorEvent`
+  requires it in its parameter type; `apiHandler`'s own writer is raw SQL with
+  no type over it and is covered by
+  `apps/issues/lib/api/error-events-app.test.ts` instead — it swallows its own
+  failures, so a broken INSERT there stops the error log with no other symptom.
 
 The `Errors` factory (`lib/api/errors.ts`):
 
@@ -1089,9 +1098,21 @@ worse than a missing one.
 Recovery is the recycle bin (`deletion.ts`, `bk trash`), which is what users and
 agents have actually been using. History is the event spine.
 
-The empty `platform.transaction_log` table is still there; dropping it is a
-separate change. Do not wire a new writer to it — if per-field undo is ever
-wanted, build it on `platform.events`, which already records every mutation.
+The `platform.transaction_log` table is still there; dropping it is a separate
+change. Do not wire a new writer to it — if per-field undo is ever wanted, build
+it on `platform.events`, which already records every mutation.
+
+> **Correction, 2026-08-10: "empty" above is a claim about production on
+> 2026-08-05, and it is not the gate to drop the table on.** Local dev has **4
+> rows**, newest `created_at` 2026-05-22 — stale residue from before undo was
+> retired, not a live writer. So the question at drop time is *"is anything
+> still WRITING it?"* (`SELECT count(*), max(created_at)`), not *"is it
+> empty?"*: a recent `max(created_at)` means an undiscovered writer and is a
+> reason to stop; an old one means residue and rows are expected. Confirmed
+> against the catalog rather than by grep — the only trigger in the whole
+> `platform` schema is `trg_blob_refs` on `comments`, and **a Postgres trigger
+> is not code any grep of `apps/` would find.** See
+> `multiAppFinalRefactor/PLAN.md` §4b.
 
 ### File uploads (`app/api/upload/route.ts`, `app/api/upload/blob/route.ts`)
 

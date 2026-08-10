@@ -51,6 +51,10 @@ export function clientErrorsRoute(app: AppContext) {
     const context = body.context !== undefined ? sanitize(body.context) : null
 
     await insertErrorEvent(app.db, {
+      // The SERVING deployment, like every other writer of this column. A
+      // client-side error reported to the sales origin is a sales error even
+      // though the browser is where it happened.
+      app: app.appSlug,
       level: 'error',
       code,
       message,

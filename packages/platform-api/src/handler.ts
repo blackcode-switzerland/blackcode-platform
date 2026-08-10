@@ -245,10 +245,17 @@ interface ErrorEventRow {
 async function safeLog(app: AppContext, row: ErrorEventRow): Promise<void> {
   try {
     const context = row.context === null ? null : JSON.stringify(row.context)
+    // `app` is stamped from the AppContext, never from `row` — the same reason
+    // `recordUpload` and `recordEvent` stamp theirs centrally: a column that a
+    // call site can supply is a column a call site can omit, and this one has
+    // to be right on EVERY row for the refactor's Phase 5 to be able to make it
+    // NOT NULL. `safeLog` is not reachable except through a handler that already
+    // holds the context, so there is nothing to thread.
     await app.db.execute(sql`
       INSERT INTO ${errorEvents}
-        (level, code, message, stack, route, method, status_code, user_id, workspace_id, context)
+        (app, level, code, message, stack, route, method, status_code, user_id, workspace_id, context)
       VALUES (
+        ${truncate(app.appSlug, 40)},
         ${row.level},
         ${truncate(row.code ?? null, 50)},
         ${truncate(row.message, 8_000) ?? 'Unknown'},

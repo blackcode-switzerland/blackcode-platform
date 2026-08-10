@@ -309,6 +309,13 @@
       "when": 1785950071936,
       "tag": "0043_labels_app_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1786060920000,
+      "tag": "0044_error_events_app",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import { and, count, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
 import { db } from '../client'
 import { errorEvents, type ErrorEvent, type NewErrorEvent } from '../schema'
 import { insertErrorEvent as platformInsertErrorEvent } from '@blackcode/platform-db'
+import { APP_SLUG } from '@/lib/app'
 import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@/lib/limits'
 
 export interface PublicErrorRow {
@@ -73,8 +74,15 @@ export async function getErrorEvent(id: number): Promise<ErrorEvent | null> {
 // now a shared route factory. Only the INSERT moved — the listings and triage
 // mutations below serve Tier-2 routes that have not been factory-ised, and
 // moving a query nothing shared calls yet is speculative extraction.
-export function insertErrorEvent(row: Omit<NewErrorEvent, 'id' | 'occurred_at'>): Promise<void> {
-  return platformInsertErrorEvent(db, row)
+//
+// `app` is injected here and the parameter type does not accept it, so no call
+// site in this app can supply the wrong slug or forget it — the same shape as
+// `queries/uploads.ts`. That is why `error_events.app` can be made NOT NULL in
+// the refactor's Phase 5 without auditing callers.
+export function insertErrorEvent(
+  row: Omit<NewErrorEvent, 'id' | 'occurred_at' | 'app'>
+): Promise<void> {
+  return platformInsertErrorEvent(db, { ...row, app: APP_SLUG })
 }
 
 // ---------------------------------------------------------------------------

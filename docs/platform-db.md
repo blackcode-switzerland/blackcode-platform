@@ -108,17 +108,42 @@ nobody can prove the file is unused. That is not a bug to work around.
 
 ## The app dimension on shared tables
 
-Three `platform.*` columns exist so more than one app can write these tables
-without colliding. All three landed 2026-08-06 (migrations `0041`–`0043`, D-14)
-and all three are the **expand** half of expand → migrate → contract.
+These `platform.*` columns exist so more than one app can write these tables
+without colliding. The first three landed 2026-08-06 (migrations `0041`–`0043`,
+D-14); `error_events.app` landed 2026-08-10 (`0044`). All are the **expand**
+half of expand → migrate → contract.
 
 | Column | Form | Rule |
 |---|---|---|
 | `comments.parent_type` | `<app>:<noun>` | `issues:issue`, `sales:prospect` |
 | `deletion_batches.root_type` | `<app>:<noun>` | same |
 | `labels.app` | slug, or NULL | NULL = **shared** with every app in the workspace. `0043` claimed every existing row for `issues`, so NULL has no instances — sharing is a deliberate `SET app = NULL` |
+| `error_events.app` | slug, nullable | Which deployment threw. `0044` backfilled every existing row to `issues`. Nullable only until both apps have deployed writing it |
 
-Three things about them are easy to get wrong:
+> **`error_events.app` is not optional information, and it is the one column
+> here that is not about collision.** `error_events.workspace_id` has never had
+> a foreign key. That was harmless while there was one set of workspaces; the
+> multi-app refactor gives each app its own, and from that point `workspace_id
+> = 1` names a different row depending on who wrote it. Reading the workspace
+> without the app is then a confidently wrong answer rather than a missing one.
+> The two columns have to be read together.
+>
+> It also has **no FK to `apps.slug`**, unlike `labels.app` and `uploads.app`.
+> Those tables hold an app's data, so `ON DELETE set null` is a survivable loss;
+> this one holds the record of an app FAILING, and deregistering an app must not
+> erase the attribution of exactly the rows somebody is reading to find out what
+> went wrong.
+>
+> All three writers stamp it from the serving deployment, never from a call
+> site: `apiHandler`'s `safeLog` and `clientErrorsRoute` take it from
+> `AppContext.appSlug`, and `insertErrorEvent` **requires** it in its parameter
+> type so an app-level caller cannot omit it. That is what will make the Phase 5
+> `SET NOT NULL` a check rather than a hope. `safeLog` is the writer with no
+> compile-time guard — it builds a hand-written column list in interpolated SQL
+> and swallows its own failures — so it is covered at runtime instead, by
+> `apps/issues/lib/api/error-events-app.test.ts`.
+
+Three things about the `<app>:<noun>` columns are easy to get wrong:
 
 **The CHECK validates the shape, not the vocabulary.** `<app>` and `<noun>` are
 each `[a-z][a-z0-9_-]{0,39}`, and that is all. Platform does not enumerate an
@@ -153,6 +178,41 @@ migrate-first cutover below — rather than applying it by hand ahead of time.
 
 Rollbacks: `docs/sql/phase1e-*.sql`, one per migration, each stating what
 promoting the previous build already achieves without them.
+`0044`'s is `docs/sql/0044-error-events-app-rollback.sql`, and its two steps are
+deliberately unequal: dropping the index is free, dropping the column destroys
+attribution that cannot be recomputed — `workspace_id` is precisely the value
+that stopped being self-describing — so step 2 ships commented out.
+
+## An app with its own workspaces (the multi-app refactor)
+
+`sales.*` gained `workspaces`, `workspace_members`, `invitations`, `labels`,
+`uploads` and `events` on 2026-08-10 (migration `0003`). **They are empty and
+nothing reads them yet**; Phase 2 bootstraps onto them and Phase 3 moves the
+query layer across. See `multiAppFinalRefactor/PLAN.md`.
+
+Two things about that which generalise beyond this refactor:
+
+**A per-app copy is not a copy.** Each of those tables drops the columns that
+only existed because the platform table was shared — `app` everywhere, the
+`app IS NULL OR app = <serving app>` scope on labels, `workspace_invitations.app`.
+A scope helper left behind over a table that cannot hold a foreign row reads as
+protection and is a no-op, which is what `CLAUDE.md`'s standing rule is about.
+It also drops what has never had a writer (`workspaces.deleted_at`, still
+unwritten in both apps) rather than carrying it forward to acquire two meanings.
+
+**Cross-schema FKs into `platform.users` stay, and are the point.** Identity is
+the shared thing. `sales.workspaces.owner_id → platform.users.id` is the
+boundary being drawn, not a breach of it — the forbidden direction is still
+`platform` → an app, for the `pg_dump` reason above.
+
+**New tables need no re-grant, and that was verified rather than assumed.**
+`docs/sql/<app>-app-role.sql` step 5 runs `ALTER DEFAULT PRIVILEGES … AS THE
+MIGRATOR`, which covers tables created afterwards. A bounded probe role was
+provisioned *before* these six tables existed, the migration was applied, and
+the role's DML on all six plus their sequences was confirmed with no further
+`GRANT` — while still being refused `issues.*` and refused DDL on its own
+tables. `GRANT … ON ALL TABLES` alone would NOT have covered them; it means
+"all tables that exist right now".
 
 ## Counters live in the app, not in platform
 

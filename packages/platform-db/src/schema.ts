@@ -757,6 +757,37 @@ export const errorEvents = platformSchema.table(
   'error_events',
   {
     id: serial('id').primaryKey(),
+    // `workspace_id` has NO foreign key, and after the app split it is not
+    // self-describing either: each app keeps its OWN workspaces, so
+    // `workspace_id = 1` names a different row depending on who wrote it. This
+    // column is what disambiguates it, and reading one without the other is the
+    // bug it exists to prevent.
+    //
+    // NULLABLE, and it is expand → migrate → contract rather than timidity —
+    // the same sequence `events.app` and `uploads.app` went through, for the
+    // same reason: the migration lands before the deploy that writes the
+    // column, and for the length of that window the old code is still
+    // inserting rows that do not know it exists. NOT NULL would turn every one
+    // of those into a failed insert, and this table is the error log — the one
+    // place where a failed write costs you the record of why something broke.
+    // A DEFAULT would hardcode one app's name into a platform table.
+    //
+    // Migration 0044 backfills every existing row to 'issues': every row
+    // predates the split and issues is the only app whose workspace ids they
+    // can mean. NOT NULL is deferred to the refactor's Phase 5, once both apps
+    // have been deployed writing it — see multiAppFinalRefactor/PLAN.md §4b.
+    //
+    // No FK to `apps.slug`, unlike `events.app` and `uploads.app`. Those tables
+    // hold an app's data; this one holds the record of an app FAILING, and that
+    // record must survive deregistering the app it names. `ON DELETE set null`
+    // would erase the attribution of exactly the rows somebody is reading to
+    // find out what went wrong.
+    //
+    // ALL THREE WRITERS SET IT, and none of them takes it from a call site:
+    // `apiHandler`'s safeLog and `clientErrorsRoute` read `AppContext.appSlug`,
+    // and `insertErrorEvent` requires it in its parameter type so an app-level
+    // caller cannot omit it. See `packages/platform-db/src/error-events.ts`.
+    app: varchar('app', { length: 40 }),
     workspace_id: integer('workspace_id'),
     user_id: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
     level: varchar('level', { length: 10 }).notNull().default('error'),
@@ -775,6 +806,10 @@ export const errorEvents = platformSchema.table(
   },
   (t) => ({
     occurredIdx: index('idx_error_events_occurred').on(t.occurred_at),
+    // "what has app X been throwing lately?" is the question this column was
+    // added to make answerable, and it is the one the super-admin Errors tab
+    // asks. Paired with occurred_at because every listing here is time-ordered.
+    appOccurredIdx: index('idx_error_events_app_occurred').on(t.app, t.occurred_at),
     levelIdx: index('idx_error_events_level').on(t.level),
     codeIdx: index('idx_error_events_code').on(t.code),
     routeIdx: index('idx_error_events_route').on(t.route),
