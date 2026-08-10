@@ -1,4 +1,4 @@
-package platform
+package appverbs
 
 import (
 	"io"
@@ -38,7 +38,7 @@ func TestTokenArgReadsLeadingDashTokens(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cmd := newInviteAcceptCmd()
+			cmd := newInviteAcceptCmd(Config{App: "probe"})
 			cmd.SetOut(io.Discard)
 			cmd.SetErr(io.Discard)
 

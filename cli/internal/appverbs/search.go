@@ -1,4 +1,4 @@
-package platform
+package appverbs
 
 // `bk search` — federated search across every app, in one workspace.
 //
@@ -21,7 +21,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newSearchCmd() *cobra.Command {
+func newSearchCmd(acfg Config) *cobra.Command {
 	var (
 		apps           []string
 		types          []string

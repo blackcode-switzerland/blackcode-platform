@@ -1,4 +1,4 @@
-package platform
+package appverbs
 
 import (
 	"fmt"
@@ -10,20 +10,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newMemberCmd() *cobra.Command {
+func newMemberCmd(acfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "member",
 		Short: "Manage members of the active workspace",
 	}
 	cmd.AddCommand(
-		newMemberListCmd(),
-		newMemberRemoveCmd(),
-		newMemberLeaveCmd(),
+		newMemberListCmd(acfg),
+		newMemberRemoveCmd(acfg),
+		newMemberLeaveCmd(acfg),
 	)
 	return cmd
 }
 
-func newMemberListCmd() *cobra.Command {
+func newMemberListCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/members"},
@@ -61,7 +61,7 @@ func newMemberListCmd() *cobra.Command {
 	}
 }
 
-func newMemberRemoveCmd() *cobra.Command {
+func newMemberRemoveCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:         "remove <user_id>",
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/members/{userId}"},
@@ -89,7 +89,7 @@ func newMemberRemoveCmd() *cobra.Command {
 	}
 }
 
-func newMemberLeaveCmd() *cobra.Command {
+func newMemberLeaveCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:         "leave",
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/leave"},

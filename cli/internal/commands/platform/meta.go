@@ -27,7 +27,7 @@ user, the active workspace, and EVERY workspace you belong to.
 
 Pick the workspace you write to by its NAME/SLUG from the list below — not by the
 numeric id (ids are opaque and easy to confuse). Then target it with
-` + "`bk workspace use <slug>`" + ` or a per-command ` + "`--ws <slug>`" + `. The active
+` + "`bk <app> workspace use <slug>`" + ` or a per-command ` + "`--ws <slug>`" + `. The active
 workspace is only a default, not necessarily where you mean to write.
 
 Use --ws <slug|id> to preview another workspace's context without switching.`,
@@ -85,7 +85,7 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 					fmt.Fprintf(w, "active: %s (slug %s, id %d, role %s)\n",
 						meta.ActiveWorkspace.Name, meta.ActiveWorkspace.Slug, meta.ActiveWorkspace.ID, meta.ActiveWorkspace.Role)
 				} else {
-					fmt.Fprintln(w, "active: (none — run `bk workspace use <slug>`)")
+					fmt.Fprintln(w, "active: (none — run `bk <app> workspace use <slug>`)")
 				}
 				fmt.Fprintln(w)
 
@@ -156,13 +156,13 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 						// Membership without access is the quiet failure of Phase 4:
 						// nothing errored, the list is just empty. Say which it is.
 						fmt.Fprintln(cmd.ErrOrStderr(),
-							"(no workspaces you can use this app in — run `bk workspace list --all` to see "+
+							"(no workspaces you can use this app in — run `bk <app> workspace list --all` to see "+
 								"every workspace you are a member of, then ask an owner for access)")
 					} else {
 						fmt.Fprintln(cmd.ErrOrStderr(), "(no workspaces)")
 					}
 				} else {
-					fmt.Fprintln(cmd.ErrOrStderr(), "\nPick your target by SLUG (e.g. `bk workspace use <slug>` or `--ws <slug>`), not the id.")
+					fmt.Fprintln(cmd.ErrOrStderr(), "\nPick your target by SLUG (e.g. `bk <app> workspace use <slug>` or `--ws <slug>`), not the id.")
 				}
 				return nil
 			})

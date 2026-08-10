@@ -1,4 +1,4 @@
-package platform
+package appverbs
 
 import (
 	"fmt"
@@ -35,7 +35,7 @@ import (
 // written ("every file attached to an ISSUE"), and it is now
 // `bk issues attachment list` — a noun in that app's group rather than a
 // subcommand of a bare verb. One noun must not straddle two tiers.
-func newStorageCmd() *cobra.Command {
+func newStorageCmd(acfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "storage",
 		Short: "Uploaded files across every app in the workspace (owner only)",
@@ -53,11 +53,11 @@ up space and to permanently delete files that nothing references.
 
 Owner only.`,
 	}
-	cmd.AddCommand(newStorageListCmd(), newStorageRmCmd())
+	cmd.AddCommand(newStorageListCmd(acfg), newStorageRmCmd(acfg))
 	return cmd
 }
 
-func newStorageListCmd() *cobra.Command {
+func newStorageListCmd(acfg Config) *cobra.Command {
 	var app string
 	cmd := &cobra.Command{
 		Use:         "list",
@@ -116,7 +116,7 @@ REFS = 0 is an orphan and can be removed with "bk storage rm <id>".`,
 	return cmd
 }
 
-func newStorageRmCmd() *cobra.Command {
+func newStorageRmCmd(acfg Config) *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
 		Use:         "rm <id>",

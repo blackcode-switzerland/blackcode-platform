@@ -173,7 +173,7 @@ func New(baseURL, token, workspaceSlug string) *Client {
 // /api/workspaces/acme/issues. Returns an error if no active workspace is set.
 func (c *Client) wsPath(suffix string) (string, error) {
 	if c.WorkspaceSlug == "" {
-		return "", fmt.Errorf("no active workspace; run `bk workspace use <slug>`")
+		return "", fmt.Errorf("no active workspace; run `bk <app> workspace use <slug>`")
 	}
 	suffix = strings.TrimPrefix(suffix, "/")
 	if suffix == "" {

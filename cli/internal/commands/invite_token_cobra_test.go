@@ -21,18 +21,18 @@ func TestInviteTokenSurvivesCobra(t *testing.T) {
 			root := NewRoot()
 			root.SetOut(io.Discard)
 			root.SetErr(io.Discard)
-			root.SetArgs([]string{"invite", verb, "-Jx7QsAbcdefghijklmnopqrstuvwxyz0123456789"})
+			root.SetArgs([]string{"issues", "invite", verb, "-Jx7QsAbcdefghijklmnopqrstuvwxyz0123456789"})
 
 			err := root.Execute()
 			if err == nil {
-				t.Fatalf("`bk invite %s <token>` unexpectedly succeeded with no credentials", verb)
+				t.Fatalf("`bk issues invite %s <token>` unexpectedly succeeded with no credentials", verb)
 			}
 			if strings.Contains(err.Error(), "unknown shorthand flag") ||
 				strings.Contains(err.Error(), "unknown flag") {
-				t.Fatalf("`bk invite %s` still parses the token as a flag: %v", verb, err)
+				t.Fatalf("`bk issues invite %s` still parses the token as a flag: %v", verb, err)
 			}
 			if !errors.Is(err, config.ErrNotConfigured) {
-				t.Fatalf("`bk invite %s` failed with %v; want ErrNotConfigured, "+
+				t.Fatalf("`bk issues invite %s` failed with %v; want ErrNotConfigured, "+
 					"which is how we know the token reached RunE", verb, err)
 			}
 		})

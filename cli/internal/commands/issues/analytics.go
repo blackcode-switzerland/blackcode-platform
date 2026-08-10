@@ -130,7 +130,7 @@ func fmtCycle(h *float64) string {
 
 func renderAnalyticsSummary(w io.Writer, p *client.AnalyticsPayload) error {
 	if p.Message == "no_active_workspace" {
-		fmt.Fprintln(w, "No active workspace. Run `bk workspace use <slug>` or pass --ws <slug|id>.")
+		fmt.Fprintln(w, "No active workspace. Run `bk issues workspace use <slug>` or pass --ws <slug|id>.")
 		return nil
 	}
 

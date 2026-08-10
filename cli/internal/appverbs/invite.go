@@ -1,4 +1,4 @@
-package platform
+package appverbs
 
 import (
 	"fmt"
@@ -12,24 +12,24 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newInviteCmd() *cobra.Command {
+func newInviteCmd(acfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "invite",
 		Short: "Manage workspace invitations",
 	}
 	cmd.AddCommand(
-		newInviteSendCmd(),
-		newInviteListCmd(),
-		newInviteRevokeCmd(),
-		newInviteAcceptCmd(),
-		newInviteDeclineCmd(),
-		newInvitePendingCmd(),
-		newInviteCandidatesCmd(),
+		newInviteSendCmd(acfg),
+		newInviteListCmd(acfg),
+		newInviteRevokeCmd(acfg),
+		newInviteAcceptCmd(acfg),
+		newInviteDeclineCmd(acfg),
+		newInvitePendingCmd(acfg),
+		newInviteCandidatesCmd(acfg),
 	)
 	return cmd
 }
 
-func newInviteCandidatesCmd() *cobra.Command {
+func newInviteCandidatesCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:         "candidates",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/invite-candidates"},
@@ -79,7 +79,7 @@ func newInviteCandidatesCmd() *cobra.Command {
 	}
 }
 
-func newInviteSendCmd() *cobra.Command {
+func newInviteSendCmd(acfg Config) *cobra.Command {
 	var app string
 	cmd := &cobra.Command{
 		Use:         "send <email> [--app <app>]",
@@ -129,7 +129,7 @@ Run ` + "`bk app list`" + ` to see which apps are enabled here and how each gran
 	return cmd
 }
 
-func newInviteListCmd() *cobra.Command {
+func newInviteListCmd(acfg Config) *cobra.Command {
 	var all bool
 	cmd := &cobra.Command{
 		Use:         "list",
@@ -167,7 +167,7 @@ func newInviteListCmd() *cobra.Command {
 	return cmd
 }
 
-func newInviteRevokeCmd() *cobra.Command {
+func newInviteRevokeCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:         "revoke <id>",
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/invitations/{id}"},
@@ -238,7 +238,7 @@ func tokenArg(cmd *cobra.Command, args []string) (string, error) {
 	return token, nil
 }
 
-func newInviteAcceptCmd() *cobra.Command {
+func newInviteAcceptCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:                "accept <token>",
 		Annotations:        map[string]string{"routes": "POST /api/invitations/accept"},
@@ -263,7 +263,7 @@ func newInviteAcceptCmd() *cobra.Command {
 	}
 }
 
-func newInviteDeclineCmd() *cobra.Command {
+func newInviteDeclineCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:                "decline <token>",
 		Annotations:        map[string]string{"routes": "POST /api/invitations/decline"},
@@ -288,7 +288,7 @@ func newInviteDeclineCmd() *cobra.Command {
 	}
 }
 
-func newInvitePendingCmd() *cobra.Command {
+func newInvitePendingCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:         "pending",
 		Annotations: map[string]string{"routes": "GET /api/me/pending-invitations"},

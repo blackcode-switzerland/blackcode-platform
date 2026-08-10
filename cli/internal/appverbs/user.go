@@ -1,4 +1,4 @@
-package platform
+package appverbs
 
 import (
 	"fmt"
@@ -12,17 +12,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newUserCmd() *cobra.Command {
+func newUserCmd(acfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "user",
 		Aliases: []string{"users"},
 		Short:   "Read users",
 	}
-	cmd.AddCommand(newUserListCmd(), newUserViewCmd())
+	cmd.AddCommand(newUserListCmd(acfg), newUserViewCmd(acfg))
 	return cmd
 }
 
-func newUserListCmd() *cobra.Command {
+func newUserListCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/users"},
@@ -59,7 +59,7 @@ func newUserListCmd() *cobra.Command {
 	}
 }
 
-func newUserViewCmd() *cobra.Command {
+func newUserViewCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:         "view <id|email>",
 		Annotations: map[string]string{"routes": "GET /api/users"},

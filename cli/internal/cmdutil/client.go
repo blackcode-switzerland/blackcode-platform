@@ -65,12 +65,19 @@ var PinnedApp string
 func PinApp(app string) { PinnedApp = app }
 
 // ClientWorkspaceSlug returns the workspace slug/id the client should target:
-// the --ws override when set, otherwise the active workspace from config.
+// the --ws override when set, otherwise THIS INVOCATION'S APP's active
+// workspace.
+//
+// Per app since Phase 4, and it has to be: a slug identifies a row in the app's
+// own workspace table, and since Phase 2 there is one such table per app with
+// OVERLAPPING ids. Reading one shared field meant `bk sales workspace use …`
+// silently retargeted `bk issues …` — measured, see config.ActiveWorkspaces.
 func ClientWorkspaceSlug(cfg *config.Config) string {
 	if strings.TrimSpace(WSOverride) != "" {
 		return WSOverride
 	}
-	return cfg.ActiveWorkspaceSlug
+	app, _ := TargetApp(cfg)
+	return cfg.ActiveWorkspaceFor(app).Slug
 }
 
 // TargetApp reports which app this invocation is talking to, and why, for the
@@ -208,8 +215,12 @@ func ClientForApp(cfg *config.Config, app string) (*client.Client, error) {
 }
 
 // ResolveWorkspaceRef returns either the slug/id explicitly given as the first
-// argument, or the active workspace slug from config. Errors if there is no
+// argument, or this invocation's app's active workspace. Errors if there is no
 // argument and no active workspace.
+//
+// The error NAMES THE APP, and that is the point of the per-app store: "no
+// active workspace" used to be answerable by a `bk workspace use` that set the
+// wrong app's, and the caller had no way to see that from the message.
 func ResolveWorkspaceRef(cfg *config.Config, args []string) (string, error) {
 	if len(args) > 0 && args[0] != "" {
 		return args[0], nil
@@ -217,13 +228,20 @@ func ResolveWorkspaceRef(cfg *config.Config, args []string) (string, error) {
 	if strings.TrimSpace(WSOverride) != "" {
 		return WSOverride, nil
 	}
-	if cfg.ActiveWorkspaceSlug != "" {
-		return cfg.ActiveWorkspaceSlug, nil
+	app, _ := TargetApp(cfg)
+	ws := cfg.ActiveWorkspaceFor(app)
+	if ws.Slug != "" {
+		return ws.Slug, nil
 	}
-	if cfg.ActiveWorkspaceID > 0 {
-		return fmt.Sprintf("%d", cfg.ActiveWorkspaceID), nil
+	if ws.ID > 0 {
+		return fmt.Sprintf("%d", ws.ID), nil
 	}
-	return "", fmt.Errorf("no active workspace — set one with `bk workspace use <slug>` or pass it explicitly")
+	if app == "" {
+		return "", fmt.Errorf("no active workspace — set one with `bk <app> workspace use <slug>` or pass it explicitly")
+	}
+	return "", fmt.Errorf(
+		"no active workspace for the %s app — set one with `bk %s workspace use <slug>` "+
+			"(each app remembers its own; `bk %s workspace list` shows them)", app, app, app)
 }
 
 // RequireActiveWorkspace is ResolveWorkspaceRef for commands that take no

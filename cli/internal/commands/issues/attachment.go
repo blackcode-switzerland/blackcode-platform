@@ -39,7 +39,7 @@ func newAttachmentListCmd() *cobra.Command {
 the API/CLI ("bk issues issue attach"), joined to its issue and uploader.
 
 This is separate from files embedded inline in descriptions and comments. For
-everything stored in the workspace, across every app, use "bk storage list".`,
+everything this app has stored in the workspace, use "bk issues storage list".`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {

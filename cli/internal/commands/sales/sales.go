@@ -70,10 +70,23 @@ Vocabularies (stages, channels, meeting types, ...) and every limit are served
 live by "bk meta". They change without a release of this binary, so this help
 text does not list them.
 
-Identity and org verbs — workspace, member, invite, token, profile, inbox — are
-NEUTRAL and stay bare, as are the cross-app ones: search, activity, link, and
-"bk storage", which lists every app's files against one workspace quota. You
-upload INTO an app; you list ACROSS all of them. Run "bk guide platform/apps".`
+THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
+
+  bk sales workspace  list, show, use. There is no create/edit/delete here: a
+                      workspace is the COMPANY (D-3), and you are granted one
+  bk sales member     list, remove
+  bk sales invite     send, list, accept, decline, revoke, pending, candidates
+  bk sales activity   this app's history (--since 24h)
+
+"bk sales workspace use x" sets THIS app's active workspace and no other's.
+
+Bare verbs are identity and this binary only: login, logout, whoami, token,
+profile, meta, app, guide, skill, changelog, version, super-admin. Run
+"bk guide platform/apps" for the rule.
+
+There is no "bk sales inbox", "bk sales storage" or "bk sales user": this app
+serves no route for them, and a command that could only 404 is a dead end with a
+help page. "bk sales member list" is who is in your workspace.`
 
 // NewGroup returns the `bk sales` command group. Registered from
 // commands/root.go, exactly as an app's group should be.

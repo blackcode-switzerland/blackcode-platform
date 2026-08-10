@@ -42,7 +42,7 @@ may use each one.
   bk app access grant <app> --user <ref>   grant one member
   bk app access revoke <app> --user <ref>  revoke one member
 
-Membership and access are different things: ` + "`bk member list`" + ` shows who is in
+Membership and access are different things: ` + "`bk <app> member list`" + ` shows who is in
 the workspace, this shows who can open a given app inside it. With
 default-access all_members the two are the same set; with invite_only they are
 not, which is the point.

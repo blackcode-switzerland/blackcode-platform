@@ -26,27 +26,30 @@ import (
 // `bk guide`. What stays here: what bk is, the first run, the global flags, the
 // exit codes, the command groups, and one loud pointer.
 //
-// ORGANISED BY TIER since 3.0.0 (docs/sales-app-plan.md D-11). This is the first
-// text an agent reads, and the question it has to answer on the first pass is
-// not "what verbs exist?" but "which app is this command talking to?". A flat
-// list of verbs cannot answer that; three named groups can, and the tiers are
-// then the same idea the guide, the error hints and `bk meta`'s routing block
-// all repeat.
-const rootLong = `bk is the CLI for the Blackcode platform — workspaces, members,
-tokens and inbox, plus one command group per app.
+// ORGANISED BY TIER, and there are TWO of them since 4.0.0
+// (multiAppFinalRefactor Phase 4). This is the first text an agent reads, and
+// the question it has to answer on the first pass is not "what verbs exist?" but
+// "which app is this command talking to?". A flat list cannot answer that; two
+// named groups can, and the split is the same idea the guide, the error hints
+// and `bk meta`'s routing block all repeat.
+//
+// The third tier — CROSS-APP — is gone, and its absence is the headline. It
+// existed because the apps shared a database; they no longer do.
+const rootLong = `bk is the CLI for the Blackcode platform — one login, one token,
+and one command group per app.
 
 It is the ONLY supported interface. The HTTP API behind it is private plumbing
 with no public contract.
 
 Agents: run "bk guide" first — it is the complete, always-current usage guide
-for THIS binary. Then "bk meta" to pick your workspace.
+for THIS binary. Then "bk meta" to see where each command will go.
 
 First run:
-  bk login --server URL    # opens browser, captures token
-  bk skill install         # write the agent skill file for this project
-  bk guide                 # how to use this binary (offline, no auth needed)
-  bk meta                  # who am I + every workspace I can write to + live limits
-  bk workspace use <slug>  # set active workspace (pick by name/slug, not id)
+  bk login --server URL           # opens browser, captures token
+  bk skill install                # write the agent skill file for this project
+  bk guide                        # how to use this binary (offline, no auth)
+  bk meta                         # who am I + every app + where each goes
+  bk <app> workspace use <slug>   # set THAT APP's active workspace
 
 Global flags:
   -o table|json|yaml|yml   output format (default: table)
@@ -59,58 +62,55 @@ Exit codes (stable; for branching in scripts/agents):
   5 not-found(404)   6 validation(400/422)   7 user-aborted
   8 client too old   9 update available
 
-THREE TIERS OF VERB. The spelling tells you which app a command talks to —
-run "bk guide platform/apps" for the rule and the reasoning.
+TWO TIERS OF VERB, and the spelling tells you which — run "bk guide
+platform/apps" for the rule and the reasoning.
 
-  1. NEUTRAL — bare. Identity and org data: the same answer from any app, so no
-     app can be the wrong one to ask.
+  1. BARE — your ACCOUNT and this BINARY. One login and one token are valid
+     against every app, so no app can be the wrong one to ask.
        login       authenticate (--server names ANY app's url)
        logout      remove stored credentials
-       meta        who am I + every workspace I can write to + live limits
-       guide       the embedded usage guide (--list, <topic>, --json)
-       skill       install / check / sync the agent skill file
-       workspace   list (--all for every workspace + per-app badges), show,
-                   create, edit, transfer, use
-       app         which apps a workspace runs, and who may use them
-       member      list, remove, leave
-       invite      send, list, accept, decline, revoke, pending, candidates
+       whoami      the account this token belongs to
        token       list, create, delete
        profile     view, edit
-       inbox       list, read, archive, unarchive
+       meta        who am I + every app + where each command will go
+       app         the address book: which apps exist and where they live
+       guide       the embedded usage guide (--list, <topic>, --json)
+       skill       install / check / sync the agent skill file
        changelog   the dated record of what changed
        version     print the version of this binary
        super-admin users, whitelist, errors (super admins only; platform-wide)
 
-  2. CROSS-APP — bare, and crossing the boundary is the point. Results are
-     tagged with the app they came from.
-       search      federated search across every app's entities (returns URNs)
-       activity    merged activity feed across every app (--since, --app)
-       link        relate two entities by URN, across apps (create, list, rm)
-       storage     every app's uploaded files, one workspace quota (owner only)
+  2. APP-OWNED — "bk <app> <verb>", because the answer depends on the app.
+     Each app has its OWN workspaces, members, labels, files and history.
+       bk <app> workspace  list, show, use (+ create/edit/transfer/delete
+                           where the app serves them)
+       bk <app> member     list, remove, leave
+       bk <app> invite     send, list, accept, decline, revoke, pending
+       bk <app> upload     store a file against that app
+       bk <app> trash      that app's recycle bin: list, restore, purge, empty
+       bk <app> label      list, view, create, edit, delete, attach, detach
+       bk <app> search     find things in that app
+       bk <app> activity   that app's history (--since)
+       …plus that app's own nouns.
 
-  3. APP-OWNED — behind the app's name, because the answer depends on the app.
-     Every app group carries the same three, plus its own nouns.
-       bk <app> upload    store a file against that app
-       bk <app> trash     that app's recycle bin: list, restore, purge, empty
-       bk <app> label     list, view, create, edit, delete, attach, detach
+     EACH APP REMEMBERS ITS OWN ACTIVE WORKSPACE. "bk sales workspace use x"
+     does not move "bk issues". They are different tables that happen to share
+     some ids, so a slug only means something against the app it came from.
 
-     Files are the pairing to remember: you upload INTO one app
-     ("bk issues upload"), and you list ACROSS all of them ("bk storage list").
+     Not every app serves every verb: "bk <app> --help" is the list for that
+     app, and a verb it does not serve is simply absent rather than a 404.
 
 APPS — every app verb sits behind its app name:
   issues      issue, task, project, attachment, move, copy, analytics
-              + the three above
-  sales       prospect
+  sales       prospect, contact, meeting, comm, product, template, doc, …
 
-Renamed in 3.0.0: "upload", "trash" and "label" moved behind the app name —
-"bk issues upload", not "bk upload". There is no bare form and no alias: a bare
-spelling would have to pick an app silently, which is the mistake being removed.
-"bk storage attachments" became "bk issues attachment list". The old spellings
-exit non-zero and name their replacement. Run "bk changelog".
-
-Every issue, task and project is addressable by a URN —
-bc:issues:<workspace>/<type>/<number> — so "bk search" spans apps and "bk link"
-relates two things that live in different ones. Run "bk guide platform/cross-app".
+CHANGED 2026-08-10 (4.0.0), and it is a breaking change for anything scripted:
+"workspace", "member", "invite", "user", "inbox", "storage", "search" and
+"activity" moved behind the app name, and "link" was REMOVED. The apps stopped
+sharing a database, so a bare spelling had no correct answer — only a default,
+taken from whichever app you were last homed on, with nothing in the command
+saying which. Every old spelling exits non-zero and names its replacement.
+Run "bk changelog".
 
 Discover flags before calling: bk <group> --help, then bk <group> <cmd> --help.`
 
@@ -145,7 +145,7 @@ func NewRoot() *cobra.Command {
 	// Found by the two-server routing test, which is the only thing that could
 	// have found it. This name says which of the two it is.
 	root.PersistentFlags().StringVar(&cmdutil.AppOverride, "app-server", "",
-		"Send this invocation's NEUTRAL and CROSS-APP verbs to <app>'s server (`bk <app> …` ignores it; `bk app use` changes it permanently)")
+		"Send this invocation's BARE (identity) verbs to <app>'s server (`bk <app> …` ignores it — it pins its own app; `bk app use` changes it permanently)")
 	// Tiers 1 and 2 (D-11): the verbs that stay bare because no app can be the
 	// wrong one to ask, and the ones whose job is to cross the boundary.
 	root.AddCommand(platform.NewCommands()...)

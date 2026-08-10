@@ -38,15 +38,26 @@ const long = `The issues app: projects, issues, tasks, their comments and their 
 APP-OWNED PLATFORM VERBS — the same three under every app, each answering for
 ITS app:
 
-  bk issues upload    store a file against this app
-  bk issues trash     this app's recycle bin: list, restore, purge, empty
-  bk issues label     labels, and attaching them to this app's issues
+  bk issues workspace  this app's workspaces: list, show, use, create, edit,
+                       transfer, delete
+  bk issues member     list, remove, leave
+  bk issues invite     send, list, accept, decline, revoke, pending, candidates
+  bk issues user       the people you share a workspace with, in this app
+  bk issues upload     store a file against this app
+  bk issues trash      this app's recycle bin: list, restore, purge, empty
+  bk issues label      labels, and attaching them to this app's issues
+  bk issues search     find an issue, task or project by title (returns URNs)
+  bk issues activity   this app's history (--since 24h, --subject <urn>)
+  bk issues inbox      your notifications from this app
+  bk issues storage    this app's uploaded files and the workspace's usage
 
-Identity and org verbs — workspace, member, invite, token, profile, inbox — are
-NEUTRAL and stay bare, as are the cross-app ones: search, activity, link, and
-"bk storage", which lists every app's files against one workspace quota. You
-upload INTO an app; you list ACROSS all of them. Run "bk guide platform/apps"
-for the tiers, or "bk --help" for the list.
+THIS APP'S ACTIVE WORKSPACE IS ITS OWN. "bk issues workspace use x" does not
+move any other app's — since 2026-08-10 each app has its own workspace table,
+and the ids overlap, so a slug only means something against the app it came from.
+
+Bare verbs are now identity and this binary only: login, logout, whoami, token,
+profile, meta, app, guide, skill, changelog, version, super-admin. Run
+"bk guide platform/apps" for the rule, or "bk --help" for the list.
 
 The old un-namespaced spellings were REMOVED in 1.12.0: "bk issue list" is now
 "bk issues issue list". The old form exits non-zero and names its replacement.

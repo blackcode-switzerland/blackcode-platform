@@ -19,6 +19,7 @@ import (
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/issues"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
 )
 
 // D-1's routing rule has exactly one implementation — cmdutil.ClientForApp —
@@ -221,11 +222,19 @@ func TestRoutingSendsEachTierToItsOwnServer(t *testing.T) {
 	// same observation, and a resolver that ignored its argument entirely would
 	// pass most of this table. Injecting exactly that regression is how the
 	// original fixture — home == issues — was found to be too weak.
+	// Each app gets its OWN active workspace, because since Phase 4 that is the
+	// only kind there is. The two slugs are DIFFERENT on purpose: an assertion
+	// on which server was reached would still pass with one shared field, but
+	// the path each server sees would not, and case "the same verb, two apps"
+	// below reads the path.
 	writeConfig(t, dir, map[string]any{
-		"token":                 "bk_live_test",
-		"home_app":              "sales",
-		"home_server":           salesSrv.URL,
-		"active_workspace_slug": "acme",
+		"token":       "bk_live_test",
+		"home_app":    "sales",
+		"home_server": salesSrv.URL,
+		"active_workspaces": map[string]any{
+			"issues": map[string]any{"id": 1, "slug": "acme-issues"},
+			"sales":  map[string]any{"id": 2, "slug": "acme-sales"},
+		},
 		"app_servers": map[string]string{
 			"issues": issuesSrv.URL,
 			"sales":  salesSrv.URL,
@@ -240,18 +249,25 @@ func TestRoutingSendsEachTierToItsOwnServer(t *testing.T) {
 		// App-owned: the group pins its app — AGAINST the home app, which is sales.
 		{"app-owned verb goes to its app, not home", []string{"issues", "label", "list"}, "issues"},
 		{"an app's own noun goes to its app, not home", []string{"issues", "issue", "list"}, "issues"},
-		// Neutral + cross-app: the home server, which here is the other one.
-		{"neutral verb goes home", []string{"workspace", "list"}, "sales"},
-		{"cross-app verb goes home", []string{"storage", "list"}, "sales"},
+		// THE VERBS PHASE 4 MOVED. Each of these was bare and went home; the
+		// app name on the command is now the only thing that decides, which is
+		// the whole prize of the phase — `bk trash purge` used to destroy things
+		// in whichever app the config was last homed on.
+		{"a moved verb goes to its app, not home", []string{"issues", "workspace", "list"}, "issues"},
+		{"a moved read verb goes to its app, not home", []string{"issues", "storage", "list"}, "issues"},
+		// Bare, after Phase 4: identity and the binary. These still follow home.
+		{"an identity verb goes home", []string{"token", "list"}, "sales"},
+		{"another identity verb goes home", []string{"profile", "view"}, "sales"},
 		// …and --app-server moves the home half, one invocation at a time. It is
 		// NOT spelled --app: six commands already use --app as a FILTER, and a
 		// persistent flag of that name shadows them silently rather than
 		// colliding. This pair of cases is what found that.
-		{"--app-server redirects a neutral verb", []string{"--app-server", "issues", "workspace", "list"}, "issues"},
-		{"--app-server redirects a cross-app verb", []string{"--app-server", "issues", "storage", "list"}, "issues"},
+		{"--app-server redirects an identity verb", []string{"--app-server", "issues", "token", "list"}, "issues"},
+		{"--app-server redirects the address book", []string{"--app-server", "issues", "profile", "view"}, "issues"},
 		// THE ONE THAT MATTERS MOST: an override must NOT move an app-owned verb.
 		// Its app is written on the command, and a flag cannot outrank it.
 		{"--app-server does not move an app-owned verb", []string{"--app-server", "sales", "issues", "label", "list"}, "issues"},
+		{"--app-server does not move a moved verb", []string{"--app-server", "sales", "issues", "member", "list"}, "issues"},
 	}
 
 	for _, tc := range cases {
@@ -275,6 +291,145 @@ func TestRoutingSendsEachTierToItsOwnServer(t *testing.T) {
 					strings.Join(tc.argv, " "), otherName, *other, gotName)
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 4. THE SAME VERB, TWO APPS, TWO ANSWERS — Phase 4's whole claim
+// ---------------------------------------------------------------------------
+// `member` was a bare NEUTRAL verb: one workspace table, so one membership list,
+// so no app could be the wrong one to ask. Since Phase 2 that is two tables with
+// OVERLAPPING ids, and a bare spelling would answer from whichever app the
+// config was last homed on.
+//
+// This asserts both halves of the fix at once, and neither alone would do:
+//
+//   - the SERVER differs (routing), and
+//   - the WORKSPACE SLUG IN THE PATH differs (per-app active workspace).
+//
+// The second is the one a re-tiering could silently get wrong. Move the verb
+// under the app, keep one shared `active_workspace_slug`, and every case in the
+// table above still passes while `bk sales member list` asks the sales server
+// about an ISSUES workspace slug. Measured before the split existed: with one
+// field, `bk workspace use balathanusan-1` left `bk sales prospect list`
+// answering `workspace not found (404)`.
+func TestTheSameVerbUnderTwoAppsAsksTwoTenancies(t *testing.T) {
+	issuesHits, salesHits := &[]string{}, &[]string{}
+	recorder := func(sink *[]string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			*sink = append(*sink, r.URL.Path)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[]}`))
+		}
+	}
+	issuesSrv := httptest.NewServer(recorder(issuesHits))
+	defer issuesSrv.Close()
+	salesSrv := httptest.NewServer(recorder(salesHits))
+	defer salesSrv.Close()
+
+	dir := t.TempDir()
+	t.Setenv("BK_CONFIG_DIR", dir)
+	writeConfig(t, dir, map[string]any{
+		"token":       "bk_live_test",
+		"home_app":    "sales",
+		"home_server": salesSrv.URL,
+		"active_workspaces": map[string]any{
+			"issues": map[string]any{"id": 1, "slug": "acme-issues"},
+			"sales":  map[string]any{"id": 2, "slug": "acme-sales"},
+		},
+		"app_servers": map[string]string{"issues": issuesSrv.URL, "sales": salesSrv.URL},
+	})
+
+	resetRoutingState()
+	_ = runRoot(t, "issues", "member", "list")
+	resetRoutingState()
+	_ = runRoot(t, "sales", "member", "list")
+
+	if len(*issuesHits) != 1 || len(*salesHits) != 1 {
+		t.Fatalf("expected one request each; issues=%v sales=%v", *issuesHits, *salesHits)
+	}
+	if !strings.Contains((*issuesHits)[0], "acme-issues") {
+		t.Errorf("`bk issues member list` asked for %q — it must use the ISSUES active "+
+			"workspace (acme-issues). A shared active-workspace field passes the routing "+
+			"table above and fails here.", (*issuesHits)[0])
+	}
+	if !strings.Contains((*salesHits)[0], "acme-sales") {
+		t.Errorf("`bk sales member list` asked for %q — it must use the SALES active "+
+			"workspace (acme-sales)", (*salesHits)[0])
+	}
+}
+
+// Setting one app's active workspace must not move another app's. The write half
+// of the property above: `bk sales workspace use` writing a shared field is
+// exactly how the two got confused before Phase 4.
+func TestWorkspaceUseIsPerApp(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BK_CONFIG_DIR", dir)
+	writeConfig(t, dir, map[string]any{
+		"token":       "bk_live_test",
+		"home_app":    "issues",
+		"home_server": "https://issues.example.test",
+		"active_workspaces": map[string]any{
+			"issues": map[string]any{"id": 1, "slug": "acme-issues"},
+		},
+		"app_servers": map[string]string{"issues": "https://issues.example.test"},
+	})
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	cfg.SetActiveWorkspaceFor("sales", config.ActiveWorkspace{ID: 9, Slug: "acme-sales"})
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	reloaded, err := config.Load()
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got := reloaded.ActiveWorkspaceFor("issues").Slug; got != "acme-issues" {
+		t.Errorf("setting sales' workspace changed issues' to %q — each app keeps its own", got)
+	}
+	if got := reloaded.ActiveWorkspaceFor("sales").Slug; got != "acme-sales" {
+		t.Errorf("sales' active workspace did not persist: %q", got)
+	}
+	// The legacy pair mirrors the HOME app only. A non-home write touching it
+	// would put a sales slug where a 3.x binary reads an issues one.
+	if reloaded.ActiveWorkspaceSlug != "acme-issues" {
+		t.Errorf("the legacy active_workspace_slug is %q — it mirrors the home app (issues) "+
+			"so a rollback to 3.x keeps working, and must not follow another app's write",
+			reloaded.ActiveWorkspaceSlug)
+	}
+}
+
+// A 3.x config carries ONE active workspace and no per-app map. It must come
+// forward as the HOME app's — and as nobody else's, because a slug resolved
+// against issues is not a sales workspace.
+func TestLegacyActiveWorkspaceMigratesToTheHomeAppOnly(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BK_CONFIG_DIR", dir)
+	writeConfig(t, dir, map[string]any{
+		"token":                 "bk_live_test",
+		"home_app":              "issues",
+		"home_server":           "https://issues.example.test",
+		"active_workspace_id":   7,
+		"active_workspace_slug": "legacy-ws",
+		"app_servers":           map[string]string{"issues": "https://issues.example.test"},
+	})
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if got := cfg.ActiveWorkspaceFor("issues"); got.Slug != "legacy-ws" || got.ID != 7 {
+		t.Errorf("a 3.x config's active workspace did not come forward for the home app: %+v — "+
+			"every `bk issues …` command would say \"no active workspace\" after an upgrade", got)
+	}
+	if got := cfg.ActiveWorkspaceFor("sales").Slug; got != "" {
+		t.Errorf("the legacy workspace was adopted for sales too (%q) — it was resolved "+
+			"against issues and naming it a sales workspace is the cross-tenant guess "+
+			"this refactor removes", got)
 	}
 }
 
@@ -353,8 +508,11 @@ func TestDeadAppServerFailsByName(t *testing.T) {
 	t.Setenv("BK_CONFIG_DIR", dir)
 	writeConfig(t, dir, map[string]any{
 		"token": "bk_live_test", "home_app": "sales", "home_server": home.URL,
-		"active_workspace_slug": "acme",
-		"app_servers":           map[string]string{"issues": deadURL, "sales": home.URL},
+		"active_workspaces": map[string]any{
+			"issues": map[string]any{"id": 1, "slug": "acme"},
+			"sales":  map[string]any{"id": 2, "slug": "acme"},
+		},
+		"app_servers": map[string]string{"issues": deadURL, "sales": home.URL},
 	})
 
 	resetRoutingState()

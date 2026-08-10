@@ -32,6 +32,22 @@ func appOwnedVerbs() []*cobra.Command {
 		// This app's binnable entity types. Declared here because they are this
 		// app's vocabulary — see the Config field's comment.
 		TrashTypes: []string{"issue", "project", "task"},
+
+		// This app serves the WHOLE shared surface, and it is the only one that
+		// does. Every flag below is the honest reading of `app/api/**`: issues
+		// has /workspaces (all four methods), /transfer, /leave, /invitations,
+		// /users, /search, /me/inbox and /storage. Its own
+		// lib/cli-parity.test.ts checks that claim against the filesystem.
+		Workspace:      true,
+		WorkspaceAdmin: true,
+		Members:        true,
+		MemberLeave:    true,
+		Invites:        true,
+		Users:          true,
+		Search:         true,
+		Activity:       true,
+		Inbox:          true,
+		Storage:        true,
 	})
 	set.Label.AddCommand(newLabelAttachCmd(), newLabelDetachCmd())
 	return set.All()

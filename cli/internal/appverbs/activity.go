@@ -1,4 +1,4 @@
-package platform
+package appverbs
 
 // `bk activity` reads platform.events, so it stays a bare platform verb — and
 // Phase 6 is what made it a genuinely cross-app feed. Every event now carries the
@@ -22,7 +22,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newActivityCmd() *cobra.Command {
+func newActivityCmd(acfg Config) *cobra.Command {
 	var (
 		limit, cursor int
 		since         string

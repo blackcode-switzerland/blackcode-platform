@@ -36,16 +36,32 @@ func runBK(t *testing.T, argv ...string) error {
 	return root.Execute()
 }
 
-// The removed bare spellings (D-11), and the app-qualified form each must name.
+// The removed bare spellings, and the app-qualified form each must name.
 //
-// `storage` is deliberately ABSENT: D-28 kept it bare, in the cross-app tier. Its
-// one moved subcommand is covered by TestRemovedStorageAttachmentsIsRedirected
-// below, which is a different shape — a group that still exists, missing a
-// subcommand that does not.
+// Three from D-11 (3.0.0) and EIGHT from multiAppFinalRefactor Phase 4, when the
+// cross-app tier stopped existing because the apps stopped sharing a database.
+//
+// `storage` and `search` are here now and were not before, and that is a change
+// of fact rather than of opinion: D-28 kept `storage` bare because "one ledger,
+// one quota, the same rows from every app", and Phase 3 made the ledger per app.
+// `search` read `platform.entities`, and sales stopped projecting into it.
+//
+// `link` is NOT in this map — it was removed with no replacement to name, so it
+// cannot satisfy the "hint names the new spelling" assertion below. It has its
+// own case, TestRemovedLinkNamesWhatToDoInstead, which is the shape that matters
+// for a deletion: the hint has to say what to do, not where the command went.
 var removedBareVerbs = map[string]string{
-	"upload": "bk issues upload",
-	"trash":  "bk issues trash",
-	"label":  "bk issues label",
+	"upload":    "bk issues upload",
+	"trash":     "bk issues trash",
+	"label":     "bk issues label",
+	"workspace": "bk issues workspace",
+	"member":    "bk issues member",
+	"invite":    "bk issues invite",
+	"user":      "bk issues user",
+	"inbox":     "bk issues inbox",
+	"storage":   "bk issues storage",
+	"search":    "bk issues search",
+	"activity":  "bk issues activity",
 }
 
 func TestRemovedBareVerbsFailWithARecoverableHint(t *testing.T) {
@@ -90,9 +106,24 @@ func TestRemovedBareVerbsFailWithARecoverableHint(t *testing.T) {
 // test ever reaches a real deployment with real credentials.
 func TestAppQualifiedVerbsReachTheAuthCheck(t *testing.T) {
 	leaf := map[string][]string{
-		"upload": {"issues", "upload", "some-file.pdf"},
-		"trash":  {"issues", "trash", "list"},
-		"label":  {"issues", "label", "list"},
+		"upload":    {"issues", "upload", "some-file.pdf"},
+		"trash":     {"issues", "trash", "list"},
+		"label":     {"issues", "label", "list"},
+		"workspace": {"issues", "workspace", "list"},
+		"member":    {"issues", "member", "list"},
+		"invite":    {"issues", "invite", "list"},
+		"user":      {"issues", "user", "list"},
+		"inbox":     {"issues", "inbox", "list"},
+		"storage":   {"issues", "storage", "list"},
+		"search":    {"issues", "search", "acme"},
+		"activity":  {"issues", "activity"},
+		// The other app's copy of the same verbs — because "resolves under
+		// `bk issues`" and "resolves under every app that declares it" are two
+		// properties, and a Set built for one app and reused for another would
+		// satisfy only the first.
+		"sales workspace": {"sales", "workspace", "list"},
+		"sales member":    {"sales", "member", "list"},
+		"sales activity":  {"sales", "activity"},
 	}
 	for verb, argv := range leaf {
 		t.Run(verb, func(t *testing.T) {
@@ -137,11 +168,16 @@ func TestHintForPrefersNothingOverNoise(t *testing.T) {
 	}
 }
 
-// `bk storage attachments` is the one spelling D-28 removed, and it fails
-// differently from the four verbs above: `bk storage` still EXISTS, so the error
-// comes from rejectUnknownSubcommands' RunE and names the group
-// (`… for "bk storage"`), not the root. DeprecationHint has to match on
-// `<parent> <sub>` for this one, and that lookup had no test until now.
+// `bk storage attachments` is the D-28 spelling, and it used to fail
+// differently from the verbs above: `bk storage` still existed, so the error came
+// from rejectUnknownSubcommands' RunE and named the GROUP. Phase 4 moved
+// `storage` under the app, so cobra's legacyArgs now reports the first token at
+// the root and the `storage` row answers instead.
+//
+// Asserted rather than deleted, because the property a caller needs is unchanged:
+// the old two-word spelling must still land somewhere it can act on. What
+// changed is WHICH row answers, and that is worth pinning — if the group-level
+// lookup ever becomes live again, this says which answer is acceptable.
 func TestRemovedStorageAttachmentsIsRedirected(t *testing.T) {
 	err := runBK(t, "storage", "attachments")
 	if err == nil {
@@ -151,21 +187,37 @@ func TestRemovedStorageAttachmentsIsRedirected(t *testing.T) {
 		t.Errorf("exit code = %d, want %d (usage) for %v", got, exitUsage, err)
 	}
 	hint := hintFor(err)
-	if !strings.Contains(hint, "bk issues attachment list") {
+	if !strings.Contains(hint, "bk issues attachment list") &&
+		!strings.Contains(hint, "bk issues storage") {
 		t.Errorf("`bk storage attachments` failed with %q and hint %q — it must name "+
-			"`bk issues attachment list`", err, hint)
+			"`bk issues attachment list` or, since `storage` itself moved, "+
+			"`bk issues storage`", err, hint)
 	}
 }
 
-// …and the verb it hangs off must still work bare. Without this, the test above
-// would pass just as well if `bk storage` had been deleted entirely, which is
-// the opposite of what D-28 decided.
-func TestStorageStaysBare(t *testing.T) {
-	t.Setenv("BK_CONFIG_DIR", t.TempDir())
-	err := runBK(t, "storage", "list")
-	if !errors.Is(err, config.ErrNotConfigured) {
-		t.Fatalf("`bk storage list` failed with %v; want %v — storage is cross-app and "+
-			"stays bare (D-28)", err, config.ErrNotConfigured)
+// `bk link` was REMOVED, not renamed, and that is a different obligation.
+//
+// Every other row in this file can be checked by "does the hint name the new
+// spelling?". There is no new spelling here — PLAN.md §3 deletes the feature
+// because a link's two ends needed one shared entity index and only one app
+// writes that index now. So the hint has to carry a WORKAROUND, and this asserts
+// it does. Without this case, deleting the row would look identical to deleting
+// the command.
+func TestRemovedLinkNamesWhatToDoInstead(t *testing.T) {
+	err := runBK(t, "link", "list", "bc:issues:acme/issue/1")
+	if err == nil {
+		t.Fatal("`bk link list` succeeded — the command was removed on 2026-08-10")
+	}
+	if got := classify(err); got != exitUsage {
+		t.Errorf("exit code = %d, want %d (usage) for %v", got, exitUsage, err)
+	}
+	hint := hintFor(err)
+	if !strings.Contains(hint, "removed") {
+		t.Errorf("the hint for `bk link` does not say it was removed: %q", hint)
+	}
+	if !strings.Contains(hint, "URN") {
+		t.Errorf("the hint for `bk link` names no alternative — an agent that used it has "+
+			"nothing to do instead: %q", hint)
 	}
 }
 

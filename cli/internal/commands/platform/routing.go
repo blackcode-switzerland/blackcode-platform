@@ -132,7 +132,7 @@ func buildRoutingBlock(cfg *config.Config) routingBlock {
 
 func printRouting(w io.Writer, cfg *config.Config) {
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "routing: neutral + cross-app verbs → %s", cfg.HomeServer)
+	fmt.Fprintf(w, "routing: bare (identity) verbs → %s", cfg.HomeServer)
 	if cfg.HomeApp != "" {
 		fmt.Fprintf(w, "  (home app: %s)", cfg.HomeApp)
 	}
@@ -150,23 +150,35 @@ func printRouting(w io.Writer, cfg *config.Config) {
 }
 
 // newAppUseCmd — `bk app use <slug>` switches the HOME app: which server the
-// neutral and cross-app verbs talk to, and which app's lens `bk workspace list`
-// uses. It does not affect `bk <app> …`, which is pinned by its own name.
+// remaining BARE verbs talk to. It does not affect `bk <app> …`, which is pinned
+// by its own name.
+//
+// Phase 4 shrank what this does, on purpose. It used to decide where
+// `bk workspace list`, `bk search`, `bk trash purge` and a dozen other commands
+// landed — a piece of hidden state that changed what a command DID without
+// changing what it SAID. Those verbs all name their app now, so what is left is
+// which deployment answers questions about the account. Kept because
+// `bk app list --app-server issues` is still a reasonable thing to want, and
+// removing a flag agents may have learned is a deprecation for no gain.
 func newAppUseCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:         "use <app>",
 		Annotations: map[string]string{"routes": "none"},
-		Short:       "Switch the home app: which server the bare verbs talk to",
+		Short:       "Switch the home app: which server the bare identity verbs talk to",
 		Long: `Set the home app.
 
-The NEUTRAL verbs (workspace, member, invite, token, profile, inbox, meta) and
-the CROSS-APP ones (search, activity, link, storage) go to the home app's
-server. App-owned commands do NOT: "bk issues upload" always talks to the issues
-app, whatever the home app is, because its name says so.
+The BARE verbs — login, token, profile, meta, app, changelog, super-admin — go to
+the home app's server. They answer questions about your ACCOUNT, which every
+deployment answers the same way, so the home app decides only who is asked.
+
+Everything else names its app and is unaffected: "bk issues upload" always talks
+to the issues app, whatever the home app is, because its name says so. That is
+the point of the 4.0.0 verb move — no hidden state decides where a command lands,
+and each app remembers its own active workspace.
 
 This is local state, written to ~/.config/bk/config.json. Run "bk app list" to
 see every app and its server, or "bk meta" to refresh the registry from the
-platform. Use "--app <slug>" to redirect a single command instead.`,
+platform. Use "--app-server <slug>" to redirect a single command instead.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := strings.TrimSpace(args[0])
@@ -188,7 +200,8 @@ platform. Use "--app <slug>" to redirect a single command instead.`,
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "home app is now %s (%s)\n", app, server)
 			fmt.Fprintln(cmd.ErrOrStderr(),
-				"bare verbs now talk to that server; `bk <app> …` is unaffected — it always pins its own app")
+				"the bare identity verbs now talk to that server; `bk <app> …` is unaffected — "+
+					"it always pins its own app, and each app keeps its own active workspace")
 			return nil
 		},
 	}

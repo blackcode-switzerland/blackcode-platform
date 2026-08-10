@@ -1,4 +1,4 @@
-package platform
+package appverbs
 
 import (
 	"encoding/json"
@@ -11,21 +11,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newInboxCmd() *cobra.Command {
+func newInboxCmd(acfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "inbox",
 		Short: "Per-user notifications (invitations, mentions, assignments, status changes)",
 	}
 	cmd.AddCommand(
-		newInboxListCmd(),
-		newInboxReadCmd(),
-		newInboxArchiveCmd(),
-		newInboxUnarchiveCmd(),
+		newInboxListCmd(acfg),
+		newInboxReadCmd(acfg),
+		newInboxArchiveCmd(acfg),
+		newInboxUnarchiveCmd(acfg),
 	)
 	return cmd
 }
 
-func newInboxListCmd() *cobra.Command {
+func newInboxListCmd(acfg Config) *cobra.Command {
 	var unread bool
 	cmd := &cobra.Command{
 		Use:         "list",
@@ -80,7 +80,7 @@ func newInboxListCmd() *cobra.Command {
 	return cmd
 }
 
-func newInboxReadCmd() *cobra.Command {
+func newInboxReadCmd(acfg Config) *cobra.Command {
 	var all bool
 	cmd := &cobra.Command{
 		Use:         "read [id ...] | --all",
@@ -114,7 +114,7 @@ func newInboxReadCmd() *cobra.Command {
 	return cmd
 }
 
-func newInboxArchiveCmd() *cobra.Command {
+func newInboxArchiveCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:         "archive <id> [id ...]",
 		Annotations: map[string]string{"routes": "POST /api/me/inbox/archive"},
@@ -143,7 +143,7 @@ func newInboxArchiveCmd() *cobra.Command {
 	}
 }
 
-func newInboxUnarchiveCmd() *cobra.Command {
+func newInboxUnarchiveCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:         "unarchive <id> [id ...]",
 		Annotations: map[string]string{"routes": "POST /api/me/inbox/unarchive"},

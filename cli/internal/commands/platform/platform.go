@@ -1,27 +1,61 @@
 // Package platform holds the BARE verbs — the ones that stay at the top level
 // because no app can be the wrong one to ask.
 //
-// Two of the three tiers in docs/sales-app-plan.md D-11 live here:
+// ---------------------------------------------------------------------------
+// WHAT IS LEFT HERE, AND WHY IT IS SO MUCH LESS (Phase 4)
+// ---------------------------------------------------------------------------
+// D-11 had three tiers, and TWO of them lived in this package: NEUTRAL (the same
+// answer from any deployment) and CROSS-APP (spans every app by design). Both
+// rested on one fact — the apps shared a database. `bk workspace list` could be
+// bare because there was one `platform.workspaces`; `bk search` could be bare
+// because every app projected into `platform.entities`; `bk storage` could be
+// bare because there was one upload ledger.
 //
-//	NEUTRAL    identical answer from any deployment. login, logout, meta, guide,
-//	           changelog, skill, version, app, workspace, member, invite, token,
-//	           profile, inbox, super-admin. These are identity and org data; a
-//	           workspace is the company and an app is a capability inside it
-//	           (docs/platform-architecture.md §4.4), so namespacing them per app
-//	           would claim a boundary that does not exist and would give a person
-//	           three workspace lists for one company.
+// multiAppFinalRefactor Phases 2 and 3 ended all three. Sales has its own
+// workspaces, members, invitations, labels, uploads ledger and event spine, and
+// it no longer projects into the shared index at all. So the cross-app tier is
+// gone (and `bk link` with it, PLAN.md §3), and every verb that reads an app's
+// DATA moved to `bk <app> <verb>` — internal/appverbs.
 //
-//	CROSS-APP  spans every app BY DESIGN, and tags each result with the app it
-//	           came from. search, activity, link — and `storage`, which lists
-//	           every app's files against one workspace quota (D-28). Making these
-//	           app-scoped would destroy the thing they exist for.
+// What remains here is the account and the binary:
 //
-// The third tier — `upload`, `trash`, `label`, whose answer depends on the app —
-// moved to `bk <app> <verb>` in 3.0.0 and lives in internal/appverbs. Read that
-// package's header before adding a command here: the question is not "is it
-// shared code?" but "would two deployments give the same answer?". A label, a
-// file's ownership and a recycle bin would not; a file LISTING does — which is
-// why `storage` is here and `upload` is not.
+//	login, logout, whoami   authenticate; one account, every app
+//	token                   API tokens — one token, every app
+//	profile                 your own name, tagline, avatar
+//	meta                    who am I, where will each command go, live limits
+//	app                     the address book: which apps exist, where they live
+//	guide, skill, version   this binary, offline
+//	changelog               the dated record; merged from one source
+//	super-admin             platform-wide administration — see below
+//
+// The test for adding anything here is unchanged in wording and much sharper in
+// effect: **would two deployments give the same answer?** For everything above
+// the answer is yes because the row lives in `platform.users`, `platform.apps`
+// or `platform.api_tokens` — the four tables §4b of PLAN.md marks "stays
+// shared" — or inside this binary.
+//
+// ---------------------------------------------------------------------------
+// `super-admin` STAYS BARE, AND THE REASON HAS AN EXPIRY DATE
+// ---------------------------------------------------------------------------
+// `users`, `whitelist` and `errors` read `platform.users`,
+// `platform.email_whitelist` and `platform.error_events` — genuinely shared
+// operator surfaces, and `error_events` gained an `app` column in Phase 1
+// precisely so ONE log can stay honest about which deployment wrote a row.
+//
+// `entity-drift` and `blob-drift` are NOT like that. Both are scoped to the
+// deployment they run against — an app's Postgres role has no grant on another
+// app's schema — which is CLAUDE.md finding #14: `entity-drift` reported no
+// drift against a database holding 51 unprojected sales rows. By the rule above
+// they are app-owned.
+//
+// They stay bare anyway, and this is the measurement rather than a preference:
+// **only `apps/issues` mounts `/api/super-admin/**` at all.** With exactly one
+// deployment able to answer, an app-qualified spelling would name a choice that
+// does not exist, and `bk sales super-admin blob-drift` would be a command that
+// can only 404. That stops being true the moment a second app mounts one of
+// those routes — so it is asserted rather than remembered:
+// superadmin_scope_test.go fails if any other app grows a super-admin route
+// while these are still bare.
 //
 // This package must not import any app package, and no app package may import
 // it. Anything both need is in internal/cmdutil or internal/appverbs.
@@ -40,17 +74,8 @@ func NewCommands() []*cobra.Command {
 		newWhoamiCmd(),
 		newMetaCmd(),
 		newProfileCmd(),
-		newWorkspaceCmd(),
 		newAppCmd(),
-		newUserCmd(),
-		newMemberCmd(),
-		newInviteCmd(),
-		newInboxCmd(),
 		newTokenCmd(),
-		newActivityCmd(),
-		newSearchCmd(),
-		newLinkCmd(),
-		newStorageCmd(),
 		newChangelogCmd(),
 		newSuperAdminCmd(),
 		newVersionCmd(),

@@ -73,12 +73,53 @@ var deprecations = map[string]string{
 	// contains the word it was asserting on.
 	"template": "`bk template …` is now `bk scaffold …` — the scaffold app's slug was renamed on 2026-08-07 (D-38) because `template` collides with `bk sales template`. Same commands, same output: `bk scaffold note list`.",
 
-	// `bk storage` itself STAYS BARE (D-28): one ledger, one quota, the same rows
-	// from every app. Only its issues-only subcommand moved, and it moved to a
-	// noun of that app rather than to `bk issues storage attachments` — one noun
-	// must not straddle two tiers. Keyed `<parent> <sub>` because `bk storage`
-	// still exists, so cobra reports this one against the GROUP.
-	"storage attachments": "`bk storage attachments` is now `bk issues attachment list` — it lists issue attachments and only ever did, so it is a noun of that app. `bk storage list` is unchanged and still spans every app.",
+	// `bk storage attachments` moved to a noun of the issues app in 3.0.0 — one
+	// noun must not straddle two tiers. `bk storage` itself has since moved too
+	// (see 4.0.0 below), so cobra now reports the FIRST token and the `storage`
+	// row answers. This entry stays until the 3.0.0 batch is pruned: it names a
+	// different replacement from the group's row, and a caller who typed the
+	// two-word form is better served by the specific one if cobra ever reports
+	// it again.
+	"storage attachments": "`bk storage attachments` is now `bk issues attachment list` — it lists issue attachments and only ever did, so it is a noun of that app.",
+
+	// --- 4.0.0 (2026-08-10): the cross-app tier is gone; the apps are separate ---
+	//
+	// multiAppFinalRefactor Phase 4. Every verb below read a `platform.*` table
+	// that two apps shared, which is what made a bare spelling defensible:
+	// `bk workspace list` had one workspace table to read, `bk search` had one
+	// entity index, `bk storage` had one upload ledger.
+	//
+	// Phases 2 and 3 ended that. `apps/sales` has its own workspaces, members,
+	// invitations, labels, uploads ledger and event spine, and stopped projecting
+	// into the shared index altogether. A bare spelling now has no correct answer
+	// — only a DEFAULT, taken from whichever app the config was last homed on,
+	// with nothing in the command saying which. That is how `bk trash purge`
+	// destroyed things in an app the caller never named.
+	//
+	// TEN VERBS AT ONCE, which is the largest batch this repo has taken, and the
+	// rows are what make the difference between an agent that retries correctly
+	// and one that stops. Live from day one with no alias, for 3.0.0's reason: an
+	// alias would have to pick an app silently, which is the accident being
+	// removed. Keep for two minor releases (through 4.2.0), then prune.
+	//
+	// Each hint names `bk <app> <verb>` AND a concrete example, because "use the
+	// app name" is not something an agent can execute. `bk --help` lists the apps
+	// this binary knows.
+	"workspace": "`bk workspace …` is now `bk <app> workspace …` — each app has its own workspaces since 2026-08-10, and each remembers its own active one. Try `bk issues workspace list` or `bk sales workspace list`. Run `bk guide platform/apps`.",
+	"member":    "`bk member …` is now `bk <app> member …` — membership is per app now, so the same person can be in one app's workspace and not another's. Try `bk issues member list` or `bk sales member list`.",
+	"invite":    "`bk invite …` is now `bk <app> invite …` — an invitation grants access to ONE app's workspace. Try `bk issues invite list` or `bk sales invite send <email>`. `bk <app> invite accept <token>` still redeems one.",
+	"user":      "`bk user …` is now `bk issues user …` — it lists the people you share a workspace with, which is an answer only that app's membership table can give. `bk sales member list` is the sales equivalent.",
+	"inbox":     "`bk inbox …` is now `bk issues inbox …` — notifications belong to the app that raised them, and `apps/sales` has none. Try `bk issues inbox list`.",
+	"storage":   "`bk storage …` is now `bk <app> storage …` — the upload LEDGER became per app on 2026-08-10, so two deployments no longer return the same rows (the Blob store and the workspace quota are still shared). Try `bk issues storage list`.",
+	"search":    "`bk search …` is now `bk <app> search …` — there is no cross-app index any more. Try `bk issues search <query>` for issues, tasks and projects, or `bk sales search <query>`, which searches INSIDE sales' records.",
+	"activity":  "`bk activity …` is now `bk <app> activity …` — each app keeps its own event feed. Try `bk issues activity --since 24h` or `bk sales activity`.",
+
+	// `bk link` is REMOVED, not moved, and this row is the only thing an agent
+	// on stale context has left. PLAN.md §3: a link's two ends could live in two
+	// apps, which needed one shared entity index; that index is now written by
+	// one app, so the feature has no honest implementation. Say what to do
+	// instead, because there is no new spelling to name.
+	"link": "`bk link` was removed on 2026-08-10 — it recorded a relation between two apps' entities in a shared index, and the apps no longer share one. Put the other end's URN (`bc:sales:<ws>/prospect/12`) in the description or a comment instead; `bk <app> search` finds a URN.",
 
 	// --- 1.12.0 (2026-08-05): `bk undo` removed ---
 	//

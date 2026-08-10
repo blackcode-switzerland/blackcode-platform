@@ -1,4 +1,4 @@
-package platform
+package appverbs
 
 import (
 	"fmt"
@@ -12,37 +12,57 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newWorkspaceCmd() *cobra.Command {
+// `bk <app> workspace` — THIS APP's tenancies.
+//
+// App-owned since Phase 4, and the reason is a table, not a taste: since Phase 2
+// each app has its own workspaces (`sales.workspaces`), mirrored from the
+// platform table so THE IDS AND SLUGS OVERLAP. A bare `bk workspace use <slug>`
+// therefore had no defensible answer to "in which app?", and the one it gave was
+// "whichever app you were last homed on" — recorded in a single config field
+// that the next app's `use` overwrote.
+//
+// MEASURED before this moved, on two local dev servers: `bk workspace use
+// balathanusan-1` (a workspace only issues has) left `bk sales prospect list`
+// answering `workspace not found (404)` with a hint blaming the surface. Each
+// app now remembers its own — see config.ActiveWorkspaces.
+func newWorkspaceCmd(cfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "workspace",
-		Short: "Manage workspaces (your current scope)",
-		Long: `Workspaces partition everything: projects, tasks, issues, labels,
-members, activity, analytics. Pick the active workspace once with ` + "`bk workspace use`" + `,
-and the rest of bk operates within it.`,
+		Short: "Manage this app's workspaces (your current scope)",
+		Long: fmt.Sprintf(`Workspaces partition everything this app holds. Pick the active one
+once with "bk %s workspace use", and the rest of "bk %s" operates within it.
+
+EACH APP REMEMBERS ITS OWN. Setting this app's active workspace does not touch
+any other app's — they are different tables with overlapping ids, so a slug only
+means something against the app it was resolved in.`, cfg.App, cfg.App),
 	}
 	cmd.AddCommand(
-		newWorkspaceListCmd(),
-		newWorkspaceShowCmd(),
-		newWorkspaceCreateCmd(),
-		newWorkspaceUseCmd(),
-		newWorkspaceEditCmd(),
-		newWorkspaceTransferCmd(),
-		newWorkspaceDeleteCmd(),
+		newWorkspaceListCmd(cfg),
+		newWorkspaceShowCmd(cfg),
+		newWorkspaceUseCmd(cfg),
 	)
+	if cfg.WorkspaceAdmin {
+		cmd.AddCommand(
+			newWorkspaceCreateCmd(cfg),
+			newWorkspaceEditCmd(cfg),
+			newWorkspaceTransferCmd(cfg),
+			newWorkspaceDeleteCmd(cfg),
+		)
+	}
 	return cmd
 }
 
 // newWorkspaceListCmd lists the workspaces you can use THIS app in.
 //
-// The default is app-scoped (Phase 4): a workspace where issues is switched off,
-// or where you were never granted it, is not a workspace you can write to, and
+// The default is app-scoped: a workspace where this app is switched off, or
+// where you were never granted it, is not a workspace you can write to, and
 // offering it would offer a guaranteed 403.
 //
 // --all is the escape hatch, and it is not optional politeness. Without it, a
 // workspace that this app is not enabled in simply vanishes, and "where did my
 // workspace go?" would have no answer from inside the app that hid it. --all
 // shows every membership plus the apps you can reach in each.
-func newWorkspaceListCmd() *cobra.Command {
+func newWorkspaceListCmd(acfg Config) *cobra.Command {
 	var all bool
 	cmd := &cobra.Command{
 		Use:         "list",
@@ -57,7 +77,7 @@ func newWorkspaceListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			activeID := cfg.ActiveWorkspaceID
+			activeID := cfg.ActiveWorkspaceFor(acfg.App).ID
 
 			if all {
 				workspaces, err := c.ListAllMyWorkspaces()
@@ -114,7 +134,7 @@ func newWorkspaceListCmd() *cobra.Command {
 				}
 				if len(workspaces) == 0 {
 					fmt.Fprintln(cmd.ErrOrStderr(),
-						"(no workspaces you can use this app in — try `bk workspace list --all`)")
+						fmt.Sprintf("(no workspaces you can use this app in — try `bk %s workspace list --all`)", acfg.App))
 				}
 				return nil
 			})
@@ -125,7 +145,7 @@ func newWorkspaceListCmd() *cobra.Command {
 	return cmd
 }
 
-func newWorkspaceShowCmd() *cobra.Command {
+func newWorkspaceShowCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:         "show [slug|id]",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}"},
@@ -160,7 +180,7 @@ func newWorkspaceShowCmd() *cobra.Command {
 	}
 }
 
-func newWorkspaceCreateCmd() *cobra.Command {
+func newWorkspaceCreateCmd(acfg Config) *cobra.Command {
 	var name string
 	var useAfter bool
 	cmd := &cobra.Command{
@@ -184,12 +204,11 @@ func newWorkspaceCreateCmd() *cobra.Command {
 				if _, err := c.SetActiveWorkspace(ws.ID); err != nil {
 					return err
 				}
-				cfg.ActiveWorkspaceID = ws.ID
-				cfg.ActiveWorkspaceSlug = ws.Slug
+				cfg.SetActiveWorkspaceFor(acfg.App, config.ActiveWorkspace{ID: ws.ID, Slug: ws.Slug})
 				if err := config.Save(cfg); err != nil {
 					return err
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "Active workspace set to %s.\n", ws.Slug)
+				fmt.Fprintf(cmd.OutOrStdout(), "Active %s workspace set to %s.\n", acfg.App, ws.Slug)
 			}
 			return nil
 		},
@@ -200,7 +219,7 @@ func newWorkspaceCreateCmd() *cobra.Command {
 	return cmd
 }
 
-func newWorkspaceUseCmd() *cobra.Command {
+func newWorkspaceUseCmd(acfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:         "use <slug|id>",
 		Annotations: map[string]string{"routes": "POST /api/me/active-workspace,GET /api/workspaces"},
@@ -218,19 +237,23 @@ func newWorkspaceUseCmd() *cobra.Command {
 			if _, err := c.SetActiveWorkspace(detail.Workspace.ID); err != nil {
 				return err
 			}
-			cfg.ActiveWorkspaceID = detail.Workspace.ID
-			cfg.ActiveWorkspaceSlug = detail.Workspace.Slug
+			cfg.SetActiveWorkspaceFor(acfg.App, config.ActiveWorkspace{
+				ID:   detail.Workspace.ID,
+				Slug: detail.Workspace.Slug,
+			})
 			if err := config.Save(cfg); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Active workspace: %s (%s)\n",
-				detail.Workspace.Name, detail.Workspace.Slug)
+			fmt.Fprintf(cmd.OutOrStdout(), "Active %s workspace: %s (%s)\n",
+				acfg.App, detail.Workspace.Name, detail.Workspace.Slug)
+			fmt.Fprintf(cmd.ErrOrStderr(),
+				"this is the %s app's workspace only — every other app keeps its own\n", acfg.App)
 			return nil
 		},
 	}
 }
 
-func newWorkspaceEditCmd() *cobra.Command {
+func newWorkspaceEditCmd(acfg Config) *cobra.Command {
 	var name, slug string
 	cmd := &cobra.Command{
 		Use:         "edit [slug|id]",
@@ -259,9 +282,9 @@ func newWorkspaceEditCmd() *cobra.Command {
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "updated workspace %q (slug: %s)\n",
 				ws.Name, ws.Slug)
-			// Refresh config if the active workspace was edited
-			if cfg.ActiveWorkspaceSlug == ref || fmt.Sprint(cfg.ActiveWorkspaceID) == ref {
-				cfg.ActiveWorkspaceSlug = ws.Slug
+			// Refresh config if this app's active workspace was edited.
+			if active := cfg.ActiveWorkspaceFor(acfg.App); active.Slug == ref || fmt.Sprint(active.ID) == ref {
+				cfg.SetActiveWorkspaceFor(acfg.App, config.ActiveWorkspace{ID: active.ID, Slug: ws.Slug})
 				_ = config.Save(cfg)
 			}
 			return nil
@@ -272,7 +295,7 @@ func newWorkspaceEditCmd() *cobra.Command {
 	return cmd
 }
 
-func newWorkspaceTransferCmd() *cobra.Command {
+func newWorkspaceTransferCmd(acfg Config) *cobra.Command {
 	var userRef string
 	var yes bool
 	cmd := &cobra.Command{
@@ -322,27 +345,27 @@ func newWorkspaceTransferCmd() *cobra.Command {
 // It also takes the target as an explicit argument rather than falling back to
 // the active workspace — "delete whatever I happen to be pointed at" is not a
 // safe default for an irreversible operation.
-func newWorkspaceDeleteCmd() *cobra.Command {
+func newWorkspaceDeleteCmd(acfg Config) *cobra.Command {
 	var confirmRef string
 	var yes bool
 	cmd := &cobra.Command{
 		Use:         "delete <slug|id> --confirm <slug|id>",
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}"},
 		Short:       "Permanently delete a workspace and everything in it (owner only)",
-		Long: `Permanently delete a workspace: its projects, tasks, issues, labels,
-comments, invitations and membership. This is NOT the Trash — there is no
-restore, and ` + "`bk undo`" + ` cannot roll it back.
+		Long: fmt.Sprintf(`Permanently delete a workspace and everything this app holds in it.
+This is NOT the Trash — there is no restore.
 
 You must be the workspace owner. To transfer it instead, see
-` + "`bk workspace transfer`" + `.
+"bk %s workspace transfer".
 
 --confirm must repeat the same slug/id you passed as the argument. It is
 required even with --yes and even under BK_NO_PROMPT=1.
 
-  bk workspace delete scratch-ws --confirm scratch-ws
+  bk %s workspace delete scratch-ws --confirm scratch-ws
 
-If the deleted workspace was your active one, the active workspace is cleared —
-run ` + "`bk workspace use <slug>`" + ` to pick a new one.`,
+If the deleted workspace was your active one, this app's active workspace is
+cleared — run "bk %s workspace use <slug>" to pick a new one.`,
+			acfg.App, acfg.App, acfg.App),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ref := strings.TrimSpace(args[0])
@@ -366,12 +389,12 @@ run ` + "`bk workspace use <slug>`" + ` to pick a new one.`,
 			}
 			// Clear the active workspace if we just deleted it, so the next
 			// command fails with "no active workspace" instead of 404-ing.
-			if cfg.ActiveWorkspaceSlug == ref || fmt.Sprint(cfg.ActiveWorkspaceID) == ref {
-				cfg.ActiveWorkspaceSlug = ""
-				cfg.ActiveWorkspaceID = 0
+			if active := cfg.ActiveWorkspaceFor(acfg.App); active.Slug == ref || fmt.Sprint(active.ID) == ref {
+				cfg.SetActiveWorkspaceFor(acfg.App, config.ActiveWorkspace{})
 				_ = config.Save(cfg)
-				fmt.Fprintln(cmd.ErrOrStderr(),
-					"note: that was your active workspace — run `bk workspace use <slug>` to pick another")
+				fmt.Fprintf(cmd.ErrOrStderr(),
+					"note: that was your active %s workspace — run `bk %s workspace use <slug>` to pick another\n",
+					acfg.App, acfg.App)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "deleted workspace %q\n", ref)
 			return nil

@@ -36,8 +36,49 @@ import (
 // capability nobody can reach.
 var trashTypes = []string{"prospect", "meeting", "communication", "product", "template", "document"}
 
+// THE SUBSET THIS APP SERVES, AND WHY EACH ABSENCE IS PERMANENT (D-36).
+//
+// A yes/no "hosts the platform surface" flag could not say this, which is why it
+// was retired. Every value below is the honest reading of `apps/sales/app/api`:
+//
+//	Workspace       yes — GET /api/workspaces and GET /api/workspaces/{ws} are
+//	                mounted, and `workspace use` is how a caller picks the
+//	                tenancy the rest of `bk sales …` runs in
+//	WorkspaceAdmin  NO  — D-3: a workspace is the COMPANY. Sales has no
+//	                create-workspace flow, does not rename one, and must not be
+//	                a second implementation of the delete cascade
+//	Members         yes — /members and /members/{userId}
+//	MemberLeave     NO  — this app mounts no /leave route
+//	Invites         yes — the whole invitation surface is this app's own since
+//	                Phase 2, including invite-candidates, which agent 3 rewrote
+//	                because the shared factory suggested ISSUES colleagues
+//	Users           NO  — and this is the one worth reading twice. The shared
+//	                `GET /api/users` answers "people you share a workspace
+//	                with" out of `platform.workspace_members`, so on this
+//	                deployment it listed issues colleagues, and returned NOTHING
+//	                for a sales-only account. The route was removed rather than
+//	                re-pointed: `bk sales member list` already answers the
+//	                question this app actually has
+//	Search          NO  — not missing, TAKEN. `bk sales search` is this app's
+//	                own full-text search over /sales-search (see search.go).
+//	                The shared one reads /api/workspaces/{ws}/search, which
+//	                agent 4 unmounted after measuring it serving issues' titles
+//	                to a sales-only member
+//	Activity        yes — /activity, reading `sales.events` since Phase 3
+//	Inbox           NO  — decision 3: sales touches `inbox_messages` in zero
+//	                files and mounts no route
+//	Storage         NO  — this app mounts no /storage route. It uploads (the
+//	                bytes go to the one shared Blob store) and records them in
+//	                `sales.uploads`; the listing view is issues' alone today
 func appOwnedVerbs() []*cobra.Command {
-	set := appverbs.New(appverbs.Config{App: Slug, TrashTypes: trashTypes})
+	set := appverbs.New(appverbs.Config{
+		App:        Slug,
+		TrashTypes: trashTypes,
+		Workspace:  true,
+		Members:    true,
+		Invites:    true,
+		Activity:   true,
+	})
 	// `attach` and `detach` name an ENTITY, so they are built here rather than in
 	// the shared package: they post to a SALES route, and `bk __routes` tags them
 	// with this app so the claim is checked against the tree that serves it.
