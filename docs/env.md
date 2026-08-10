@@ -31,7 +31,13 @@ with `vercel env ls` rather than trusting it; it is a snapshot, not a mechanism.
 | `PLATFORM_ENFORCE_APP_ACCESS` | ❌ unset | ✅ `1` | unset on issues by design: it is the app everyone has |
 | `RESEND_API_KEY` / `_FROM_EMAIL` | ✅ | ❌ unset | sales has no email module, deliberately. Sender is `admin@blackcode.ch` on the apex domain since 2026-08-10 |
 
-**Set on `bc-issues` and read by NOTHING:** 17 `NEON_*` variables
+**Removed 2026-08-10:** 17 `NEON_*` variables that were injected by the Neon
+integration and read by no code in this repo — they duplicated live database
+credentials. Verified gone. If they reappear, the integration re-added them and
+that is still not a signal they are needed. The paragraph below is kept because
+the reasoning applies to any integration-injected set.
+
+**Was set on `bc-issues` and read by NOTHING:** 17 `NEON_*` variables
 (`NEON_PGPASSWORD`, `NEON_DATABASE_URL`, …) injected by the Neon integration,
 plus `BLOB_STORE_ID` and `BLOB_WEBHOOK_PUBLIC_KEY` from the Blob integration.
 No code in this repo reads any of them — the apps use `DATABASE_URL` and
@@ -61,7 +67,9 @@ vercel env rm <NAME> production --yes             # remove
 | **Impact if missing** | App crashes on startup — nothing works |
 
 **Where to find it:**
-Vercel dashboard → Storage → `bc-issues` (Neon) → Connection Details → copy `DATABASE_URL` (pooled connection).
+Vercel dashboard → Storage → the Neon integration → Connection Details → copy
+`DATABASE_URL` (pooled connection). Renamed off `bc-issues` on 2026-08-10 — it is
+the platform's one database, not the first app's.
 
 **How to update:**
 Only needed if you migrate to a different database. Remove old value, add new:
@@ -312,14 +320,14 @@ exact URI Google expected, so add that string verbatim rather than retyping it.
 |---|---|
 | **Purpose** | Enables file/image uploads via Vercel Blob storage |
 | **Status** | Set ✓ — auto-injected via Vercel Storage integration |
-| **Source** | Vercel dashboard → Storage → `bc-issues-blob` (Blob) |
+| **Source** | Vercel dashboard → Storage → `blackcode-platform-blob` (Blob) |
 | **Impact if missing** | All file uploads return 500 error in production |
 
 **Where to find it:**
-Vercel dashboard → Storage → `bc-issues-blob` → Settings → Tokens → `BLOB_READ_WRITE_TOKEN`.
+Vercel dashboard → Storage → `blackcode-platform-blob` → Settings → Tokens → `BLOB_READ_WRITE_TOKEN`.
 
 **How to regenerate** (e.g. if compromised):
-1. Vercel dashboard → Storage → `bc-issues-blob` → Settings → Tokens → Create new token
+1. Vercel dashboard → Storage → `blackcode-platform-blob` → Settings → Tokens → Create new token
 2. Update the env var:
 ```bash
 vercel env rm BLOB_READ_WRITE_TOKEN production --yes
