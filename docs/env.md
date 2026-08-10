@@ -67,9 +67,11 @@ vercel env rm <NAME> production --yes             # remove
 | **Impact if missing** | App crashes on startup — nothing works |
 
 **Where to find it:**
-Vercel dashboard → Storage → the Neon integration → Connection Details → copy
-`DATABASE_URL` (pooled connection). Renamed off `bc-issues` on 2026-08-10 — it is
-the platform's one database, not the first app's.
+Neon console → project **`blackcode-platform-db`** → Connect → copy the pooled
+connection string. (Also reachable via Vercel dashboard → Storage.) Renamed off
+`bc-issues` on 2026-08-10 — it is the platform's one database, not the first
+app's, and there is exactly one: `platform.*` + a schema per app, never a second
+project.
 
 **How to update:**
 Only needed if you migrate to a different database. Remove old value, add new:
