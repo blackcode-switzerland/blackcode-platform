@@ -3,8 +3,20 @@
   "routes": [
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk issues workspace delete",
+      "app": "issues"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/comments/{id}",
       "command": "bk issues issue delete-comment",
+      "app": "issues"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/invitations/{id}",
+      "command": "bk issues invite revoke",
       "app": "issues"
     },
     {
@@ -39,6 +51,12 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}/members/{userId}",
+      "command": "bk issues member remove",
+      "app": "issues"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/projects/{id}",
       "command": "bk issues project delete",
       "app": "issues"
@@ -57,6 +75,12 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}/storage/{id}",
+      "command": "bk issues storage rm",
+      "app": "issues"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/tasks/{id}",
       "command": "bk issues task delete",
       "app": "issues"
@@ -69,6 +93,18 @@
     },
     {
       "method": "GET",
+      "path": "/api/me/inbox",
+      "command": "bk issues inbox list",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/pending-invitations",
+      "command": "bk issues invite pending",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
       "path": "/api/upload",
       "command": "bk issues upload",
       "app": "issues"
@@ -76,7 +112,25 @@
     {
       "method": "GET",
       "path": "/api/users",
-      "command": "bk issues issue list",
+      "command": "bk issues user view",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "command": "bk issues workspace use",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk issues workspace show",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/activity",
+      "command": "bk issues activity",
       "app": "issues"
     },
     {
@@ -89,6 +143,18 @@
       "method": "GET",
       "path": "/api/workspaces/{ws}/attachments",
       "command": "bk issues attachment list",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk issues invite list",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invite-candidates",
+      "command": "bk issues invite candidates",
       "app": "issues"
     },
     {
@@ -147,6 +213,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/members",
+      "command": "bk issues member list",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/projects",
       "command": "bk issues project list",
       "app": "issues"
@@ -177,6 +249,18 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/search",
+      "command": "bk issues search",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/storage",
+      "command": "bk issues storage list",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/tasks",
       "command": "bk issues task list",
       "app": "issues"
@@ -197,6 +281,12 @@
       "method": "GET",
       "path": "/api/workspaces/{ws}/trash",
       "command": "bk issues trash list",
+      "app": "issues"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk issues workspace edit",
       "app": "issues"
     },
     {
@@ -231,6 +321,42 @@
     },
     {
       "method": "POST",
+      "path": "/api/invitations/accept",
+      "command": "bk issues invite accept",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/invitations/decline",
+      "command": "bk issues invite decline",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/active-workspace",
+      "command": "bk issues workspace use",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/inbox/archive",
+      "command": "bk issues inbox archive",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/inbox/mark-read",
+      "command": "bk issues inbox read",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/inbox/unarchive",
+      "command": "bk issues inbox unarchive",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
       "path": "/api/upload",
       "command": "bk issues upload",
       "app": "issues"
@@ -239,6 +365,18 @@
       "method": "POST",
       "path": "/api/upload/blob",
       "command": "bk issues upload",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces",
+      "command": "bk issues workspace create",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk issues invite send",
       "app": "issues"
     },
     {
@@ -275,6 +413,12 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/labels",
       "command": "bk issues label create",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/leave",
+      "command": "bk issues member leave",
       "app": "issues"
     },
     {
@@ -321,6 +465,12 @@
     },
     {
       "method": "POST",
+      "path": "/api/workspaces/{ws}/transfer",
+      "command": "bk issues workspace transfer",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
       "path": "/api/workspaces/{ws}/trash/empty",
       "command": "bk issues trash empty",
       "app": "issues"
@@ -357,38 +507,8 @@
     },
     {
       "method": "DELETE",
-      "path": "/api/workspaces/{ws}",
-      "command": "bk workspace delete",
-      "app": "platform"
-    },
-    {
-      "method": "DELETE",
       "path": "/api/workspaces/{ws}/apps/{app}/access/{userId}",
       "command": "bk app access revoke",
-      "app": "platform"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/workspaces/{ws}/invitations/{id}",
-      "command": "bk invite revoke",
-      "app": "platform"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/workspaces/{ws}/links",
-      "command": "bk link rm",
-      "app": "platform"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/workspaces/{ws}/members/{userId}",
-      "command": "bk member remove",
-      "app": "platform"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/workspaces/{ws}/storage/{id}",
-      "command": "bk storage rm",
       "app": "platform"
     },
     {
@@ -401,18 +521,6 @@
       "method": "GET",
       "path": "/api/me",
       "command": "bk whoami",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/me/inbox",
-      "command": "bk inbox list",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/me/pending-invitations",
-      "command": "bk invite pending",
       "app": "platform"
     },
     {
@@ -465,30 +573,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/users",
-      "command": "bk user view",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces",
-      "command": "bk workspace use",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}",
-      "command": "bk workspace show",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/activity",
-      "command": "bk activity",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
       "path": "/api/workspaces/{ws}/apps",
       "command": "bk app list",
       "app": "platform"
@@ -497,42 +581,6 @@
       "method": "GET",
       "path": "/api/workspaces/{ws}/apps/{app}/access",
       "command": "bk app access list",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/invitations",
-      "command": "bk invite list",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/invite-candidates",
-      "command": "bk invite candidates",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/links",
-      "command": "bk link list",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/members",
-      "command": "bk member list",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/search",
-      "command": "bk search",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/storage",
-      "command": "bk storage list",
       "app": "platform"
     },
     {
@@ -549,50 +597,8 @@
     },
     {
       "method": "PATCH",
-      "path": "/api/workspaces/{ws}",
-      "command": "bk workspace edit",
-      "app": "platform"
-    },
-    {
-      "method": "PATCH",
       "path": "/api/workspaces/{ws}/apps/{app}",
       "command": "bk app enable",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/invitations/accept",
-      "command": "bk invite accept",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/invitations/decline",
-      "command": "bk invite decline",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/me/active-workspace",
-      "command": "bk workspace use",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/me/inbox/archive",
-      "command": "bk inbox archive",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/me/inbox/mark-read",
-      "command": "bk inbox read",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/me/inbox/unarchive",
-      "command": "bk inbox unarchive",
       "app": "platform"
     },
     {
@@ -621,38 +627,8 @@
     },
     {
       "method": "POST",
-      "path": "/api/workspaces",
-      "command": "bk workspace create",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
       "path": "/api/workspaces/{ws}/apps/{app}/access",
       "command": "bk app access grant",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/workspaces/{ws}/invitations",
-      "command": "bk invite send",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/workspaces/{ws}/leave",
-      "command": "bk member leave",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/workspaces/{ws}/links",
-      "command": "bk link create",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/workspaces/{ws}/transfer",
-      "command": "bk workspace transfer",
       "app": "platform"
     },
     {
@@ -675,6 +651,12 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}/invitations/{id}",
+      "command": "bk sales invite revoke",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/labels/{id}",
       "command": "bk sales label delete",
       "app": "sales"
@@ -683,6 +665,12 @@
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/meetings/{n}",
       "command": "bk sales meeting rm",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/members/{userId}",
+      "command": "bk sales member remove",
       "app": "sales"
     },
     {
@@ -735,8 +723,32 @@
     },
     {
       "method": "GET",
+      "path": "/api/me/pending-invitations",
+      "command": "bk sales invite pending",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
       "path": "/api/upload",
       "command": "bk sales upload",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "command": "bk sales workspace use",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk sales workspace show",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/activity",
+      "command": "bk sales activity",
       "app": "sales"
     },
     {
@@ -765,6 +777,18 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk sales invite list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invite-candidates",
+      "command": "bk sales invite candidates",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/labels",
       "command": "bk sales label list",
       "app": "sales"
@@ -785,6 +809,12 @@
       "method": "GET",
       "path": "/api/workspaces/{ws}/meetings/{n}",
       "command": "bk sales meeting show",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/members",
+      "command": "bk sales member list",
       "app": "sales"
     },
     {
@@ -951,6 +981,24 @@
     },
     {
       "method": "POST",
+      "path": "/api/invitations/accept",
+      "command": "bk sales invite accept",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/invitations/decline",
+      "command": "bk sales invite decline",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/active-workspace",
+      "command": "bk sales workspace use",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
       "path": "/api/upload",
       "command": "bk sales upload",
       "app": "sales"
@@ -977,6 +1025,12 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/documents/{n}/links",
       "command": "bk sales doc link",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk sales invite send",
       "app": "sales"
     },
     {
@@ -1065,8 +1119,32 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces",
+      "command": "bk scaffold workspace use",
+      "app": "scaffold"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk scaffold workspace show",
+      "app": "scaffold"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/members",
+      "command": "bk scaffold member list",
+      "app": "scaffold"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/notes",
       "command": "bk scaffold note list",
+      "app": "scaffold"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/active-workspace",
+      "command": "bk scaffold workspace use",
       "app": "scaffold"
     },
     {

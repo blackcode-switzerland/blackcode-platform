@@ -1,123 +1,114 @@
-# Cross-app: URNs, search and links
+# Cross-app: what it is now, and how to address another app's records
 
-Every addressable thing in every app has one name that works everywhere. The URN
-is the durable part of this page and it works from anywhere.
+There is no cross-app tier any more. This topic keeps its name so that a stale
+`bk guide platform/cross-app` lands somewhere that tells you what replaced it,
+rather than 404ing.
 
-## WHICH DEPLOYMENT ANSWERS — read this before the rest (changed 2026-08-10)
+## What changed on 2026-08-10
 
-`bk search`, `bk link` and the merged `bk activity` were built on ONE shared
-index that every deployment could read. Apps have stopped sharing their records,
-so:
+The bare `search` and `link` verbs, and the merged `activity` feed, were built on ONE shared
+index that every deployment wrote into and could read. The apps stopped sharing
+their records, so that index has one writer and the commands built on it had no
+honest cross-app answer left.
 
-- an app that never wrote the shared index **does not serve these commands**. You
-  get exit 5 and a hint naming a server that does. That is deliberate — an empty
-  page would read like "no matches".
-- an app that owns its own activity answers `bk activity` about **itself**. Each
-  entry still carries the `app` that produced it, so you can tell.
-- **`bk link` is being retired.** Nothing new should depend on it. Put the far
-  end's URN in the record's own text instead; that is a fact both apps keep and
-  neither can drift from.
+| Bare verb, until 2026-08-10 | Now |
+|---|---|
+| `search "acme"` — every app at once | `bk <app> search "acme"` — that app |
+| `activity` — one merged feed | `bk <app> activity` — that app's history |
+| `storage list` — every app's files | `bk <app> storage list` — that app's |
+| `link create A blocks B` | **removed.** See below |
 
-`bk app list` shows the servers your token reaches, and `--app-server <slug>`
-sends one invocation to a named one. Cross-app search is coming back as a
-client-side fan-out over those servers — the binary asking each app and merging
-the answers — which needs no shared table.
+Each old spelling exits non-zero and names its replacement, so a run that hits
+one can recover inside the same run.
 
-## The URN
+## The URN — the part that did not change
+
+Every addressable thing in every app still has one name that works everywhere,
+and it is now the main way to point at another app's record:
 
 ```
 bc:<app>:<workspace-slug>/<entity-type>/<number>
 bc:issues:kali-sa/issue/482
 ```
 
-Three things about it, and each one matters when you construct or compare one:
+Three things about it, and each matters when you construct or compare one:
 
 - **`<number>` is the workspace #number** — the `#N` shown in the app and printed
-  by every list command. It is never the internal database id. This is the same
-  rule the rest of the CLI follows.
-- **`<workspace-slug>` is the slug, not the id.** So a URN is readable, and so
-  the tenant it belongs to is visible without a lookup.
-- **`<app>` comes first**, which is what tells you — and the server — which app
-  owns the thing without having to go and find out.
+  by every list command. Never the internal database id.
+- **`<workspace-slug>` is the slug, not the id**, so the tenant is visible without
+  a lookup.
+- **`<app>` comes first**, which is what tells you which app owns the thing.
 
-Do not hand-assemble a URN from parts you guessed. Get one from `bk search`, or
-from the `subject_urn` field on an activity entry. Run `bk meta` for the app
-slugs you can reach and the entity types each one publishes.
+A URN is built entirely from facts the owning app holds, so **every app can print
+one for its own records** — and that is still true now that nothing is shared.
+Get one from `bk <app> search`, from a `show` command, or from the `subject_urn`
+field on an activity entry. Do not hand-assemble one from parts you guessed. Run
+`bk meta` for the app slugs you can reach and the entity types each publishes.
 
-## Search, where it is served
+## Relating two apps' records, now that `link` is gone
 
-```bash
-bk search auth                       # titles matching "auth", any app
-bk search "#482"                     # by workspace #number
-bk search acme --type issue,project  # narrow by entity type
-bk search acme --app issues --json   # narrow by app
-bk search draft --include-deleted    # include items in the recycle bin
-```
-
-Output carries the URN, which is what `bk link` takes.
-
-This searches **titles and #numbers only**, and only across the apps that write
-the shared index — see the section at the top of this page. To search
-descriptions, or to filter by status, assignee or label, use that app's own
-listing or its own search instead.
-
-## Linking two things (retiring — see the top of this page)
-
-Links are **directed** and stored once. `A blocks B` is a single relation: it
-shows up as an outgoing link on A and an incoming one on B. There is no separate
-inverse row to keep in step.
+The removed `link` verb recorded the relation in a table both apps read. There is no such table
+now, so the relation lives where a human and an agent will both find it — in the
+record's own text:
 
 ```bash
-bk link create bc:issues:acme/issue/12 bc:issues:acme/project/3 --rel part_of
-bk link list bc:issues:acme/issue/12
-bk link rm bc:issues:acme/issue/12 bc:issues:acme/project/3 --rel part_of
+bk sales prospect show 8              # prints bc:sales:acme/prospect/8
+bk issues issue create --title "Export fails for Helvetia" \
+  --description "Prospect: bc:sales:acme/prospect/8"
 ```
 
-Run `bk meta` for the relation names this server accepts — they are served under
-`links.relations` and can change without a new binary, so they are deliberately
-not listed here.
+That is a fact one app holds and neither can drift from, and it survives being
+read by a person. What it does not give you is a reverse lookup: nothing lists
+"every issue mentioning this prospect". Search the text instead —
+`bk issues search "prospect/8"` matches titles, and the app's own listing
+searches descriptions.
 
-Four rules the server enforces, each with a distinct error you can branch on:
-
-- **Both ends must exist.** Linking to something that is not there fails with
-  exit 5 and names which end was missing. If you just created the target, you
-  already have its #number — build the URN from that.
-- **Both ends must be in the same workspace.** A link is the one thing that names
-  two records at once, so crossing a tenant boundary is refused, not merged.
-- **Nothing links to itself.**
-- **Creating the same link twice succeeds.** It reports `created: false` the
-  second time. Retrying after a timeout is safe and is not an error.
-
-`bk link rm` needs all three parts — from, to *and* rel — because direction is
-part of the identity. Check it with `bk link list` first rather than guessing.
-
-## What happens to links when things are deleted
-
-- **Binned** (an app's recycle bin): the link survives, and `bk link list` shows the far
-  end flagged as in the trash. Restoring brings it back intact.
-- **Purged** (permanently deleted): the link goes with it. A relation to
-  something that no longer exists anywhere is a dangling pointer, not a fact.
-- **Workspace renamed**: every URN in it is rewritten and the links follow
-  automatically. A URN you cached before a rename will stop resolving — get a
-  fresh one from `bk search` rather than storing them long-term.
-
-## The activity feed
+## Searching, per app
 
 ```bash
-bk activity --since 24h
-bk activity --since 7d --app issues
-bk activity --subject bc:issues:kali-sa/issue/482
-bk activity --ws kali-sa --since 30m --json
+bk issues search auth                        # titles matching "auth"
+bk issues search "#482"                      # by workspace #number
+bk issues search acme --type issue,project   # narrow by entity type
+bk issues search draft --include-deleted     # include items in the recycle bin
 ```
 
-`--since` takes a relative window: `30m`, `24h`, `7d`. Each entry carries the
-`app` that produced it and, where its subject is an addressable entity, that
-entity's `subject_urn` — so `--subject` gives you the full history of one thing
-in one call. **How many apps a single call covers depends on which server you
-ask** (top of this page); the `app` field is what tells you what you got.
+`bk issues search` matches **titles and #numbers**. To search descriptions, or to
+filter by status, assignee or label, use that app's own listing
+(`bk issues issue list --search`).
 
-Entries about members, invitations, labels and comments have no `subject_urn`.
-That is an answer, not a gap: those are real events about things that have no
-cross-app address.
+Other apps answer the same verb about themselves, and not always the same way:
+`bk sales search` is a full-text search INSIDE that app's records and returns the
+matching text. Run `bk <app> search --help` before the first call.
 
-Related commands: `bk search`, `bk link create|list|rm`, `bk activity`, `bk meta`
+There is no `--app` flag on any of these any more. The app is the command.
+
+## History, per app
+
+```bash
+bk issues activity --since 24h
+bk issues activity --subject bc:issues:kali-sa/issue/482
+bk issues activity --ws kali-sa --since 30m --json
+```
+
+`--since` takes a relative window: `30m`, `24h`, `7d`. Each entry carries the app
+that produced it and, where its subject is an addressable entity, that entity's
+`subject_urn` — so `--subject` gives you the full history of one thing in one
+call.
+
+Entries about members, invitations and labels have no `subject_urn`. That is an
+answer, not a gap: those are real events about things that have no address.
+
+To see two apps' history, ask both. The binary is the connector:
+
+```bash
+bk issues activity --since 24h
+bk sales activity --since 24h
+```
+
+## Which deployment answers
+
+`bk app list` shows the servers your token reaches. An app you have no access to
+is not in your registry at all, and `bk <app> …` fails naming the app rather than
+sending the request somewhere else.
+
+Related commands: `bk issues search`, `bk sales search`, `bk issues activity`, `bk sales activity`, `bk meta`, `bk app list`

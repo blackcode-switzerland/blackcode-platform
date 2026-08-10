@@ -42,7 +42,7 @@ bk sales prospect show 12
 You get the record, the **deal journey** — one row per stage, including the ones
 not reached yet — and every **cross-app link** touching this prospect, each with
 an absolute URL you can follow into whichever app owns the far end. Links are
-made with `bk link create` between two URNs; `bk guide platform/cross-app` has
+written into the record's own text as a URN; `bk guide platform/cross-app` has
 the shape.
 
 ## Creating and editing
@@ -115,6 +115,6 @@ bc:sales:<workspace>/template/<n>
 ```
 
 That is what makes a record findable from another app and linkable to one
-(`bk search`, `bk link create`). Run `bk meta` for the full list of addressable
+(a URN you can paste into another app's record). Run `bk meta` for the full list of addressable
 types — it grows as this app does, which is exactly why this page does not
 enumerate it.

@@ -17,7 +17,7 @@ bk sales search  reads this app's full text.
                  Returns records, with the matching text.
 ```
 
-It is the only search this deployment serves. The bare, cross-app `bk search`
+It is the only search this deployment serves. The bare, cross-app `search` verb
 reads a shared title index that this app no longer writes to, and asking this
 deployment for it fails with exit 5 and a hint naming what to do instead —
 loudly, rather than by returning an empty page that reads like "no matches".

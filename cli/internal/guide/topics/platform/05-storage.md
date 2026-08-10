@@ -19,28 +19,32 @@ So an edit leaves an orphan. Clearing orphans is an explicit owner action.
 
 ## Owner review & cleanup
 
-`storage` is **cross-app and bare**, like `bk search`: one cabinet, one
-workspace quota, the same rows whichever app you ask. Uploading is the half that
-belongs to an app — you upload INTO one app and list ACROSS all of them. Run
-`bk guide platform/apps` for the tiers.
+`storage` is **app-owned**, like `upload`: each app keeps its own record of what
+it stored. Run `bk guide platform/apps` for the tiers.
 
 ```bash
-bk storage list --json         # every app's files + what references them + usage
-bk storage list --app issues   # only the files one app uploaded
-bk storage rm <id>             # permanently delete an orphan
+bk issues storage list --json  # this app's files + what references them + usage
+bk issues storage rm <id>      # permanently delete an orphan
 ```
 
-`bk storage rm` is refused with a **409 `file_in_use`** conflict if anything
+There is no `--app` filter any more — the app is the command. Not every app
+serves this verb; `bk <app> --help` is the list.
+
+`bk <app> storage rm` is refused with a **409 `file_in_use`** conflict if anything
 still references the file — **including a trashed item**. Empty or purge the
 Trash first if you mean to reclaim the space.
 
-## Storage is shared between apps
+## The store is shared; the ledger is not
 
-One store, one workspace quota, files kept under a per-app prefix. Each file
-carries the app that uploaded it (the **APP** column, `--app` to filter), but the
-usage total is always the whole workspace's — filtering the list never changes
-it. That is exactly why this verb is bare while `bk <app> upload` is not: the
-app decides where a NEW file is filed, not which files you can see.
+One Vercel Blob store and one workspace quota, with files kept under a per-app
+prefix — but since 2026-08-10 **each app keeps its own record of what it
+uploaded**. So this listing is one app's files, while the usage total it prints
+is the whole workspace's, across every app. That is not an inconsistency: the
+quota belongs to the workspace and the ledger belongs to the app.
+
+That split is why the verb moved. It was bare until 2026-08-10 on the grounds
+that one ledger meant every app returned the same rows; that stopped being
+true.
 
 The per-app views of files live with their app — `bk issues attachment list` is
 the workspace's issue attachments, and `bk issues issue attachments <n>` is one
@@ -56,4 +60,4 @@ later is the right response, and no amount of `--yes` overrides it.
 
 These commands require workspace **owner** role; anything else gets exit **4**.
 
-Related commands: `bk storage list|rm`, `bk issues upload`, `bk issues attachment list`, `bk issues trash purge|empty`, `bk guide platform/apps`
+Related commands: `bk issues storage list|rm`, `bk issues upload`, `bk issues attachment list`, `bk issues trash purge|empty`, `bk guide platform/apps`

@@ -77,7 +77,7 @@ Anywhere a user is expected (`--assignee`, `bk issues issue assign`,
 - a display name — `"Alice Andrews"`
 - the literal `me`
 
-Exception: `bk member remove` takes a numeric **user id** only.
+Exception: `bk issues member remove` takes a numeric **user id** only.
 
 ## Dates & lengths
 

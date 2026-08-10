@@ -15,7 +15,6 @@ package appverbs
 import (
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
@@ -26,7 +25,6 @@ func newActivityCmd(acfg Config) *cobra.Command {
 	var (
 		limit, cursor int
 		since         string
-		apps          []string
 		subject       string
 	)
 	cmd := &cobra.Command{
@@ -56,7 +54,8 @@ workspace without switching the active one.`,
 			if cmd.Flags().Changed("cursor") {
 				cur = &cursor
 			}
-			items, nextCursor, err := c.Activity(limit, cur, since, strings.Join(apps, ","), subject)
+			// No app filter — see search.go. This feed is one app's `events` table.
+			items, nextCursor, err := c.Activity(limit, cur, since, "", subject)
 			if err != nil {
 				return err
 			}
@@ -101,7 +100,6 @@ workspace without switching the active one.`,
 	cmd.Flags().IntVar(&limit, "limit", 50, "Max items to return")
 	cmd.Flags().IntVar(&cursor, "cursor", 0, "Cursor (last event id seen) for pagination")
 	cmd.Flags().StringVar(&since, "since", "", "Only events in the last window: 30m, 24h, 7d")
-	cmd.Flags().StringSliceVar(&apps, "app", nil, "Only events produced by these apps")
 	cmd.Flags().StringVar(&subject, "subject", "", "Only events about this URN")
 	return cmd
 }

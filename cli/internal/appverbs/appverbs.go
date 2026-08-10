@@ -102,6 +102,19 @@ type Config struct {
 	// talks to. Never a default: the group PINS it.
 	App string
 
+	// Uploads, Trash and Labels mount `bk <app> upload|trash|label`.
+	//
+	// Declared like everything else since Phase 4, and they did not use to be.
+	// They were built unconditionally on the reasoning that "an app that stores
+	// nothing has no reason to exist" — which `apps/_scaffold` disproves by
+	// existing: it serves no /api/upload, no /trash and no /labels, and building
+	// them for it would have claimed three routes it has no file for. An
+	// unconditional mount is a declaration nobody can get wrong and also one
+	// nobody can get right.
+	Uploads bool
+	Trash   bool
+	Labels  bool
+
 	// TrashTypes are this app's binnable entity types, in the spelling a
 	// `<type>:<#number>` ref uses. They are validated locally so a typo costs
 	// nothing instead of a round-trip.
@@ -124,8 +137,17 @@ type Config struct {
 	// (D-3). Ignored unless Workspace is set.
 	WorkspaceAdmin bool
 
-	// Members mounts `bk <app> member` — list and remove.
+	// Members mounts `bk <app> member` — LIST only.
+	//
+	// Split from the two writes below because they are three routes, and
+	// `apps/_scaffold` serves exactly one of them. A single flag would have
+	// claimed `DELETE …/members/{userId}` and `POST …/leave` there, which is a
+	// command that can only 404.
 	Members bool
+
+	// MemberRemove adds `member remove`, which needs
+	// DELETE /api/workspaces/{ws}/members/{userId}. Ignored unless Members is set.
+	MemberRemove bool
 
 	// MemberLeave adds `member leave`, which needs POST /api/workspaces/{ws}/leave.
 	// Ignored unless Members is set.
@@ -217,14 +239,15 @@ func New(cfg Config) Set {
 		// sees it, rather than at the first HTTP call.
 		panic("appverbs.New: Config.App is required — these verbs are app-owned by definition")
 	}
-	s := Set{
-		Config: cfg,
-		// The three that every app with data has. They are unconditional
-		// because an app that stores nothing has no reason to exist, and
-		// `apps/_scaffold` proves the mount works with nothing else set.
-		Upload: newUploadCmd(cfg),
-		Trash:  newTrashCmd(cfg),
-		Label:  newLabelCmd(cfg),
+	s := Set{Config: cfg}
+	if cfg.Uploads {
+		s.Upload = newUploadCmd(cfg)
+	}
+	if cfg.Trash {
+		s.Trash = newTrashCmd(cfg)
+	}
+	if cfg.Labels {
+		s.Label = newLabelCmd(cfg)
 	}
 	if cfg.Workspace {
 		s.Workspace = newWorkspaceCmd(cfg)

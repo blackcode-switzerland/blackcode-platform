@@ -381,16 +381,32 @@ func TestAppTopicsDoNotDescribeAnotherApp(t *testing.T) {
 // commands — which is the point. They are listed separately from the nouns
 // because the two migrations prune on different schedules.
 //
-// `storage` IS NOT IN THE LIST and must not be added: D-28 kept it bare, in the
-// cross-app tier, because one ledger and one quota mean every app returns the
-// same rows. Banning `bk storage ` here would fail the topics that correctly
-// teach it.
+// EXTENDED AGAIN on 2026-08-10 (multiAppFinalRefactor Phase 4), for eight more
+// verbs and one deletion. `storage` and `search` are in the list NOW and were
+// deliberately excluded before — that is a change of FACT, not of opinion, and
+// worth stating because the previous version of this comment forbade adding them:
+//
+//   - `storage` was kept bare by D-28 because "one ledger, one quota, the same
+//     rows from every app". Phase 3 made the upload LEDGER per app. Two
+//     deployments now answer differently, which is the test D-28 itself set.
+//   - `search` read `platform.entities`, which every app projected into. Sales
+//     stopped projecting, and its `…/search` route was unmounted after it was
+//     measured serving issues' titles to a sales-only member.
+//
+// `link` is here too, and it is the only entry that names a REMOVED command
+// rather than a moved one. A topic that still teaches it is teaching a command
+// that cannot run.
 func TestTopicsUseNamespacedAppCommands(t *testing.T) {
 	moved := []string{
 		// 1.10.0 — the app nouns.
 		"issue", "task", "project", "analytics", "move", "copy",
-		// 3.0.0 — the app-owned platform verbs.
+		// 3.0.0 — the first app-owned platform verbs.
 		"upload", "trash", "label",
+		// 4.0.0 — the rest of them, when the cross-app tier stopped existing.
+		"workspace", "member", "invite", "user", "inbox", "storage", "search",
+		"activity",
+		// 4.0.0 — removed outright, with no namespaced form to move to.
+		"link",
 	}
 	for _, top := range Topics() {
 		for _, n := range moved {

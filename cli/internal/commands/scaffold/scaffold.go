@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/appverbs"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
@@ -47,8 +48,28 @@ against. Copy apps/_scaffold and cli/internal/commands/scaffold/ to start a real
 one; see docs/adding-an-app.md.`,
 	}
 	cmd.AddCommand(newNoteCmd())
+	// The app-owned platform verbs this scaffold actually serves (Phase 4).
+	//
+	// Two, not eleven, and the shortness is the lesson: `appverbs.Config` is a
+	// DECLARATION OF WHAT `app/api/**` HAS, never a wish list. This app mounts
+	// `GET /api/workspaces`, `GET /api/workspaces/{ws}` and
+	// `GET …/{ws}/members`, so it declares `Workspace` and `Members` and nothing
+	// else. Turn on `Uploads` here and `lib/cli-parity.test.ts` immediately
+	// reports a claim on `POST /api/upload`, which this app has no file for.
+	//
+	// `WorkspaceAdmin` is off because this app serves GET on /api/workspaces and
+	// no other method; `MemberLeave` because there is no /leave route.
+	cmd.AddCommand(appverbs.New(appverbs.Config{
+		App:       Slug,
+		Workspace: true,
+		Members:   true,
+	}).All()...)
 	return cmd
 }
+
+// Slug is this app's name — the first segment of `bk scaffold …` and the key in
+// the CLI's app registry. One spelling, used everywhere.
+const Slug = "scaffold"
 
 func newNoteCmd() *cobra.Command {
 	cmd := &cobra.Command{

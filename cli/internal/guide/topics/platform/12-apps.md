@@ -1,80 +1,58 @@
 # Apps — which app is this command talking to?
 
-One binary, one login, one workspace list — and more than one app. This topic is
-the rule that keeps that from being confusing: **every `bk` verb belongs to
-exactly one of three tiers, and the spelling tells you which.**
+One binary, one login, one token — and more than one app. This topic is the rule
+that keeps that from being confusing: **every `bk` verb belongs to one of two
+tiers, and the spelling tells you which.**
 
-Read it before your first write. Getting a tier wrong is not a syntax error —
-it is a file, a label or a deleted item landing in the wrong app, where nothing
+Read it before your first write. Getting a tier wrong is not a syntax error — it
+is a file, a label or a deleted item landing in the wrong app, where nothing
 downstream can tell it was a mistake.
 
-## The three tiers
+## The two tiers
 
-**1. Neutral — bare, and the same answer from any app.**
-
-```bash
-bk login          bk logout         bk meta           bk guide
-bk workspace      bk member         bk invite         bk token
-bk profile        bk inbox          bk app            bk changelog
-bk skill          bk version        bk super-admin
-```
-
-These touch identity and organisation data. A workspace is the company; an app
-is a capability inside it. No app owns a person, a membership or an invitation,
-so no app can be the wrong one to ask — and namespacing them would hand you
-three workspace lists for one company.
-
-**2. Cross-app — bare, and crossing the boundary is the whole point.**
+**1. Bare — your ACCOUNT and this BINARY.**
 
 ```bash
-bk search "acme"        # hits from EVERY app, each tagged with the app it is in
-bk activity             # one merged feed; --app narrows it
-bk link create …        # relate two things that live in different apps
-bk storage list         # every app's files, one workspace quota; --app filters
+bk login      bk logout     bk whoami     bk token      bk profile
+bk meta       bk app        bk guide      bk skill      bk changelog
+bk version    bk super-admin
 ```
 
-Results are tagged with the app they came from, and addresses are URNs
-(`bc:<app>:<workspace>/<type>/<number>`), so an answer is never ambiguous about
-where it lives. Scoping these to one app would remove the only reason they
-exist. See `bk guide platform/cross-app`.
+One account, one password, one token, valid against every app. These read what
+the platform genuinely shares — your user record, your tokens, the app address
+book — or they read nothing at all and answer out of this binary. No app can be
+the wrong one to ask.
 
-**3. App-owned — behind the app's name, because the answer depends on the app.**
+**2. App-owned — `bk <app> <verb>`, because the answer depends on the app.**
 
 ```bash
-bk issues issue create --title "…"     # this app's nouns
-bk issues upload contract.pdf          # …and these three, which used to be bare
-bk issues trash list
-bk issues label list
+bk issues issue create --title "…"    # that app's nouns
+bk issues workspace list              # …and its tenancy
+bk sales member list                  # the same verb, a different app, a
+                                      # different set of people
+bk issues upload contract.pdf
+bk sales trash list
 ```
 
-`upload`, `trash` and `label` moved behind the app name in 3.0.0. They look
-shared, and they are not:
+**Everything that touches an app's data is here.** Each app has its own
+workspaces, members, invitations, labels, uploads, history and recycle bin.
 
-| Verb | Why it belongs to one app |
-|---|---|
-| `upload` | the file records which app received it, and lands under that app's prefix |
-| `trash` | each app has its own recycle bin, holding its own entities |
-| `label` | labels are filtered by app, and attaching one names an entity in that app |
+## The test, and the one question behind it
 
-### Files: you upload INTO one app, and you list ACROSS all of them
+> **Would two deployments give the same answer?**
 
-This is the one pairing worth memorising, because the two halves sit in
-different tiers on purpose:
+If yes, the verb is bare. If no, the app is in the command.
 
-```bash
-bk issues upload contract.pdf   # APP-OWNED: the file is filed under issues
-bk storage list                 # CROSS-APP: every app's files, tagged by app
-bk storage list --app issues    # …filtered, if you only want one app's
-```
+That test has not changed. What changed is the facts it is applied to. Until
+2026-08-10 the apps shared a database, so a bare `workspace list` had one
+table to read and a bare `search` had one index. They do not share one now,
+so those same verbs would have had no correct answer — only a **default**, taken
+from whichever app you were last homed on, with nothing in the command saying
+which.
 
-Uploading is a choice about ownership — the file is permanently attributed to
-the app that received it and stored under that app's prefix — so the app has to
-be in the command. Listing is not: uploads are ONE ledger against ONE workspace
-quota, so every app returns the same rows. An app-scoped `storage list` would
-have suggested the app narrows the answer, and then not narrowed it.
-
-The test to apply when you are unsure: **would two deployments answer
-differently?** If yes, the app is in the command.
+That is the failure being removed. A bare `trash purge` used to destroy things in an
+app the command never named. You could not read your own command back and know
+what it hit.
 
 ## Why a namespace and not a `--app` flag
 
@@ -82,18 +60,49 @@ A flag can be forgotten, and a forgotten flag falls back to a default. A
 namespace cannot be forgotten: there is no bare form to type. `bk issues upload`
 reads exactly like `bk issues issue create`, so learning one teaches the other.
 
-That is also why the old bare spellings were removed outright instead of being
-kept as aliases for a while. An alias would have to pick an app silently, which
-is the accident being removed. Instead:
+That is also why the old bare spellings were removed outright rather than kept as
+aliases. An alias would have to pick an app silently, which is the accident being
+removed. Instead:
 
 ```
-error: unknown command "upload" for "bk"
-hint: the bare spelling is now `bk <app> upload …` — a file is stored against
-      one app, so the app names itself: `bk issues upload contract.pdf`.
+error: unknown command "workspace" for "bk"
+hint: the bare spelling is now `bk <app> workspace …` — each app has its own
+      workspaces, and each remembers its own active one. Try
+      `bk issues workspace list` or `bk sales workspace list`.
 ```
 
-Non-zero exit, one line on stderr, and the replacement named — recoverable
-inside the same run.
+Non-zero exit, one line on stderr, the replacement named — recoverable inside the
+same run.
+
+## Each app remembers its own active workspace
+
+```bash
+bk issues workspace use acme     # sets THIS app's active workspace
+bk sales workspace use acme      # …and this one's, separately
+```
+
+The two are different rows in different tables that may happen to share an id and
+a slug. Setting one does not move the other, and a slug only means something
+against the app it was resolved in. `bk meta` prints what each is.
+
+If you upgraded from an older `bk`, the single active workspace you had comes
+forward as your **home app's**, and no other app's — a slug resolved against one
+app is not a workspace in another. Run `bk <app> workspace use <slug>` once per
+app you work in.
+
+## Not every app serves every verb
+
+An app mounts the part of the shared surface it actually has, and the rest is
+simply absent from its group rather than present and failing:
+
+```bash
+bk sales --help          # what THIS app offers
+bk issues workspace --help
+```
+
+`apps/sales` has no create-workspace command, for example — a workspace is the
+company, and you are granted one rather than opening one from a sales context.
+A verb missing from `bk <app> --help` is a decision, not an outage.
 
 ## Which apps exist, and which you can reach
 
@@ -101,7 +110,7 @@ inside the same run.
 bk --help          # the app groups this BINARY has
 bk meta            # the apps this TOKEN can reach, live, plus a `routing` block
 bk <app> --help    # one app's commands
-bk app list        # every app here: enabled, its server, and whether it answers
+bk app list        # every app here: its server, and whether it answers
 ```
 
 `bk --help` and `bk meta` answer different questions, and the difference matters:
@@ -117,34 +126,34 @@ by tier:
 
 | Tier | Server |
 |---|---|
-| Neutral | the **home app**'s |
-| Cross-app | the home app's (it reads shared data, so any app answers alike) |
+| Bare | the **home app**'s (it answers about your account, so any app answers alike) |
 | App-owned | **that app's**, always — `bk <app> …` pins it |
 
 ```bash
-bk meta                      # refreshes the address book; prints where each tier goes
-bk app list                  # every app, its server, and whether it answers for you
-bk app use sales             # move the home app: the bare verbs now go to sales
+bk meta               # refreshes the address book; prints where each tier goes
+bk app list           # every app, its server, and whether it answers for you
+bk app use sales      # move the home app: the bare verbs now go to sales
 ```
 
-**Upgrading from bk 2.x? Run `bk meta` once.** A 2.x config has no address book,
-and `bk` will not invent one — `bk <app> …` fails naming this command until it
-has been learned. Your login still works; nothing else is needed.
+`bk app use` matters much less than it used to, and that is the point. It used to
+decide where a dozen data commands landed. Now it decides only which deployment
+answers questions about your account.
 
-`bk <app> …` ignores all of that. Its app is written on the command, so no mode,
-default or previous command can move it — which is the property that makes a
-namespace safer than a flag.
+`bk <app> …` ignores it entirely. Its app is written on the command, so no mode,
+default or previous command can move it — the property that makes a namespace
+safer than a flag.
+
+**Upgrading from bk 2.x? Run `bk meta` once.** A 2.x config has no address book,
+and `bk` will not invent one.
 
 ### `--app-server` — the escape hatch, and when to reach for it
 
-Almost never. `bk app use <slug>` is how you change where the bare verbs go, and
-it is the right answer whenever you are going to run more than one command.
+Almost never. `bk app use <slug>` is the right answer whenever you will run more
+than one command.
 
 `--app-server <slug>` redirects a SINGLE invocation and changes nothing on disk.
-Use it for a one-off look at another app's deployment — checking `bk meta` or
-`bk workspace list` through sales while you stay homed on issues — or in a script
-that must not disturb the config it found. If you are typing it twice, you wanted
-`bk app use`.
+Use it for a one-off look at another app's deployment, or in a script that must
+not disturb the config it found.
 
 ```bash
 bk --app-server sales meta      # one look at sales, home app unchanged
@@ -153,9 +162,8 @@ bk --app-server sales meta      # one look at sales, home app unchanged
 It cannot move an app-owned verb: `bk --app-server sales issues upload x.pdf`
 still uploads to issues. The name on the command wins over the flag, always.
 
-**The flag is `--app-server`, not `--app`.** `--app` already means "filter by
-app" on `bk search`, `bk activity`, `bk storage list`, `bk changelog` and
-`bk guide`. One name, two meanings, would be a coin flip.
+**The flag is `--app-server`, not `--app`.** `--app` still means "filter by app"
+on `bk changelog` and `bk guide`. One name, two meanings, would be a coin flip.
 
 ## When routing fails, it says so
 
@@ -174,17 +182,22 @@ so a stale address book and a down deployment are distinguishable.
 
 ## Working across two apps
 
-Nothing forces you to pick one. The normal shape is: work in the app that owns
-the thing, and use the cross-app tier to join them.
+Nothing forces you to pick one, and the connector is **you, driving this binary**
+— not a shared table. Work in the app that owns the thing, and carry the address
+across by hand:
 
 ```bash
-bk issues issue create --title "Export fails for large accounts"
-bk link create bc:issues:acme/issue/512 blocks bc:sales:acme/prospect/8
-bk search "acme"        # both apps, each hit tagged
+bk sales prospect show 8            # prints its URN
+bk issues issue create --title "Export fails for Helvetia" \
+  --description "Prospect: bc:sales:acme/prospect/8"
 ```
 
-The rule of thumb, if you remember nothing else: **if the answer would differ
-between two deployments, the app is in the command.** If it would not, the verb
-is bare.
+A URN — `bc:<app>:<workspace>/<type>/<number>` — is an address any app can print
+and a human or agent can resolve. There is no command that records a relation
+between two apps' records; the `link` verb was removed on 2026-08-10 for that reason,
+because it needed one index that every app wrote into.
 
-Related commands: `bk --help`, `bk meta`, `bk app list`, `bk app use`, `bk issues upload`, `bk issues trash list`, `bk storage list`, `bk search`, `bk link`
+The rule of thumb, if you remember nothing else: **if the answer would differ
+between two deployments, the app is in the command.**
+
+Related commands: `bk --help`, `bk meta`, `bk app list`, `bk app use`, `bk issues workspace list`, `bk sales member list`, `bk issues upload`, `bk issues trash list`

@@ -24,7 +24,7 @@ A **list** command prints `{ "data": [ … ], "next_cursor": <id|null> }`.
 `bk issues issue list` adds `"total"`. A **single-item** command prints the bare object.
 
 Most lists return everything in one response and `next_cursor` is `null`. Only
-three feeds paginate: `bk activity`, `bk issues trash list`, and
+three feeds paginate: `bk issues activity`, `bk issues trash list`, and
 `bk super-admin errors list`. They take `--limit` / `--cursor`; follow
 `next_cursor` until it is `null`. Page size defaults and caps are in `bk meta`
 under `limits.page_size_default` / `limits.page_size_max`.
@@ -48,7 +48,7 @@ when more rows remain, so `--json` stdout stays clean.
 | 9 | update available (`bk skill check` / `bk skill sync` found something behind) |
 
 A mistyped command or subcommand is always an error, never a silent success —
-`bk workspace notacmd` exits 2, it does not print help and exit 0.
+`bk issues workspace notacmd` exits 2, it does not print help and exit 0.
 
 **A conflict exits 2, and the same condition always exits the same code.** When
 you pass a `--confirm` value that does not name the record, some commands catch
@@ -72,7 +72,7 @@ you the new spelling; for drift it tells you to run `bk skill sync`.
 ## Scripting checklist
 
 - `export BK_NO_PROMPT=1`
-- Pick the workspace first (`bk workspace use …` or `--ws`)
+- Pick the workspace first (`bk <app> workspace use …` or `--ws`)
 - `--json` for everything you parse
 - Branch on exit codes
 - Use `bk issues move` / `bk issues copy` to relocate items — never re-create by hand
@@ -84,4 +84,4 @@ bk issues issue list --project 1 --status todo --json \
   | xargs -n1 -I{} bk issues issue edit {} --status in_progress --assignee me
 ```
 
-Related commands: every command; see `bk activity`, `bk issues trash list`, `bk super-admin errors list` for pagination
+Related commands: every command; see `bk issues activity`, `bk issues trash list`, `bk super-admin errors list` for pagination

@@ -32,6 +32,9 @@ func appOwnedVerbs() []*cobra.Command {
 		// This app's binnable entity types. Declared here because they are this
 		// app's vocabulary — see the Config field's comment.
 		TrashTypes: []string{"issue", "project", "task"},
+		Uploads:    true,
+		Trash:      true,
+		Labels:     true,
 
 		// This app serves the WHOLE shared surface, and it is the only one that
 		// does. Every flag below is the honest reading of `app/api/**`: issues
@@ -41,6 +44,7 @@ func appOwnedVerbs() []*cobra.Command {
 		Workspace:      true,
 		WorkspaceAdmin: true,
 		Members:        true,
+		MemberRemove:   true,
 		MemberLeave:    true,
 		Invites:        true,
 		Users:          true,

@@ -58,7 +58,6 @@ Owner only.`,
 }
 
 func newStorageListCmd(acfg Config) *cobra.Command {
-	var app string
 	cmd := &cobra.Command{
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/storage"},
@@ -81,7 +80,9 @@ REFS = 0 is an orphan and can be removed with "bk storage rm <id>".`,
 			if err != nil {
 				return err
 			}
-			listing, err := c.ListStorage(app)
+			// No app filter: the LEDGER is per app since 2026-08-10, so this
+			// listing is already one app's files. See search.go.
+			listing, err := c.ListStorage("")
 			if err != nil {
 				return err
 			}
@@ -112,7 +113,6 @@ REFS = 0 is an orphan and can be removed with "bk storage rm <id>".`,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&app, "app", "", "Only files uploaded by this app (run `bk meta` for the apps you can reach)")
 	return cmd
 }
 

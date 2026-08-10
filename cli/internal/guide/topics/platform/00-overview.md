@@ -1,35 +1,30 @@
 # Overview — read this first
 
-`bk` is how you operate the **Blackcode platform**: workspaces, members, labels,
-files, tokens and inbox — plus one or more **apps** built on top of them.
+`bk` is how you operate the **Blackcode platform**: one login and one token,
+plus one or more **apps**, each with its own workspaces, members, labels, files
+and history.
 
 There is **one supported interface: this CLI.** The HTTP API behind it is private
 plumbing with no public contract — do not call it directly, and do not build
 against an OpenAPI spec (there isn't one any more).
 
-## Three tiers of verb, and the spelling tells you which
+## Two tiers of verb, and the spelling tells you which
 
-A workspace is the company; an app is a capability inside it. Every command sits
-in exactly one tier, and **you can see which from the command itself**:
+Every command sits in exactly one tier, and **you can see which from the command
+itself**:
 
-- **Neutral — bare.** `bk workspace list`, `bk member list`, `bk token create`,
-  `bk meta`. Identity and org data: the answer is the same whichever app you ask,
-  so no app can be the wrong one.
-- **Cross-app — bare, and CHANGING.** `bk search`, `bk activity`, `bk link`,
-  `bk storage list`. These were built on one shared index that every deployment
-  could answer from. An app that owns its own records answers only for itself,
-  and one that never wrote the shared index does not serve the bare command at
-  all: you get exit 5 and a hint naming the server that does. `bk activity` is
-  the case to watch — from such an app it is that app's feed, not everyone's.
-  Check with `bk app list` rather than assuming; the tier is being reworked.
-- **App-owned — behind the app's name.** `bk issues issue create`, and also
-  `bk issues upload`, `bk issues trash list`, `bk issues label list`. A file's
-  ownership, a recycle bin and a label each belong to ONE app, so the app says
-  so.
+- **Bare — your ACCOUNT and this BINARY.** `bk login`, `bk token create`,
+  `bk profile`, `bk meta`, `bk app list`, `bk guide`. One account, one token,
+  valid against every app, so no app can be the wrong one to ask.
+- **App-owned — behind the app's name.** Everything that touches an app's data:
+  `bk issues issue create`, `bk issues workspace list`, `bk sales member list`,
+  `bk issues upload`, `bk sales trash list`, `bk issues search`.
 
-You **upload into** one app and **list across** all of them: `bk issues upload`
-files a document under issues, `bk storage list` shows every app's files against
-the one workspace quota.
+**Each app has its own workspaces, members, invitations, labels, uploads and
+history**, and remembers its own active workspace. `bk sales workspace use x`
+does not move `bk issues`. That is the whole reason the app is in the command:
+before 2026-08-10 the bare form picked an app silently, from whichever one you
+were last homed on, and nothing in the command said which.
 
 Read `bk guide platform/apps` before doing anything that writes. It is the full
 rule, with the reasoning, and it is what stops a file landing in the wrong app.
@@ -45,9 +40,9 @@ on stderr, so a stale script tells you exactly what to type instead.
 
 ```bash
 bk guide            # this document — the complete usage guide for YOUR binary
-bk meta             # who you are, every workspace you can write to, live limits
-bk workspace use <slug>
-bk <group> --help   # discover flags before you call anything
+bk meta             # who you are, every app you can reach, where each goes
+bk <app> workspace use <slug>    # per app — each remembers its own
+bk <app> --help     # discover flags before you call anything
 ```
 
 ## What lives where

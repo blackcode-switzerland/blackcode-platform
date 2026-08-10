@@ -72,12 +72,16 @@ var trashTypes = []string{"prospect", "meeting", "communication", "product", "te
 //	                `sales.uploads`; the listing view is issues' alone today
 func appOwnedVerbs() []*cobra.Command {
 	set := appverbs.New(appverbs.Config{
-		App:        Slug,
-		TrashTypes: trashTypes,
-		Workspace:  true,
-		Members:    true,
-		Invites:    true,
-		Activity:   true,
+		App:          Slug,
+		TrashTypes:   trashTypes,
+		Uploads:      true,
+		Trash:        true,
+		Labels:       true,
+		Workspace:    true,
+		Members:      true,
+		MemberRemove: true,
+		Invites:      true,
+		Activity:     true,
 	})
 	// `attach` and `detach` name an ENTITY, so they are built here rather than in
 	// the shared package: they post to a SALES route, and `bk __routes` tags them

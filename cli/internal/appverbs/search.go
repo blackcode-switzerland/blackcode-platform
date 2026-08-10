@@ -23,7 +23,6 @@ import (
 
 func newSearchCmd(acfg Config) *cobra.Command {
 	var (
-		apps           []string
 		types          []string
 		limit          int
 		includeDeleted bool
@@ -53,7 +52,11 @@ types each app publishes.`,
 			if err != nil {
 				return err
 			}
-			results, err := c.SearchEntities(args[0], apps, types, limit, includeDeleted)
+			// No app filter: this command IS the filter. `--app` selected among the
+			// apps projecting into one shared index, and there is one such app now
+			// — a flag whose only legal value is the app already named on the
+			// command is a flag that can only be got wrong.
+			results, err := c.SearchEntities(args[0], nil, types, limit, includeDeleted)
 			if err != nil {
 				return err
 			}
@@ -75,7 +78,6 @@ types each app publishes.`,
 			})
 		},
 	}
-	cmd.Flags().StringSliceVar(&apps, "app", nil, "Only these apps (comma-separated)")
 	cmd.Flags().StringSliceVar(&types, "type", nil, "Only these entity types (comma-separated)")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Max results (server default applies when unset)")
 	cmd.Flags().BoolVar(&includeDeleted, "include-deleted", false, "Include items in the recycle bin")

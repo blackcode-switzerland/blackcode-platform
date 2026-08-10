@@ -6,7 +6,7 @@ each other. This page is that round trip, end to end, and **it changed on
 2026-08-10**: what crosses the boundary now is you and the binary, not a shared
 database table.
 
-Related commands: `bk sales prospect show`, `bk sales search`, `bk activity`,
+Related commands: `bk sales prospect show`, `bk sales search`, `bk sales activity`,
 `bk app list`, `bk meta`.
 
 ## Everything addressable has a URN
@@ -38,9 +38,9 @@ This deployment serves this search and no other. It reads this app's full-text
 columns, so it finds a phrase in a call summary — and it only ever answers about
 this app's records.
 
-The bare `bk search` reads a shared title index that this app no longer writes
-to. Asked of this deployment it fails with exit 5 and a hint naming the server
-that does answer it; run `bk app list` to see which servers your token reaches.
+There used to be a bare `search` verb reading a shared title index across every
+app. It was removed on 2026-08-10 along with that index; each app answers for
+itself now. Run `bk app list` to see which servers your token reaches.
 
 ## Recording that two records are related
 
@@ -59,16 +59,18 @@ either record, survives both apps' backups, and cannot drift out of step with
 the thing it points at. Run `bk meta` for this app's addressable types when you
 need to build one from the other direction.
 
-## Activity is this app's
+## Activity is this app's, and says so
 
 ```bash
-bk activity --since 7d
-bk activity --subject bc:sales:<ws>/prospect/12
+bk sales activity --since 7d
+bk sales activity --subject bc:sales:<ws>/prospect/12
 ```
 
-Bare, but it answers about **this app** when you are homed here: every entry it
-returns was produced by this deployment. `--subject` gives you the full history
-of one record in one call, which is the question it is best at.
+Every entry it returns was produced by this deployment. `--subject` gives you the
+full history of one record in one call, which is the question it is best at.
+
+To see another app's history, ask that app — the binary is what crosses the
+boundary, and asking both is two commands rather than one flag.
 
 ## One login, one binary
 

@@ -13,13 +13,15 @@ import (
 func newMemberCmd(acfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "member",
-		Short: "Manage members of the active workspace",
+		Short: "Manage members of this app's active workspace",
 	}
-	cmd.AddCommand(
-		newMemberListCmd(acfg),
-		newMemberRemoveCmd(acfg),
-		newMemberLeaveCmd(acfg),
-	)
+	cmd.AddCommand(newMemberListCmd(acfg))
+	if acfg.MemberRemove {
+		cmd.AddCommand(newMemberRemoveCmd(acfg))
+	}
+	if acfg.MemberLeave {
+		cmd.AddCommand(newMemberLeaveCmd(acfg))
+	}
 	return cmd
 }
 

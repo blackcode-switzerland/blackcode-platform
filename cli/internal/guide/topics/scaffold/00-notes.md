@@ -25,8 +25,8 @@ are the platform's: see `bk guide platform/output-and-exit-codes`.
 The scaffold stops short of three things on purpose, because each needs a
 decision only the real app can make:
 
-- **A URL scheme and an entity projection**, so notes become addressable as
-  `bc:<app>:<workspace>/note/<n>` and appear in `bk search` and `bk link`.
+- **A URL scheme**, so notes become addressable as
+  `bc:<app>:<workspace>/note/<n>` and can be pasted into another app's record.
 - **A blob reference scanner**, if the app's content can embed uploaded files.
   Without one, deleting a file is refused platform-wide — correctly, because
   nobody can prove the file is unused. See `bk guide platform/storage`.
@@ -36,4 +36,4 @@ decision only the real app can make:
 Run `bk meta` for the live vocabularies, limits and workspaces — never assume a
 value you read in a guide topic.
 
-Related commands: `bk scaffold note list|create`, `bk meta`, `bk workspace use`
+Related commands: `bk scaffold note list|create`, `bk meta`, `bk guide platform/apps`

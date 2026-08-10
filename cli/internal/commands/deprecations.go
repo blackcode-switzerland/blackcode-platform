@@ -114,6 +114,17 @@ var deprecations = map[string]string{
 	"search":    "`bk search …` is now `bk <app> search …` — there is no cross-app index any more. Try `bk issues search <query>` for issues, tasks and projects, or `bk sales search <query>`, which searches INSIDE sales' records.",
 	"activity":  "`bk activity …` is now `bk <app> activity …` — each app keeps its own event feed. Try `bk issues activity --since 24h` or `bk sales activity`.",
 
+	// `--app` is gone from `search`, `activity` and `storage list`. It selected
+	// among the apps writing one shared index, so with one app per index its only
+	// legal value is the app already named on the command — and its only OTHER
+	// value returns an empty result that reads as "nothing here".
+	//
+	// Keyed bare, like every flag row. That is safe rather than lucky: this hint
+	// only fires on an `unknown flag` error, and the commands that still take
+	// `--app` (`bk changelog`, `bk guide`, `bk <app> invite send`) accept it, so
+	// they never produce one.
+	"--app": "`--app` was removed from `search`, `activity` and `storage list` on 2026-08-10 — each app now has its own index, feed and upload ledger, so the app is the command: `bk issues search …`, `bk sales activity`. It is unchanged on `bk changelog --app` and `bk guide --app`.",
+
 	// `bk link` is REMOVED, not moved, and this row is the only thing an agent
 	// on stale context has left. PLAN.md §3: a link's two ends could live in two
 	// apps, which needed one shared entity index; that index is now written by

@@ -78,4 +78,4 @@ bk issues issue attachments 42
 bk issues issue detach 42 <attachment-id>
 ```
 
-Related commands: `bk issues upload`, `bk storage list`, `bk issues issue attach|detach|attachments`, `bk issues attachment list`, `bk issues issue|task|project create --file`, `bk meta`, `bk guide platform/apps`
+Related commands: `bk issues upload`, `bk issues storage list`, `bk issues issue attach|detach|attachments`, `bk issues attachment list`, `bk issues issue|task|project create --file`, `bk meta`, `bk guide platform/apps`
