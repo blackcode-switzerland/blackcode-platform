@@ -37,15 +37,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@blackcode/platform-agent'
-import {
-  errorEvents,
-  getWorkspaceForUser,
-  type User,
-  type Workspace,
-} from '@blackcode/platform-db'
+import { errorEvents, type User } from '@blackcode/platform-db'
 import type { AppContext } from './app-context'
+import type { WorkspaceMembershipRef } from './workspace-source'
 import { ApiError, Errors, errorBody } from './errors'
-import { requireAppAccess } from './require-app-access'
 import { sanitize, truncate } from './sanitize'
 
 // ---------------------------------------------------------------------------
@@ -313,16 +308,27 @@ function routePath(req: NextRequest): string {
 
 export interface WorkspaceContext {
   user: User
-  workspace: Workspace
+  /**
+   * Narrowed from platform-db's `Workspace` to `WorkspaceRef` on 2026-08-10:
+   * this object no longer necessarily comes from `platform.workspaces`, so it
+   * can only promise the columns every app's workspace table has. See
+   * `./workspace-source.ts` for which five and why.
+   */
+  workspace: WorkspaceMembershipRef
   role: 'owner' | 'member'
 }
 
 /**
  * Bind the workspace resolver to one app.
  *
- * The lookup itself is `getWorkspaceForUser` in platform-db — the same function
- * `apps/issues` always used, moved beside the tables it reads. Read its note
- * before changing what it matches.
+ * The lookup is `app.workspaces.getForUser` — the app's own table since Phase 2
+ * of the multi-app refactor. `apps/issues` supplies `platformWorkspaceSource`,
+ * whose implementation is `getWorkspaceForUser` from platform-db, so nothing
+ * about that app's behaviour changed.
+ *
+ * The 401 / 404 / 403 decisions stayed HERE, and that is the split this seam is
+ * for: which table to read is an app's answer, what a denial looks like is the
+ * platform's.
  */
 export function createResolveWorkspace(app: AppContext) {
   return async function resolveWorkspace(
@@ -334,18 +340,15 @@ export function createResolveWorkspace(app: AppContext) {
 
     if (!slugOrId) throw Errors.notFound('workspace')
 
-    const ws = await getWorkspaceForUser(app.db, slugOrId, user.id)
+    const ws = await app.workspaces.getForUser(slugOrId, user.id)
     if (!ws) throw Errors.notFound('workspace')
 
     // Membership gets you into the organisation; this gets you into THIS app.
-    // Behind PLATFORM_ENFORCE_APP_ACCESS — unset means enforced.
-    await requireAppAccess(app.db, {
-      app: app.appSlug,
-      workspaceId: ws.id,
-      userId: user.id,
-      userEmail: user.email,
-      workspaceSlug: ws.slug,
-    })
+    // Behind PLATFORM_ENFORCE_APP_ACCESS for a platform-backed source — and a
+    // documented no-op for an app that owns its workspaces, where membership IS
+    // the answer. The source decides, because the source is what holds the rows
+    // the gate would have queried.
+    await app.workspaces.assertAppAccess({ workspace: ws, user })
 
     return {
       user,

@@ -46,8 +46,28 @@ vi.mock('@/lib/db/queries/users', () => ({
   getUserById: async () => USER,
   getUserByEmail: async () => USER,
 }))
+// `getUserById` joined this list on 2026-08-10. `platformMetaBlock` stopped
+// reading `user.active_workspace_id` off the resolved caller and now asks
+// `AppContext.workspaces.getDefaultForUser`, which re-reads the user so a token
+// minted before the last `bk workspace use` cannot report a stale default. That
+// is one more database call, and an unstubbed one made this whole file 500 —
+// visibly, because `metaBody` asserts the fixture produced a real 200 before it
+// asserts anything about the document. Without that premise assertion the five
+// cases below would have silently started checking an error envelope.
 vi.mock('@blackcode/platform-db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@blackcode/platform-db')>()),
+  getUserById: async () => USER,
+  // Added the same day as `getUserById` above, and for a related reason:
+  // `platformMetaBlock` now guarantees an entry for the app SERVING the request,
+  // because `appsReachableByUser` derives its list from grants and an app that
+  // owns its own tenancy has none. `appsReachableByUser` below already returns
+  // an `issues` entry, so this stub does not change the assertions — it just
+  // keeps the extra lookup off the database.
+  getAppRegistryEntry: async () => ({
+    slug: 'issues',
+    name: 'Blackcode Issues',
+    base_url: null,
+  }),
   getWorkspaceForUser: async () => null,
   listMyWorkspaces: async () => [],
   listWorkspaceMembers: async () => [],

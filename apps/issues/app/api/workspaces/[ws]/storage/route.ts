@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, resolveWorkspace, requireOwner } from '@/lib/api'
 import { listWorkspaceUploads, computeWorkspaceStorageUsage } from '@/lib/db/queries/uploads'
+import { getWorkspaceById } from '@/lib/db/queries/workspaces'
 import { computeWorkspaceReferences } from '@/lib/storage'
 
 interface Params {
@@ -26,10 +27,18 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   // app, and a total that shrank with a filter would read as free space.
   const app = req.nextUrl.searchParams.get('app')
 
-  const [rows, refMap, usageBytes] = await Promise.all([
+  // `storage_limit_bytes` is read from the row rather than from `ctx.workspace`
+  // as of 2026-08-10. `WorkspaceContext.workspace` narrowed to the five columns
+  // every app's workspace table has, and a per-workspace storage quota is not
+  // one of them — `sales.workspaces` deliberately has no such column, because a
+  // quota over ONE shared Blob store is not a per-app fact. Same column, same
+  // workspace, same `?? null`; one extra primary-key lookup, run in parallel so
+  // it costs no latency. See packages/platform-api/src/workspace-source.ts.
+  const [rows, refMap, usageBytes, wsRow] = await Promise.all([
     listWorkspaceUploads(ctx.workspace.id, { app }),
     computeWorkspaceReferences(ctx.workspace.id),
     computeWorkspaceStorageUsage(ctx.workspace.id),
+    getWorkspaceById(ctx.workspace.id),
   ])
 
   const data = rows.map((u) => {
@@ -64,6 +73,6 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     next_cursor: null,
     total: data.length,
     usage_bytes: usageBytes,
-    limit_bytes: ctx.workspace.storage_limit_bytes ?? null,
+    limit_bytes: wsRow?.storage_limit_bytes ?? null,
   })
 })

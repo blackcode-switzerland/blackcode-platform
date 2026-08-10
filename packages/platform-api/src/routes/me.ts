@@ -14,9 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   deleteAccountReport,
   getUserById,
-  getWorkspaceForUser,
   listPendingInvitationsForEmail,
-  setActiveWorkspace,
   softDeleteUser,
   updateUserProfile,
 } from '@blackcode/platform-db'
@@ -183,10 +181,16 @@ export function activeWorkspaceRoute(app: AppContext) {
     // Membership, not app access: this is "which workspace was I looking at",
     // and a workspace you belong to but cannot use THIS app in is still a legal
     // answer for another app's UI.
-    const ws = await getWorkspaceForUser(app.db, target, user.id)
+    //
+    // Resolved through THIS APP'S workspaces (`app.workspaces`), which is what
+    // stops `bk workspace use <a-sales-slug>` from 404ing against a sales-homed
+    // CLI — and, more importantly, stops a sales workspace id from being written
+    // into the one `platform.users.active_workspace_id` column that issues
+    // reads. See `WorkspaceSource.getDefaultForUser`.
+    const ws = await app.workspaces.getForUser(target, user.id)
     if (!ws) throw Errors.notFound('workspace')
 
-    await setActiveWorkspace(app.db, user.id, ws.id)
+    await app.workspaces.setDefaultForUser(user.id, ws.id)
     return NextResponse.json({ active_workspace_id: ws.id, slug: ws.slug })
   })
 }

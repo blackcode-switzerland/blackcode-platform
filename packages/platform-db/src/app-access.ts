@@ -198,6 +198,37 @@ export async function appsReachableByUser(
   }))
 }
 
+/**
+ * One row of the app registry, by slug. No access check — this is the ADDRESS
+ * BOOK (`platform.apps`), not a grant.
+ *
+ * Added 2026-08-10. `/api/meta` needs it to answer for the app SERVING the
+ * request: `appsReachableByUser` derives its list from `platform.app_access`,
+ * and an app that owns its own workspaces has no rows there, so a user of it
+ * saw an empty `apps` object — including no entry for the app they were talking
+ * to, and therefore no `base_url` for it. Reachability by grant is still what
+ * lists OTHER apps (docs/platform-architecture.md §4.5: an agent must not
+ * discover an app its user cannot reach); the current app is not a discovery,
+ * it is the thing answering.
+ */
+export async function getAppRegistryEntry(
+  db: Executor,
+  slug: string
+): Promise<{ slug: string; name: string; base_url: string | null } | null> {
+  const res = await db.execute(sql`
+    SELECT a.slug, a.name, a.base_url FROM ${apps} a
+    WHERE a.slug = ${slug} AND a.enabled = true
+    LIMIT 1
+  `)
+  const r = res.rows[0]
+  if (!r) return null
+  return {
+    slug: String(r.slug),
+    name: String(r.name),
+    base_url: r.base_url == null ? null : String(r.base_url),
+  }
+}
+
 /** Registry rows joined with this workspace's state, for the Apps settings screen. */
 export async function listWorkspaceApps(
   db: Executor,

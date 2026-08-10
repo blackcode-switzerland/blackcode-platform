@@ -25,6 +25,7 @@ import type { NextRequest } from 'next/server'
 import {
   createApiHandler,
   createResolveWorkspace,
+  platformWorkspaceSource,
   type AppContext,
 } from '@blackcode/platform-api'
 import { verifyToken } from '@blackcode/platform-auth'
@@ -56,6 +57,27 @@ export const appContext: AppContext = {
   get db() {
     return getDb()
   },
+
+  // ── WHERE THIS APP'S WORKSPACES LIVE ──────────────────────────────────────
+  // `platform.workspaces`, for now. That is the smallest honest answer while
+  // this scaffold has no sign-up, no members page and no tenancy tables of its
+  // own — a copy of it is not usable until somebody grants it a workspace, which
+  // is exactly the add-on shape `apps/sales` spent Phase 2 leaving behind.
+  //
+  // **Phase 7 of multiAppFinalRefactor changes this**, and it is the point of
+  // that phase: the scaffold gains its own workspaces/members/invitations so the
+  // DEFAULT for a new app is independence, and this line becomes
+  // `scaffoldWorkspaceSource`. Until then, read
+  // `packages/platform-api/src/workspace-source.ts` and `apps/sales/lib/api.ts`
+  // before copying this app for anything real.
+  //
+  // A getter for the same reason `db` is one: `platformWorkspaceSource` closes
+  // over the client, so building it eagerly here would open a connection at
+  // module import time and make the app unbuildable without a DATABASE_URL.
+  get workspaces() {
+    return platformWorkspaceSource(getDb(), APP_SLUG)
+  },
+
   resolveUser,
   // No `manifest`: this scaffold has no agent landing page, and a X-BK-Help
   // header pointing at a 404 is worse than no header. A real app adds one.

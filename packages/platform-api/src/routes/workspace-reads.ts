@@ -10,9 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   appsReachableByUser,
   listInviteCandidates,
-  listMyWorkspaces,
   listWorkspaceApps,
-  listWorkspaceMembers,
 } from '@blackcode/platform-db'
 import { isSuperAdmin } from '@blackcode/platform-auth'
 import type { AppContext } from '../app-context'
@@ -54,11 +52,11 @@ export function workspacesRoute(app: AppContext) {
     )
 
     if (!all) {
-      return jsonList(await listMyWorkspaces(app.db, user.id, { app: app.appSlug }))
+      return jsonList(await app.workspaces.listForUser(user.id, { scopedToApp: true }))
     }
 
     const [workspaces, reachable] = await Promise.all([
-      listMyWorkspaces(app.db, user.id),
+      app.workspaces.listForUser(user.id, { scopedToApp: false }),
       appsReachableByUser(app.db, user.id),
     ])
     const appsByWorkspace = new Map<number, string[]>()
@@ -107,7 +105,7 @@ export function workspaceShowRoute(app: AppContext) {
     return NextResponse.json({
       workspace: ctx.workspace,
       role: ctx.role,
-      members: await listWorkspaceMembers(app.db, ctx.workspace.id),
+      members: await app.workspaces.listMembers(ctx.workspace.id),
     })
   })
 }
@@ -119,7 +117,7 @@ export function workspaceMembersRoute(app: AppContext) {
   return apiHandler(async (req: NextRequest, { params }: WsParams) => {
     const { ws } = await params
     const ctx = await resolveWorkspace(req, ws)
-    return jsonList(await listWorkspaceMembers(app.db, ctx.workspace.id))
+    return jsonList(await app.workspaces.listMembers(ctx.workspace.id))
   })
 }
 

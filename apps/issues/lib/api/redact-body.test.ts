@@ -77,12 +77,33 @@ function allStrings(value: unknown, seen = new Set<unknown>()): string[] {
   return Object.values(value as Record<string, unknown>).flatMap((v) => allStrings(v, seen))
 }
 
+/**
+ * `AppContext.workspaces` became required on 2026-08-10 (an app must say where
+ * its workspaces live — packages/platform-api/src/workspace-source.ts).
+ *
+ * These fixtures never resolve a workspace: the handler under test throws before
+ * any route body runs. So every method THROWS rather than returning an empty
+ * answer — a stub that quietly returns `null` would let this test keep passing
+ * if the handler one day started resolving a workspace, which is exactly the
+ * kind of silently-retargeted assertion CLAUDE.md finding #10 is about.
+ */
+const unusedWorkspaces = new Proxy({} as AppContext['workspaces'], {
+  get(_t, prop) {
+    return () => {
+      throw new Error(
+        `AppContext.workspaces.${String(prop)}() was called by a fixture that must never reach it`
+      )
+    }
+  },
+})
+
 /** Run one request through the shared handler and return the captured INSERT. */
 async function runFailingRequest(redactBody: boolean): Promise<string[]> {
   const db = capturingDb()
   const ctx: AppContext = {
     appSlug: 'test-app',
     db: db as unknown as AppContext['db'],
+    workspaces: unusedWorkspaces,
     async resolveUser() {
       return null
     },

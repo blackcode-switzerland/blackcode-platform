@@ -15,7 +15,7 @@
 // See `packages/platform-api/src/app-context.ts` for the bar a new field has to
 // clear before it is added here.
 
-import type { AppContext } from '@blackcode/platform-api'
+import { platformWorkspaceSource, type AppContext } from '@blackcode/platform-api'
 import { db } from '@/lib/db/client'
 import { resolveUser } from '@/lib/auth/resolve'
 import { getValidatedSessionUser } from '@/lib/auth/session'
@@ -52,6 +52,19 @@ const resolveSessionUser = getValidatedSessionUser
 export const appContext: AppContext = {
   appSlug: APP_SLUG,
   db,
+
+  // ── THIS APP'S WORKSPACES ARE `platform.workspaces`, AND STAY THERE ────────
+  // The multi-app refactor moves SALES onto its own tenancy tables; it moves not
+  // one row of this app's. `platformWorkspaceSource` is a thin binding of the
+  // five platform-db functions these routes already called, in the same order
+  // with the same arguments — including the `workspace_apps` / `app_access`
+  // gate, which is still enforced here and behind `PLATFORM_ENFORCE_APP_ACCESS`
+  // exactly as before. See packages/platform-api/src/workspace-source.ts.
+  //
+  // Renaming these tables to `issues.*` was considered and rejected: it would
+  // mean moving production data for a cosmetic gain (PLAN.md §2).
+  workspaces: platformWorkspaceSource(db, APP_SLUG),
+
   resolveUser,
   resolveSessionUser,
   manifest: {

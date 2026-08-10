@@ -28,6 +28,7 @@
 import type { NextRequest } from 'next/server'
 import type { PlatformDatabase, User } from '@blackcode/platform-db'
 import type * as platformSchema from '@blackcode/platform-db/schema'
+import type { WorkspaceSource } from './workspace-source'
 
 /**
  * A Drizzle client that knows the `platform.*` tables — and only those.
@@ -89,6 +90,23 @@ export interface AppContext {
    * `apps/_scaffold/lib/db/client.ts` records where that was found.
    */
   db: AppDatabase
+
+  /**
+   * WHERE THIS APP'S WORKSPACES LIVE — see `./workspace-source.ts`.
+   *
+   * Added 2026-08-10 (multiAppFinalRefactor Phase 2), and it is the field that
+   * makes this type's own rule true rather than aspirational: `db` was always
+   * enough only because every app's workspaces were in the same table. They are
+   * not any more.
+   *
+   * REQUIRED, with no platform default, and that is the whole safety property.
+   * A default would mean an app that never answered the question serves,
+   * correctly and silently, against ANOTHER app's tenancy — the same shape as
+   * `resolveSessionUser` falling back to `resolveUser`, with a wider blast
+   * radius. `apps/issues` supplies `platformWorkspaceSource(db, APP_SLUG)`,
+   * which is the set of calls it already made.
+   */
+  workspaces: WorkspaceSource
 
   /**
    * Who is calling, or null.

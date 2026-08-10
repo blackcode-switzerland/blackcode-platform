@@ -36,15 +36,13 @@ import type { NextRequest } from 'next/server'
 import {
   LINK_RELATIONS,
   appsReachableByUser,
-  getWorkspaceForUser,
-  listMyWorkspaces,
-  listWorkspaceMembers,
+  getAppRegistryEntry,
   type User,
-  type WorkspaceWithMembership,
 } from '@blackcode/platform-db'
 import { isSuperAdmin } from '@blackcode/platform-auth'
 import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@blackcode/platform-agent'
 import type { AppContext } from './app-context'
+import type { WorkspaceMembershipRef } from './workspace-source'
 
 export interface PlatformMetaOptions {
   /**
@@ -63,7 +61,7 @@ export interface PlatformMetaResult {
   /** Spread straight into the route's response. */
   meta: Record<string, unknown>
   /** The resolved workspace, so the app can run its own scoped queries. */
-  workspace: WorkspaceWithMembership | null
+  workspace: WorkspaceMembershipRef | null
   /** The freshly-read caller. */
   user: User
 }
@@ -82,31 +80,60 @@ export async function platformMetaBlock(
   user: User,
   opts: PlatformMetaOptions = {}
 ): Promise<PlatformMetaResult> {
-  // Workspace: explicit ?ws=<slug|id> override, else the caller's active one.
-  // getWorkspaceForUser returns null if it doesn't exist or the caller isn't a
-  // member (no existence leak).
+  // Workspace: explicit ?ws=<slug|id> override, else this app's default for the
+  // caller. Both go through `app.workspaces`, which returns null if it doesn't
+  // exist or the caller isn't a member (no existence leak).
+  //
+  // `user.active_workspace_id` is NOT read here any more, and that is a fix
+  // rather than a refactor: it is one column shared by every app, so after the
+  // split it names a different team depending on which app last wrote it. The
+  // app's own source answers "what should I default to" — for issues that IS
+  // the column, for an app with one workspace per person it is that workspace.
   const wsParam = req.nextUrl.searchParams.get('ws')
-  const slugOrId = wsParam ?? (user.active_workspace_id ? String(user.active_workspace_id) : null)
-  const workspace = slugOrId ? await getWorkspaceForUser(app.db, slugOrId, user.id) : null
+  const workspace = wsParam
+    ? await app.workspaces.getForUser(wsParam, user.id)
+    : await app.workspaces.getDefaultForUser(user.id)
 
   // Every workspace the caller belongs to AND can use THIS app in — the
   // disambiguation list an agent needs to target the right tenant by
   // (human-readable) name/slug. App-scoped: offering a workspace the caller
   // cannot write to would be offering a guaranteed 403. `bk workspace list --all`
   // is the escape hatch that shows the rest.
-  const myWorkspaces = await listMyWorkspaces(app.db, user.id, { app: app.appSlug })
+  const myWorkspaces = await app.workspaces.listForUser(user.id, { scopedToApp: true })
 
   // The apps this token can reach, anywhere. An agent working for a user with no
   // sales access must not be able to discover that a sales app exists
   // (docs/platform-architecture.md §4.5), so this is derived from grants, never
   // from the registry. The unfiltered membership list is only used to turn the
   // workspace ids those grants carry back into slugs.
-  const [reachableApps, allMyWorkspaces] = await Promise.all([
+  const [granted, allMyWorkspaces, currentEntry] = await Promise.all([
     appsReachableByUser(app.db, user.id),
-    listMyWorkspaces(app.db, user.id),
+    app.workspaces.listForUser(user.id, { scopedToApp: false }),
+    getAppRegistryEntry(app.db, app.appSlug),
   ])
 
-  const members = workspace ? await listWorkspaceMembers(app.db, workspace.id) : []
+  // ── THE CURRENT APP IS ALWAYS PRESENT ──────────────────────────────────────
+  // `appsReachableByUser` derives its list from `platform.app_access`, and an
+  // app that owns its own workspaces has no rows there at all — so from 2026-08-10
+  // a b/sales user saw `apps: {}`, with no entry and no `base_url` for the very
+  // deployment answering the request. That is not a discovery question: you are
+  // demonstrably able to reach the app you are talking to.
+  //
+  // Other apps stay grant-derived, which is the §4.5 rule this must not weaken:
+  // an agent working for somebody with no sales access must not learn that a
+  // sales app exists.
+  const reachableApps =
+    currentEntry && !granted.some((a) => a.slug === app.appSlug)
+      ? [
+          ...granted,
+          // Its workspaces are every workspace this app's own source reports —
+          // there are no grants to narrow them by, and an entry listing none
+          // would tell an agent it can reach the app but has nowhere to write.
+          { ...currentEntry, workspace_ids: allMyWorkspaces.map((w) => w.id) },
+        ]
+      : granted
+
+  const members = workspace ? await app.workspaces.listMembers(workspace.id) : []
 
   const meta: Record<string, unknown> = {
     user: {

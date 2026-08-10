@@ -38,6 +38,45 @@ export async function touchLastLogin(db: PlatformDb, id: number): Promise<void> 
   await db.update(users).set({ last_login: new Date() }).where(eq(users.id, id))
 }
 
+/**
+ * Create an email+password account.
+ *
+ * Here, and not in an app, for this file's own reason: there is ONE
+ * `platform.users` row per person and every app's sign-up creates the same one.
+ * `apps/sales` gained a register route on 2026-08-10 and the alternative was a
+ * second INSERT into the shared identity table, in a second app, with its own
+ * ideas about which columns to set.
+ *
+ * ── THIS FUNCTION DOES NOT DECIDE WHO MAY HAVE AN ACCOUNT ──────────────────
+ * The whitelist gate (`SUPER_ADMINS` + `platform.email_whitelist`) lives in
+ * `@blackcode/platform-auth` and is the ROUTE's to apply, before calling this.
+ * That split is deliberate and it is the dangerous edge of the whole platform:
+ * one identity means an ungated register route on ANY app is an ungated
+ * register route on all of them. Putting the gate in here would make it look
+ * handled and make it unskippable in the one place — an admin tool, a seed
+ * script — where skipping it is legitimate. Both apps' routes gate; both apps'
+ * routes are tested for it.
+ *
+ * `last_login` is set on creation, matching `apps/issues`' behaviour since it
+ * was written: signing up IS a login, and a null there reads as "never signed
+ * in" on the super-admin user list.
+ */
+export async function createUserWithPassword(
+  db: PlatformDb,
+  data: { email: string; password_hash: string; name?: string | null }
+): Promise<User | null> {
+  const [created] = await db
+    .insert(users)
+    .values({
+      email: data.email,
+      password_hash: data.password_hash,
+      name: data.name ?? undefined,
+      last_login: new Date(),
+    })
+    .returning()
+  return created ?? null
+}
+
 export interface UpsertUserFromOAuthInput {
   google_id?: string
   email: string

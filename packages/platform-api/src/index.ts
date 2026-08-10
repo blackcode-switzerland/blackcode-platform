@@ -12,6 +12,18 @@ export type { RequireAppAccessArgs } from './require-app-access'
 // The shared request layer (2026-08-06, docs/sales-app-plan.md Phase 1a / D-2).
 // An app binds these to its own AppContext in `lib/api` — see handler.ts.
 export type { AppContext, AppManifest } from './app-context'
+
+// WHERE AN APP'S WORKSPACES LIVE (2026-08-10, multiAppFinalRefactor Phase 2).
+// `platformWorkspaceSource` is what an app on `platform.workspaces` supplies;
+// an app that owns its own tenancy writes its own. Read workspace-source.ts
+// before implementing one — the `getDefaultForUser` note in particular.
+export { platformWorkspaceSource } from './workspace-source'
+export type {
+  WorkspaceSource,
+  WorkspaceRef,
+  WorkspaceMembershipRef,
+  WorkspaceMemberRef,
+} from './workspace-source'
 export {
   createApiHandler,
   createResolveWorkspace,
