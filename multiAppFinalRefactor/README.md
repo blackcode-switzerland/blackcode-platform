@@ -75,8 +75,25 @@ to issues. Sales' own data may be destroyed freely. If a step would touch a row
 issues can see and your brief did not explicitly say so, **stop and report**.
 
 **2. Never touch production.** You do not have, and must not ask for, production
-credentials. Develop against the local Postgres (`docker compose up -d`,
-`localhost:5434`). The human runs everything that reaches production.
+credentials. Develop against the local Postgres (`docker compose up -d`; the
+scripts reach it on port **5432**, inside the container). The human runs
+everything that reaches production.
+
+> **`bk` DEFAULTS TO PRODUCTION. This has already happened once.**
+>
+> The CLI reads `~/.config/bk/config.json` — the human's real config, homed on
+> `https://sales.blackcode.ch` with a live token. Nothing about running `bk` on
+> this machine tells you that. Agent 4 sent five list commands to production
+> before noticing a workspace name in an error message was not one of theirs.
+>
+> **Always run `bk` under an isolated config:**
+>
+> ```bash
+> export BK_CONFIG_DIR=/tmp/bk-agentN
+> ```
+>
+> Rule 2 is not only about `psql`. Anything that can carry a credential —
+> `bk`, `vercel`, `gh` — reads a config you did not write.
 
 **3. Prove every check fires.** From `CLAUDE.md`:
 
