@@ -8,11 +8,18 @@ import {
   createApiHandler,
   createResolveWorkspace,
   type AppContext,
+  type WorkspaceSource,
 } from '@blackcode/platform-api'
 import { verifyToken } from '@blackcode/platform-auth'
 import { getDb } from './db/client'
 import { getValidatedSessionUser } from './auth/session'
 import { APP_SLUG } from './app'
+import {
+  getWorkspaceById,
+  getWorkspaceForUser,
+  listWorkspaceMembers,
+  listWorkspacesForUser,
+} from './db/queries/workspaces'
 
 /**
  * The caller, from a `bk_live_…` bearer token **or** a browser session.
@@ -38,8 +45,72 @@ async function resolveUser(req: NextRequest) {
   return getValidatedSessionUser()
 }
 
+/**
+ * THIS APP'S WORKSPACES ARE `sales.workspaces` (Phase 2, 2026-08-10).
+ *
+ * ── WHAT CHANGED, IN ONE SENTENCE ──────────────────────────────────────────
+ * A person no longer needs an ISSUES workspace to hold a sales account. Before
+ * this, every shared route resolved `platform.workspaces`, so "who may use
+ * b/sales" was decided in another app's tenancy table and gated by
+ * `platform.workspace_apps` — which is why this app's own files never named
+ * `workspace_members` while depending on it completely.
+ *
+ * ── THE TWO NO-OPS BELOW ARE THE INTERESTING PART ──────────────────────────
+ * `assertAppAccess` and `setDefaultForUser` do nothing here, and neither is an
+ * omission. Read them before deciding one of them is a gap.
+ */
+const salesWorkspaces: WorkspaceSource = {
+  getForUser: (slugOrId, userId) => getWorkspaceForUser(slugOrId, userId),
+
+  // Both answers are the same list, because there is no app-inside-a-workspace
+  // to scope to: a `sales.workspaces` row is this app's, entirely. The platform
+  // implementation filters by `platform.app_access`; here that filter would have
+  // nothing to read, and a filter over rows that cannot be foreign is a no-op
+  // that reads as protection.
+  listForUser: (userId) => listWorkspacesForUser(userId),
+
+  getById: (id) => getWorkspaceById(id),
+
+  listMembers: (workspaceId) => listWorkspaceMembers(workspaceId),
+
+  // ── §3e: THIS APP NO LONGER CONSULTS `PLATFORM_ENFORCE_APP_ACCESS` ─────────
+  // A MEMBER OF A SALES WORKSPACE IS A SALES USER, full stop. The per-app gate
+  // (`platform.workspace_apps` + `platform.app_access`) exists to switch one app
+  // on and off INSIDE a workspace two apps share. Nothing shares a
+  // `sales.workspaces` row, so there is no row for the gate to read and no
+  // question for it to answer — asking it would be asking about another app's
+  // tenancy and getting a denial for a workspace id that means something else.
+  //
+  // Both tables are DROPPED in Phase 5. The env var stays set in Vercel until
+  // then; what changed today is that this app stops consulting it.
+  assertAppAccess: async () => {},
+
+  // ── DELIBERATELY NOT `setActiveWorkspace` ─────────────────────────────────
+  // `platform.users.active_workspace_id` is ONE column shared by every app, and
+  // after the split a sales workspace id written into it is read back by
+  // `apps/issues` as an ISSUES workspace id — by `/api/meta`, by the dashboard's
+  // default-workspace picker, and by upload attribution. Writing it would be the
+  // `error_events.workspace_id` ambiguity all over again, in the identity table.
+  //
+  // Nothing is lost by not writing it: a person has exactly one sales workspace,
+  // so `getDefaultForUser` below already knows the answer, and `bk workspace use`
+  // persists its choice in the CLI's own config regardless.
+  setDefaultForUser: async () => {},
+
+  // One workspace per person (PLAN.md §1), so "the default" is "theirs" and
+  // there is nothing to remember. `listWorkspacesForUser` is ordered oldest-first
+  // (it matches the platform listing), so the most recently touched one is the
+  // LAST — which is the sensible answer on the day this app grows a switcher and
+  // a person has two.
+  getDefaultForUser: async (userId) => {
+    const mine = await listWorkspacesForUser(userId)
+    return mine.length > 0 ? mine[mine.length - 1] : null
+  },
+}
+
 export const appContext: AppContext = {
   appSlug: APP_SLUG,
+  workspaces: salesWorkspaces,
   // A GETTER, not `db: getDb()`. Calling it here would open a connection at
   // module import time, and `next build` imports every route module to collect
   // page data — so an eager client makes the app unbuildable without a

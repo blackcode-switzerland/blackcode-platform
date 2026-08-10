@@ -140,26 +140,33 @@ right.
   workspace segment, at `/dashboard/settings/*`, because three of its four pages
   are about the blackcode account rather than about this workspace.
 
-## 5. The two empties, and why they must differ
+## 5. The empty, and the one that was deleted
 
 `app/dashboard/layout.tsx`.
 
+Until 2026-08-10 there were **two** empties and the whole point of the section was
+telling them apart: *"No workspace yet"* versus *"No access to b/sales"*, the
+second coming from `listMyWorkspaces({ app })` filtering `platform.workspaces`
+through `platform.app_access`. Collapsing them would have shown a
+member-without-access an onboarding screen that quietly *worked* while hiding the
+real problem.
+
+**That distinction is now unrepresentable, and the branch is gone.** This app
+owns `sales.workspaces`; a member of a sales workspace is a sales user, full
+stop. There is no second app inside one of its workspaces to be switched off, so
+there is no second empty to describe — and a screen nobody can ever reach reads
+to the next person as protection. `PLATFORM_ENFORCE_APP_ACCESS` is not consulted
+anywhere in this app any more.
+
 | | Condition | What it says |
 |---|---|---|
-| **No memberships** | `listMyWorkspaces(user)` is empty | *"No workspace yet."* Your account exists but belongs to nothing; ask an owner to invite this address |
-| **No app access** | memberships exist, `listMyWorkspaces(user, { app: 'sales' })` is empty | *"No access to b/sales."* Names the workspaces you ARE in, and says an owner grants it from Workspace settings → Apps |
+| **No workspace** | `listWorkspacesForUser(user)` is empty | *"No workspace yet."* One is created the moment you sign in, so this means that step did not finish. Sign out and back in — it retries |
 
-Collapsing them shows a member-without-access an onboarding screen that quietly
-*works* while hiding the real problem. **Sales' answer to the first differs from
-issues'**: issues offers "create your first workspace", and sales cannot — D-3
-removes that flow — so the first empty is a statement of fact plus who fixes it.
-The property being preserved is that the two say genuinely different things, not
-that they say the same things issues says.
-
-> The app-scoped list only filters when **`PLATFORM_ENFORCE_APP_ACCESS`** is on.
-> With it off the two lists are identical and the second branch is unreachable —
-> that is the kill switch behaving as designed, not the check being broken. Both
-> branches were verified on the seeded database with the switch on, 2026-08-07.
+**Its meaning changed with its neighbour.** Every sign-in mints a workspace
+(`lib/auth.ts` → `ensureWorkspaceForUser`, one transaction), so this is an
+ANOMALY screen now rather than the normal state of an internal product nobody
+self-serves into. That is why the wording names the action that actually retries
+it, instead of naming somebody to ask.
 
 ## 6. Auth, and the one thing that fails silently
 
@@ -193,7 +200,8 @@ not repeated here. Two things are this app's own:
 | `/dashboard/{ws}/activity` | what changed and who changed it — §7.7 |
 | `/dashboard/{ws}/search` | grouped, faceted full search — §7.8 |
 | `/dashboard/{ws}/trash` | the bin, read-only in both modes |
-| `/dashboard/settings/{profile,account,tokens,preferences}` | §9 |
+| `/dashboard/settings/{profile,members,account,tokens,preferences}` | §9 |
+| `/invitations/{token}` | where an invitation link lands — accept or decline |
 
 Three conventions they all share, each of which is a decision:
 
@@ -473,10 +481,33 @@ other to showing everything.
 
 ## 9. Settings
 
-`/dashboard/settings/{profile,account,tokens,preferences}`, outside the workspace
-segment because three of the four are about the **blackcode account** rather than
-about this workspace — and the pages say so, because a Settings screen inside one
-app reads as that app's settings and this one is not.
+`/dashboard/settings/{profile,members,account,tokens,preferences}`, outside the
+workspace segment because most of them are about the **blackcode account** rather
+than about this workspace — and the pages say so, because a Settings screen inside
+one app reads as that app's settings and this one is not.
+
+**Members (2026-08-10) is the exception, and it is the screen the multi-app
+refactor exists for.** It is about THIS app's workspace: `sales.workspace_members`
+and `sales.invitations`. Before it, nobody could be put into b/sales from
+b/sales — membership was `platform.workspace_members` plus a per-app grant, so a
+sales user was somebody who had first been invited into an issues workspace.
+
+It is **visible by default**, not behind a role check. An owner needs it to
+invite; a member needs it to see who else is here. The page hides the invite form
+from non-owners, which is where that decision belongs — a tab that appears for
+some people and not others is how "why can Ana see this and I can't" becomes
+unanswerable.
+
+The word *workspace* does not appear on it. It says "your team", because a sales
+user has exactly one and never picks it (PLAN.md §1). Roles are shown and not
+editable: no app on this platform has a change-role route, and inventing one here
+would have been a new platform capability landed inside a tenancy migration.
+
+Inviting and removing go through `lib/mutations.ts` behind `useCanWrite()` —
+they are sales RECORDS now. **Accepting an invitation does not**, and
+`components/accept-invitation.tsx` has an entry in `lib/read-only.test.ts`
+saying why: read-only is a browser display preference, and one that could stop
+somebody joining the app at all would be a permission over their account (D-7).
 
 Preferences is the exception: `ui_mode` is keyed on (user, workspace), so that
 page resolves the workspaces this person can reach and renders one block each.

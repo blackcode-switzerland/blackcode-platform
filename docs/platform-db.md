@@ -186,9 +186,52 @@ that stopped being self-describing — so step 2 ships commented out.
 ## An app with its own workspaces (the multi-app refactor)
 
 `sales.*` gained `workspaces`, `workspace_members`, `invitations`, `labels`,
-`uploads` and `events` on 2026-08-10 (migration `0003`). **They are empty and
-nothing reads them yet**; Phase 2 bootstraps onto them and Phase 3 moves the
-query layer across. See `multiAppFinalRefactor/PLAN.md`.
+`uploads` and `events` on 2026-08-10 (migration `0003`), and **migration `0004`
+the same day put them to work**: sign-up, first-sign-in bootstrap, the members
+page and the invitation flow all read and write `sales.*`. `labels`, `uploads`
+and `events` are still fed from `platform.*` — that is Phase 3. See
+`multiAppFinalRefactor/PLAN.md`.
+
+### `0004` mirrored ids rather than remapping them, and that has two consequences
+
+Twelve of this app's tables had a foreign key on `platform.workspaces`. The
+migration copied the `platform.workspaces` rows the app actually uses into
+`sales.workspaces` **preserving the id**, then swapped each constraint — so it is
+a catalog change with no data movement and it deletes nothing.
+
+**1. The two tables drift from here, and that is correct.** After this, a
+person's issues workspace and their sales workspace are different things that
+happened to share a number on one day.
+
+**2. The id spaces must not overlap, and the sequence is what enforces it.**
+Between Phase 2 and Phase 3, this app still writes four PLATFORM tables that
+carry a `workspace_id` with an FK on `platform.workspaces`: `events`, `entities`,
+`labels`, `uploads`. Those writes now carry a SALES workspace id, and there are
+exactly two outcomes:
+
+- the id also exists in `platform.workspaces` → **the FK is satisfied and the row
+  lands against somebody else's workspace.** Silent. Measured: a sales workspace
+  minted at id 2 wrote a `platform.events` row attributed to platform workspace
+  2, which belongs to another user.
+- it does not → `violates foreign key constraint
+  events_workspace_id_workspaces_id_fk`. Loud and attributable.
+
+Mirroring ids makes the two spaces start out overlapping, so without an offset
+the early sales workspaces land squarely in the silent case. `0004` therefore
+advances `sales.workspaces_id_seq` a thousand past the `platform.workspaces`
+high-water mark, converting the silent case into the loud one until Phase 3
+points those four query layers at `sales.*`. **Do not "tidy" that offset away.**
+
+### `platform.users.active_workspace_id` is one column and two questions
+
+It is shared by every deployment, and after the split the same number means a
+different team depending on who wrote it — `/api/meta`, the issues dashboard's
+default-workspace picker and `platform-storage`'s upload attribution all read it.
+So an app that owns its workspaces **must not write its ids into that column and
+must not read its own default out of it**; it answers "which workspace by
+default" from its own tenancy (`WorkspaceSource.getDefaultForUser`). This is
+`error_events.workspace_id`'s ambiguity in the identity table, and the fix is the
+same shape: keep the column, stop asking it a question it cannot answer.
 
 Two things about that which generalise beyond this refactor:
 

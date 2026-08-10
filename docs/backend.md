@@ -107,6 +107,7 @@ shared handler needs from an app:
 |---|---|
 | `appSlug` | the identity `requireAppAccess` checks against |
 | `db` | a Drizzle client typed to the platform tables; every app's is a superset. **Supply it as a getter if the app's client is lazy** — `next build` imports every route module |
+| `workspaces` | **where this app's workspaces live** (2026-08-10). A `WorkspaceSource`: seven methods over one subject — resolve one for a caller, list them, one by id, its members, the per-app access gate, and the default workspace's read/write. `apps/issues` supplies `platformWorkspaceSource(db, APP_SLUG)`; `apps/sales` supplies its own over `sales.*`. **Required, with no platform default** — a default would mean an app that never answered the question serves, correctly and silently, against another app's tenancy |
 | `resolveUser` | the browser half is app-specific (next-auth config) |
 | `resolveSessionUser?` | session-ONLY, for `/api/tokens`. A separate field because a bearer token minting a bearer token is privilege escalation; the routes that need it throw at mount time rather than falling back |
 | `manifest?` | `X-BK-Help` / `X-BK-Changelog`. Omitted by an app with no agent landing page — a breadcrumb pointing at a 404 is worse than none |
@@ -114,7 +115,23 @@ shared handler needs from an app:
 
 The bar for a new field is high: every one is a thing each future app must supply
 forever. `schema` was in the original sketch and was dropped — shared code cannot
-type against an app's schema, and every table these routes touch is `platform.*`.
+type against an app's schema.
+
+> **`workspaces` is the field that made the last sentence of that paragraph stop
+> being true.** It used to end "…and every table these routes touch is
+> `platform.*`". That held only because every app's workspaces were in the same
+> table. `AppContext.workspaces` is the seam that replaced it: shared code still
+> never names an app's table, it asks the app. Seven methods rather than one
+> resolver because several shared entry points read tenancy, not one —
+> `/api/meta` resolves a default and lists members, `bk workspace use` writes
+> one, upload attribution reads one by id. A single resolver would have left
+> every one of those still naming `platform.*`: a seam that looks finished and is
+> not. See `packages/platform-api/src/workspace-source.ts`.
+>
+> Creating, renaming and deleting a workspace, membership writes and the whole
+> invitation state machine are deliberately NOT in it. They carry an event spine,
+> a cascade and a token lifecycle, and an app that owns its tenancy writes those
+> routes itself.
 
 **Platform route factories** live beside it, in
 `packages/platform-api/src/routes/`. A shared route is mounted in three lines:

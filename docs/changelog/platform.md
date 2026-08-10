@@ -30,6 +30,35 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-10 — an app can own its own workspaces (`AppContext.workspaces`)
+
+**Not breaking for `apps/issues` — nothing about its behaviour changed.** This is
+the platform-side half of b/sales getting its own tenancy; see
+`docs/changelog/sales.md` for what a sales client should adapt.
+
+The shared request layer no longer names a table when it resolves a workspace.
+Every app supplies a `WorkspaceSource` saying where its workspaces live, and
+`apiHandler`, `resolveWorkspace`, `GET /api/workspaces`, `GET /api/workspaces/{ws}`,
+`GET …/members`, `POST /api/me/active-workspace` and `GET /api/meta` all go
+through it. `apps/issues` supplies the `platform.workspaces`-backed one, which is
+the same set of queries it already made.
+
+**One thing worth knowing even though it does not break a client:**
+`platform.users.active_workspace_id` is ONE column shared by every deployment. It
+worked while there was one set of workspaces; with two, the same number means a
+different team depending on who wrote it. An app that owns its workspaces no
+longer writes that column and no longer reads its own default out of it. The
+issues deployment is unchanged: it still writes it, and `bk workspace use`
+against issues still sets what the issues dashboard opens.
+
+`GET /api/meta` now always lists the app SERVING the request under `apps`, with
+its `base_url`. Previously that list came only from `platform.app_access` grants,
+so a user of an app that keeps its own tenancy saw an empty object — including no
+entry for the app they were talking to. Other apps are still grant-derived: an
+agent must not discover an app its user cannot reach.
+
+---
+
 ## 2026-08-10 — `apps/sales` is live, and two shared accounts were made generic
 
 **Not breaking. Nothing to adapt** — this is a record of what changed underneath.

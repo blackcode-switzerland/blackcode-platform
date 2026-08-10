@@ -372,6 +372,12 @@ page needs something the kit does not do, it builds its own in
 0002_blob_reference_index.sql    11 triggers over 22 columns, grants, backfill, flag
 0003_sales_own_foundations.sql   6 tables: workspaces, members, invitations,
                                  labels, uploads, events. Additive; no reader
+0004_sales_owns_its_workspaces.sql  mirrors the platform.workspaces rows this
+                                 app uses into sales.workspaces PRESERVING THE
+                                 ID, copies the memberships, advances the
+                                 sequence past platform's high-water mark, and
+                                 swaps 12 foreign keys onto sales.workspaces.
+                                 Deletes nothing
 ```
 
 All three are hand-written. `drizzle-kit generate` cannot express a schema that must
@@ -652,6 +658,65 @@ no second copy to drift.
   `upload_url`/`external_url`, so a partial update can violate it invisibly — and
   only an uploaded file is covered by `platform.blob_references`, so swapping one
   for the other silently changes whether the delete gate can see it.
+
+### 7.4.2 This app owns its tenancy (2026-08-10)
+
+Workspaces, membership and invitations are `sales.*`. Before this, a sales user
+was somebody who had first been invited into an ISSUES workspace and then granted
+the sales app inside it — which is what made this product an add-on rather than
+an app.
+
+**How the shared request layer still works.** `AppContext.workspaces` is a
+`WorkspaceSource` (`packages/platform-api/src/workspace-source.ts`) and this app
+supplies its own, over `lib/db/queries/workspaces.ts`. `apiHandler`,
+`resolveWorkspace`, the workspace/members read factories, `/api/me/active-workspace`
+and `platformMetaBlock` all go through it. The plumbing is shared; the data is
+not, and that distinction is the whole refactor in one line.
+
+**Two methods on that source are deliberate no-ops, and `lib/workspace-source.test.ts`
+asserts the absence:**
+
+- `assertAppAccess` — **a member of a sales workspace is a sales user.** The
+  per-app gate (`platform.workspace_apps` + `platform.app_access`) exists to
+  switch an app on and off inside a workspace two apps share; nothing shares a
+  `sales.workspaces` row. This app no longer consults
+  `PLATFORM_ENFORCE_APP_ACCESS` anywhere. Both tables are dropped in Phase 5.
+- `setDefaultForUser` — `platform.users.active_workspace_id` is one column shared
+  by every deployment, so a sales workspace id written into it is read back by
+  `apps/issues` as one of ITS ids. The default comes from this app's own tenancy
+  instead.
+
+**What this app now serves itself**, and why each could not stay a shared factory:
+
+| Route | Why |
+|---|---|
+| `POST /api/auth/register` | self sign-up. **Carries the whitelist gate** — the account is the shared platform one, so an ungated route here is an ungated route everywhere. `lib/auth/register-gate.test.ts` |
+| `DELETE …/members/{userId}` | the row is `sales.workspace_members`, and the factory's event write would carry this workspace's id into `platform.events` |
+| `GET\|POST …/invitations`, `DELETE …/invitations/{id}` | `sales.invitations` has no `app` column — an invitation to a sales workspace IS an invitation to sales |
+| `GET …/invite-candidates` | the shared version suggested people you share an ISSUES workspace with |
+| `GET /api/me/pending-invitations` | the shared version reads `platform.workspace_invitations` |
+| `POST /api/invitations/{accept,decline}` | **these did not exist on this app at all.** `bk invite accept` is a bare verb, so it 404'd against a sales-homed CLI, and the accept link the invitations route printed pointed at a page this app did not serve. Sales could create invitations nobody could ever accept |
+
+`GET|PATCH …/workspaces/{ws}/apps…` are **gone** from this deployment, with the
+"No access to b/sales" screen.
+
+**Still hidden (PLAN.md §1):** no switcher, no create-workspace flow, no
+workspace settings page. One workspace per person, and the word never appears in
+the UI. The tables are fully multi-workspace, so that is a UI change later rather
+than a migration.
+
+**Not yet moved, and it is Phase 3's:** `labels`, `uploads` and `events` still
+write `platform.*`. Because those tables' `workspace_id` foreign keys still point
+at `platform.workspaces`, a write in a workspace that exists only in `sales.*`
+fails LOUDLY — see `docs/platform-db.md` for why the sequence offset in `0004` is
+what makes that failure loud rather than silent. **In practice this means a
+brand-new sales workspace cannot create a prospect until Phase 3 lands.**
+
+Upload attribution has the softer version of the same gap: a sales-only workspace
+resolves to no `platform.workspaces` row, so the file lands under the
+`unattributed` prefix with a NULL `workspace_id` in the ledger. That is the
+documented, lossless behaviour of that path (`platform-storage/src/attribution.ts`
+never throws) and it resolves when `sales.uploads` takes over.
 
 ### 7.5 What is not built yet
 

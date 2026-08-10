@@ -1,69 +1,51 @@
 import { redirect } from 'next/navigation'
-import { listMyWorkspaces } from '@blackcode/platform-db'
 import { getValidatedSessionUser } from '@/lib/auth/session'
-import { getDb } from '@/lib/db/client'
-import { APP_SLUG } from '@/lib/app'
+import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
 
 /**
- * ── TWO DIFFERENT EMPTIES, AND TELLING THEM APART IS THE WHOLE POINT ────────
+ * ── THE "NO ACCESS TO B/SALES" GATE IS GONE, AS OF 2026-08-10 ───────────────
  *
- * `reachable` is app-scoped: workspaces where `sales` is enabled AND this user
- * has been granted it. `memberships` is the raw list. They answer different
- * questions and collapsing them produces the failure `apps/issues` documented:
- * a member who simply has not been granted the app sees an onboarding screen
- * that quietly *works*, which hides the real problem and leaves them worse off
- * than an error would have.
+ * This file used to render TWO different empties and the whole point was
+ * telling them apart: "you belong to no workspace" versus "you belong to one,
+ * but b/sales has not been enabled for you there". The second came from
+ * `listMyWorkspaces({ app })`, which filtered `platform.workspaces` through
+ * `platform.workspace_apps` / `platform.app_access` behind
+ * `PLATFORM_ENFORCE_APP_ACCESS`.
  *
- * ── WHERE SALES DIFFERS FROM ISSUES, AND WHY IT IS NOT A REGRESSION ────────
- * Issues answers the first empty with "create your first workspace". Sales
- * cannot and must not: D-3 removes the create-workspace flow from this app
- * entirely. So the first empty is a statement of fact plus who fixes it, rather
- * than a form. It is the honest answer for a product people arrive in by
- * invitation — and the two empties still say genuinely different things, which
- * is the property being preserved.
+ * That distinction was real and is now unrepresentable: a `sales.workspaces` row
+ * is this app's, entirely, and **a member of a sales workspace is a sales user**
+ * (multiAppFinalRefactor PLAN.md §3, Phase 2 §3e). There is no second app inside
+ * it to be switched off, so there is no second empty to describe. Keeping the
+ * branch would have left a screen nobody can ever see, which reads to the next
+ * reader as protection.
  *
- * ── THE ENFORCEMENT SWITCH IS PART OF THIS ─────────────────────────────────
- * `listMyWorkspaces({ app })` filters only when `PLATFORM_ENFORCE_APP_ACCESS` is
- * on. With it off the two lists are identical, the "no access" branch is
- * unreachable, and that is the kill switch behaving as designed rather than this
- * check being broken. Worth knowing before concluding the branch is dead code:
- * it was verified by turning the switch ON and signing in as a user with no
- * sales grant.
+ * The remaining empty also changed meaning, and it is worth saying why it is
+ * kept rather than deleted. Every sign-in now mints a workspace
+ * (`lib/auth.ts` → `ensureWorkspaceForUser`, one transaction), so reaching this
+ * screen means that bootstrap failed. It is an ANOMALY screen now, not the
+ * normal state of an internal product nobody self-serves into — hence the
+ * "sign out and back in" wording, which is the action that actually retries it.
+ *
+ * `PLATFORM_ENFORCE_APP_ACCESS` is not consulted anywhere in this app any more.
+ * The variable stays set in Vercel until Phase 5 removes it and the two tables
+ * it gates.
  */
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getValidatedSessionUser()
   if (!user) redirect('/login')
 
-  const db = getDb()
-  const [reachable, memberships] = await Promise.all([
-    listMyWorkspaces(db, user.id, { app: APP_SLUG }),
-    listMyWorkspaces(db, user.id),
-  ])
+  const memberships = await listWorkspacesForUser(user.id)
 
   if (memberships.length === 0) {
     return (
       <Empty title="No workspace yet">
         <p>
-          Your account exists, but it does not belong to a workspace. b/sales is
-          internal and there is no self-serve sign-up: somebody has to invite you.
+          Your account exists, but it has no b/sales workspace. One is normally
+          created the moment you sign in, so this means that step did not finish.
         </p>
         <p>
-          Ask a workspace owner to invite <strong>{user.email}</strong>, then sign
-          in again.
-        </p>
-      </Empty>
-    )
-  }
-
-  if (reachable.length === 0) {
-    return (
-      <Empty title="No access to b/sales">
-        <p>
-          You are a member of {memberships.map((w) => w.name).join(', ')}, but
-          b/sales has not been enabled for you there.
-        </p>
-        <p>
-          A workspace owner can grant it from <strong>Workspace settings → Apps</strong>.
+          Sign out and back in with <strong>{user.email}</strong> — it retries.
+          If it keeps happening, tell an administrator.
         </p>
       </Empty>
     )

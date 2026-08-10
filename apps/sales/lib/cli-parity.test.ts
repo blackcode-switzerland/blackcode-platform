@@ -64,6 +64,15 @@ const CLI_DIR = join(REPO_ROOT, 'cli')
 const EXCLUDED_PATHS = new Map<string, string>([
   ['/api/auth/{nextauth}', 'NextAuth handler — browser session machinery, never called by the binary'],
   [
+    '/api/auth/register',
+    'browser sign-up flow (added 2026-08-10 with this app\'s self-signup). Same entry, ' +
+      'same reason, in apps/issues: an agent authenticates with a `bk_live_…` token, ' +
+      'which it can only hold because a human already created the account. A `bk` ' +
+      'command that created platform accounts would be a much larger decision than a ' +
+      'missing one — and the route is gated on the email whitelist, which is asserted ' +
+      'by lib/auth/register-gate.test.ts rather than by this file',
+  ],
+  [
     '/api/cli/authorize',
     'the browser half of `bk login` (D-21) — the binary OPENS /cli/authorize in a browser and the ' +
       'page posts here; it never calls this route itself. Same entry, same reason, in apps/issues. ' +

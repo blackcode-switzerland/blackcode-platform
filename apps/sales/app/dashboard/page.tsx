@@ -1,9 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { listMyWorkspaces } from '@blackcode/platform-db'
 import { getValidatedSessionUser } from '@/lib/auth/session'
-import { getDb } from '@/lib/db/client'
-import { APP_SLUG } from '@/lib/app'
+import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
 
 /**
  * `/dashboard` → `/dashboard/{ws}` (D-3).
@@ -26,7 +24,7 @@ export default async function DashboardIndex() {
   const user = await getValidatedSessionUser()
   if (!user) redirect('/login')
 
-  const reachable = await listMyWorkspaces(getDb(), user.id, { app: APP_SLUG })
+  const reachable = await listWorkspacesForUser(user.id)
   if (reachable.length === 1) redirect(`/dashboard/${reachable[0].slug}`)
   // Zero is the layout's "no access" empty, which has already rendered instead
   // of this page. Reaching here with zero would mean the two disagreed.

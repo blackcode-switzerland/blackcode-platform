@@ -331,3 +331,45 @@ export function useRemoveCommunication(ws: string) {
     success: ({ number }) => `Communication #${number} binned`,
   })
 }
+
+// ---------------------------------------------------------------------------
+// The team — `sales.workspace_members` and `sales.invitations` (Phase 2)
+// ---------------------------------------------------------------------------
+// These are RECORD writes, not account operations, and the distinction is the
+// one `lib/read-only.test.ts` draws by path: `/api/me` and `/api/tokens` are
+// the platform account, `/api/workspaces/…` is this app's data. Membership moved
+// from `platform.workspace_members` to `sales.workspace_members` on 2026-08-10,
+// which moved it across that line — so it belongs here, behind `useCanWrite()`,
+// with everything else that writes a sales row.
+//
+// The one that is NOT here is ACCEPTING an invitation
+// (`components/accept-invitation.tsx`, `POST /api/invitations/accept`). It is
+// not workspace-scoped and it must not be gateable: read-only is a browser
+// display preference, and a preference that could stop somebody joining the app
+// at all would be a permission over their account — D-7's misreading exactly.
+
+const teamKeys = (ws: string): QueryKey[] => [['members', ws], ['invitations', ws]]
+
+export function useInviteMember(ws: string) {
+  return useRecordMutation<{ email: string }>(ws, {
+    send: ({ email }) => apiSend('POST', wsPath(ws, '/invitations'), { email }),
+    invalidate: () => teamKeys(ws),
+    success: ({ email }) => `Invitation created for ${email}`,
+  })
+}
+
+export function useRevokeInvitation(ws: string) {
+  return useRecordMutation<{ id: number }>(ws, {
+    send: ({ id }) => apiSend('DELETE', wsPath(ws, `/invitations/${id}`)),
+    invalidate: () => teamKeys(ws),
+    success: () => 'Invitation revoked',
+  })
+}
+
+export function useRemoveMember(ws: string) {
+  return useRecordMutation<{ userId: number; email: string }>(ws, {
+    send: ({ userId }) => apiSend('DELETE', wsPath(ws, `/members/${userId}`)),
+    invalidate: () => teamKeys(ws),
+    success: ({ email }) => `${email} removed`,
+  })
+}

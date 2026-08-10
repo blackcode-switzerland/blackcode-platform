@@ -22,6 +22,59 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-10 — b/sales has its own workspaces, its own members, and self sign-up
+
+**b/sales no longer borrows another app's tenancy.** Until today a sales user was
+somebody who had first been invited into an ISSUES workspace and then granted the
+sales app inside it. Workspaces, membership and invitations now live in
+`sales.*`, and a person can sign up, get a workspace, and invite a colleague
+without the issues app existing.
+
+**What is new**
+
+- `POST /api/auth/register` — self sign-up. It carries the same whitelist gate
+  the rest of the platform uses (`SUPER_ADMINS` + the approved-address list): the
+  account it creates is the SHARED blackcode account, so an ungated sign-up here
+  would be an ungated sign-up everywhere. A non-approved address gets `403
+  not_in_whitelist`, before any lookup, so it cannot be used to probe whether
+  somebody has an account.
+- A workspace is created on your first sign-in, with you as its owner, in one
+  transaction. You are never sent away to be invited somewhere else.
+- `POST /api/invitations/accept` and `POST /api/invitations/decline` — so
+  `bk invite accept <token>` works against a sales-homed CLI. **They did not
+  exist here before**: an invitation created from sales could not be accepted
+  from sales, and the accept link it printed pointed at a page this app did not
+  serve. Both are fixed.
+- **Settings → Members** — see your team, invite by email, remove somebody.
+
+**What changed for a client**
+
+- `bk workspace list`, `bk workspace show`, `bk member list`, `bk invite …` and
+  `bk meta` against the sales deployment now answer about SALES workspaces. If
+  you were relying on a sales-homed `bk` to show you an issues workspace, use
+  `--app-server issues` or `bk app use issues`.
+- `bk workspace use <slug>` against sales no longer changes the workspace the
+  ISSUES deployment defaults to. They were one setting and are now two, which is
+  the fix: one numeric id could not mean two different teams.
+- `bk meta`'s `active_workspace` is your sales workspace, resolved from this
+  app's own tenancy rather than from a shared column.
+- Invitations still report `email_sent: false` — this deployment sends no email.
+  The response now carries `accept_url`, which is the link to hand over.
+- Roles are shown and not editable; no app has a change-role route yet.
+
+**Removed**
+
+- The "No access to b/sales" screen, and the per-app access check behind it.
+  **A member of a sales workspace is a sales user.** `GET|PATCH
+  /api/workspaces/{ws}/apps…` are gone from this deployment; per-workspace app
+  switching is an issues concept and does not apply to a workspace only sales
+  can see.
+
+**Not changed:** `apps/issues` — not one row of its data moved, and its
+workspaces, members, invitations and per-app access behave exactly as before.
+
+---
+
 ## 2026-08-07 — `bk sales trash purge` destroyed communications without saying which
 
 `bk sales trash purge communication:17` printed

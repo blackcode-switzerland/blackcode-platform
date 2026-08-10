@@ -124,20 +124,87 @@ const RECORD_WRITES = 'lib/mutations.ts'
  * The `/api/workspaces/…` rule below applies to these files TOO, which is what
  * stops an allowance here from quietly becoming permission to write records.
  */
-const ACCOUNT_WRITERS = new Map<string, string>([
-  ['components/cli-authorize-form.tsx', '`bk login` mints a platform token — POST /api/cli/authorize'],
-  ['components/settings/profile-settings.tsx', 'your blackcode profile — PATCH /api/me'],
-  ['components/settings/token-settings.tsx', 'platform API tokens — /api/tokens'],
+interface AccountWriter {
+  /** Why this module may call `apiSend` at all. */
+  why: string
+  /**
+   * Set when the module legitimately writes a WORKSPACE-SCOPED path.
+   *
+   * Exactly one module qualifies and it is not a loophole: `sales.user_preferences`
+   * is keyed on (user, workspace), so the caller's own display preference has a
+   * workspace in its path while being nobody else's data. Every other
+   * workspace-scoped write is a shared record and belongs in `lib/mutations.ts`.
+   *
+   * It has to be DECLARED rather than inferred, because "workspace-scoped" and
+   * "shared record" are the same shape from the outside. An undeclared one fails.
+   */
+  workspaceScoped?: string
+}
+
+const ACCOUNT_WRITERS = new Map<string, AccountWriter>([
+  [
+    'components/cli-authorize-form.tsx',
+    { why: '`bk login` mints a platform token — POST /api/cli/authorize' },
+  ],
+  ['components/settings/profile-settings.tsx', { why: 'your blackcode profile — PATCH /api/me' }],
+  ['components/settings/token-settings.tsx', { why: 'platform API tokens — /api/tokens' }],
+  [
+    'components/accept-invitation.tsx',
+    { why: 'accepting or declining an invitation — POST /api/invitations/{accept,decline}, ' +
+      'added 2026-08-10 with this app\'s own invitations. It is NOT workspace-scoped ' +
+      'and must not be gateable: read-only is a browser display preference, and a ' +
+      'preference that could stop somebody joining the app at all would be a ' +
+      'permission over their account (D-7). Note that INVITING and REMOVING are the ' +
+      'other way round — those are `sales.workspace_members` rows and live in ' +
+      'lib/mutations.ts behind useCanWrite(), which is where the path rule below put ' +
+      'them.' },
+  ],
   [
     'components/settings/preference-settings.tsx',
-    'the ui_mode switch itself. It cannot go through `useRecordMutation`: that ' +
-      'one refuses in read-only, and a switch you could not switch back would be ' +
-      'a lock rather than a preference.',
+    {
+      why:
+        'the ui_mode switch itself. It cannot go through `useRecordMutation`: that ' +
+        'one refuses in read-only, and a switch you could not switch back would be ' +
+        'a lock rather than a preference.',
+      workspaceScoped:
+        '`sales.user_preferences` is keyed on (user, workspace), so this write is ' +
+        'workspace-scoped while being the caller\'s own setting rather than a ' +
+        'shared record. Declared here because the path rule below cannot tell the ' +
+        'two apart, and an undeclared workspace-scoped write must fail.',
+    },
   ],
 ])
 
-/** `/api/workspaces/…` in a string literal — a sales record, not an account op. */
-const WORKSPACE_PATH = /(['"])\/api\/workspaces\//
+/**
+ * A write aimed at a sales RECORD rather than at the account.
+ *
+ * ===========================================================================
+ * WIDENED 2026-08-10 — THE FIRST VERSION MISSED THE TWO COMMON SPELLINGS
+ * ===========================================================================
+ * It was `/(['"])\/api\/workspaces\//` — a quote, then the literal path. That
+ * matches only a single- or double-quoted constant path, and a record path is
+ * almost never one, because it carries the workspace and a number:
+ *
+ *   1. **A template literal.** `` `/api/workspaces/${ws}/members/1` `` starts
+ *      with a BACKTICK, which the character class did not include. Any path with
+ *      an interpolated id — i.e. every record path written by hand — was
+ *      invisible to this rule.
+ *   2. **`wsPath(ws, '/members/1')`.** The app's own helper builds the prefix
+ *      (`lib/client.ts`), so a module using it contains no `/api/workspaces/`
+ *      text at all. This is the spelling the rest of the app actually uses.
+ *
+ * Neither hole mattered while `ACCOUNT_WRITERS` held four modules that all wrote
+ * constant `/api/me` and `/api/tokens` paths. It started mattering the moment
+ * `components/accept-invitation.tsx` was added to that list — an allowed module
+ * whose neighbours in this app write through `wsPath`. Found by STEP 2 of the
+ * standing rule ("what would this still pass on?"): injecting a workspace path
+ * into an allowed module left the suite GREEN, and the injection was the natural
+ * spelling rather than a contrived one. CLAUDE.md finding #11's mechanism — the
+ * granularity of a text scan is part of what it checks.
+ *
+ * All three alternatives are watched failing individually; see the header.
+ */
+const WORKSPACE_PATH = /(['"`])\/api\/workspaces\/|\bwsPath\s*\(/
 
 describe('the inputs', () => {
   it('found the modules this file is about', () => {
@@ -197,7 +264,8 @@ describe('read-only is a property of the tree', () => {
     // path: `/api/me` and `/api/tokens` are the account, `/api/workspaces/…` is
     // this app's data.
     const offenders: string[] = []
-    for (const [file] of ACCOUNT_WRITERS) {
+    for (const [file, entry] of ACCOUNT_WRITERS) {
+      if (entry.workspaceScoped) continue
       const src = codeOf(readFileSync(join(APP_ROOT, file), 'utf8'))
       if (/\bapiSend\s*[<(]/.test(src) && WORKSPACE_PATH.test(src)) offenders.push(file)
     }
@@ -206,6 +274,25 @@ describe('read-only is a property of the tree', () => {
       'an account-surface module is sending a write at a workspace-scoped path. ' +
         'That is a sales record and it belongs in lib/mutations.ts, behind ' +
         `useCanWrite():\n${offenders.join('\n')}`
+    ).toEqual([])
+  })
+
+  // An exemption that has outlived its reason is coverage quietly dropped —
+  // the same rule `cli-parity.test.ts` applies to EXCLUDED_PATHS. A module that
+  // declares `workspaceScoped` and no longer writes such a path is exempt from a
+  // rule it no longer needs, and the next workspace-scoped write somebody adds
+  // to it passes unseen.
+  it('every workspaceScoped declaration is still true', () => {
+    const stale: string[] = []
+    for (const [file, entry] of ACCOUNT_WRITERS) {
+      if (!entry.workspaceScoped) continue
+      const src = codeOf(readFileSync(join(APP_ROOT, file), 'utf8'))
+      if (!WORKSPACE_PATH.test(src)) stale.push(`${file} — "${entry.workspaceScoped}"`)
+    }
+    expect(
+      stale,
+      'these modules are exempt from the workspace-path rule and no longer write ' +
+        `one. Delete the declaration:\n${stale.join('\n')}`
     ).toEqual([])
   })
 

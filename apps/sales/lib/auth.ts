@@ -15,20 +15,33 @@
 // nothing about it is configured here.
 //
 // ---------------------------------------------------------------------------
-// THE ONE PLACE THIS DIFFERS FROM `apps/issues`, AND IT IS DELIBERATE
+// A FIRST SIGN-IN HERE CREATES A WORKSPACE. THAT REVERSES D-3, ON PURPOSE.
 // ---------------------------------------------------------------------------
-// **A first sign-in here does NOT create a workspace.** Issues calls
-// `ensureDefaultWorkspace` on a new Google account; sales does not, and D-3 is
-// why: sales renders no workspace switcher and no create-workspace flow, so a
-// workspace minted at sign-in would be one the human can neither see nor leave —
-// and it would arrive with `sales` not enabled on it, which is the "onboarding
-// screen that quietly works while hiding the real problem" that
-// `app/dashboard/layout.tsx` exists to prevent.
+// Until 2026-08-10 this file deliberately did NOT create one, and the reasoning
+// was right for what was true then: sales rendered no switcher and no create
+// flow, so a workspace minted at sign-in was one the human could neither see nor
+// leave — and it arrived with `sales` not enabled on it in
+// `platform.workspace_apps`, which is the "onboarding screen that quietly works
+// while hiding the real problem" `app/dashboard/layout.tsx` existed to prevent.
 //
-// A person who belongs to nothing gets told so, by name, with who can fix it.
-// That is the honest answer for an internal pipeline nobody self-serves into.
+// **Both halves of that premise are gone.** This app owns `sales.workspaces`, so
+// there is no per-app switch left to be off; and it has a members page, so the
+// workspace is something the person can see and act on. What is left of D-3 —
+// no switcher, no create-workspace page, one workspace per person — is intact
+// and is `ensureWorkspaceForUser`'s whole shape.
 //
-// Pending invitations ARE still materialised: those were addressed to this
+// The workspace and the owner's membership row are written in ONE transaction.
+// That is not tidiness: a workspace with no membership locks its own owner out
+// of their data, because every read in this app joins on membership — and it is
+// exactly the shape a partial failure leaves behind.
+//
+// It runs on BOTH providers and on every sign-in, not just new accounts. The
+// credentials provider cannot know whether an account is new, and the function
+// is keyed on MEMBERSHIP rather than account age, which is also what makes the
+// invitation flow correct: somebody who accepted an invitation already belongs
+// to a workspace and must not be handed a second one of their own.
+//
+// Pending invitations are still materialised: those were addressed to this
 // person by somebody who already decided they belong.
 import { type NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
@@ -46,6 +59,23 @@ import {
   verifyPassword,
 } from '@blackcode/platform-auth'
 import { getDb } from './db/client'
+import { ensureWorkspaceForUser } from './db/queries/workspaces'
+
+/**
+ * The first-sign-in bootstrap, run for both providers.
+ *
+ * NEVER THROWS. A sign-in that fails because a workspace could not be minted is
+ * a person locked out of an account that exists — and this is idempotent, so the
+ * next sign-in retries it. The dashboard's "no workspace yet" screen is the
+ * visible fallback, and it is now an anomaly rather than the normal state.
+ */
+async function bootstrapWorkspace(userId: number, name: string | null, email: string) {
+  try {
+    await ensureWorkspaceForUser(userId, name, email)
+  } catch (err) {
+    console.error('ensureWorkspaceForUser failed at sign-in:', err)
+  }
+}
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
@@ -74,6 +104,9 @@ export const authOptions: NextAuthOptions = {
         if (!ok) return null
 
         await touchLastLogin(getDb(), user.id)
+        // Both providers bootstrap. This one cannot know whether the account is
+        // new, which is why the function is keyed on membership — see the header.
+        await bootstrapWorkspace(user.id, user.name, user.email)
         return {
           id: String(user.id),
           email: user.email,
@@ -99,7 +132,6 @@ export const authOptions: NextAuthOptions = {
             avatar_url: user.image,
           })
           if (result.was_new) {
-            // No `ensureDefaultWorkspace` — see the header.
             try {
               await materializePendingInvitationsForUser(
                 getDb(),
@@ -110,6 +142,12 @@ export const authOptions: NextAuthOptions = {
               console.error('materialize pending invitations failed:', mErr)
             }
           }
+          // OUTSIDE the `was_new` branch, unlike the invitation materialisation
+          // above. That one is a one-time conversion of rows addressed to a
+          // brand-new account; this is "does this person have a workspace yet",
+          // which stays worth asking — an existing account whose bootstrap
+          // failed, or one created before this phase, self-heals on next login.
+          await bootstrapWorkspace(result.user.id, result.user.name, result.user.email)
         } catch (error) {
           console.error('Failed to upsert user:', error)
         }
