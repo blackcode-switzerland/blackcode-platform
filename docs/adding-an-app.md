@@ -823,6 +823,23 @@ cheaper than pretending otherwise.
 6. **A 409 has no branch in the CLI's `classify()`**, so `confirm_mismatch` exits
    1 from the server and 2 from the binary. One condition, two exit codes, and an
    agent cannot write one recovery.
+7. **Email is app-local, and the first app that needs it twice will copy it.**
+   `apps/issues/lib/email/` — a lazy Resend client, `fromAddress()`, and the
+   templates — is the last significant piece of shared behaviour that never
+   became a package, because `apps/issues` was the only sender and still is.
+   **If your app needs to send email, promote it to `packages/platform-email`
+   first; do not copy the directory.** Two copies means two `fromAddress()`
+   functions and two sets of templates, and the second one goes stale silently —
+   nothing renders both, so nothing compares them.
+
+   The move is small and the shape is already decided: the **address** is
+   platform-wide (`admin@blackcode.ch`, on the apex domain, because Resend's
+   free plan verifies one domain per account), and the **app identity lives in
+   the display name** — `Blackcode Issues <admin@blackcode.ch>`. So
+   `fromAddress()` takes the app, exactly like every other value that had to
+   stop assuming one deployment: `platform.uploads.app`, `labels.app`,
+   `comments.parent_type`. Written down 2026-08-10, when the sending domain was
+   made generic and the module was the one thing left that was not.
 
 ## The record: what walking this document found
 
