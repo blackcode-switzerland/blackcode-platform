@@ -1165,8 +1165,15 @@ Combined with `apiHandler`, this means 5xx errors are captured for the
 
 ### A new column
 
-Edit `lib/db/schema.ts` → `npm run db:generate` → review the SQL in
-`lib/db/migrations/` → `npm run db:migrate`.
+Edit the app's `lib/db/schema.ts` → `npm run db:generate:<app>` → review the SQL
+in that app's `lib/db/migrations/` → `npm run db:migrate:<app>`.
+
+> **Name the app.** Every app has its own schema, its own migrations directory
+> and its own Drizzle ledger (D-34). The root scripts were `db:generate` /
+> `db:migrate` while there was one app; they are `…:issues` and `…:sales` now,
+> because an unqualified name silently generated into `apps/issues` no matter
+> which app you were working on. Running the old name fails with
+> "missing script", which is the point.
 
 ### A new table
 
@@ -1182,8 +1189,9 @@ then add a `lib/db/queries/<thing>.ts` module. `project_updates` (migration
 ```bash
 docker compose up -d        # Postgres 16 on localhost:5434
 npm install
-npm run db:migrate
-npm run dev                 # http://localhost:3000
+npm run db:migrate:issues   # or :sales
+npm run dev                 # issues on http://localhost:3000
+                            # npm run dev:sales for the sales app
 ```
 
 ### Database client (`lib/db/client.ts`)
@@ -1198,10 +1206,13 @@ compatibility, but the default client uses `pg`.
 Managed by `drizzle-kit` (config in `drizzle.config.ts`):
 
 ```bash
-npm run db:generate   # author a migration from schema diffs
-npm run db:migrate    # apply pending migrations
-npm run db:push       # push schema directly (prototyping only)
-npm run db:studio     # browse data
+npm run db:generate:issues   # author a migration from schema diffs
+npm run db:migrate:issues    # apply pending migrations
+npm run db:push:issues       # push schema directly (prototyping only)
+npm run db:studio:issues     # browse data
+
+npm run db:generate:sales    # the same, per app
+npm run db:migrate:sales
 ```
 
 Migration files are numbered `0000_…` upward in `lib/db/migrations/`, with

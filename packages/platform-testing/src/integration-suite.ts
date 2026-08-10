@@ -35,7 +35,8 @@
 //      day someone provisions a database for CI, they set that and the option
 //      is taken, with no test file edited.
 //
-// (c) was rejected outright. Evidence in a .txt file under `salesImplementation/`
+// (c) was rejected outright. Evidence was in a .txt file under `salesImplementation/`,
+// archived out of the repo on 2026-08-10 (~/Documents/BAK/blackcode-platform-backups/)
 // is evidence in a directory whose own README says it is deleted when the
 // project ships.
 //

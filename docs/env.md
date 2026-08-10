@@ -11,6 +11,35 @@ Two are not.** Get the distinction wrong on a new app and the failure is silent:
 | **Shared resource, same value, different reason** | `DATABASE_URL` and `MIGRATE_DATABASE_URL` point at the **same Neon project** (different roles per app); `BLOB_READ_WRITE_TOKEN` at the **same Blob store** | A second database or store breaks every cross-app feature |
 | **Per project** | `NEXTAUTH_URL`, `SUPER_ADMINS`, `GOOGLE_CLIENT_ID`/`SECRET`, `RESEND_*`, `RUN_MIGRATIONS`, `PLATFORM_ENFORCE_APP_ACCESS` | Nothing shared; set them per app |
 
+## What is actually set, per project — audited 2026-08-10
+
+Every `Status: Set ✓` further down was written when `bc-issues` was the only
+project, and means "set on issues". This table is the two-app truth. Re-audit it
+with `vercel env ls` rather than trusting it; it is a snapshot, not a mechanism.
+
+| Variable | `bc-issues` | `bc-sales` | Note |
+|---|---|---|---|
+| `DATABASE_URL` | ✅ prod + preview | ✅ prod | different Postgres ROLE per app, same Neon project |
+| `MIGRATE_DATABASE_URL` | ✅ prod | ✅ prod | `neondb_owner`, same value |
+| `NEXTAUTH_URL` | ✅ prod | ✅ prod | per app. **Was wrong on issues until 2026-08-10** |
+| `NEXTAUTH_SECRET` | ✅ prod + preview | ✅ prod | **same value**, rotated onto both 2026-08-10 |
+| `AUTH_COOKIE_DOMAIN` | ✅ prod only | ✅ prod only | `.blackcode.ch`. Never on preview |
+| `BLOB_READ_WRITE_TOKEN` | ✅ prod + preview | ✅ prod + preview | **prod → real store, preview → preview store** |
+| `RUN_MIGRATIONS` | ✅ prod only | ✅ prod only | on preview it writes to the production database |
+| `SUPER_ADMINS` | ✅ | ✅ | issues has two addresses, sales one — deliberate, per app |
+| `GOOGLE_CLIENT_ID` / `_SECRET` | ✅ | ✅ | same OAuth client, **different secret** — a client can hold two |
+| `PLATFORM_ENFORCE_APP_ACCESS` | ❌ unset | ✅ `1` | unset on issues by design: it is the app everyone has |
+| `RESEND_API_KEY` / `_FROM_EMAIL` | ✅ | ❌ unset | sales cannot send email, deliberately |
+
+**Set on `bc-issues` and read by NOTHING:** 17 `NEON_*` variables
+(`NEON_PGPASSWORD`, `NEON_DATABASE_URL`, …) injected by the Neon integration,
+plus `BLOB_STORE_ID` and `BLOB_WEBHOOK_PUBLIC_KEY` from the Blob integration.
+No code in this repo reads any of them — the apps use `DATABASE_URL` and
+`BLOB_READ_WRITE_TOKEN`. The `NEON_*` set duplicates live database credentials,
+which is the reason to remove them rather than tidiness. Expect the integration
+to re-add them; if it does, that is the integration's business and not a signal
+they are needed.
+
 **Quick commands:**
 ```bash
 vercel env ls production                          # list all
@@ -44,7 +73,7 @@ vercel env add DATABASE_URL production --value "<new-url>" --yes
 
 After changing, always run migrations against the new DB:
 ```bash
-DATABASE_URL="<new-url>" npm run db:migrate
+DATABASE_URL="<new-url>" npm run db:migrate:issues   # name the app
 ```
 
 ---
@@ -116,7 +145,7 @@ vercel env add NEXTAUTH_SECRET production --value "<the same new secret>" --yes
 
 ```bash
 ./devops/release.sh web issues
-# ./devops/release.sh web sales      ← and every other registered app
+./devops/release.sh web sales      # and every other registered app
 ```
 
 Rotating one app and not the others produces exactly the split-brain above,
@@ -388,7 +417,7 @@ SUPER_ADMINS=balathanusan@blackcode.ch
 
 # Do NOT set RUN_MIGRATIONS here. Leaving it unset is what keeps
 # `npm run build` from writing to your database. Migrate explicitly instead:
-#   npm run db:migrate
+#   npm run db:migrate:issues   (name the app)
 ```
 
 Start the local Postgres with `docker compose up -d`, then — **from the repo

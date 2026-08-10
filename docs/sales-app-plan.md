@@ -13,11 +13,16 @@
 > section is the half of this plan that was one-time platform work; you do not
 > pay it again.
 >
-> ## If you are deploying sales, read `salesImplementation/DEPLOY-TODO.txt`
+> ## Sales is deployed. 2026-08-10.
 >
-> Release 2. It is the ordered runbook, and its database steps are in a
-> **different order from anything written here** — the order in this plan was
-> rehearsed on 2026-08-07 and it fails silently (CLAUDE.md guardrails #15, #16).
+> `sales.blackcode.ch` is live. The runbook that got it there was walked end to
+> end and then archived out of the repo, to
+> `~/Documents/BAK/blackcode-platform-backups/salesImplementation/DEPLOY-TODO.txt`.
+>
+> **Do not follow this plan's database order.** It was rehearsed on 2026-08-07
+> and it fails silently (CLAUDE.md guardrails #15, #16). The order that works is
+> in [`adding-an-app.md`](adding-an-app.md), which also now carries what the real
+> deployment found that no plan predicted.
 >
 > ## What this file is still good for
 >
@@ -37,7 +42,19 @@
 > phases accumulated have been moved into `adding-an-app.md`; that is where they
 > are maintained now.
 >
-> Delete this file once the decisions have somewhere better to live.
+> **Do NOT delete this file, and do not move it.** That line used to say "delete
+> it once the decisions have somewhere better to live", which was wrong in a way
+> nobody checked: **about 50 source files cite `docs/sales-app-plan.md` by full
+> path** — `app-context.ts`, `handler.ts`, `root.go`, `platform.go`, half of
+> `packages/platform-db`, and so on — each anchoring a D-number to the reasoning
+> behind it. Deleting or moving this file turns every one of those into a
+> citation of nothing, and this repo's own rule (CLAUDE.md finding #18) is that a
+> citation is a claim about what the repo protects.
+>
+> If the decisions ever do get a better home, the move is: relocate the file,
+> then `grep -rl 'sales-app-plan' ` and update every citation in the same commit.
+> Checked 2026-08-10, when this file was a candidate for archiving and the
+> citations are what stopped it.
 
 ---
 

@@ -4,9 +4,16 @@
 
 A **monorepo** (npm workspaces + Turborepo) holding Blackcode's internal apps.
 
+**Two apps are in production**, on one database and one login:
+`issues.blackcode.ch` and `sales.blackcode.ch` (live since 2026-08-10).
+
 - **`apps/issues`** — an AI-native issue tracker (Linear-style). Next.js 16 App
   Router, TypeScript, Tailwind v4, Drizzle ORM + PostgreSQL, next-auth, TanStack
-  Query, Framer Motion. This is the product.
+  Query, Framer Motion. The first app, and where most shared patterns were born.
+- **`apps/sales`** — prospects, meetings, communications. The **second** app, and
+  the reason most of the platform exists in its current shape: it was the second
+  question every shared thing had ever been asked. Same stack; its own schema,
+  migrations, CLI group and docs.
 - **`apps/_scaffold`** — the scaffold. A real, minimal app: one entity, one
   route, its own migrations and ledger, nine platform route factories, an entity
   projection and its reconciler, a CLI command group, a guide topic, a page.
@@ -392,12 +399,23 @@ See `AGENTS.md` for the short version.
 ### Releasing
 
 `./devops/release.sh cli minor` (GitHub + npm; needs `npm login` + an OTP) and
-`./devops/release.sh web` (Vercel production). Both interactive.
+`./devops/release.sh web <app>` (Vercel production — **a web release targets
+exactly one app**, so name it). Both interactive. `./devops/release.sh apps`
+lists what is deployable; `app_registry()` in that script is the authority.
 
-**The order is: deploy web, then npm, then deploy web AGAIN.** The release script
-bumps `CLI_LATEST_VERSION` in a commit it creates itself, so that commit lands
-*after* the first web deploy — without the second deploy, production keeps
-advertising the old version and no installed client is told an update exists.
+**The order is: deploy web, then npm, then deploy web AGAIN — and "web" means
+EVERY app, both times.** The release script bumps `CLI_LATEST_VERSION` in a
+commit it creates itself, so that commit lands *after* the first web deploy —
+without the second deploy, production keeps advertising the old version and no
+installed client is told an update exists. And every deployment answers the
+"current version?" question from that one shared constant while `bk` asks
+whichever app the user is *homed* on, so deploying only one leaves everyone
+homed on the other uninformed. Both halves verified on 2026-08-10.
+
+> **Vercel does not read `.gitignore`.** The repo-root **`.vercelignore`** is
+> what keeps a deploy at ~66 MB instead of 8.5 GB (`.turbo` is 16 GB on disk).
+> It is shared by every app — never add a per-app one. If an upload ever reports
+> gigabytes, stop and find out why before letting it finish.
 
 `CLI_MIN_VERSION` in `packages/platform-agent/src/cli-version.ts` hard-blocks
 every older binary with exit 8. **Publish to npm before raising it** — raise it

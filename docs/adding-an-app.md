@@ -409,35 +409,49 @@ routes attributed to `platform`, and its parity test will tell you so.
 
 ---
 
-> ## ⚠️ STEPS 8 AND 9 ARE STILL UNVERIFIED — AND THIS BOX IS STILL OPEN
+> ## ✅ CLOSED — every step walked against a real deployment, 2026-08-10
 >
-> Steps 1–6 were walked on 2026-08-05 against a throwaway app. The real
-> `apps/sales` was then built, and on **2026-08-07** it closed steps 7 and 10 for
-> real. **Steps 8 and 9 remain unwalked**, because they need a Vercel project, a
-> subdomain and DNS — credentials no agent on this project had.
+> Steps 1–6 were walked on 2026-08-05 against a throwaway app; steps 7 and 10 on
+> 2026-08-07 by `apps/sales`. **Steps 8 and 9 were closed on 2026-08-10 by
+> deploying `apps/sales` to production**, which is the first time this checklist
+> has been followed end to end by anyone.
 >
-> **Do not sign this box because the app builds.** Sign it when the four proofs
-> below have actually been observed, in production, by the person who ran the
-> deploy.
+> **Do not sign this box because the app builds.** Sign it when the proofs below
+> have actually been observed, in production, by the person who ran the deploy.
 >
 > | Step | Status | What closes it — the observation, not the intent |
 > |---|---|---|
 > | **7** `docs/changelog/<app>.md` | ✅ **closed 2026-08-07**, `apps/sales` | `bk changelog` and `GET /api/changelog` return sales entries with no registry edit. The directory read is the discovery mechanism; adding the file was the whole step. |
-> | **8** Vercel project | ⬜ **open** | (a) `./devops/release.sh apps` lists the app; (b) `./devops/release.sh web <app>` deploys to the intended project and **not** to whichever one the working copy was last linked to; (c) a commit touching only another app does **not** trigger a build, i.e. `turbo-ignore` fired; (d) the app's own `vercel.json` region took effect — sales' first deploy is the first time any of this was true for a second project. |
-> | **9** Subdomain + cookie domain | ⬜ **open** | Sign in at app A in a browser, open app B, **already signed in**. That single observation is the step. It also proves `NEXTAUTH_SECRET` was copied rather than generated, which nothing else does. |
+> | **8** Vercel project | ✅ **closed 2026-08-10**, `apps/sales` | (a) `./devops/release.sh apps` lists two apps ✓; (b) `release.sh web sales` deployed to `bc-sales` via `VERCEL_PROJECT_ID`, not to the linked project ✓; (c) **not observable, and that is fine** — `vercel.json` sets `git.deploymentEnabled.main = false`, so a push never builds and `turbo-ignore` has nothing to skip. Delete this proof or re-scope it to preview builds; (d) region ✓ — `vercel inspect` shows every lambda `[fra1]`. |
+> | **9** Subdomain + cookie domain | ✅ **closed 2026-08-10**, `apps/sales` | Signed in at `issues.blackcode.ch`, opened `sales.blackcode.ch`, **already signed in** — the app rendered the user's identity and workspace list with no login. Note it proves the two apps hold the SAME `NEXTAUTH_SECRET`; it does not prove it was *copied* (here it was rotated onto both, because the value could not be read — see `docs/env.md`). |
 > | **10** `apps/<app>/docs/` | ✅ **closed 2026-08-07**, `apps/sales` | `apps/sales/docs/{backend,frontend}.md` exist and describe only sales; the split rule held under a real second app. |
 >
-> **Until 8 and 9 are signed, treat them as a reconstruction from how
-> `apps/issues` is configured — not as instructions anyone has followed.** The
-> full, ordered version of what to do is
-> `salesImplementation/DEPLOY-TODO.txt` → Release 2; this section is the summary
-> of it that survives after that file is deleted.
+> ### What the first real deployment found that this checklist did not say
+>
+> Four things went wrong on 2026-08-10. None reached a user; all four are now
+> covered in the steps below, and they are what a reconstruction could not know.
+>
+> 1. **The repo had no `.vercelignore`, and Vercel does not read `.gitignore`.**
+>    The first upload was **8.5 GB** — `.turbo` (16 GB on disk) and `cli/dist`
+>    (1.1 GB). With the file: 66 MB. It lives at the repo root and is shared by
+>    every app, so app #3 inherits the fix.
+> 2. **`AUTH_COOKIE_DOMAIN` failed the build, correctly.** `NEXTAUTH_URL` on the
+>    *existing* app was still the `*.vercel.app` URL. Nothing had ever depended
+>    on it — NextAuth derives the origin from the request — so it had been wrong
+>    and invisible for months. **Check `NEXTAUTH_URL` is the app's real public
+>    URL on EVERY app before setting the cookie domain**, not just the new one.
+> 3. **`NEXTAUTH_SECRET` could not be copied.** It is stored sensitive and is
+>    unreadable to the dashboard and to `vercel env pull`. Rotation onto every
+>    app is the answer; `docs/env.md` now leads with checking which you face.
+> 4. **Connecting the Blob store put the PRODUCTION store on the new app's
+>    PREVIEW environment too** — a preview build could have deleted real files.
+>    Connect production and preview stores separately, and check afterwards.
 >
 > | | |
 > |---|---|
-> | Walked | steps 1–6, 2026-08-05, throwaway app · steps 7 + 10, 2026-08-07, `apps/sales` |
-> | Still unverified | steps **8** and **9** |
-> | Closed by | *(the person who deploys the first real app — your name, the app, the date, and which of the proofs above you actually saw)* |
+> | Walked | steps 1–6, 2026-08-05, throwaway app · steps 7 + 10, 2026-08-07, `apps/sales` · steps **8 + 9**, 2026-08-10, `apps/sales` in production |
+> | Still unverified | **nothing** — but see 8(c) above, which is unobservable by design rather than passed |
+> | Closed by | Balathanusan Jeyarasan, `apps/sales`, 2026-08-10. Proofs seen: 8(a), 8(b), 8(d), 9. |
 
 ## 7. `docs/changelog/sales.md`
 
@@ -461,10 +475,24 @@ update — `bk changelog` and `GET /api/changelog` pick it up automatically.
   file until 2026-08-07; nothing in the checklist mentioned it, because
   `apps/issues` had had one since before the monorepo existed.
 - Environment: **the full list is in `docs/env.md`, with which values are
-  platform-wide and which are per-project.** `NEXTAUTH_SECRET` is **copied from
-  an existing app, never generated** (D-39) — see step 9.
+  platform-wide and which are per-project.** `NEXTAUTH_SECRET` must end up
+  **identical on every app** (D-39) — see step 9 for why copying it may not be
+  possible.
 - `RUN_MIGRATIONS=1` **Production only**. On Preview it means a preview build
   writes to the production database.
+- **Connect the Blob store to PRODUCTION only, then connect the *preview* store
+  to PREVIEW separately.** The dashboard's Connect Project dialog offers
+  "Production, Preview" together and that is the wrong answer: it points the new
+  app's preview builds at the real file store, where a preview can delete files
+  that are still in use. There is no undo. Done wrong on 2026-08-10 and caught by
+  looking at `vercel env ls` afterwards, which is the check — the dialog gives no
+  hint. Also tick **"Add a read-write token env var"**: without it you get
+  `BLOB_STORE_ID` and `BLOB_WEBHOOK_PUBLIC_KEY`, which nothing reads, and not
+  `BLOB_READ_WRITE_TOKEN`, which is the one the upload route needs.
+- **`.vercelignore` is at the REPO ROOT and is already correct** — you inherit
+  it. Do not add a per-app one. Vercel does not read `.gitignore`, and without
+  that file the first deploy of any app in this monorepo uploads `.turbo` and
+  `cli/dist`: 8.5 GB instead of 66 MB, found on 2026-08-10.
 
 ## 9. Subdomain and cookie domain
 
@@ -487,10 +515,21 @@ not accept, and the symptom is every sign-in succeeding and bouncing back to
 Never set `AUTH_COOKIE_DOMAIN` on Preview or Development: a preview runs on
 `*.vercel.app`, which is not under `.blackcode.ch`.
 
-**And copy `NEXTAUTH_SECRET` from an existing app rather than generating one
-(D-39).** The cookie is encrypted with it; an app holding a different secret
-cannot read the others' sessions, and the only symptom is a person being asked
-to sign in twice. `docs/env.md` has the procedure and the rotation rule.
+**Step 2 is not only about the new app.** On 2026-08-10 the *existing* app's
+`NEXTAUTH_URL` was still its `*.vercel.app` URL — wrong for months, invisible
+because NextAuth derives the origin from the request, and harmless right up until
+a cookie domain depended on it. It failed that app's build, not the new one's.
+**Check `NEXTAUTH_URL` on every app before setting the cookie domain anywhere.**
+
+**And `NEXTAUTH_SECRET` must be the SAME on every app (D-39)** — the cookie is
+encrypted with it, an app holding a different one cannot read the others'
+sessions, and the only symptom is a person being asked to sign in twice.
+*Copying* is the cheap way, but **check first that you can**: it is typically
+stored sensitive, and then it is unreadable to both the dashboard and
+`vercel env pull`, which returns the literal `[SENSITIVE]`. When it cannot be
+read, generate ONE new value, set it on every app, and redeploy every app —
+which signs everyone out once, so do it on the deploy that was going to sign
+them out anyway. `docs/env.md` has both paths.
 
 ## 10. `apps/sales/docs/`
 

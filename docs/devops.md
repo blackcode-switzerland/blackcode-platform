@@ -36,9 +36,13 @@ The app slug is **required**. Without it the script lists the apps and exits 1;
 an unknown slug does the same. Preflight checks Vercel auth, the git branch and
 a clean tree, then asks to confirm before deploying.
 
-- **Production URL**: https://issues.blackcode.ch
-- **Vercel project**: `bc-issues`
-- **Dashboard**: https://vercel.com/balathanusans-projects-f76f8a7b/bc-issues
+| App | Production URL | Vercel project | Project id |
+|---|---|---|---|
+| `issues` | https://issues.blackcode.ch | `bc-issues` | `prj_bueHX5y2f7uaemskB5Q1Plwbry2p` |
+| `sales` | https://sales.blackcode.ch | `bc-sales` | `prj_p5A74QYKnig8696ES87bT6rvHMdZ` |
+
+Dashboard: `https://vercel.com/balathanusans-projects-f76f8a7b/<project>`.
+`app_registry()` in `devops/release.sh` is the authority; this table is a copy.
 
 Two things the script does deliberately:
 
@@ -59,7 +63,7 @@ Two things the script does deliberately:
 > `issues` existed during the migration window and was deleted on 2026-08-06 —
 > it never built successfully and never served anything.
 
-### Two deploy traps
+### Three deploy traps
 
 - **`--skip-domain` is partial.** It protects the *custom* domain
   (`issues.blackcode.ch`) from being re-aliased. It does **not** protect the
@@ -73,6 +77,14 @@ Two things the script does deliberately:
   (`curl -sI`, or `curl -o /dev/null -w '%{http_code}'` without `-L`) and treat
   a 3xx to `vercel.com` as protected-not-broken. Verify the real surface on the
   custom domain.
+
+- **Watch the upload size on the first deploy of a new app.** It should be about
+  **66 MB**. Vercel does **not** read `.gitignore` — it reads `.vercelignore`,
+  which lives at the repo root and is shared by every app. Before that file
+  existed the first production deploy of 2026-08-10 reported an **8.5 GB** upload
+  (`.turbo` is 16 GB on disk, `cli/dist` 1.1 GB) and was cancelled. If you ever
+  see gigabytes, stop: something is excluded that should not be, or the file is
+  not being applied.
 
 > This is the deploy-side instance of the standing rule: a green reading that
 > cannot distinguish success from a login page is not a check.
@@ -159,9 +171,23 @@ git push origin main
 # 3. If the CLI was also changed, cut a new CLI release
 ./devops/release.sh cli patch
 
-# 4. Deploy web AGAIN to make the new version gate live
+# 4. Deploy web AGAIN to make the new version gate live —
+#    EVERY app, not just the one you fixed. See below.
 ./devops/release.sh web issues
+./devops/release.sh web sales
 ```
+
+> **Step 4 is every app in `app_registry()`.** Each deployment answers "what CLI
+> version is current?" from the same shared constant, and `bk` asks whichever app
+> the user is *homed* on. Deploy only one and everyone homed on the other is
+> never told an update exists — and on a forced release, one host locks them out
+> while the other does not. `release.sh` prints the per-app list at the end of a
+> CLI release; run all of it. Verified 2026-08-10: both apps returned
+> `x-bk-cli-latest: 2.1.0` only after the second pair of deploys.
+>
+> Step 4 is also not optional busywork. The CLI release bumps the version in a
+> commit **it creates itself**, which lands after step 2's deploy — so without
+> step 4 production keeps advertising the old version.
 
 ---
 
@@ -248,7 +274,7 @@ pulling a branch that adds a migration. To run it manually against production
 instead:
 
 ```bash
-DATABASE_URL="<neon-url>" npm run db:migrate
+DATABASE_URL="<neon-url>" npm run db:migrate:issues   # name the app
 ```
 
 The Neon connection string is in Vercel → Storage → bc-issues → Connection Details.

@@ -18,7 +18,9 @@
 -- \set ON_ERROR_STOP on. NOT OPTIONAL, AND HERE IS WHAT IT COST TO LEARN.
 -- ---------------------------------------------------------------------------
 -- Rehearsed 2026-08-07 against a copy of the local database, in the order
--- `salesImplementation/DEPLOY-TODO.txt` gave (role first, migrations later).
+-- the deploy runbook gave (role first, migrations later). That runbook was
+-- archived on 2026-08-10 to ~/Documents/BAK/blackcode-platform-backups/;
+-- `docs/adding-an-app.md` carries the ordering that survived it.
 -- **Five of this file's ten statements failed and psql exited 0:**
 --
 --     psql:role.sql:18: ERROR:  role "sales_app" already exists   (rehearsal only)
