@@ -29,7 +29,7 @@ import { getDb } from '../client'
 import {
   communications,
   contacts,
-  labels,
+  salesLabels,
   meetings,
   prospectLabels,
   prospects,
@@ -107,15 +107,14 @@ export async function listProspects(filter: ListProspectsFilter): Promise<Prospe
   if (filter.q?.trim()) where.push(ilike(prospects.name, `%${filter.q.trim()}%`))
   if (filter.cursor != null) where.push(sql`${prospects.seq} < ${filter.cursor}`)
   if (filter.label?.trim()) {
-    // A label is app-scoped (D-14): `app IS NULL OR app = 'sales'` belongs in
-    // EVERY read, not just the list route — otherwise a filter by an issues
-    // label silently returns nothing and looks like "no prospects match".
+    // No app scope in this predicate any more, and its absence is the Phase 3
+    // change: `sales.prospect_labels.label_id` has a foreign key into
+    // `sales.labels`, so there is no foreign row for a scope to exclude.
     where.push(sql`EXISTS (
       SELECT 1 FROM ${prospectLabels} pl
-      JOIN ${labels} l ON l.id = pl.label_id
+      JOIN ${salesLabels} l ON l.id = pl.label_id
       WHERE pl.prospect_id = ${prospects.id}
         AND lower(l.name) = lower(${filter.label.trim()})
-        AND (l.app IS NULL OR l.app = 'sales')
     )`)
   }
 
@@ -185,19 +184,13 @@ async function decorate(rows: Prospect[]): Promise<ProspectRow[]> {
   const attached = await db
     .select({
       prospect_id: prospectLabels.prospect_id,
-      id: labels.id,
-      name: labels.name,
-      color: labels.color,
+      id: salesLabels.id,
+      name: salesLabels.name,
+      color: salesLabels.color,
     })
     .from(prospectLabels)
-    .innerJoin(labels, eq(labels.id, prospectLabels.label_id))
-    .where(
-      and(
-        inArray(prospectLabels.prospect_id, ids),
-        // App scope again — see the note in listProspects.
-        or(isNull(labels.app), eq(labels.app, 'sales'))
-      )
-    )
+    .innerJoin(salesLabels, eq(salesLabels.id, prospectLabels.label_id))
+    .where(inArray(prospectLabels.prospect_id, ids))
   const byProspect = new Map<number, ProspectLabel[]>()
   for (const l of attached) {
     const list = byProspect.get(l.prospect_id) ?? []

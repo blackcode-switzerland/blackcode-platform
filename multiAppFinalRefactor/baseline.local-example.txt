@@ -65,3 +65,6 @@ sales.uploads	0	NULL	NULL
 sales.user_preferences	1	NOID	NOID
 sales.workspace_members	0	NULL	NULL
 sales.workspaces	0	NULL	NULL
+
+# EXPECTED 2026-08-10 phase-3 agent4 (LOCAL)
+# platform.labels -1   sales rows, app = 'sales' — the query layer now reads sales.labels

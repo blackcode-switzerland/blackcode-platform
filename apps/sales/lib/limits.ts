@@ -39,7 +39,7 @@ export const PRODUCT_NAME_MAX = 120
 export const TEMPLATE_NAME_MAX = 120
 /** Document `title`. */
 export const DOCUMENT_TITLE_MAX = 200
-/** How many `platform.labels` may be attached to one prospect. */
+/** How many `sales.labels` may be attached to one prospect. */
 export const LABELS_PER_PROSPECT_MAX = 20
 
 /**

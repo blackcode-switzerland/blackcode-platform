@@ -3,10 +3,10 @@
 // DELETE /api/workspaces/{ws}/labels/{id}
 //
 // `{id}` is the label's row id, and here that IS the address: a label is a
-// `platform.labels` row with no per-workspace #number, and `bk <app> label` has
-// always addressed it that way. The app scope lives in the WHERE clause of every
-// statement (see `lib/db/queries/labels.ts`), so an issues label at this id
-// answers 404 rather than being renamed from here.
+// `sales.labels` row with no per-workspace #number, and `bk <app> label` has
+// always addressed it that way. Since Phase 3 the ids are this app's own
+// serials, so an id from another app is simply not a row here — a 404 by
+// existence rather than by a scope predicate.
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
@@ -35,8 +35,8 @@ function labelId(raw: string): number {
 const notFound = (id: number) =>
   Errors.notFound(
     'label_not_found',
-    `no label ${id} this app can see in this workspace`,
-    'run `bk sales label list` — a label belonging to another app is not listed here'
+    `no label ${id} in this workspace`,
+    'run `bk sales label list` for the ids'
   )
 
 export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {

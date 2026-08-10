@@ -1,19 +1,21 @@
 // Labels — `bk sales label list | view | create | edit | delete | attach | detach`.
 //
 // ---------------------------------------------------------------------------
-// THE TABLE IS PLATFORM'S; THE SCOPE IS THIS APP'S (D-14)
+// THE TABLE IS THIS APP'S, AND THAT IS WHAT REPLACED THE SCOPE (Phase 3)
 // ---------------------------------------------------------------------------
-// A label lives in `platform.labels` and carries an `app` column:
+// A label used to live in `platform.labels`, one table serving both apps, with
+// an `app` column and a predicate — `app IS NULL OR app = 'sales'` — threaded
+// through every read and every write. That predicate is D-14's workaround for a
+// shared table, and it was real protection there: a read that forgot it returned
+// the issues app's labels while `bk sales label list` promised otherwise.
 //
-//   app = 'sales'   scoped — only this app lists, attaches, renames or deletes it
-//   app IS NULL     shared — every app in the workspace sees it
-//
-// **`app IS NULL OR app = 'sales'` belongs in EVERY read**, not only the list
-// route. The schema says so at length and `apps/issues` has a whole test file
-// enumerating the paths, because the failure is silent in the worst direction: a
-// read that ignores the column returns another app's labels while the command
-// spelling (`bk sales label list`) promises otherwise, and an agent then attaches
-// an issues label to a prospect.
+// It lives in `sales.labels` now, and **the helper that carried the predicate is
+// deleted rather than ported**. Over a table that cannot hold another app's row
+// it is a no-op that reads as protection, which is CLAUDE.md's entire subject.
+// The scope is the schema, and `sales.prospect_salesLabels.label_id` has a foreign
+// key into `sales.labels` (migration 0005) so an attachment cannot name a
+// foreign label either — enforced by Postgres rather than by a WHERE clause
+// somebody has to remember.
 //
 // ---------------------------------------------------------------------------
 // AND WHY THIS IS NOT A SHARED FACTORY
@@ -25,24 +27,15 @@
 // noun across two layers to share three functions is not a trade worth making
 // while there are two apps.
 
-import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { getDb } from '../client'
-import { labels, prospectLabels, prospects } from '../schema'
-import type { Label } from '../schema'
-import { APP_SLUG } from '@/lib/app'
+import { salesLabels, prospectLabels, prospects } from '../schema'
+import type { SalesLabel } from '../schema'
 import { recordEvent } from './events'
 import { LABELS_PER_PROSPECT_MAX } from '@/lib/limits'
 import type { Actor } from '@/lib/actor'
 
-/**
- * The scope predicate. Written once, imported by every read below.
- *
- * A helper rather than an inlined pair of conditions so that "did this read
- * apply the app scope?" is answerable by grepping for one name.
- */
-const visibleToThisApp = () => or(isNull(labels.app), eq(labels.app, APP_SLUG))
-
-export interface LabelRow extends Label {
+export interface LabelRow extends SalesLabel {
   /** How many of THIS app's prospects carry it. */
   usage: number
 }
@@ -51,9 +44,9 @@ export async function listLabels(workspaceId: number): Promise<LabelRow[]> {
   const db = getDb()
   const rows = await db
     .select()
-    .from(labels)
-    .where(and(eq(labels.workspace_id, workspaceId), visibleToThisApp()))
-    .orderBy(asc(labels.name))
+    .from(salesLabels)
+    .where(eq(salesLabels.workspace_id, workspaceId))
+    .orderBy(asc(salesLabels.name))
   if (rows.length === 0) return []
 
   const counts = await db
@@ -84,20 +77,19 @@ export async function createLabel(
   workspaceId: number,
   input: { name: string; color?: string | null; description?: string | null },
   actor: Actor
-): Promise<Label> {
+): Promise<SalesLabel> {
   const db = getDb()
   return await db.transaction(async (tx) => {
     const [row] = await tx
-      .insert(labels)
+      .insert(salesLabels)
       .values({
         workspace_id: workspaceId,
         name: input.name,
         color: input.color ?? undefined,
         description: input.description ?? null,
-        // Scoped to this app on creation. Sharing is a DELIBERATE act
-        // (`SET app = NULL` on one label), never a state a label drifts into —
-        // D-29 settled that and the backfill made it the starting state.
-        app: APP_SLUG,
+        // No `app` column to set. D-29's "a label is scoped on creation and
+        // sharing is a deliberate act" was a rule about a shared table; here
+        // every row is this app's and there is nothing to declare.
         created_by: actor.userId,
       })
       .returning()
@@ -122,7 +114,7 @@ export async function updateLabel(
   labelId: number,
   input: { name?: string; color?: string | null; description?: string | null },
   actor: Actor
-): Promise<Label | null> {
+): Promise<SalesLabel | null> {
   const db = getDb()
   return await db.transaction(async (tx) => {
     const values: Record<string, unknown> = {}
@@ -132,12 +124,12 @@ export async function updateLabel(
     if (Object.keys(values).length === 0) return null
 
     const [row] = await tx
-      .update(labels)
+      .update(salesLabels)
       .set(values)
       // The scope is in the WHERE, not checked afterwards: an issues label must
       // not be renameable from here, and a guard that reads then writes has a
       // window between the two.
-      .where(and(eq(labels.id, labelId), eq(labels.workspace_id, workspaceId), visibleToThisApp()))
+      .where(and(eq(salesLabels.id, labelId), eq(salesLabels.workspace_id, workspaceId)))
       .returning()
     if (!row) return null
     await recordEvent(tx, {
@@ -158,12 +150,12 @@ export async function deleteLabel(
   workspaceId: number,
   labelId: number,
   actor: Actor
-): Promise<Label | null> {
+): Promise<SalesLabel | null> {
   const db = getDb()
   return await db.transaction(async (tx) => {
     const [row] = await tx
-      .delete(labels)
-      .where(and(eq(labels.id, labelId), eq(labels.workspace_id, workspaceId), visibleToThisApp()))
+      .delete(salesLabels)
+      .where(and(eq(salesLabels.id, labelId), eq(salesLabels.workspace_id, workspaceId)))
       .returning()
     if (!row) return null
     await recordEvent(tx, {
@@ -181,7 +173,7 @@ export async function deleteLabel(
 }
 
 export type AttachResult =
-  | { ok: true; attached: boolean; label: Label }
+  | { ok: true; attached: boolean; label: SalesLabel }
   | { ok: false; reason: 'label_not_found' }
   | { ok: false; reason: 'too_many'; max: number }
 
@@ -196,11 +188,11 @@ export async function attachLabel(
   return await db.transaction(async (tx) => {
     const [label] = await tx
       .select()
-      .from(labels)
-      .where(and(eq(labels.id, labelId), eq(labels.workspace_id, workspaceId), visibleToThisApp()))
+      .from(salesLabels)
+      .where(and(eq(salesLabels.id, labelId), eq(salesLabels.workspace_id, workspaceId)))
       .limit(1)
     // A 404 rather than a silent no-op: attaching an issues label to a prospect
-    // is the exact mistake `labels.app` exists to prevent, and it has to be
+    // is the exact mistake `salesLabels.app` exists to prevent, and it has to be
     // visible to the caller who tried.
     if (!label) return { ok: false, reason: 'label_not_found' } as const
 

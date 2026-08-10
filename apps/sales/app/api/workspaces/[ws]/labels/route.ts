@@ -1,11 +1,10 @@
 // GET  /api/workspaces/{ws}/labels — this app's labels
 // POST /api/workspaces/{ws}/labels — create one
 //
-// The table is `platform.labels` and the SCOPE is this app's (D-14):
-// `app IS NULL OR app = 'sales'`, applied in `lib/db/queries/labels.ts` to every
-// read and every write, not only to this listing. A read that ignored the column
-// would return the issues app's labels while `bk sales label list` promises
-// otherwise — and an agent would then attach one to a prospect.
+// The table is `sales.labels` (Phase 3). It used to be `platform.labels` with an
+// `app` column and a predicate on every read; the predicate is gone because the
+// table cannot hold another app's row. `app` is still a FIELD on the wire,
+// answered with this app's slug — see `publicLabel` in lib/views.ts.
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors, jsonList } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'

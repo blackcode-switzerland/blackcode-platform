@@ -109,7 +109,7 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core'
-import { apiTokens, labels, users, workspaces } from '@blackcode/platform-db'
+import { apiTokens, users, workspaces } from '@blackcode/platform-db'
 import { DEFAULT_LABEL_COLOR } from '@/lib/pipeline'
 
 /** This app's Postgres schema. Named for the app slug — see lib/app.ts. */
@@ -893,15 +893,18 @@ export const templateDocuments = salesSchema.table(
 )
 
 /**
- * Prospect tags — `platform.labels`, app-scoped (D-14).
+ * Prospect tags — `sales.labels` since Phase 3 (migration 0005, the thirteenth
+ * foreign key).
  *
  * The mockup's tags ("Phase 1 shipped", "Active client", "Referral ·
  * Metaesthetics") are labels, so they reuse proven machinery — colours, attach,
  * detach, filtering, `bk sales label` — instead of a parallel tag system that
- * every future app then also builds. `platform.labels.app` is what keeps issues'
- * labels out of sales' picker; a read that ignores that column returns another
- * app's labels while the command spelling promises otherwise, so
- * `app IS NULL OR app = 'sales'` belongs in EVERY read, not just the list route.
+ * every future app then also builds.
+ *
+ * It used to point at `platform.labels`, and the scope that kept issues' labels
+ * out of this app's picker was a predicate (`app IS NULL OR app = 'sales'`)
+ * threaded through every read. **The scope is now the schema**: this FK cannot
+ * reach a row belonging to another app, so there is no predicate to forget.
  */
 export const prospectLabels = salesSchema.table(
   'prospect_labels',
@@ -911,7 +914,7 @@ export const prospectLabels = salesSchema.table(
       .references(() => prospects.id, { onDelete: 'cascade' }),
     label_id: integer('label_id')
       .notNull()
-      .references(() => labels.id, { onDelete: 'cascade' }),
+      .references(() => salesLabels.id, { onDelete: 'cascade' }),
   },
   (t) => ({
     pk: primaryKey({ columns: [t.prospect_id, t.label_id] }),
@@ -1175,10 +1178,10 @@ export const salesInvitations = salesSchema.table(
  * `sales.labels`.
  *
  * Dropped from the platform shape: `app`, and with it the whole
- * `app IS NULL OR app = 'sales'` predicate that `lib/db/queries/labels.ts`
- * threads through every read and every write. That predicate is the D-14
+ * `app IS NULL OR app = 'sales'` predicate that `lib/db/queries/labels.ts` used
+ * to thread through every read and every write. That predicate is the D-14
  * workaround for one table serving two apps; in this table every row is this
- * app's, so the correct scope is the absence of a scope. Phase 3 deletes
+ * app's, so the correct scope is the absence of a scope. Phase 3 DELETED
  * `visibleToThisApp()` rather than porting it — a scope helper left behind over
  * a table that cannot hold a foreign row reads as protection and is a no-op,
  * which is CLAUDE.md's whole subject.

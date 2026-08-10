@@ -25,6 +25,7 @@
 import type { LinkRow } from '@blackcode/platform-db'
 import type { ProspectLabel, ProspectRow } from './db/queries/prospects'
 import { entityUrnOrNull } from './entity-address'
+import { APP_SLUG } from './app'
 
 export interface PublicProspect {
   number: number
@@ -420,7 +421,6 @@ export function publicLabel(l: {
   name: string
   color: string | null
   description: string | null
-  app: string | null
   usage: number
 }) {
   return {
@@ -429,7 +429,13 @@ export function publicLabel(l: {
     name: l.name,
     color: l.color,
     description: l.description,
-    app: l.app,
+    // `app` is no longer a COLUMN — Phase 3 moved labels to `sales.labels`,
+    // where every row is this app's — but it is still a field on the wire, and
+    // it is answered with a constant rather than dropped. `bk <app> label list`
+    // prints it, and a client that has always seen it would start showing an
+    // empty column against a fact that has not changed: this label belongs to
+    // this app. Removing the field is a CLI change and belongs to Phase 4.
+    app: APP_SLUG,
     issue_count: l.usage,
   }
 }
