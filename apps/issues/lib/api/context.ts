@@ -15,7 +15,11 @@
 // See `packages/platform-api/src/app-context.ts` for the bar a new field has to
 // clear before it is added here.
 
-import { platformWorkspaceSource, type AppContext } from '@blackcode/platform-api'
+import {
+  platformUploadLedger,
+  platformWorkspaceSource,
+  type AppContext,
+} from '@blackcode/platform-api'
 import { db } from '@/lib/db/client'
 import { resolveUser } from '@/lib/auth/resolve'
 import { getValidatedSessionUser } from '@/lib/auth/session'
@@ -64,6 +68,15 @@ export const appContext: AppContext = {
   // Renaming these tables to `issues.*` was considered and rejected: it would
   // mean moving production data for a cosmetic gain (PLAN.md §2).
   workspaces: platformWorkspaceSource(db, APP_SLUG),
+
+  // ── AND SO IS THIS APP'S UPLOAD LEDGER ────────────────────────────────────
+  // `platform.uploads`, unchanged. `platformUploadLedger` is a binding of the
+  // two platform-storage calls `/api/upload` already made — `attributeUpload`
+  // and `recordUpload`, same arguments, same order — so this app's attribution
+  // and its ledger row are unchanged by construction rather than by review.
+  // `apps/sales` supplies its own; the Blob store, the quota and
+  // `platform.blob_references` are shared by both and untouched.
+  uploads: platformUploadLedger(db, APP_SLUG),
 
   resolveUser,
   resolveSessionUser,

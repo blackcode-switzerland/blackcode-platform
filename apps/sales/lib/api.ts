@@ -20,6 +20,7 @@ import {
   listWorkspaceMembers,
   listWorkspacesForUser,
 } from './db/queries/workspaces'
+import { salesUploadLedger } from './db/queries/uploads'
 
 /**
  * The caller, from a `bk_live_…` bearer token **or** a browser session.
@@ -108,9 +109,20 @@ const salesWorkspaces: WorkspaceSource = {
   },
 }
 
+/**
+ * THIS APP'S UPLOAD LEDGER IS `sales.uploads` (Phase 3, 2026-08-10).
+ *
+ * Built from the workspace source above rather than importing its own, so both
+ * AppContext fields agree about where this app's workspaces live. The store,
+ * the quota and `platform.blob_references` are shared and unchanged — only the
+ * record of which files exist moved. See `lib/db/queries/uploads.ts`.
+ */
+const salesUploads = salesUploadLedger(salesWorkspaces)
+
 export const appContext: AppContext = {
   appSlug: APP_SLUG,
   workspaces: salesWorkspaces,
+  uploads: salesUploads,
   // A GETTER, not `db: getDb()`. Calling it here would open a connection at
   // module import time, and `next build` imports every route module to collect
   // page data — so an eager client makes the app unbuildable without a

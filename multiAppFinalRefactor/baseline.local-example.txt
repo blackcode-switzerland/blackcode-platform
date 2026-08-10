@@ -68,3 +68,6 @@ sales.workspaces	0	NULL	NULL
 
 # EXPECTED 2026-08-10 phase-3 agent4 (LOCAL)
 # platform.labels -1   sales rows, app = 'sales' — the query layer now reads sales.labels
+
+# EXPECTED 2026-08-10 phase-3 agent4 (LOCAL)
+# platform.uploads -2   sales rows, app = 'sales' — the ledger is sales.uploads now

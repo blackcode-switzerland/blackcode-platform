@@ -26,6 +26,7 @@ import {
   createApiHandler,
   createResolveWorkspace,
   platformWorkspaceSource,
+  platformUploadLedger,
   type AppContext,
 } from '@blackcode/platform-api'
 import { verifyToken } from '@blackcode/platform-auth'
@@ -76,6 +77,19 @@ export const appContext: AppContext = {
   // module import time and make the app unbuildable without a DATABASE_URL.
   get workspaces() {
     return platformWorkspaceSource(getDb(), APP_SLUG)
+  },
+
+  // ── WHERE THIS APP RECORDS ITS UPLOADS ────────────────────────────────────
+  // `platform.uploads`, for now, and the same caveat as `workspaces` above
+  // applies: Phase 7 of multiAppFinalRefactor gives the scaffold its own
+  // tenancy, and a `sales.uploads`-shaped ledger goes with it. The STORE is
+  // shared either way — one Blob store, one quota, one
+  // `platform.blob_references` — so this field is about the record, not the
+  // bytes. Read `packages/platform-api/src/upload-ledger.ts` before copying it.
+  //
+  // A getter for `db`'s reason: it closes over the client.
+  get uploads() {
+    return platformUploadLedger(getDb(), APP_SLUG)
   },
 
   resolveUser,

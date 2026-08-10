@@ -87,6 +87,16 @@ function allStrings(value: unknown, seen = new Set<unknown>()): string[] {
  * if the handler one day started resolving a workspace, which is exactly the
  * kind of silently-retargeted assertion CLAUDE.md finding #10 is about.
  */
+const unusedUploads = new Proxy({} as AppContext['uploads'], {
+  get(_t, prop) {
+    return () => {
+      throw new Error(
+        `AppContext.uploads.${String(prop)}() was called by a fixture that must never reach it`
+      )
+    }
+  },
+})
+
 const unusedWorkspaces = new Proxy({} as AppContext['workspaces'], {
   get(_t, prop) {
     return () => {
@@ -104,6 +114,7 @@ async function runFailingRequest(redactBody: boolean): Promise<string[]> {
     appSlug: 'test-app',
     db: db as unknown as AppContext['db'],
     workspaces: unusedWorkspaces,
+    uploads: unusedUploads,
     async resolveUser() {
       return null
     },

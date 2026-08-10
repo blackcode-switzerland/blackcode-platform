@@ -63,6 +63,7 @@ vi.mock('@blackcode/platform-storage', async (importOriginal) => ({
 }))
 
 import { uploadRoute } from '@blackcode/platform-api/routes'
+import { platformUploadLedger } from '@blackcode/platform-api'
 import { APP_SLUG } from '@/lib/app'
 
 const USER = {
@@ -80,9 +81,20 @@ function contextFor(appSlug: string): AppContext {
   for (const m of ['from', 'where', 'limit', 'innerJoin', 'leftJoin']) chain[m] = () => chain
   chain.then = (ok: (v: unknown[]) => unknown) => Promise.resolve([WORKSPACE]).then(ok)
 
+  const db = { select: () => chain }
+
   return {
     appSlug,
-    db: { select: () => chain },
+    db,
+    // The app's own LEDGER (Phase 3): `/api/upload` no longer stamps the column
+    // itself, it asks this. Built here from the SAME `appSlug` the route is
+    // mounted with, because that is precisely what is under test — if the two
+    // could differ, the file's path and the file's owner could disagree.
+    //
+    // `platformUploadLedger`, not a stub: `attributeUpload` and `recordUpload`
+    // are half of what this file checks (`recordUpload` is intercepted at the
+    // module boundary above, so the row is captured rather than written).
+    uploads: platformUploadLedger(db as never, appSlug),
     async resolveUser() {
       return USER
     },

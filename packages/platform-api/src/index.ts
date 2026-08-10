@@ -24,6 +24,14 @@ export type {
   WorkspaceMembershipRef,
   WorkspaceMemberRef,
 } from './workspace-source'
+
+// WHERE AN APP RECORDS ITS UPLOADS (2026-08-10, multiAppFinalRefactor Phase 3).
+// The ledger splits per app; the Blob store, the quota and
+// `platform.blob_references` do not. Read upload-ledger.ts before implementing
+// one — `attribute` must never throw.
+export { platformUploadLedger } from './upload-ledger'
+export type { UploadLedger, UploadAttribution, UploadRecord } from './upload-ledger'
+
 export {
   createApiHandler,
   createResolveWorkspace,

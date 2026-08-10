@@ -34,10 +34,8 @@ import { dirname, resolve, sep } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import {
   assertPathnameWritable,
-  attributeUpload,
   blobPathname,
   listAppSlugs,
-  recordUpload,
   BLOCKED_UPLOAD_MIME_TYPES,
   MAX_UPLOAD_BYTES,
   MAX_UPLOAD_LABEL,
@@ -111,8 +109,7 @@ export function uploadRoute(app: AppContext) {
     // cannot be attributed lands under the `unattributed` prefix rather than
     // failing.
     const workspaceField = formData.get('workspace')
-    const workspace = await attributeUpload(
-      app.db,
+    const workspace = await app.uploads.attribute(
       user,
       typeof workspaceField === 'string' ? workspaceField : null
     )
@@ -139,7 +136,7 @@ export function uploadRoute(app: AppContext) {
     // fail the upload itself). `app` is stamped here rather than at a call site
     // so forgetting it is not representable.
     try {
-      await recordUpload(app.db, {
+      await app.uploads.record({
         url,
         pathname,
         filename: file.name,
@@ -147,7 +144,6 @@ export function uploadRoute(app: AppContext) {
         mime_type: file.type || null,
         workspace_id: workspace.id,
         uploaded_by: user.id,
-        app: app.appSlug,
       })
     } catch (err) {
       console.error('[upload] ledger record failed (non-fatal):', err)
@@ -188,7 +184,7 @@ export function uploadRoute(app: AppContext) {
       // decided by the same input. The CLI passes its --ws target here; the web
       // client passes nothing and gets the active workspace.
       workspace: (
-        await attributeUpload(app.db, user, request.nextUrl.searchParams.get('workspace'))
+        await app.uploads.attribute(user, request.nextUrl.searchParams.get('workspace'))
       ).slug,
       blockedMimeTypes: BLOCKED_UPLOAD_MIME_TYPES,
       note: `All content types accepted except ${BLOCKED_UPLOAD_MIME_TYPES.join(', ')} (blocked for XSS safety)`,
@@ -261,7 +257,7 @@ export function uploadBlobRoute(app: AppContext) {
             throw new Error(`${payload.contentType} files are not allowed for security reasons`)
           }
 
-          const workspace = await attributeUpload(app.db, user, payload.workspace ?? null)
+          const workspace = await app.uploads.attribute(user, payload.workspace ?? null)
 
           return {
             addRandomSuffix: true,
@@ -283,7 +279,11 @@ export function uploadBlobRoute(app: AppContext) {
         onUploadCompleted: async ({ blob, tokenPayload }) => {
           try {
             const meta = tokenPayload ? JSON.parse(tokenPayload) : {}
-            await recordUpload(app.db, {
+            // The SERVING app's own ledger, exactly as in the multipart path.
+            // This callback arrives from Vercel rather than from the browser, so
+            // there is no caller-supplied value to be tempted by — and the ledger
+            // stamps its own `app`, so there is none to pass either.
+            await app.uploads.record({
               url: blob.url,
               pathname: blob.pathname,
               filename: meta.filename || blob.pathname,
@@ -291,10 +291,6 @@ export function uploadBlobRoute(app: AppContext) {
               mime_type: meta.contentType ?? blob.contentType ?? null,
               workspace_id: meta.workspace_id ?? null,
               uploaded_by: meta.uploaded_by ?? null,
-              // The SERVING app, exactly as in the multipart path. This callback
-              // arrives from Vercel rather than from the browser, so there is no
-              // caller-supplied value to be tempted by.
-              app: app.appSlug,
             })
           } catch (err) {
             console.error('[upload/blob] ledger record failed (non-fatal):', err)

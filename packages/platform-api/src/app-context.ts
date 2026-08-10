@@ -29,6 +29,7 @@ import type { NextRequest } from 'next/server'
 import type { PlatformDatabase, User } from '@blackcode/platform-db'
 import type * as platformSchema from '@blackcode/platform-db/schema'
 import type { WorkspaceSource } from './workspace-source'
+import type { UploadLedger } from './upload-ledger'
 
 /**
  * A Drizzle client that knows the `platform.*` tables — and only those.
@@ -107,6 +108,22 @@ export interface AppContext {
    * which is the set of calls it already made.
    */
   workspaces: WorkspaceSource
+
+  /**
+   * WHERE THIS APP RECORDS ITS UPLOADS — see `./upload-ledger.ts`.
+   *
+   * Added 2026-08-10 (multiAppFinalRefactor Phase 3), and required for
+   * `workspaces`' reason: the LEDGER is per app now, so a default would mean an
+   * app writing its rows into another app's table and the cross-app delete gate
+   * asking the wrong app whether a file is still in use.
+   *
+   * The STORE is unchanged and stays shared — one Blob store, one quota, one
+   * `platform.blob_references`. This field is about the record, not the bytes.
+   *
+   * `apps/issues` supplies `platformUploadLedger(db, APP_SLUG)`, which is the
+   * pair of calls `routes/upload.ts` already made.
+   */
+  uploads: UploadLedger
 
   /**
    * Who is calling, or null.
