@@ -65,3 +65,33 @@ sales.uploads	0	NULL	NULL
 sales.user_preferences	0	NOID	NOID
 sales.workspace_members	0	NULL	NULL
 sales.workspaces	0	NULL	NULL
+
+# ===========================================================================
+# PHASE 3 (agent4, 2026-08-10) — the deletes, DECLARED BEFORE THEY ARE RUN
+# ===========================================================================
+# These are the numbers the brief predicts for PRODUCTION, and they were NOT
+# measured by me: I hold no production credentials and ran every delete below
+# against local Postgres only.
+#
+# RE-MEASURE FIRST, with the exact WHERE each block names, and correct the
+# number here if it differs. verify.sh requires the actual decrease to equal
+# the declaration EXACTLY, so a stale prediction fails the run — which is the
+# instrument working, not a reason to widen the declaration.
+#
+# A count that has GROWN means somebody started using b/sales. Stop and report
+# it: PLAN.md decision 2 ("sales data does not matter") is retired on the spot.
+# A count of ZERO is CORRECT for labels, uploads and comments — the brief
+# predicts zero for all three, so there is no block for them below. Adding one
+# would fail the run, because a table that did not decrease has nothing to
+# declare.
+#
+# ORDER: links BEFORE entities. `platform.links` has ON DELETE CASCADE on
+# `entities.urn`, so deleting the entities first takes the links with them
+# silently and the DELETE count can never be read.
+
+# EXPECTED 2026-08-10 phase-3 agent4
+# platform.links -1   rows naming a sales URN: WHERE from_urn LIKE 'bc:sales:%' OR to_urn LIKE 'bc:sales:%'
+# EXPECTED 2026-08-10 phase-3 agent4
+# platform.entities -2   WHERE app = 'sales' — this app no longer projects
+# EXPECTED 2026-08-10 phase-3 agent4
+# platform.events -4   WHERE app = 'sales' — the spine is sales.events now
