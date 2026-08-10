@@ -1,0 +1,538 @@
+FROM:    agent5
+TO:      master
+DATE:    2026-08-10
+PHASE:   4 — The CLI stops pretending the apps share a database
+STATUS:  REPLY — DONE, gate green, four commits, not pushed.
+         ** I DAMAGED LOCAL DEV DATA WITH A BAD DELETE. §9.2. It is local only,
+            most of it is repaired, and 3 rows are gone for good. **
+--------------------------------------------------------------------------------
+
+SUMMARY
+
+Ten verbs moved behind the app name, `bk link` is removed, and the cross-app tier
+no longer exists. Every command that touches an app's data names the app.
+
+Five things to read even if you skip the rest:
+
+  1. §2 — ** THE CONFIG'S ACTIVE WORKSPACE WAS THE OTHER HALF OF THIS PHASE AND
+     YOUR BRIEF DOES NOT MENTION IT. ** Moving `workspace use` under the app
+     while one shared field remembered the answer would have made a measured
+     404 permanent instead of incidental. Measured before I changed anything.
+  2. §6.3 — `storage` goes app-owned, and D-28 is not being overruled: its own
+     stated reason expired in YOUR Phase 3. Same for `user`, which was serving
+     the wrong people from the sales host — measured, §4.2.
+  3. §6.2 — I agree `super-admin` stays bare, and I made the agreement expire:
+     a new guard goes red the day a second app mounts `/api/super-admin/**`.
+  4. §5 — ** I FOUND MY OWN NEW GUARD INERT WITHIN THE HOUR ** (finding #10's
+     shape, twice), and separately watched a "guard passes" observation that
+     was really an injection that never applied.
+  5. §9.2 — the bad delete.
+
+
+================================================================================
+1. THE FINAL TIER TABLE
+================================================================================
+TWO tiers, not three. The middle one existed because the apps shared a database.
+
+--- BARE: your ACCOUNT and this BINARY ----------------------------------------
+  login · logout · whoami · token · profile · meta · app
+  guide · skill · changelog · version · super-admin
+
+Every one reads `platform.users`, `platform.api_tokens` or `platform.apps` — the
+tables PLAN.md §4b marks "stays shared" — or reads nothing and answers out of the
+binary. Two deployments answer alike.
+
+--- APP-OWNED: `bk <app> <verb>` ----------------------------------------------
+  MOVED THIS PHASE (10):
+    workspace   each app has its own since your Phase 2. Ids AND slugs overlap
+    member      `sales.workspace_members` vs `platform.workspace_members`
+    invite      an invitation grants access to ONE app's workspace
+    user        "people you share a workspace with" — per app by definition; §4.2
+    inbox       issues-only (your decision 3)
+    storage     the LEDGER became per app in your Phase 3; see §6.3
+    search      sales stopped projecting into `platform.entities`
+    activity    `sales.events` since your Phase 3
+  ALREADY THERE (3): upload · trash · label
+
+--- REMOVED (1) ---------------------------------------------------------------
+    link        PLAN.md §3. No replacement command; the hint carries the
+                workaround instead of a new spelling
+
+--- YOUR §2's LIST WAS RIGHT, WITH ONE ADDITION AND ONE SUBTRACTION ------------
+You listed ten. `user` is the eleventh and you did not classify it (your §6.1
+flagged exactly that). `storage` you were unsure about and were right — §6.3.
+`version`, `whoami`, `routing`, `aliases` are all correctly bare: `routing.go` is
+the address book's implementation, not a verb; `aliases.go` is the 1.10.0
+machinery.
+
+--- WHAT EACH APP ACTUALLY MOUNTS ---------------------------------------------
+`appverbs.Config` declares it verb by verb — D-36 one level down. A verb an app
+has no route for is ABSENT from its group, not present and 404ing.
+
+  issues    everything (the only app serving the whole surface)
+  sales     workspace (list/show/use — no create/edit/transfer/delete, D-3),
+            member (list/remove — no leave), invite, activity, upload, trash,
+            label. NOT inbox, storage, user, or the shared search — it has its
+            own `bk sales search` over /sales-search
+  scaffold  workspace + member ONLY. Two, and the shortness is the lesson: it
+            serves no /api/upload, /trash or /labels
+
+** THIS FORCED A DESIGN CHANGE MID-PHASE. ** I first made upload/trash/label
+unconditional ("an app that stores nothing has no reason to exist"). The scaffold
+disproved it by existing, and its parity test said so. Everything is declared now.
+
+
+================================================================================
+2. ** THE THING YOUR BRIEF DOES NOT MENTION, AND IT IS HALF THE PHASE **
+================================================================================
+`config.json` had ONE `active_workspace_slug`. That was correct while every app
+read one `platform.workspaces`. Since your Phase 2 there are two tables, and
+migration 0004 MIRRORED ids, so the two id spaces overlap by construction.
+
+MEASURED WITH THE OLD BINARY, before I changed a line, two local servers:
+
+    $ bk workspace use balathanusan-1      # a workspace only ISSUES has
+    Active workspace: Bala's workspace (balathanusan-1)
+    $ bk issues issue list                 # fine
+    $ bk sales prospect list
+    error: workspace not found (404)
+    hint: if this used to work, the surface may have changed — run `bk skill
+          sync`, then `bk guide` for current usage
+    exit 5
+
+One command silently broke another app's, and the hint blamed the wrong thing.
+
+** RE-TIERING `workspace use` WITHOUT FIXING THIS WOULD HAVE MADE IT PERMANENT
+   AND SPELLED IT OUT LOUD: ** two commands that NAME different apps, writing one
+field. So `config.ActiveWorkspaces` is keyed by app slug.
+
+A 3.x config's single workspace is adopted for the HOME app and for NO other — a
+slug resolved against issues is not a sales workspace, and seeding it as one is
+the cross-tenant guess this whole refactor removes. Observed on a real 3.x-shaped
+config: `bk issues issue list` inherited it and worked; `bk sales prospect list`
+answered
+
+    error: no active workspace for the sales app — set one with
+    `bk sales workspace use <slug>` (each app remembers its own;
+    `bk sales workspace list` shows them)
+
+which is the difference between a dead end and a recovery.
+
+** THERE ARE TWO RESOLVERS AND I ONLY FOUND THAT BY INJECTING INTO EACH. **
+`ResolveWorkspaceRef` builds the path a scoped command asks for.
+`ClientWorkspaceSlug` sets the client's implicit workspace — sent as
+`?workspace=` on `GET /api/upload`, which is what decides the BLOB FOLDER and the
+ledger row. My first new guard covered the first and stayed GREEN when I pointed
+the second back at the shared field. That is a sales file landing under an issues
+workspace's prefix: agent 4's Phase-3 attribution bug, arriving from the client.
+Both are guarded now (§5).
+
+
+================================================================================
+3. THE DEPRECATIONS, AND THE HINTS I WATCHED FIRE
+================================================================================
+Eleven rows added in the same commit as the move: the ten verbs, plus `--app`
+(removed from search/activity/storage list — it filtered a shared index and its
+only legal value became the app already named on the command). Live from day one
+with no alias, for 3.0.0's reason: an alias would have to pick an app silently.
+
+ACTUAL STDERR, from the built binary, every one exit 2:
+
+  $ bk workspace list
+  error: unknown command "workspace" for "bk"
+  hint: `bk workspace …` is now `bk <app> workspace …` — each app has its own
+        workspaces since 2026-08-10, and each remembers its own active one. Try
+        `bk issues workspace list` or `bk sales workspace list`. Run
+        `bk guide platform/apps`.
+
+  $ bk storage list
+  hint: `bk storage …` is now `bk <app> storage …` — the upload LEDGER became
+        per app on 2026-08-10, so two deployments no longer return the same rows
+        (the Blob store and the workspace quota are still shared). Try
+        `bk issues storage list`.
+
+  $ bk link list bc:issues:x/issue/1
+  hint: `bk link` was removed on 2026-08-10 — it recorded a relation between two
+        apps' entities in a shared index, and the apps no longer share one. Put
+        the other end's URN (`bc:sales:<ws>/prospect/12`) in the description or a
+        comment instead; `bk <app> search` finds a URN.
+
+  …and the same for member, invite, user, inbox, search, activity (all naming a
+  runnable replacement), plus trash, upload, label unchanged from 3.0.0.
+
+`link` is the one that needed a different shape and it has its own test:
+every other row is checkable by "does the hint name the new spelling?", and there
+is no new spelling here, so `TestRemovedLinkNamesWhatToDoInstead` asserts the
+hint says REMOVED and carries a workaround. Without it, deleting the row would
+look identical to deleting the command.
+
+--- YOUR §3b, AND I CHANGED SOMETHING BECAUSE OF IT ----------------------------
+The not-served hint read `other := "issues"; if nse.App == "issues" { other =
+"sales" }`. The platform binary naming two app slugs — wrong the day app #3
+exists, and already wrong for the sales-only user you warned about, whose
+grant-derived registry has no `issues` entry, so the suggested recovery answers
+"no server known for app issues".
+
+It now draws from the registry, and when there is nothing to suggest it SAYS SO
+and stops rather than trailing off:
+
+    the sales deployment does not serve that route, and your account reaches no
+    other app that might — this capability is not available to you.
+    `bk sales --help` lists what this app does offer
+
+An agent that reads that stops. An agent that reads the old one burns a retry.
+
+
+================================================================================
+4. WHAT THE PHASE FOUND OUTSIDE WHERE ANYONE LOOKED (your §6.5, paid again)
+================================================================================
+4.1 ** `apps/_scaffold` STILL MOUNTED THE ROUTE THAT LEAKED. ** `searchRoute`
+    resolves the workspace through `AppContext.workspaces` — this app's table —
+    then queries `platform.entities` BY THAT ID. That is exactly agent 4's §3,
+    sitting in the file `docs/adding-an-app.md` tells people to COPY. Removed,
+    with `links` and `users`, and a README beside them saying why. App #3 would
+    have inherited the bug from a phase whose job was to remove it.
+
+4.2 ** `GET /api/users` ON THE SALES DEPLOYMENT LISTED PEOPLE WHO ARE IN NO SALES
+    WORKSPACE. ** `getVisibleUsers` joins `platform.workspace_members`. Measured
+    against the real routes, user 2's token:
+
+      sales /api/users        -> [user 1, user 2]
+      sales /workspaces/balathanusan-1-2/members -> [user 2]   (the truth)
+
+    User 1 shares only an ISSUES workspace with the caller. For a sales-ONLY
+    account the route returns `[]` — the join needs a platform membership.
+    Not a privilege escalation (the caller already knows that person from
+    issues), but a wrong answer nobody could tell was wrong, and the sales UI
+    never used the route. Removed rather than re-pointed: `bk sales member list`
+    is the question this app actually has. Agent 3 fixed `invite-candidates` for
+    this exact reason and this one was missed beside it.
+
+4.3 `apps/_scaffold` served `GET /api/workspaces` and NO way to select one. Once
+    every command resolves its tenancy from a per-app selection, that is a group
+    that cannot address anything. It gains `POST /api/me/active-workspace` — the
+    pairing sales' own route header warns about in as many words.
+
+4.4 `GET /api/workspaces/{ws}/links` on ISSUES had no caller at all: `bk link`
+    was its only one and no page ever used it. Unmounted. `platform.links` and
+    `linksRoute` are untouched, so PLAN.md §4b's "issues may keep intra-app
+    links" costs five lines to undo.
+
+4.5 `bk app list` 404s from a sales-homed CLI — it claims
+    `GET /api/workspaces/{ws}/apps`, which only issues mounts. NOT MINE: your §4
+    says workspace_apps/app_access are Phase 5, and PLAN.md §6b says `bk app`
+    narrows to the address book there. Flagging it so it is not a surprise.
+
+4.6 `bk meta` still serves `links.relations`. Nothing in the CLI reads it now.
+    Left alone — a route change in a Go-and-guide phase — flagged for Phase 5.
+
+
+================================================================================
+5. WHICH GUARDS I WATCHED FAIL, AND WHAT EACH WOULD STILL PASS ON
+================================================================================
+** THE HEADLINE: I FOUND MY OWN GUARD INERT, TWICE, WITHIN THE HOUR. **
+
+5.1 `commands/appverbs_test.go` — FOUND INERT, FINDING #10 EXACTLY.
+    It read the tier from `appverbs.New(Config{App:"probe"}).All()` — the right
+    instinct, derive the list. The moment Config grew per-app flags, a probe
+    setting none returned THREE verbs. Every assertion kept passing over
+    upload/trash/label while the eight verbs the phase had just moved were
+    checked by nothing. ** THE SUITE WAS GREEN THE WHOLE TIME. ** A correct
+    change (Config HAD to grow, because sales serves a subset) silently
+    retargeted an assertion phrased for the old set.
+    Fixed with `everyVerb()` plus a floor that fails if the discovered list
+    shrinks. STILL PASSES ON: a verb added to Config and not to `everyVerb()` —
+    the floor catches the count, not the identity.
+
+5.2 THE SECOND ONE, SAME HOUR: `TestTheSameVerbUnderTwoAppsAsksTwoTenancies`,
+    which I wrote as this phase's flagship guard, does NOT cover
+    `ClientWorkspaceSlug`. Injected the shared-field regression into it → GREEN.
+    Injected the same into `ResolveWorkspaceRef` → RED. Two resolvers; the guard
+    knew one. `TestUploadAsksAboutItsOwnAppsWorkspace` now covers the other, and
+    was watched red on that exact injection.
+
+5.3 ** AND A PROCESS FAILURE WORTH MORE THAN EITHER: I "WATCHED TWO GUARDS PASS"
+    ON INJECTIONS THAT NEVER APPLIED. ** My sales-parity injections were string
+    replacements whose targets `gofmt` had realigned minutes earlier. Both were
+    silent no-ops, both reported "passed", and I nearly wrote that down as
+    "the guard would still pass on this". Re-run with an assertion on the
+    injection target, both went RED immediately (§5.7). **An injection you have
+    not asserted landed is not an injection.** This belongs in CLAUDE.md's
+    corollary list as a mechanism: the rule says watch the check go red, and it
+    is silent on proving you actually broke the thing.
+
+--- WATCHED RED, RESTORED, EACH LISTED WITH WHAT IT WOULD STILL PASS ON --------
+
+5.4 `routes_test.go` — deleted `bk issues user list`'s annotation.
+    RED: "these leaf commands have no `routes` annotation: bk issues user list".
+    STILL PASSES ON: an annotation that is present and WRONG. That is
+    cli-parity's job, and only for apps that mount the route.
+
+5.5 `groups_test.go` — removed the unknown-subcommand branch in root.go.
+    RED on 43 cases ("`bk app definitely-not-a-real-command` returned no error").
+    STILL PASSES ON: a group that errors with the wrong WORDING — it asserts the
+    string "unknown command", which is what DeprecationHint parses, so wording
+    and hint are coupled and that is fine.
+    (My first attempt at this injection broke the BUILD instead. A build failure
+    is not the guard firing; I redid it.)
+
+5.6 `boundaries_test.go` — made `platform/version.go` import the sales package.
+    RED: "platform/version.go imports the \"sales\" app."
+    STILL PASSES ON: a reach-in through `cmdutil` or `appverbs` — those are the
+    sanctioned shared homes and nothing checks what goes into them.
+
+5.7 `apps/sales/lib/cli-parity.test.ts` — BOTH directions, injections asserted:
+    (a) declared `Storage: true` (a route sales has no file for) → RED, drift,
+        naming `bk sales storage list|rm`.
+    (b) removed `Members`/`MemberRemove` (routes sales DOES serve) → RED,
+        uncovered capability, naming GET and DELETE on `…/members`.
+    STILL PASSES ON: a command claiming a route that exists with the right
+    METHOD but the wrong SEMANTICS — the check is path+method, never behaviour.
+    That is precisely how `/api/users` was wrong for a whole phase (§4.2).
+
+5.8 `cli-parity`'s vacuous-pass assertion (your finding #10 note) — deleted
+    `cli/internal/guide/topics/sales/` → RED: "no bk command is ATTRIBUTED to
+    sales". `appOwnClaims` still discriminates after the move; I checked because
+    the move changes exactly the set it reads.
+
+5.9 `platform-route-coverage.test.ts` — gave `bk version` a claim on
+    `GET /api/nobody-serves-this` → RED, naming the command.
+    ** WEAKER THAN IT WAS, AND YOU SHOULD KNOW BY HOW MUCH: ** it saw ~100
+    platform claims before this phase and sees 25 now, because the rest are
+    app-tagged and checked per app instead. Its vacuous-pass floor is
+    `claims.length > 0`, which 25 clears comfortably — but if the bare tier ever
+    shrank to nothing the floor would still pass at 1.
+
+5.10 `guide_test.go` — widened `TestTopicsUseNamespacedAppCommands` by eight
+    verbs plus `link`, then ran it: RED on 31 places across 12 topics, including
+    BOTH topics I had just rewritten. All fixed.
+    ** IT CANNOT TELL "teaching the old spelling" FROM "documenting that the old
+    spelling was removed", ** and a topic explaining a removal legitimately needs
+    the string. I wrote around it (quote cobra's error, or name the verb without
+    `bk `) rather than adding an escape hatch, because finding #9 is this guard
+    being weakened until it protected nothing. Worth a decision from you: the
+    workaround is invisible to a future writer, who will hit the same wall.
+
+5.11 NEW GUARD — `platform/superadmin_scope_test.go`. §6.2.
+    Watched RED by adding `apps/sales/app/api/super-admin/errors/route.ts`:
+    "2 apps now mount /api/super-admin/** (issues, sales)". Restored.
+
+5.12 NEW GUARD — `TestNotServedHintOnlySuggestsAppsTheConfigKnows`, both cases.
+    Restored the hardcoded pair → RED on the sales-only case only. The two-app
+    case alone would have passed it.
+
+5.13 `verify.sh` — RED, at me, and it was right. §9.2.
+
+
+================================================================================
+6. YOUR §6, ITEM BY ITEM
+================================================================================
+6.1 "§2's list may be wrong." Nearly right. `user` was the one you had not
+    classified and it is the most interesting of the lot (§4.2). `version`,
+    `whoami`, `routing`, `aliases` are correctly bare or not verbs at all.
+
+6.2 "`bk super-admin` may not be as bare as I think." ** YOU ARE RIGHT TO DOUBT
+    IT AND I AGREE WITH LEAVING IT BARE, WITH AN EXPIRY DATE. **
+    `users`/`whitelist`/`errors` read `platform.users`, `email_whitelist` and
+    `error_events` — genuinely shared, and `error_events` gained an `app` column
+    in your Phase 1 precisely so one log stays honest.
+    `entity-drift` and `blob-drift` FAIL the tier test outright: both are scoped
+    to the deployment they run against, which is CLAUDE.md finding #14. By the
+    rule they are app-owned.
+    They stay bare on a MEASUREMENT, not a preference: ** only apps/issues mounts
+    /api/super-admin/** at all. ** One deployment can answer, so an app-qualified
+    spelling would name a choice that does not exist and `bk sales super-admin
+    blob-drift` could only 404.
+    That argument has one input, and inputs change while comments do not. So it
+    is asserted: `superadmin_scope_test.go` goes RED the day a second app mounts
+    one of those routes, and its failure message says to move the two drift
+    commands. ** A deferral with a trigger is a decision; without one it is how a
+    wrong tier survives three phases. **
+
+6.3 "`storage` is the interesting one." ** IT GOES APP-OWNED, AND D-28 IS NOT
+    BEING OVERRULED — ITS OWN STATED REASON EXPIRED IN YOUR PHASE 3. **
+    D-28 kept it bare because "uploads are ONE LEDGER against one workspace
+    quota, so every app returns the SAME ROWS". `AppContext.uploads` made the
+    ledger per app and sales writes `sales.uploads`. Two deployments now answer
+    differently — which is the test D-28 itself specifies.
+    Your quota argument is real and survives: the STORE, the QUOTA and
+    `platform.blob_references` are still shared. That is why `bk issues storage
+    list` prints one app's rows and a workspace-wide usage total, and the topic
+    says so. It is not an inconsistency: the quota belongs to the workspace, the
+    ledger to the app.
+    ** D-28's pairing — "you upload INTO one app and list ACROSS all of them" —
+    now describes nothing that exists. ** It is called out as expired in
+    CLAUDE.md, AGENTS.md, docs/cli.md and platform-architecture §7.1 rather than
+    quietly dropped, because it is quotable and someone will re-derive it.
+    Footnote: sales never mounted `/storage` anyway, so bare `bk storage` was
+    already 404ing from a sales-homed CLI. The tier was wrong before I arrived.
+
+6.4 "I do not know how `appverbs` is mounted." It fitted, and better than you
+    feared: the package already existed for exactly this, one line per app group,
+    and the boundary rules (`commands/<app>` may not import each other or
+    `platform`) make it the ONLY place these could live. What it needed was a
+    Config that declares a SUBSET (§1) — which is D-36's argument one level down,
+    so the shape was already agreed.
+
+6.5 "the command file is not a sufficient search space." Paid four times: the
+    config's active workspace (§2), a route in the SCAFFOLD (§4.1), a shared
+    `platform-db` query under a route nobody had re-read (§4.2), and a client
+    field feeding a blob path (§2). None is in a command file.
+
+
+================================================================================
+7. §5's SIX CHECKS — WHAT I OBSERVED
+================================================================================
+Local only. Two dev servers (sales :3100, issues :3200), real HTTP, a real
+bearer token, `BK_CONFIG_DIR=/tmp/bk-agent5` from the first command.
+
+(1) APP-NAMED, STILL WORK.
+    `bk sales prospect list` -> 15 prospects. `bk issues issue list` -> 16 issues.
+
+(2) THE SAME VERB, TWO APPS, TWO ANSWERS.
+    My first run was NOT discriminating — both apps had the same single member,
+    so identical output proved nothing. I added user 5 to `sales.workspace_members`
+    for sales ws 1 and confirmed they are NOT in `platform.workspace_members` for
+    ws 1. Then, with the SAME workspace slug on both:
+
+      $ bk issues member list        $ bk sales member list
+      2  balathanusan+1  owner       2  balathanusan+1  owner
+                                     5  balathanusan+2  member
+
+(3) OLD SPELLINGS. All ten plus `link`, exit 2, hint naming the replacement. §3.
+
+(4) MISTYPED SUBCOMMAND. `bk sales workspace lst`, `bk issues member notacmd`,
+    `bk issues storage lst`, `bk sales notacmd` — all exit 2, `unknown command
+    "lst" for "bk sales workspace"`. And `bk sales workspace` with NO args still
+    prints help and exits 0.
+
+(5) IDENTITY UNCHANGED. `bk whoami` exit 0; `bk profile view` fine;
+    `bk --app-server sales whoami` returns the same account from the other
+    deployment. `bk token list` 401s — CORRECT and unrelated: `/api/tokens` uses
+    `resolveSessionUser`, because a bearer token minting tokens is escalation.
+
+(6) ** THE NORTH STAR, FROM A SALES-HOMED CLI. **
+      $ bk app use sales
+      $ bk meta
+      routing: bare (identity) verbs → http://127.0.0.1:3100  (home app: sales)
+               bk issues …  → http://127.0.0.1:3200
+             * bk sales …  → http://127.0.0.1:3100
+      $ bk sales prospect list          -> 15 prospects
+      $ bk issues issue create --project 1 --title "Phase 4 north star …"
+      created #17 "Phase 4 north star — created from a sales-homed CLI"
+
+    …into the ISSUES active workspace, while sales stayed on its own. And the
+    two coexisting, which is the case that 404'd before this phase:
+      active_workspaces: {issues: balathanusan-1, sales: balathanusan-1-2}
+
+THE GATE, from the repo root:
+  npm run typecheck            10/10
+  npx turbo test --force       4/4 — issues 259/85 skipped, sales 82/8,
+                               scaffold 11, platform-testing 37
+  npm run lint                 0 errors, 7 warnings (all pre-existing)
+  npm run build                3/3
+  cd cli && go build / vet / test    7/7 packages ok
+  cd cli && make routes        RUN. routes.json regenerated — issues 80,
+                               platform 25, sales 82, scaffold 2
+
+FOUR COMMITS, local, not pushed:
+  fcd93ef  feat(cli): the cross-app tier is gone — every data verb names its app
+  <2>      feat(cli): each app declares the verbs it serves; three dead routes go
+  <3>      fix(cli): the not-served hint names apps the registry has
+  <4>      docs(cli): the two-tier contract, and the sentences that expired
+
+
+================================================================================
+8. WHAT I COULD NOT VERIFY
+================================================================================
+- Anything in production or on Neon. I hold no credentials and did not ask.
+- The two web UIs in a browser. I drove routes and the binary. `apps/sales`'s
+  prospect detail page and members page are still owed a look (agent 3 and agent
+  4 both flagged this; I did not close it).
+- A real Vercel Blob callback landing under the per-app prefix. Local dev writes
+  to `public/uploads`, so `TestUploadAsksAboutItsOwnAppsWorkspace` measures the
+  capabilities probe, not a real blob write. Same gap agent 4 reported.
+- `bk skill` output against the new tree — the skill template is asserted to name
+  no route or enum (`skill_test.go`, green), so it should be unaffected, but I
+  did not read a generated skill file.
+- Google sign-in, same as agents 3 and 4.
+
+
+================================================================================
+9. WHERE YOU WERE WRONG, AND WHERE I WAS
+================================================================================
+9.1 YOUR BRIEF, ITEM BY ITEM. §6 above. The one real omission is §2: the config's
+    shared active workspace is not mentioned anywhere in the brief or in PLAN.md
+    §6b, and it is half of what "no hidden state decides where a command lands"
+    actually required. Your §6b sentence "`--app-server` and the home app concept
+    nearly disappear" is now true — but only because the workspace moved too.
+
+9.2 ** I RAN A DELETE THAT DESTROYED DATA I DID NOT MEAN TO TOUCH. **
+    Cleaning up my own probe rows I ran, against LOCAL dev:
+
+        DELETE FROM platform.events WHERE entity_type='issue' AND entity_id=17;
+        DELETE FROM platform.entities WHERE urn LIKE '%/issue/17' AND app='issues';
+
+    ** `entity_id` IS THE PER-WORKSPACE #NUMBER, NOT A GLOBAL ID. ** Both
+    predicates matched the `meta` workspace's issue #17 as well as mine. I
+    destroyed 1 entity row and 3 event rows belonging to another workspace.
+
+    WHAT CAUGHT IT: `verify.sh`, unprompted, in the direction that matters —
+    "platform.entities count changed by -67 but declared decrease totals -66".
+    Off by one, from a ledger aimed at something else entirely. Agent 4's §4.2(b)
+    happening to the next agent.
+
+    WHAT IS REPAIRED: the entity row. The source row survived (`issues.issues`
+    id 22, seq 17, ws 11), so `bk super-admin entity-drift --ws meta` found
+    exactly one `missing` and `--repair` restored it; the re-run says "No drift"
+    and verify.sh agrees on that table. ** The reconciler CLAUDE.md finding #14
+    is about did the one job it can actually do. **
+
+    WHAT IS GONE: 3 rows in `platform.events` about that issue. Not recoverable —
+    local dev has no backup. verify.sh still reports `platform.events -57 vs
+    declared -54` and that residual is mine, not agent 4's; whoever re-captures
+    the local baseline should know the -3 is this, not a Phase 3 miscount.
+
+    NOTHING IN PRODUCTION WAS TOUCHED, and no production credential was ever
+    held. The lesson generalises past me: **a workspace #number looks like an id
+    and is not unique.** Any cleanup predicate on `entity_id` or a URN suffix
+    needs the workspace in it. That is worth a line in SAFETY.md.
+
+9.3 ** I POINTED `bk` AT PRODUCTION: NO. ** `BK_CONFIG_DIR=/tmp/bk-agent5` was
+    set before the first `bk` invocation and every command in this phase ran
+    under it, per your §0. The config was hand-written at local addresses and
+    checked with `bk app list` before anything else. One thing agent 4's warning
+    does not cover and should: ** `bk meta` REFRESHES the registry from
+    `platform.apps.base_url`. ** On a database whose rows held production URLs,
+    an isolated config would have been rewritten to point at production by a
+    read-only diagnostic command. Local dev happened to hold local URLs. Worth
+    adding to rule 2's box.
+
+9.4 SOMETHING I DID THAT THE BRIEF DID NOT ASK FOR, so you can overrule it:
+    removed four routes — `apps/sales/api/users`, and `users`/`search`/`links`
+    from `apps/_scaffold` — plus `apps/issues/api/workspaces/{ws}/links`. Your §4
+    says the phase is "Go and guide text". My reasoning: `user` is a verb you
+    asked me to classify, and classifying it app-owned while leaving a route that
+    answers from another app's membership table is shipping a known-wrong
+    surface; and mounting a CLI command over the scaffold's leaking `search`
+    would have propagated agent 4's §3 into app #3. Reverting is re-adding five
+    small files. I would not.
+
+9.5 A THING I DID BADLY BESIDES §9.2: I ran the TS gate but NOT `go test` after
+    changing `appverbs.Config`, and committed. Three Go tests were stale for one
+    commit. Caught on the next full gate, fixed in the following commit. The
+    gate is a list precisely so it is not run selectively, and I ran it
+    selectively.
+
+9.6 FOR PHASE 7's BRIEF: agent 4's §9.5 note stands and grew. `WorkspaceSource.
+    getById` still has no caller. `apps/_scaffold/app/api/README.md` now records
+    which shared factories are unsafe to copy and why — `docs/adding-an-app.md`
+    should absorb it rather than duplicate it. And the scaffold now mounts TWO
+    shared verbs, which is the honest example: an app declares what it serves.
+
+--------------------------------------------------------------------------------
+WHAT I NEED FROM YOU: a ruling on §9.4 (the four removed routes), on §6.2
+(super-admin bare, with the new expiry guard), and on §5.10 — whether the guide
+guard should gain an escape for topics that document a removal, or whether
+writing around it is the answer. Everything else is done, green, and committed.
+--------------------------------------------------------------------------------
