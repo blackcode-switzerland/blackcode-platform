@@ -39,7 +39,6 @@ import {
 import type { Prospect } from '../schema'
 import { allocateSeq } from './counters'
 import { recordEvent } from './events'
-import { markEntityDeleted, projectEntity, syncEntityDeletedState } from './entities'
 import type { Actor } from '@/lib/actor'
 import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@/lib/limits'
 
@@ -287,12 +286,6 @@ export async function createProspect(input: CreateProspectInput): Promise<Prospe
       action: 'created',
       meta: { name: row.name, stage: row.stage },
     })
-    await projectEntity(tx, {
-      workspaceId: input.workspaceId,
-      entityType: 'prospect',
-      number: row.seq,
-      title: row.name,
-    })
     return row
   })
 
@@ -381,15 +374,6 @@ export async function updateProspect(
         : 'updated',
       diff: { before, after },
       meta: { name: row.name },
-    })
-    // The projection carries the TITLE, so a rename has to reach it or
-    // `bk search` keeps returning the old name.
-    await projectEntity(tx, {
-      workspaceId,
-      entityType: 'prospect',
-      number: row.seq,
-      title: row.name,
-      deletedAt: row.deleted_at,
     })
     return row
   })
@@ -591,17 +575,6 @@ export async function softDeleteProspect(
       action: 'deleted',
       meta: { name: row.name, number: row.seq },
     })
-    await markEntityDeleted(tx, {
-      workspaceId,
-      entityType: 'prospect',
-      number: row.seq,
-      deletedAt: now,
-    })
-    // The children are binned by predicate, so the projection is RE-DERIVED for
-    // the workspace rather than patched row by row. `syncEntityDeletedState`'s
-    // header says why: there is no list of affected rows, and building one is a
-    // list the next cascade branch has to remember to extend.
-    await syncEntityDeletedState(tx, workspaceId)
     return row
   })
 

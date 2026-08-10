@@ -30,22 +30,16 @@
  *   would put a row in `platform.blob_references` for a file nobody can fetch,
  *   and `bk super-admin blob-drift` would report it forever. Every seeded
  *   document is an `external_url`.
- * - No `platform.events` and no `platform.entities`. Those are written by the
- *   real write paths (agent5's routes), inside the transaction that writes the
- *   source row. Seeding them here would be a SECOND implementation of the
- *   projection, and the two would disagree the first time either changed.
+ * - No `sales.events`. Those are written by the real write paths, inside the
+ *   transaction that writes the source row. Seeding them here would be a SECOND
+ *   implementation of the event spine, and the two would disagree the first
+ *   time either changed.
  *
- *   **So nothing seeded here is findable by `bk search` or addressable by a
- *   cross-app link until you project it.** Run:
- *
- *     SALES_REPROJECT=1 npm run db:reproject --workspace=sales
- *
- *   This line used to say `bk super-admin entity-drift --repair`, which CANNOT
- *   TOUCH A SALES ROW — that command is served by the issues deployment and is
- *   bound to `issues.*`. It ran, reported no drift and exited 0 against a
- *   database with fifty-one unprojected sales rows. See `scripts/reproject.ts`
- *   for why one host cannot reconcile both apps (it is a database grant, not an
- *   omission).
+ *   **Since Phase 3 there is nothing to project.** This app no longer writes
+ *   `platform.entities`, so `db:reproject` and its "run entity-drift --repair"
+ *   predecessor are both gone with it — seeded rows are reachable through
+ *   `bk sales …` and this app's own search, and they are not in the cross-app
+ *   index because that index is now issues' alone.
  *
  * Usage:  SALES_SEED=1 npm run db:seed --workspace=sales
  */
@@ -377,10 +371,18 @@ const MATCHES: Array<[string, string, number, string]> = [
 async function main() {
   const db = getDb()
 
-  const wsRes = await db.execute(sql`SELECT id, slug, name FROM platform.workspaces ORDER BY id LIMIT 1`)
+  // `sales.workspaces`, not `platform.workspaces` (Phase 2). Every table below
+  // has a foreign key on the former, so seeding a platform workspace id that
+  // this app does not know about fails on the first insert — and, for the ids
+  // the two tables still share, would seed into a workspace whose membership is
+  // a different set of people.
+  const wsRes = await db.execute(sql`SELECT id, slug, name FROM sales.workspaces ORDER BY id LIMIT 1`)
   const ws = wsRes.rows[0]
   if (!ws) {
-    console.error('✗ no workspace in platform.workspaces — create one first (bk workspace create).')
+    console.error(
+      '✗ no workspace in sales.workspaces — sign up at this app (POST /api/auth/register) ' +
+        'or sign in once; the first sign-in mints one.'
+    )
     process.exit(1)
   }
   const wsId = Number(ws.id)
@@ -525,7 +527,12 @@ async function main() {
   for (const r of counts.rows) console.log(`  ${String(r.t).padEnd(16)} ${r.n}`)
   console.log('✓ seeded. URNs are NOT projected — run `bk super-admin entity-drift --repair` if you want them.')
 
-  await enableAppForWorkspace(db, wsId, String(ws.slug))
+  // NO `enableAppForWorkspace` any more. `platform.workspace_apps` /
+  // `platform.app_access` gate an app INSIDE a shared workspace, and this app
+  // stopped consulting them in Phase 2 — a member of a sales workspace is a
+  // sales user. Both tables are dropped in Phase 5. Writing them here would
+  // also fail outright: their `workspace_id` has a foreign key on
+  // `platform.workspaces`, and this workspace is `sales.workspaces`.
   await pointAppAtThisMachine(db)
   await mintDevToken(db, wsId)
   process.exit(0)
@@ -537,9 +544,13 @@ async function main() {
 // Seeded rows are useless if no command can reach them, and the two things
 // standing between a fresh clone and `bk sales prospect list` are not data:
 //
-//   1. a `platform.workspace_apps` row, or `resolveWorkspace` answers 403
-//      `app_access_denied` for every route in this app;
+//   1. this app's `base_url` in `platform.apps`, or `bk sales …` is sent to
+//      whatever the registry last recorded — production, from a laptop;
 //   2. an API token, or there is nothing to authenticate with.
+//
+// (There used to be a third: a `platform.workspace_apps` row, without which
+// every route answered 403 `app_access_denied`. Phase 2 stopped this app
+// consulting that gate, and Phase 5 drops the tables.)
 //
 // Both live here rather than in a paragraph telling a developer to paste SQL.
 // A hand-run `INSERT INTO platform.api_tokens` is not repeatable for the next
@@ -550,46 +561,7 @@ async function main() {
 // and both are idempotent, like everything else in this file.
 
 /**
- * Run `sales` in this workspace, and grant it to every member.
- *
- * BOTH halves are required and it is easy to think one is enough:
- * `hasAppAccess` joins `app_access` to `workspace_apps`, so a workspace running
- * the app with no grants denies everybody, and a grant against a workspace not
- * running the app denies too. `default_access: 'all_members'` is the POLICY for
- * members added later — it does not retroactively grant anything, which is why
- * the explicit rows below exist.
- */
-async function enableAppForWorkspace(db: ReturnType<typeof getDb>, wsId: number, slug: string) {
-  await db.execute(sql`
-    INSERT INTO platform.workspace_apps (workspace_id, app, default_access)
-    VALUES (${wsId}, ${APP_SLUG}, 'all_members')
-    ON CONFLICT (workspace_id, app) DO NOTHING`)
-
-  // Mirrors `workspace_members.role`, which is what `app_access.role` is
-  // documented to do. Derived from the membership table rather than defaulted,
-  // so the workspace owner does not quietly become an app 'member'.
-  const granted = await db.execute(sql`
-    INSERT INTO platform.app_access (workspace_id, app, user_id, role)
-    SELECT wm.workspace_id, ${APP_SLUG}, wm.user_id, wm.role
-    FROM platform.workspace_members wm
-    WHERE wm.workspace_id = ${wsId}
-    ON CONFLICT (workspace_id, app, user_id) DO NOTHING
-    RETURNING user_id`)
-
-  console.log(
-    `▶ ${APP_SLUG} enabled for workspace "${slug}" — ` +
-      `${granted.rows.length} new grant(s), every member of that workspace can now use it`
-  )
-}
-
-/**
- * Point `platform.apps.base_url` at this machine, so `bk` can reach it.
- *
- * WITHOUT THIS, LOCAL ROUTING UN-DOES ITSELF. `bk meta`'s side effect is
- * load-bearing (D-1): it refreshes the CLI's app registry from
- * `apps.<slug>.base_url`. So a developer who hand-writes a localhost address
- * into their config loses it the first time they run `bk meta` — which is the
- * command every recovery hint in the routing layer tells them to run.
+ * Point this app's registry row at this machine.
  *
  * The URL comes from `SALES_BASE_URL` when set, and defaults to the port
  * `next dev` uses for this app. Behind the same two gates as everything else in
@@ -635,7 +607,7 @@ async function pointAppAtThisMachine(db: ReturnType<typeof getDb>) {
 async function mintDevToken(db: ReturnType<typeof getDb>, wsId: number) {
   const ownerRes = await db.execute(sql`
     SELECT u.id, u.email
-    FROM platform.workspaces w
+    FROM sales.workspaces w
     JOIN platform.users u ON u.id = w.owner_id
     WHERE w.id = ${wsId}`)
   const owner = ownerRes.rows[0]

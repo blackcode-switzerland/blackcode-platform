@@ -20,7 +20,6 @@ import {
 import type { Product, SalesDocument, Template } from '../schema'
 import { allocateSeq } from './counters'
 import { recordEvent } from './events'
-import { markEntityDeleted, projectEntity } from './entities'
 import type { Actor } from '@/lib/actor'
 import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@/lib/limits'
 
@@ -111,12 +110,6 @@ export async function createProduct(
       action: 'created',
       meta: { name: row.name, category: row.category },
     })
-    await projectEntity(tx, {
-      workspaceId,
-      entityType: 'product',
-      number: row.seq,
-      title: row.name,
-    })
     return row
   })
 }
@@ -158,13 +151,6 @@ export async function updateProduct(
       entityId: row.id,
       action: 'updated',
       meta: { name: row.name },
-    })
-    await projectEntity(tx, {
-      workspaceId,
-      entityType: 'product',
-      number: row.seq,
-      title: row.name,
-      deletedAt: row.deleted_at,
     })
     return row
   })
@@ -275,12 +261,6 @@ export async function createTemplate(
       action: 'created',
       meta: { name: row.name, channel: row.channel },
     })
-    await projectEntity(tx, {
-      workspaceId,
-      entityType: 'template',
-      number: row.seq,
-      title: row.name,
-    })
     return row
   })
 }
@@ -323,13 +303,6 @@ export async function updateTemplate(
       entityId: row.id,
       action: 'updated',
       meta: { name: row.name },
-    })
-    await projectEntity(tx, {
-      workspaceId,
-      entityType: 'template',
-      number: row.seq,
-      title: row.name,
-      deletedAt: row.deleted_at,
     })
     return row
   })
@@ -508,12 +481,6 @@ export async function addDocument(
       action: 'created',
       meta: { title: row.title, kind: row.kind },
     })
-    await projectEntity(tx, {
-      workspaceId,
-      entityType: 'document',
-      number: row.seq,
-      title: row.title,
-    })
     return row
   })
 }
@@ -552,13 +519,6 @@ export async function updateDocument(
       entityId: row.id,
       action: 'updated',
       meta: { title: row.title },
-    })
-    await projectEntity(tx, {
-      workspaceId,
-      entityType: 'document',
-      number: row.seq,
-      title: row.title,
-      deletedAt: row.deleted_at,
     })
     return row
   })
@@ -687,12 +647,6 @@ async function softDeleteCatalogRow<T extends 'product' | 'template' | 'document
       entityId: row.id,
       action: 'deleted',
       meta: { name: label(row as Record<string, unknown>), number: row.seq },
-    })
-    await markEntityDeleted(tx, {
-      workspaceId,
-      entityType: type,
-      number: row.seq,
-      deletedAt: now,
     })
     return row
   })

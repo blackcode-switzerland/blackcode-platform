@@ -23,7 +23,6 @@ import { communications, contacts, meetings, prospects } from '../schema'
 import type { Communication, Meeting } from '../schema'
 import { allocateSeq } from './counters'
 import { recordEvent } from './events'
-import { markEntityDeleted, projectEntity } from './entities'
 import type { Actor } from '@/lib/actor'
 import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@/lib/limits'
 
@@ -148,12 +147,6 @@ export async function createMeeting(input: CreateMeetingInput): Promise<Meeting>
       action: 'created',
       meta: { title: row.title, status: row.status, prospect_id: input.prospectId },
     })
-    await projectEntity(tx, {
-      workspaceId: input.workspaceId,
-      entityType: 'meeting',
-      number: row.seq,
-      title: row.title,
-    })
     return row
   })
 }
@@ -213,13 +206,6 @@ export async function updateMeeting(
       action: 'updated',
       meta: { title: row.title, status: row.status },
     })
-    await projectEntity(tx, {
-      workspaceId,
-      entityType: 'meeting',
-      number: row.seq,
-      title: row.title,
-      deletedAt: row.deleted_at,
-    })
   })
   return await getMeetingBySeq(workspaceId, seq)
 }
@@ -250,12 +236,6 @@ export async function softDeleteMeeting(
       entityId: row.id,
       action: 'deleted',
       meta: { title: row.title, number: row.seq },
-    })
-    await markEntityDeleted(tx, {
-      workspaceId,
-      entityType: 'meeting',
-      number: row.seq,
-      deletedAt: now,
     })
   })
   return await getMeetingBySeq(workspaceId, seq)
@@ -388,14 +368,6 @@ export async function logCommunication(input: LogCommInput): Promise<Communicati
       action: 'created',
       meta: { channel: row.channel, direction: row.direction, prospect_id: input.prospectId },
     })
-    await projectEntity(tx, {
-      workspaceId: input.workspaceId,
-      entityType: 'communication',
-      number: row.seq,
-      // The subject if there is one, otherwise something a human can recognise
-      // in a search result. A URN whose title is "" is a hit nobody can act on.
-      title: row.subject ?? `${row.channel} · ${row.direction}`,
-    })
     return row
   })
 }
@@ -426,12 +398,6 @@ export async function softDeleteCommunication(
       entityId: row.id,
       action: 'deleted',
       meta: { channel: row.channel, number: row.seq },
-    })
-    await markEntityDeleted(tx, {
-      workspaceId,
-      entityType: 'communication',
-      number: row.seq,
-      deletedAt: now,
     })
   })
   return await getCommBySeq(workspaceId, seq)

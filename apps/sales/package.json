@@ -13,8 +13,7 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed": "tsx scripts/seed.ts",
-    "db:reproject": "tsx scripts/reproject.ts"
+    "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
     "@blackcode/platform-agent": "*",

@@ -47,7 +47,6 @@ import {
   templates,
 } from '../schema'
 import { recordEvent } from './events'
-import { purgeMissingEntities, syncEntityDeletedState } from './entities'
 import type { SalesEntityType } from '@/lib/entity-address'
 import type { Actor } from '@/lib/actor'
 
@@ -237,7 +236,6 @@ export async function restoreItem(
       action: 'restored',
       meta: { number, children },
     })
-    await syncEntityDeletedState(tx, workspaceId)
     return {
       type,
       number,
@@ -315,10 +313,6 @@ export async function purgeItems(
       })
     }
 
-    // Projections whose source row is gone. By predicate, not by list — a purge
-    // cascades in the database and building a list of affected rows is a list
-    // the next cascade branch has to remember to extend.
-    await purgeMissingEntities(tx, workspaceId)
     return purged
   })
 }

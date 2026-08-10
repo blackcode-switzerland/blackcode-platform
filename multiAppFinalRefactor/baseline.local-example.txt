@@ -74,3 +74,8 @@ sales.workspaces	0	NULL	NULL
 
 # EXPECTED 2026-08-10 phase-3 agent4 (LOCAL)
 # platform.events -54   sales rows, app = 'sales' — the spine is sales.events now
+
+# EXPECTED 2026-08-10 phase-3 agent4 (LOCAL)
+# platform.entities -66   sales rows, app = 'sales' — this app no longer projects
+# EXPECTED 2026-08-10 phase-3 agent4 (LOCAL)
+# platform.links -5   every link naming a sales URN. Deleted EXPLICITLY, before the entities row it hangs off: the FK would have cascaded it away silently and the ritual needs the count READ

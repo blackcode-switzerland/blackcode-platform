@@ -166,13 +166,16 @@ const CITATIONS = collectCitations()
  * ONE file rather than a name everywhere.
  */
 const ALLOWED = new Map<string, string>([
-  [
-    'apps/sales/lib/db/queries/entities.ts::entities.projection.test.ts',
-    'narrates the bug rather than making a claim — the header records that this ' +
-      'comment USED TO cite a file that did not exist, and it has to write the ' +
-      'dead name to say so. The live citation in the same header names ' +
-      'entities.integration.test.ts, which exists.',
-  ],
+  // EMPTY, as of 2026-08-10. Its one entry covered a comment in
+  // `apps/sales/lib/db/queries/entities.ts`, and that file is gone: Phase 3 of
+  // the multi-app refactor removed this app's projection into
+  // `platform.entities` altogether. The staleness assertion below is what
+  // reported it — the allowance outlived the thing it excused by about an hour,
+  // which is precisely the case it was written for.
+  //
+  // An empty map is a legitimate state and NOT a reason to delete this list or
+  // the assertion: the next honest "this comment names a dead file on purpose"
+  // goes here with its reason.
 ])
 
 const allowKey = (c: Citation) => `${c.from}::${c.cited}`

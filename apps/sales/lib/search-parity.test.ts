@@ -16,14 +16,15 @@
 // left.
 //
 // ===========================================================================
-// AND THE OTHER HALF: THIS APP DOES NOT SERVE THE PLATFORM SEARCH
+// AND THE OTHER HALF: THIS APP DOES NOT SERVE THE CROSS-APP SEARCH
 // ===========================================================================
-// D-9's two layers are two PATHS. `…/search` reads `platform.entities` (titles,
-// every app, URNs out) and `…/sales-search` reads `sales.*` full text. Serving
-// both from this host would make which one an agent got depend on which
-// deployment it was pointed at — the ambiguity D-11 removes from the verbs. The
-// last case asserts the route file does not exist, so mounting it becomes a
-// deliberate act with a failing test attached rather than a three-line accident.
+// `…/sales-search` reads `sales.*` full text and is this app's. `…/search`
+// reads `platform.entities` across every app, scoped by a workspace id — and
+// since Phase 2 this app's workspace ids come from a DIFFERENT tenancy that
+// shares ids with the platform one. Mounting it therefore serves another app's
+// rows to this app's members; the last case asserts the route file does not
+// exist, with the measurement, so mounting it becomes a deliberate act with a
+// failing test attached rather than a three-line accident.
 //
 // Watched fail 2026-08-07, three ways:
 //   - `wsPath(ws, '/sales-search')` pasted back into `command-palette.tsx`
@@ -130,56 +131,76 @@ describe('search: one endpoint, one call site (D-9)', () => {
   })
 
   // -------------------------------------------------------------------------
-  // REVERSED 2026-08-07. THIS APP NOW MOUNTS BOTH, AND MUST.
+  // REVERSED AGAIN, 2026-08-10 (Phase 3). THIS APP MUST NOT MOUNT `…/search`.
   // -------------------------------------------------------------------------
-  // This case used to assert that `app/api/workspaces/[ws]/search/route.ts` did
-  // NOT exist, reasoning that "serving both from this host makes which one an
-  // agent gets depend on which deployment it was pointed at."
+  // The history matters, because this case has now argued both ways and only
+  // one of the three arguments was made from a measurement.
   //
-  // That reasoning does not survive contact, and the rewrite rather than an
-  // appended note is deliberate — a check that prescribes a rejected design is
-  // worse than no check.
+  //  1. Originally: "do not mount it — serving both from one host makes which
+  //     search an agent gets depend on which deployment it is pointed at."
+  //     That was design reasoning, and it was WRONG: the verb decides, not the
+  //     deployment (`bk search` vs `bk sales search`).
+  //  2. 2026-08-07: "mount it — `bk search` is a north-star step and it 404s
+  //     for anyone homed on sales." True, and it was the right call while the
+  //     two apps shared `platform.workspaces`.
+  //  3. Today: **mounting it is a cross-tenant read**, and this one was
+  //     measured rather than reasoned about.
   //
-  // **The deployment never decided which search you got. The VERB does.**
-  // `bk search` calls `…/search`; `bk sales search` calls `…/sales-search`. Two
-  // paths, two commands, no ambiguity — which is D-11 working, not D-11 at risk.
-  // What NOT mounting the platform route actually bought was `bk search`
-  // returning a 404 page to anyone homed on sales, and `bk search` is a
-  // north-star step. Phase 10 ran it and it failed.
+  // `searchRoute` resolves the workspace through `AppContext.workspaces` — this
+  // app's tenancy, `sales.workspaces` — and then queries `platform.entities` by
+  // that workspace's ID. Phase 2 MIRRORED ids, so a sales workspace id is very
+  // often an issues workspace id as well, and the two are no longer the same
+  // set of people: sales membership is `sales.workspace_members` and issues
+  // membership is `platform.workspace_members`.
   //
-  // So the property worth asserting is the opposite one, and it is the same
-  // property in both directions: **both paths exist and stay distinct.** A
-  // single host serving one path under the other's semantics is the real
-  // failure, and it is what the call-site assertions above already prevent for
-  // the web surfaces.
+  // Observed on 2026-08-10, local, against the real route: a user who is a
+  // member of sales workspace 1 and NOT a member of platform workspace 1 asked
+  // this deployment to search, and got issues' issue titles and dashboard URLs
+  // back — `bc:issues:balathanusan-1-2/issue/5`, "SSO for Northstar SA —
+  // blocks CHF 18k deal". Nothing in the route is wrong; its premise stopped
+  // being true underneath it.
+  //
+  // The same is true of `…/links` (`linksRoute` resolves an issues URN and
+  // returns the far end's title), which this app also stopped mounting.
+  //
+  // WHAT THIS COSTS, STATED RATHER THAN GLOSSED: `bk search` and `bk link`
+  // answer 404 from a sales-homed CLI. That is PLAN.md §3's deliberate loss —
+  // `bk link` retires and cross-app search comes back in Phase 6 as a CLI
+  // fan-out that asks both servers — arriving one phase early because the leak
+  // cannot ship. Phase 4 re-tiers the verbs; until it does, the recovery is
+  // `bk search --app-server issues`.
 
-  it('this app mounts BOTH search paths, and they stay distinct (D-9)', () => {
+  it('this app serves its OWN search and not the cross-app one (D-9, Phase 3)', () => {
     const platformSearch = join(APP_ROOT, 'app/api/workspaces/[ws]/search/route.ts')
     const salesSearch = join(APP_ROOT, 'app/api/workspaces/[ws]/sales-search/route.ts')
 
+    // The POSITIVE case first, and it is not a formality (finding #16): an app
+    // that serves NO search at all satisfies the absence below perfectly.
     expect(
       existsSync(salesSearch),
-      'app/api/workspaces/[ws]/sales-search/route.ts is gone. That is this app\'s ' +
+      "app/api/workspaces/[ws]/sales-search/route.ts is gone. That is this app's " +
         'OWN full-text search over sales.*, and ⌘K and the search page both go ' +
         'through it.'
     ).toBe(true)
 
     expect(
       existsSync(platformSearch),
-      'app/api/workspaces/[ws]/search/route.ts is missing. That is the PLATFORM ' +
-        'search (platform.entities, every app, URNs out) and `bk search` is a ' +
-        'north-star step: without this file it answers 404 for anyone homed on ' +
-        'sales. Mounting it is three lines — searchRoute(appContext).'
-    ).toBe(true)
+      'app/api/workspaces/[ws]/search/route.ts is back. That route reads ' +
+        '`platform.entities` scoped by a workspace id resolved from ' +
+        '`sales.workspaces` — two different tenancies that share ids by ' +
+        'construction (Phase 2 mirrored them), so it serves another app\'s rows ' +
+        'to this app\'s members. Measured, not theorised: see the note above. ' +
+        'Cross-app search comes back as a CLI fan-out (PLAN.md Phase 6), never ' +
+        'as this mount.'
+    ).toBe(false)
 
-    // Distinct implementations, not one re-exporting the other. If they ever
-    // collapse into one, the two-layer model in D-9 is gone and only this says so.
-    const platformSrc = readFileSync(platformSearch, 'utf8')
+    // The same failure, one path over: `bk link`'s storage is the cross-app
+    // index too, and PLAN.md §3 retires the feature outright.
     expect(
-      /sales-search/.test(platformSrc),
-      'the platform search route mentions /sales-search. These are two layers: ' +
-        'titles across every app, and full text within this one. Serving either ' +
-        'under the other\'s path is the collapse D-9 exists to prevent.'
+      existsSync(join(APP_ROOT, 'app/api/workspaces/[ws]/links/route.ts')),
+      'app/api/workspaces/[ws]/links/route.ts is back. `linksRoute` resolves URNs ' +
+        'through `platform.entities` and returns the far end\'s title — the same ' +
+        'cross-tenant read as the search route, and PLAN.md §3 retires `bk link`.'
     ).toBe(false)
   })
 })
