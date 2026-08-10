@@ -337,6 +337,38 @@ One workspace per user, invisible.
 
 ---
 
+> ### DEPLOY NOTE, decided 2026-08-10 after agent 3
+>
+> **Phases 2 and 3 ship in ONE deploy.** Phase 2 is complete, safe and loses
+> nothing, but between it and Phase 3 a brand-new sales workspace cannot create
+> a prospect: sales still writes `platform.{events,entities,labels,uploads}`,
+> whose `workspace_id` has a foreign key on `platform.workspaces` — and after
+> Phase 2 that id is a *sales* workspace id.
+>
+> Agent 3 measured both outcomes rather than reasoning about them. If the id
+> also exists in `platform.workspaces`, **the row lands silently against another
+> tenant's workspace**; if it does not, the FK rejects it loudly. Because
+> mirroring makes the two id spaces start out overlapping, **the silent outcome
+> was also the likely one.** Migration 0004 advances sales' sequence by +1000 so
+> every mis-scoped write is a loud failure instead.
+>
+> The phase boundary survives in git — separate commits, reviewable and
+> attributable — which is where it was ever load-bearing.
+>
+> ### DO NOT "FIX" A FOREIGN-KEY VIOLATION BY DROPPING THE FOREIGN KEY
+>
+> It is the obvious cheap fix in Phase 3 and it is the expensive one. Verified
+> against production: **every FK on `platform.workspaces` is `ON DELETE
+> CASCADE`** — twelve of them — and `apps/issues`' `deleteWorkspace` is a bare
+> `db.delete(workspaces)` whose own header says *"cascades (FKs handle it)"*.
+> Dropping them removes the only mechanism that cleans up an issues workspace's
+> labels, events, comments and inbox when it is deleted.
+>
+> **And `verify.sh` cannot see it**: it fails on decreases, not on absences. A
+> workspace deletion that orphans 400 rows shows up as counts that did *not* go
+> down. A real limitation of the instrument, found by reasoning about a proposal
+> rather than by running one.
+
 ### Phase 3 — Sales moves its data off the shared tables
 
 **Goal:** sales stops reading and writing `platform.*` for anything but identity.
