@@ -35,6 +35,33 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-08-10 — every issues data verb names the app: `bk issues workspace`, `bk issues search`, `bk issues storage`
+
+**Breaking for anything scripted.** Ten verbs that were bare now sit behind the
+app name. For this app the mapping is mechanical — `bk workspace list` becomes
+`bk issues workspace list`, and the same for `member`, `invite`, `user`, `inbox`,
+`storage`, `search` and `activity`. Nothing about what they return has changed.
+
+`bk link` is removed outright; see `docs/changelog/platform.md` for why and what
+to do instead.
+
+Two smaller changes worth knowing:
+
+- **`--app` is gone** from `bk issues search`, `bk issues activity` and
+  `bk issues storage list`. It filtered a shared index that no longer exists; the
+  app is the command now.
+- **`GET /api/workspaces/{ws}/links` was removed.** `bk link` was its only
+  caller and no page ever used it. `platform.links` and its route factory are
+  untouched, so intra-app links remain a five-line change if they are ever
+  wanted.
+
+**This app remembers its own active workspace.** `bk issues workspace use acme`
+does not move `bk sales`. On upgrade, your existing active workspace is adopted
+for your home app only — run `bk <app> workspace use <slug>` once for any other
+app you work in.
+
+Run `bk guide platform/apps` for the rule, or `bk issues --help` for the surface.
+
 ## 2026-08-04 — Apps are now a thing: per-workspace, per-user app access
 
 **What changed.** The platform learned that apps exist. A workspace is the

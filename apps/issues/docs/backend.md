@@ -173,8 +173,8 @@ freely; nothing in `platform.*` may depend on them.
 
 Every issue, task and project is mirrored into `platform.entities` so it is
 addressable by URN — `bc:issues:<workspace-slug>/<type>/<number>`, using the
-`#number` like everything else here. That is what makes `bk search`, `bk link`
-and the merged `bk activity` possible without any app reading another app's
+`#number` like everything else here. That is what makes `bk issues search`, `bk link`
+and the merged `bk issues activity` possible without any app reading another app's
 schema.
 
 Two rules, and both are the difference between an index and a liability:

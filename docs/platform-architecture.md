@@ -431,40 +431,68 @@ agent landing anywhere in this repo must be able to tell **which app they are in
 without tracing imports. Sharing is opt-in via `packages/platform-*`; everything
 else is app-local and visibly so.
 
-### 7.1 CLI — three verb tiers, and the tier is visible in the spelling
+### 7.1 CLI — two verb tiers, and the tier is visible in the spelling
 
-Rewritten 2026-08-06 (D-11). The old rule was "app nouns are namespaced, platform
-verbs are bare". That was correct with one app and wrong with two, because it
-sorted verbs by *who implements them* rather than by *whether two deployments
-would answer differently*.
+Rewritten 2026-08-10 (multiAppFinalRefactor Phase 4). This section previously
+described THREE tiers, rewritten 2026-08-06 as D-11, which itself replaced "app
+nouns are namespaced, platform verbs are bare". Each rewrite fixed the same
+mistake at a different scale: sorting verbs by *who implements them* rather than
+by *whether two deployments would answer differently*.
 
 | Tier | Verbs | Spelling | Rule |
 |---|---|---|---|
-| **Neutral** | `login` `logout` `meta` `guide` `changelog` `skill` `version` `app` `workspace` `member` `invite` `token` `profile` `inbox` `super-admin` | bare | Identity and org data. No app owns a person or a membership, so no app can be the wrong one to ask |
-| **Cross-app** | `search` `activity` `link` `storage` | bare | Spans every app *by design*; results are tagged with the app they came from. Scoping them would remove the reason they exist |
-| **App-owned** | every app noun, **plus** `upload` `trash` `label` | `bk <app> <verb>` | The data is app-attributed. An implicit default here is how a sales contract gets filed under issues |
+| **Bare** | `login` `logout` `whoami` `token` `profile` `meta` `app` `guide` `skill` `changelog` `version` `super-admin` | bare | Your ACCOUNT and this BINARY. One login and one token are valid against every app, so no app can be the wrong one to ask |
+| **App-owned** | every app noun, **plus** `workspace` `member` `invite` `user` `upload` `trash` `label` `search` `activity` `inbox` `storage` | `bk <app> <verb>` | The data is the app's. An implicit default here is how a sales contract gets filed under issues |
 
-**The test is "would two deployments answer differently?", never "is it shared
-code?"** (D-28). `storage` is shared code and cross-app: uploads are one ledger
-against one workspace quota, so every app returns the same rows, and an
-app-scoped `bk sales storage list` would have implied a narrowing it does not do.
-`upload` is the opposite — the receiving app is recorded on the row and becomes
-the storage prefix. Hence the pairing the guide states in as many words: **you
-upload into one app; you list across all of them.**
+`bk link` was **removed**: its two ends could live in different apps, which
+needed one entity index every app wrote into, and there is no such index now.
 
-A corollary that cost a subcommand: **one noun must not straddle two tiers.**
-`bk storage attachments` listed only ISSUE attachments while `bk storage list`
-spanned every app, so it became `bk issues attachment list` — a noun of that app,
-not a subcommand of a bare verb.
+**The test is unchanged and is still "would two deployments answer differently?",
+never "is it shared code?"** (D-28). What changed is the answers, and it is worth
+being precise about which sentences expired:
+
+- The NEUTRAL tier rested on *"no app owns a person or a membership"*. True while
+  there was one `platform.workspaces`; false since Phase 2, when `apps/sales` got
+  its own. The same person can be in one app's workspace and not the other's.
+- The CROSS-APP tier rested on one entity index (`search`, `link`), one event
+  spine (`activity`) and one upload ledger (`storage`). Phase 3 ended all four.
+- **D-28's pairing — "you upload into one app; you list across all of them" —
+  no longer describes anything.** It was right when `storage` read one ledger.
+  `AppContext.uploads` made the ledger per app, so both halves are per app and
+  `storage` moved with `upload`. The STORE and the QUOTA are still shared, which
+  is why the usage total a `storage list` prints is workspace-wide while the rows
+  are one app's.
+
+A corollary that cost a subcommand, and still holds: **one noun must not straddle
+two tiers.** `bk storage attachments` listed only ISSUE attachments, so it became
+`bk issues attachment list` — a noun of that app.
+
+**An app declares which of these it serves** (`appverbs.Config`), and a verb it
+has no route for is ABSENT from its group rather than present and 404ing. This is
+D-36 one level down: a permanent subset is legitimate, an accidental one is a
+bug. `apps/sales` serves `workspace` without `create|edit|transfer|delete` (D-3 —
+a workspace is the company), `member` without `leave`, and no `inbox`, `storage`
+or `user` at all. Both directions are checked against `app/api/**` by that app's
+`lib/cli-parity.test.ts`.
+
+**The active workspace is per app**, keyed by slug in `~/.config/bk/config.json`.
+Two apps' workspace tables have overlapping ids by construction (migration 0004
+mirrored them), so one shared field meant `bk sales workspace use x` silently
+retargeted `bk issues …` — measured against two local deployments before the
+field was split, not reasoned about. A config written by an older `bk` has its
+single active workspace adopted for the HOME app and for no other; a slug
+resolved against one app is not a workspace in another.
 
 `bk sales deal create` is redundant-looking on purpose: it tells you the app, and
 `bk deal create` does not. It also removes noun collisions before they happen
 (every app will eventually want `report`, `note`, `status`). **Why a namespace
 and not a `--app` flag:** a flag can be forgotten and has a default; a namespace
-cannot be forgotten, because there is no bare form to type.
+cannot be forgotten, because there is no bare form to type. The corollary landed
+in the same phase: `--app` was REMOVED from `search`, `activity` and
+`storage list`, where it had become a filter with one legal value.
 
-- `bk --help` lists the three tiers, then one line per app.
-- `bk issues --help` lists that app's nouns and its four app-owned verbs.
+- `bk --help` lists the two tiers, then one line per app.
+- `bk <app> --help` lists that app's nouns and the shared verbs it serves.
 - `bk guide`, `bk meta`, `bk changelog` all take `--app <name>` to scope.
 - `bk guide platform/apps` is the agent-facing statement of all of this.
 
@@ -501,9 +529,14 @@ publishes for longer than one `bk meta`.
 
 | Tier | Server | Set by |
 |---|---|---|
-| Neutral | `home_server` | `bk app use <slug>`, or `--app-server <slug>` for one invocation |
-| Cross-app | `home_server` (shared tables; any app answers alike) | same |
+| Bare | `home_server` (your account; any app answers alike) | `bk app use <slug>`, or `--app-server <slug>` for one invocation |
 | App-owned | `app_servers[<app>]` | the command itself — `bk <app> …` pins it |
+
+Since 2026-08-10 the home app decides much less than it did. It used to route a
+dozen data verbs; now it routes only the account questions, and the WORKSPACE
+those data verbs run in is per app as well (`config.ActiveWorkspaces`). That is
+the real prize of the verb move: **no hidden state decides where a command
+lands.**
 
 Three properties are load-bearing, and each has a test:
 
@@ -601,10 +634,13 @@ another app.**
   The `hostsPlatformRoutes` boolean each app used to set was **retired in the
   same change**. It could not express an app serving a legitimate SUBSET of the
   platform surface, which is a permanent state and not a build-out one — `sales`
-  has no reason ever to serve `bk inbox` (per-user, cross-workspace),
-  `bk super-admin errors` (platform-wide data, any host answers) or
-  `bk storage list` (§D-28: one ledger, one quota, same rows from every
-  deployment). The plan's earlier answer — a documented `EXCLUDED_PATHS` entry
+  has no reason ever to serve `inbox` (per-user, and it raises no notifications),
+  `bk super-admin errors` (platform-wide data, any host answers) or `storage`
+  (no route; §D-28's old reason — one ledger, same rows from every deployment —
+  expired when the ledger became per app on 2026-08-10). Since Phase 4 the same
+  idea runs one level down: `appverbs.Config` declares which shared verbs an app
+  serves, so an unmounted one is absent from `bk <app> --help` rather than
+  present and 404ing. The plan's earlier answer — a documented `EXCLUDED_PATHS` entry
   per unmounted route — was wrong for a mechanical reason worth keeping written
   down: **an exclusion pushes on COVERAGE and an unmounted route is a DRIFT
   failure**, so excluding the path removes it from the very set drift compares

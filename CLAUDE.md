@@ -44,19 +44,27 @@ What the migration bought:
 - Apps are real data: `platform.apps`, `workspace_apps`, `app_access`. Workspace
   listings are app-scoped and `resolveWorkspace` enforces access behind
   `PLATFORM_ENFORCE_APP_ACCESS`.
-- **The CLI has three verb tiers, and the tier is visible in the spelling**
-  (D-11, `bk guide platform/apps`). **Neutral** verbs stay bare because no app
-  can be the wrong one to ask (`workspace`, `member`, `invite`, `token`,
-  `profile`, `inbox`, `meta`, `login`, …). **Cross-app** verbs stay bare because
-  crossing is the point, and tag each result with its app (`search`, `activity`,
-  `link`, and `storage`, which lists every app's files against one workspace
-  quota). **App-owned** verbs sit behind the app name — that is every app noun
-  *and* `upload`, `trash`, `label`, which moved there in 3.0.0 because a file's
-  ownership, a bin and a label each belong to ONE app. **You upload INTO one app
-  and list ACROSS all of them** (D-28: the tier is decided by "would two
-  deployments answer differently?", never by "is it shared code?"). The shared
-  implementation is `cli/internal/appverbs`; each app group mounts it in one
-  line and adds its own entity-specific subcommands.
+- **The CLI has TWO verb tiers since 2026-08-10, and the tier is visible in the
+  spelling** (`bk guide platform/apps`). **Bare** is your ACCOUNT and this
+  BINARY — `login`, `logout`, `whoami`, `token`, `profile`, `meta`, `app`,
+  `guide`, `skill`, `changelog`, `version`, `super-admin`. **App-owned** is
+  everything that touches an app's data, spelled `bk <app> <verb>`: every app
+  noun *plus* `workspace`, `member`, `invite`, `user`, `upload`, `trash`,
+  `label`, `search`, `activity`, `inbox`, `storage`. `bk link` was **removed**.
+  The test is unchanged from D-11 — *"would two deployments answer
+  differently?"*, never *"is it shared code?"* — and what changed is the facts:
+  D-11's NEUTRAL tier assumed one `platform.workspaces`, and its CROSS-APP tier
+  assumed one entity index and one upload ledger. multiAppFinalRefactor Phases 2
+  and 3 ended all three, so a bare data verb had no answer, only a default taken
+  from the home app. **D-28's pairing ("you upload INTO one app and list ACROSS
+  all of them") no longer describes anything**: the ledger is per app now, so
+  `storage` moved with `upload`.
+  The shared implementation is `cli/internal/appverbs`, and **`appverbs.Config`
+  declares what each app SERVES, verb by verb** — a permanent subset is
+  legitimate (D-36) and an app gets only what its `app/api/**` tree has. The
+  active workspace is **per app** in `~/.config/bk/config.json`: two apps'
+  workspace tables have overlapping ids, so one shared field meant
+  `bk sales workspace use x` silently retargeted `bk issues …`.
 - **Everything is addressable by URN:**
   `bc:<app>:<workspace-slug>/<entity-type>/<number>`, using the #number — built
   from an app's OWN workspace slug and #number, so every app can print one.
@@ -64,12 +72,14 @@ What the migration bought:
   transaction as its source write**. Read `apps/issues/lib/db/queries/entities.ts`'s
   header before touching a write path; `bk super-admin entity-drift` is the
   reconciler. **Since 2026-08-10 `apps/issues` is the only writer of that index**
-  (multiAppFinalRefactor Phase 3): `apps/sales` stopped projecting, `bk link` is
-  retiring, and cross-app search returns as a CLI fan-out rather than a shared
-  table. A deployment that never wrote the index does not serve `bk search` or
-  `bk link` — it answers 404 with a hint naming one that does.
-- **Storage is shared and app-attributed.** `platform.uploads.app` records who
-  uploaded each file; new uploads land under `<app>/<workspace>/<file>`;
+  (multiAppFinalRefactor Phase 3): `apps/sales` stopped projecting. **`bk link`
+  is GONE** (Phase 4) and its route is unmounted everywhere; the URN goes in the
+  record's own text instead. `search` is app-owned (`bk <app> search`) and Phase
+  6 may bring a cross-app one back as a CLI fan-out over each app's server —
+  never as a shared table. **A URN itself is unaffected**: it is built from an
+  app's own slug and #number, so every app can still print and resolve one.
+- **Storage: the STORE is shared, the LEDGER is not.** `platform.uploads.app`
+  records who uploaded each file; new uploads land under `<app>/<workspace>/<file>`;
   **existing blobs were not moved** — `pathname` is where a file is, `app` is who
   owns it. Import storage from `@/lib/storage`, never from the package directly.
   **The LEDGER is per app since 2026-08-10** (`AppContext.uploads`;

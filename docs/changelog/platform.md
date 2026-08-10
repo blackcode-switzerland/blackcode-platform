@@ -30,6 +30,104 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-10 — BREAKING: ten `bk` verbs move behind the app name, and `bk link` is removed
+
+**This breaks every script and every agent that uses a bare data verb.** Each old
+spelling exits non-zero and names its replacement on stderr, so a run that hits
+one can recover inside the same run — but it does not keep working.
+
+### What moved
+
+| Old | New |
+|---|---|
+| `bk workspace …` | `bk <app> workspace …` |
+| `bk member …` | `bk <app> member …` |
+| `bk invite …` | `bk <app> invite …` |
+| `bk user …` | `bk issues user …` |
+| `bk inbox …` | `bk issues inbox …` |
+| `bk storage …` | `bk <app> storage …` |
+| `bk search …` | `bk <app> search …` |
+| `bk activity …` | `bk <app> activity …` |
+| `bk link …` | **removed** — see below |
+
+`upload`, `trash` and `label` already moved in 3.0.0 and are unchanged.
+
+### Why
+
+The verbs were bare because the apps shared a database: one `platform.workspaces`
+to list, one entity index to search, one upload ledger to report. The 2026-08-10
+refactor ended all three — `apps/sales` has its own workspaces, members,
+invitations, labels, uploads ledger and event feed, and no longer projects into
+the shared index at all.
+
+A bare spelling therefore had no correct answer, only a **default** taken from
+whichever app you were last homed on, with nothing in the command saying which.
+`bk trash purge` destroyed things in an app the command never named.
+
+### What still stays bare
+
+Your account and this binary: `login`, `logout`, `whoami`, `token`, `profile`,
+`meta`, `app`, `guide`, `skill`, `changelog`, `version`, `super-admin`. One
+account and one token remain valid against every app — that has not changed and
+is not going to.
+
+### Each app now remembers its own active workspace
+
+`bk sales workspace use acme` no longer moves `bk issues`. They are different
+rows in different tables that can share an id and a slug, so a slug only means
+something against the app it was resolved in.
+
+**On upgrade**, the single active workspace in your config is adopted as your
+**home app's** and no other's. Run `bk <app> workspace use <slug>` once for each
+other app you work in; until you do, commands in those apps fail with an error
+naming the app and the fix rather than a 404.
+
+### `--app` is gone from `search`, `activity` and `storage list`
+
+It selected among the apps writing one shared index. With one index per app its
+only legal value is the app already named on the command, and its only other
+value returns an empty result that reads as "nothing here". It is unchanged on
+`bk changelog --app` and `bk guide --app`.
+
+### `bk link` is removed, with no replacement command
+
+It recorded a relation between two apps' records in an index every app wrote
+into. There is no such index now. Put the far end's URN in the record's own text
+instead — `bk sales prospect show 8` prints one, and it is a string a human or an
+agent can act on:
+
+```bash
+bk issues issue create --project 1 --title "Export fails for Helvetia" \
+  --description "Prospect: bc:sales:acme/prospect/8"
+```
+
+What you lose is the reverse lookup; there is no list of "every issue mentioning
+this prospect". Search the text.
+
+### Apps serve subsets, and the CLI says so
+
+A verb an app does not serve is now **absent from `bk <app> --help`** rather than
+present and 404ing. `bk sales workspace` has `list`, `show` and `use` and no
+`create`, because a workspace is the company and sales has no create-workspace
+flow. Run `bk <app> --help` for what a given app offers.
+
+Three routes were also removed, each a shared handler whose premise had gone:
+`GET /api/users` on the sales deployment (it answered from the platform
+membership table, so it listed people who are in no sales workspace),
+`GET /api/workspaces/{ws}/links` on issues (no command and no page called it),
+and the same two plus `…/search` in the scaffold.
+
+### Adapting
+
+```bash
+bk guide platform/apps        # the rule, with the reasoning
+bk --help                     # the apps this binary knows
+bk <app> --help               # what that app offers
+bk meta                       # where each command will go
+```
+
+---
+
 ## 2026-08-10 — an app can own its upload ledger and its event feed
 
 Two more `AppContext` fields, and one contribution, for the same reason

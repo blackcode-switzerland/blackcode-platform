@@ -1,35 +1,62 @@
 # CLI (`bk`) — maintainer doc
 
-> **2026-08-06 — the command tree has three verb tiers** (D-11; supersedes the
-> 2026-08-04 note that "platform verbs stay bare"). Package layout, and the
-> boundary the tests enforce:
+> **2026-08-10 — the command tree has TWO verb tiers** (multiAppFinalRefactor
+> Phase 4; supersedes the 2026-08-06 three-tier note, which superseded the
+> 2026-08-04 "platform verbs stay bare"). Package layout, and the boundary the
+> tests enforce:
 >
 > ```
 > cli/internal/commands/            root.go, aliases.go, deprecations.go, routes.go
->   commands/platform/              tiers 1+2 — workspace, member, invite, token, search, activity, link, storage, …
->   commands/issues/                that app's nouns — bk issues issue|task|project|attachment|move|copy|analytics
->                                   …plus what it adds to tier 3 (appverbs.go)
-> cli/internal/appverbs/            tier 3 — upload, trash, label, built PER APP
+>   commands/platform/              tier 1 — login, logout, whoami, token, profile,
+>                                   meta, app, guide, skill, changelog, version,
+>                                   super-admin. Nothing else.
+>   commands/issues/                that app's nouns — bk issues issue|task|project|…
+>                                   …plus what it adds to tier 2 (appverbs.go)
+> cli/internal/appverbs/            tier 2 — workspace, member, invite, user, upload,
+>                                   trash, label, search, activity, inbox, storage,
+>                                   built PER APP from a per-app Config
 > cli/internal/cmdutil/             what both need: client construction, --ws/-v, flags, formatting
-> cli/internal/guide/topics/{platform,issues,template}/
+> cli/internal/guide/topics/{platform,issues,sales,scaffold}/
 > ```
 >
 > | Tier | Verbs | Spelling | Server |
 > |---|---|---|---|
-> | **Neutral** | `login` `logout` `meta` `guide` `changelog` `skill` `version` `app` `workspace` `member` `invite` `token` `profile` `inbox` `super-admin` | bare | home |
-> | **Cross-app** | `search` `activity` `link` `storage` | bare | home (reads shared tables) |
-> | **App-owned** | app nouns, **plus** `upload` `trash` `label` | `bk <app> <verb>` | that app's |
+> | **Bare** | `login` `logout` `whoami` `token` `profile` `meta` `app` `guide` `skill` `changelog` `version` `super-admin` | bare | home |
+> | **App-owned** | app nouns, **plus** `workspace` `member` `invite` `user` `upload` `trash` `label` `search` `activity` `inbox` `storage` | `bk <app> <verb>` | that app's |
 >
-> The tier is **"would two deployments answer differently?"**, not "is it shared
-> code?" (D-28). `upload`, `trash` and `label` are shared code AND app-owned: the
-> implementation lives once in `internal/appverbs` and each app group mounts its
-> own copy in one line. `storage` is shared code and NOT app-owned — one ledger,
-> one workspace quota, the same rows from every app — so it stays bare in
-> `commands/platform/`. **You upload into one app; you list across all of them.**
+> `bk link` was **removed** — see `docs/changelog/platform.md`.
+>
+> The test is unchanged and is still **"would two deployments answer
+> differently?"**, not "is it shared code?" (D-28). What changed is the answers.
+> D-11's NEUTRAL tier rested on one `platform.workspaces`; its CROSS-APP tier
+> rested on one entity index and one upload ledger. Phases 2 and 3 gave
+> `apps/sales` its own workspaces, members, invitations, labels, uploads ledger
+> and event feed, and stopped it projecting into the shared index. **D-28's
+> pairing — "you upload into one app; you list across all of them" — no longer
+> describes anything**, because the ledger moved with the upload.
+>
+> **`appverbs.Config` declares what each app SERVES**, verb by verb. That is
+> D-36's rule one level down: a permanent subset is legitimate, an accidental one
+> is a bug. `apps/sales` gets `workspace` without `create/edit/delete` (D-3),
+> `member` without `leave`, and no `inbox`, `storage` or `user` at all — because
+> it mounts no route for them, and a command that could only 404 is a dead end
+> with a help page. Both directions are checked by each app's
+> `lib/cli-parity.test.ts` against the filesystem.
+>
+> **The active workspace is PER APP** (`config.ActiveWorkspaces`, keyed by slug).
+> One field was correct while every app read one workspace table; since Phase 2
+> there are two with overlapping ids, and one field meant
+> `bk sales workspace use x` silently retargeted `bk issues …` — measured, not
+> reasoned about. A 3.x config's single active workspace is adopted for the HOME
+> app and for no other. There are two readers and both matter:
+> `ResolveWorkspaceRef` (the path a scoped command asks for) and
+> `ClientWorkspaceSlug` (sent as `?workspace=` on `GET /api/upload`, which
+> decides the blob folder). Injecting a regression into one and not the other is
+> how that second reader was found to be unguarded.
 >
 > Anything naming an app's entities (`bk issues label attach <issue>`) is built in
 > that app's package and added to the group — otherwise every app would claim an
-> issues route in the parity test. The same rule retired `bk storage attachments`:
+> issues route in the parity test. The same rule retired `bk issues storage attachments`:
 > it listed only issue attachments, so it became the noun
 > `bk issues attachment list`. One noun must not straddle two tiers.
 >
@@ -104,8 +131,8 @@ A typical session:
 
 ```bash
 bk login --server https://issues.example.com   # browser-based authorize flow
-bk workspace list                               # show your workspaces
-bk workspace use acme                           # pick the active workspace
+bk issues workspace list                               # show your workspaces
+bk issues workspace use acme                           # pick the active workspace
 bk issues project list                                 # show your projects
 bk issues issue create --project 1 --title "Fix login" --priority 2
 bk issues issue list --project 1 --mine
@@ -262,15 +289,15 @@ Hits `GET /api/me`. Prints the authenticated user's id, email, name, role, and h
 Everything below the workspace level is partitioned by workspace: projects, tasks, issues, labels, members, invitations, activity, analytics. Pick the active workspace once, and the rest of `bk` operates within it.
 
 ```bash
-bk workspace list                 # workspaces you can use this app in (active row marked with *)
-bk workspace list --all           # every workspace you are a member of, + apps you can reach
-bk workspace use acme             # set the active workspace by slug or numeric id
-bk workspace show                 # details of the active workspace
+bk issues workspace list                 # workspaces you can use this app in (active row marked with *)
+bk issues workspace list --all           # every workspace you are a member of, + apps you can reach
+bk issues workspace use acme             # set the active workspace by slug or numeric id
+bk issues workspace show                 # details of the active workspace
 ```
 
 The active workspace (id, slug) is stored in the config file and is also set server-side via `POST /api/me/active-workspace`. Workspace-scoped command groups (`label`, `member`, `invite`) require an active workspace and fail with a clear message if none is set. Workspace API paths accept either the **slug** or the **numeric id** — **prefer the slug**.
 
-> **Agents: pick the workspace by name, not by number.** Most accounts belong to more than one workspace, and the numeric id is opaque (a sequential integer that says nothing about which team it is), so selecting by id is the easiest way to write to the wrong place. Run `bk workspace list` (or `GET /api/meta`, which returns the full `workspaces` list), match the user's intent to a workspace by its `name`/`slug`, then `bk workspace use <slug>` (or `--ws <slug>` per command). The active workspace is only a default — confirm it's the intended target before creating anything.
+> **Agents: pick the workspace by name, not by number.** Most accounts belong to more than one workspace, and the numeric id is opaque (a sequential integer that says nothing about which team it is), so selecting by id is the easiest way to write to the wrong place. Run `bk issues workspace list` (or `GET /api/meta`, which returns the full `workspaces` list), match the user's intent to a workspace by its `name`/`slug`, then `bk issues workspace use <slug>` (or `--ws <slug>` per command). The active workspace is only a default — confirm it's the intended target before creating anything.
 
 ### Reading another workspace without switching (`--ws`)
 
@@ -356,13 +383,13 @@ full; `--reference` prints only the baseline reference.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk workspace list [--all]` | `GET /api/workspaces[?all=1]` | Active row marked with `*`. **App-scoped by default** (Phase 4): only workspaces you can use *this* app in. `--all` shows every workspace you are a member of plus an APPS column — the apps you can reach in each. An empty APPS column means member-without-access. |
-| `bk workspace show [slug\|id]` | `GET /api/workspaces/:ref` | Defaults to the active workspace. |
-| `bk workspace create --name N [--use]` | `POST /api/workspaces` | `--use` (default `true`) sets it active after creation. |
-| `bk workspace use <slug\|id>` | `GET /api/workspaces/:ref` + `POST /api/me/active-workspace` | Sets the active workspace. |
-| `bk workspace edit [slug\|id] --name N --slug S` | `PATCH /api/workspaces/:ref` | Refreshes the stored active slug if you renamed it. |
-| `bk workspace transfer [slug\|id] --to <user>` | `POST /api/workspaces/:ref/transfer` | Owner only; you become a regular member. |
-| `bk workspace delete <slug\|id> --confirm <slug\|id>` | `DELETE /api/workspaces/:ref` | Owner only, irreversible. `--confirm` must repeat the argument and is required even with `--yes` / `BK_NO_PROMPT=1`. Never defaults to the active workspace. Clears the active selection if it deleted it. |
+| `bk issues workspace list [--all]` | `GET /api/workspaces[?all=1]` | Active row marked with `*`. **App-scoped by default** (Phase 4): only workspaces you can use *this* app in. `--all` shows every workspace you are a member of plus an APPS column — the apps you can reach in each. An empty APPS column means member-without-access. |
+| `bk issues workspace show [slug\|id]` | `GET /api/workspaces/:ref` | Defaults to the active workspace. |
+| `bk issues workspace create --name N [--use]` | `POST /api/workspaces` | `--use` (default `true`) sets it active after creation. |
+| `bk issues workspace use <slug\|id>` | `GET /api/workspaces/:ref` + `POST /api/me/active-workspace` | Sets the active workspace. |
+| `bk issues workspace edit [slug\|id] --name N --slug S` | `PATCH /api/workspaces/:ref` | Refreshes the stored active slug if you renamed it. |
+| `bk issues workspace transfer [slug\|id] --to <user>` | `POST /api/workspaces/:ref/transfer` | Owner only; you become a regular member. |
+| `bk issues workspace delete <slug\|id> --confirm <slug\|id>` | `DELETE /api/workspaces/:ref` | Owner only, irreversible. `--confirm` must repeat the argument and is required even with `--yes` / `BK_NO_PROMPT=1`. Never defaults to the active workspace. Clears the active selection if it deleted it. |
 
 ### Apps & access (workspace-scoped)
 
@@ -576,21 +603,21 @@ that app's package.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk member list` | `GET /api/workspaces/:ws/members` | |
-| `bk member remove <user-id>` | `DELETE /api/workspaces/:ws/members/:user` | Owner only. |
-| `bk member leave` | `POST /api/workspaces/:ws/leave` | Not allowed for the owner. |
+| `bk issues member list` | `GET /api/workspaces/:ws/members` | |
+| `bk issues member remove <user-id>` | `DELETE /api/workspaces/:ws/members/:user` | Owner only. |
+| `bk issues member leave` | `POST /api/workspaces/:ws/leave` | Not allowed for the owner. |
 
 ### Invitations (workspace-scoped)
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk invite send <email> [--app A]` | `POST /api/workspaces/:ws/invitations` | If the invitee has no account, prints a shareable invite link. `--app` invites them into one app and grants it on accept **even where that app is `invite_only`** — the invitation is the grant. Without it, accepting grants whatever the workspace's apps hand out by default. |
-| `bk invite list [--all]` | `GET /api/workspaces/:ws/invitations[?all=true]` | Owner only. `--all` includes accepted/revoked/expired. |
-| `bk invite revoke <id>` | `DELETE /api/workspaces/:ws/invitations/:id` | |
-| `bk invite accept <token>` | `POST /api/invitations/accept` | Accept by token. |
-| `bk invite decline <token>` | `POST /api/invitations/decline` | Decline by token. |
-| `bk invite pending` | `GET /api/me/pending-invitations` | Invitations pending for your email, across workspaces. |
-| `bk invite candidates` | `GET /api/workspaces/:ws/invite-candidates` | Owner only. People you can invite without retyping an email; status column shows `member`/`invited`/`—`. |
+| `bk issues invite send <email> [--app A]` | `POST /api/workspaces/:ws/invitations` | If the invitee has no account, prints a shareable invite link. `--app` invites them into one app and grants it on accept **even where that app is `invite_only`** — the invitation is the grant. Without it, accepting grants whatever the workspace's apps hand out by default. |
+| `bk issues invite list [--all]` | `GET /api/workspaces/:ws/invitations[?all=true]` | Owner only. `--all` includes accepted/revoked/expired. |
+| `bk issues invite revoke <id>` | `DELETE /api/workspaces/:ws/invitations/:id` | |
+| `bk issues invite accept <token>` | `POST /api/invitations/accept` | Accept by token. |
+| `bk issues invite decline <token>` | `POST /api/invitations/decline` | Decline by token. |
+| `bk issues invite pending` | `GET /api/me/pending-invitations` | Invitations pending for your email, across workspaces. |
+| `bk issues invite candidates` | `GET /api/workspaces/:ws/invite-candidates` | Owner only. People you can invite without retyping an email; status column shows `member`/`invited`/`—`. |
 
 ### Inbox
 
@@ -598,18 +625,18 @@ Per-user notifications (invitations, mentions, assignments, status changes).
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk inbox list [--unread]` | `GET /api/me/inbox` | Prints an unread count to stderr. `--unread` shows only unread messages. |
-| `bk inbox read [id ...] \| --all` | `POST /api/me/inbox/mark-read` | Provide message ids, or `--all` to mark every unread message read. |
-| `bk inbox archive <id> [id ...]` | `POST /api/me/inbox/archive` | At least one id is required. |
+| `bk issues inbox list [--unread]` | `GET /api/me/inbox` | Prints an unread count to stderr. `--unread` shows only unread messages. |
+| `bk issues inbox read [id ...] \| --all` | `POST /api/me/inbox/mark-read` | Provide message ids, or `--all` to mark every unread message read. |
+| `bk issues inbox archive <id> [id ...]` | `POST /api/me/inbox/archive` | At least one id is required. |
 
 ### Users
 
-`bk users` is an alias for `bk user`.
+`bk users` is an alias for `bk issues user`.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk user list` | `GET /api/users` | |
-| `bk user view <id\|email>` | `GET /api/users` + client-side filter | No single-user endpoint; the CLI filters the list. |
+| `bk issues user list` | `GET /api/users` | |
+| `bk issues user view <id\|email>` | `GET /api/users` + client-side filter | No single-user endpoint; the CLI filters the list. |
 
 ### Files (app-owned)
 
@@ -627,7 +654,7 @@ bare spelling and no default.
 rows whichever app asks — so an app segment would imply a narrowing it does not
 do. You upload INTO one app (`bk <app> upload`) and list ACROSS all of them.
 
-`bk storage attachments` was retired in the same change: it listed only ISSUE
+`bk issues storage attachments` was retired in the same change: it listed only ISSUE
 attachments while `storage list` spans every app, so it is now the issues noun
 `bk issues attachment list`.
 
@@ -637,38 +664,36 @@ trash-restore stay safe) — use these to review usage and delete unused files.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk storage list [--app <slug>]` | `GET /api/workspaces/:ws/storage[?app=]` | Files with `APP` (which app uploaded it), `REFS` (how many things reference each, across every app, incl. trashed items) and total usage. `REFS 0` = orphan. `--json` includes the full reference breakdown + `usage_bytes`/`limit_bytes`. `--app` filters the file list; the usage total stays workspace-wide, because the quota is the workspace's. |
-| `bk storage rm <id> [--yes]` | `DELETE /api/workspaces/:ws/storage/:id` | Permanently delete a file by id. **Refused (409 `file_in_use`) if anything still references it** — remove those references or empty the Trash first. Also refused if the reference answer cannot be *proven* (an enabled app with no registered scanner); read that as "could not establish this file is unused", not "it is in use". Irreversible. |
+| `bk issues storage list [--app <slug>]` | `GET /api/workspaces/:ws/storage[?app=]` | Files with `APP` (which app uploaded it), `REFS` (how many things reference each, across every app, incl. trashed items) and total usage. `REFS 0` = orphan. `--json` includes the full reference breakdown + `usage_bytes`/`limit_bytes`. `--app` filters the file list; the usage total stays workspace-wide, because the quota is the workspace's. |
+| `bk issues storage rm <id> [--yes]` | `DELETE /api/workspaces/:ws/storage/:id` | Permanently delete a file by id. **Refused (409 `file_in_use`) if anything still references it** — remove those references or empty the Trash first. Also refused if the reference answer cannot be *proven* (an enabled app with no registered scanner); read that as "could not establish this file is unused", not "it is in use". Irreversible. |
 | `bk issues attachment list` | `GET /api/workspaces/:ws/attachments` | The workspace-wide attachments table (every `bk issues issue attach` row), joined to its issue + uploader. An issues noun, not a `storage` subcommand — D-28. |
 
-### Cross-app: search & links (Phase 6)
+### Search, and the links that are gone (2026-08-10)
 
-Both are **bare platform verbs**, and that placement is the design rather than a
-default. They read `platform.entities` / `platform.links`, which every app writes
-to; a link's two ends may live in different apps, so nesting either under one
-app's namespace would claim an ownership that does not exist.
+Both were **bare** verbs, and that placement was the design rather than a
+default: they read `platform.entities` / `platform.links`, which every app wrote
+to, and a link's two ends could live in different apps.
+
+Phase 4 of multiAppFinalRefactor ended both premises.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk search <query> [--app A] [--type T] [--limit N] [--include-deleted]` | `GET /api/workspaces/:ws/search` | Federated search across every app in the workspace. Matches **titles and #numbers only** — for descriptions or status/assignee/label filters, use the app's own listing. Output carries the URN, which is what `bk link` takes. |
-| `bk link create <from> <to> --rel R` | `POST /api/workspaces/:ws/links` | Idempotent: a repeat succeeds with `created:false`, so retry-after-timeout is safe. Both ends must exist and be in the same workspace. |
-| `bk link list <urn>` | `GET /api/workspaces/:ws/links` | Both directions; the far end is resolved and flagged if it is in the trash. |
-| `bk link rm <from> <to> --rel R` | `DELETE /api/workspaces/:ws/links` | All three parts identify the link — direction is part of its identity. |
+| `bk <app> search <query> [--type T] [--limit N] [--include-deleted]` | `GET /api/workspaces/:ws/search` | **One app's** entities. Matches **titles and #numbers only** — for descriptions or status/assignee/label filters, use the app's own listing. `--app` is gone: the app is the command. Mounted only where the app has the route; `apps/sales` has its own `bk sales search` over `/sales-search` instead. |
+| `bk link …` | — | **REMOVED.** `deprecations.go` names the workaround: put the far end's URN in the record's own text. `platform.links` and `linksRoute` still exist and no app mounts the route; re-mounting for INTRA-app links is a five-line change if it is ever wanted (PLAN.md §4b). |
 
-The relation vocabulary is **not** in the binary: `bk meta` serves it under
-`links.relations`, so adding one is a server change, not a CLI release. Same
-reason the guide topic (`bk guide platform/cross-app`) names no relations —
-`guide_test.go` fails the build if a topic hardcodes a dynamic value.
+The relation vocabulary that `bk meta` served under `links.relations` is now read
+by nothing in the CLI. It is left on the server rather than removed here, because
+that is a route change and this was a CLI phase — flagged for Phase 5.
 
 URN shape: `bc:<app>:<workspace-slug>/<entity-type>/<number>`, where `<number>`
 is the workspace #number and never the row id. Do not hand-assemble one; take it
-from `bk search` or from an activity entry's `subject_urn`.
+from `bk issues search` or from an activity entry's `subject_urn`.
 
 ### Activity / analytics
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk activity [--limit N] [--cursor N] [--since 24h] [--app A] [--subject URN]` | `GET /api/workspaces/:ws/activity` | Cross-app change feed (keyset-paginated). `--limit` defaults to 50; `--cursor` is the last event id seen, echoed as `next page: --cursor=N` on stderr. `--since` takes a relative window (`30m`/`24h`/`7d`) and is mutually exclusive with a raw `from=` (400 `since_and_from`). `--subject` gives one entity's whole history in one call. Each row carries the producing `app`. |
+| `bk <app> activity [--limit N] [--cursor N] [--since 24h] [--subject URN]` | `GET /api/workspaces/:ws/activity` | **That app's** change feed (keyset-paginated). `--app` was removed with the shared feed. `--limit` defaults to 50; `--cursor` is the last event id seen, echoed as `next page: --cursor=N` on stderr. `--since` takes a relative window (`30m`/`24h`/`7d`) and is mutually exclusive with a raw `from=` (400 `since_and_from`). `--subject` gives one entity's whole history in one call. Each row carries the producing `app`. |
 | `bk issues analytics [flags]` | `GET /api/workspaces/:ws/analytics` | Workspace analytics with full web-dashboard parity (see below). `--ws <slug\|id>` targets another workspace via the path. Any member; not admin-only. |
 
 **`bk issues analytics` flags** — all optional; defaults to the active workspace,
@@ -866,9 +891,13 @@ Routing, from then on:
 
 | What runs | Which server |
 |---|---|
-| `bk workspace`, `bk member`, `bk token`, `bk meta`, … (neutral) | `home_server` |
-| `bk search`, `bk activity`, `bk link`, `bk storage` (cross-app) | `home_server` |
-| `bk <app> …` (app-owned, including its nouns) | `app_servers[<app>]`, always |
+| `bk login`, `bk token`, `bk profile`, `bk meta`, `bk app`, `bk super-admin`, … (bare) | `home_server` |
+| `bk <app> …` — every noun AND `workspace`, `member`, `invite`, `user`, `upload`, `trash`, `label`, `search`, `activity`, `inbox`, `storage` | `app_servers[<app>]`, always |
+
+Since 2026-08-10 the home app decides much less than it did: it used to pick
+where a dozen data commands landed, and now it picks only which deployment
+answers about your account. The workspace those commands run against is per app
+too (`config.ActiveWorkspaces`).
 
 - **`bk app use <slug>`** moves the home app permanently.
 - **`--app-server <slug>`** redirects one invocation's home half. It is not
@@ -916,7 +945,7 @@ Same shape, YAML-formatted (2-space indent).
 
 ### Pagination
 
-The main list commands (`bk issues issue list`, `bk issues project list`, `bk issues task list`) are **not paginated** — they return every matching item in one response (`bk issues issue list` adds a `total` count). Only the keyset-paginated feeds accept `--limit` / `--cursor`: `bk activity`, `bk issues trash list`, and `bk super-admin errors list`. Their wire shape is `{ "data": [...], "next_cursor": <id|null> }`, and in **table** mode the CLI prints `next page: --cursor=<id>` to stderr when more rows remain (`… --json | jq '.next_cursor'`).
+The main list commands (`bk issues issue list`, `bk issues project list`, `bk issues task list`) are **not paginated** — they return every matching item in one response (`bk issues issue list` adds a `total` count). Only the keyset-paginated feeds accept `--limit` / `--cursor`: `bk issues activity`, `bk issues trash list`, and `bk super-admin errors list`. Their wire shape is `{ "data": [...], "next_cursor": <id|null> }`, and in **table** mode the CLI prints `next page: --cursor=<id>` to stderr when more rows remain (`… --json | jq '.next_cursor'`).
 
 ---
 
@@ -939,7 +968,7 @@ Stable for scripting. The mapping happens in `cmd/bk/main.go` by inspecting the 
 
 A mistyped command or subcommand is an error, not a silent success: cobra's
 default is to print help and return `nil` for any command group, so
-`bk workspace notacmd` used to exit 0. `rejectUnknownSubcommands()` in
+`bk issues workspace notacmd` used to exit 0. `rejectUnknownSubcommands()` in
 `internal/commands/root.go` walks the tree at construction and gives every group
 a `RunE` that rejects leftover args (`Args: cobra.NoArgs` does not work — cobra
 returns `flag.ErrHelp` for a non-runnable command *before* it validates args).
@@ -1030,7 +1059,7 @@ failure — the source is untouched until the whole copy succeeds.
 
 - Set `BK_NO_PROMPT=1`.
 - To relocate items across workspaces, use `bk issues move` / `bk issues copy` (above) — never re-create them by hand.
-- Pick an active workspace first (`bk workspace use …`) before workspace-scoped commands.
+- Pick an active workspace first (`bk issues workspace use …`) before workspace-scoped commands.
 - Always use `--json` for parsing; the table format is for humans.
 - Branch on exit codes, not stderr text.
 - For long-running scripts, regenerate the token periodically (the CLI doesn't refresh automatically).

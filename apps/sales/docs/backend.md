@@ -201,8 +201,10 @@ schema convenience.
 
 ### 3.5 Search (D-9), and two Postgres facts that were verified rather than recalled
 
-`bk search` (cross-app, bare) reads `platform.entities`, which holds titles only.
-`bk sales search` (app-owned) reaches **inside** records, so every searchable
+`bk sales search` is now this app's ONLY search, and the comparison that shaped
+it is history worth keeping: the bare `bk search` read `platform.entities`, which
+holds titles only, and it was unmounted here in Phase 3 and removed as a bare verb
+in Phase 4. `bk sales search` reaches **inside** records, so every searchable
 table carries a generated `tsvector` column with a GIN index, unioned by one
 query helper.
 
@@ -277,7 +279,7 @@ referenced only from an untriggered column is invisible to the delete gate.
 
 **Every triggered table also carries `workspace_id`, even when its parent has
 one.** `platform.blob_references.workspace_id` is copied from the source row by
-the trigger, and the Storage page, `bk storage list` and `bk super-admin
+the trigger, and the Storage page, `bk issues storage list` and `bk super-admin
 blob-drift` all work one workspace at a time. `apps/issues` shipped
 `attachments.workspace_id` NULL on every row and had to repair 24 invisible
 references inside migration 0037 — a clean report over a hole.
@@ -499,9 +501,12 @@ this app's vocabulary is, and §7.4 of `platform-architecture.md` forbids mergin
 two apps' vocabularies into one list.
 
 **Everything else the platform commands claim is deliberately NOT mounted**, and
-that is a permanent state rather than a gap. `bk inbox` is per-user and
-cross-workspace; `bk super-admin errors` reads platform-wide data; `bk storage
-list` returns the same rows from any deployment (D-28). Since 2026-08-07 the
+that is a permanent state rather than a gap. `bk <app> inbox` is per-user and
+cross-workspace and this app raises no notifications; `bk super-admin errors`
+reads platform-wide data and one host answers it. `bk <app> storage list` used to
+be excluded on D-28's grounds ("the same rows from any deployment") — that reason
+expired in Phase 3, when the upload ledger became per app, and the current reason
+is simply that this app mounts no `/storage` route. Since 2026-08-07 the
 parity guard derives each app's drift scope from the platform routes it actually
 serves, so there is nothing to declare — and the repo-wide half
 (`packages/platform-testing/test/platform-route-coverage.test.ts`) asserts that
@@ -552,7 +557,7 @@ agent-issued commands, not autosave), and `actor_token_id` actually populated.
 point: a URN is `bc:sales:<slug>/<type>/<number>` and every part of it is in
 `sales.*`. `platform.entities` was where it used to be looked UP; it was never
 what made it true. So the resolver moved into this file, joins
-`sales.workspaces`, and `?subject_urn=` / `bk activity --subject` keep working.
+`sales.workspaces`, and `?subject_urn=` / `bk sales activity --subject` keep working.
 
 ### 7.2.1 Which records have a #number, and which do not
 
@@ -565,7 +570,8 @@ The rule, stated once because it decides every route's shape:
 
 The second row is not a breach of the "#number, never id" rule — it is the other
 half of it. That rule is about ADDRESSABLE entities: ones with a URN, which
-`bk search` returns and `bk link` relates. A child with no independent identity
+`bk sales search` returns. (`bk link` related two apps' records until it was
+removed on 2026-08-10.) A child with no independent identity
 has no URN, so its row id is the only address there is, and `apps/issues` settled
 the same shape for comments (`/api/workspaces/{ws}/comments/{id}`). §6.1 of the
 plan writes `{cid}` and `{oid}` for exactly this.
@@ -583,7 +589,7 @@ every app, URNs out. **This app does not mount it, and the reason changed on
 The old reason was that serving both from one host made which search an agent
 got depend on which deployment it was pointed at. That reasoning was wrong — the
 VERB decides, not the deployment — and the route was mounted on 2026-08-07 for a
-good reason: `bk search` 404'd for anyone homed here.
+good reason: the bare `bk search` 404'd for anyone homed here.
 
 **The real reason is a cross-tenant read, and it was measured.** `searchRoute`
 resolves the workspace through `AppContext.workspaces` — `sales.workspaces` —
@@ -920,11 +926,18 @@ the rest, and why:
 | Verb | Why not here |
 |---|---|
 | `bk super-admin …` | Platform administration lives in one app. Same answer from any host, and the issues host gives it. |
-| `bk inbox …` | No shared factory exists yet. |
-| `bk storage list \| rm` | No factory, and the delete path reaches blob deletion. D-28 still holds: one ledger, same rows from issues. |
-| `bk search`, `bk link …` | **Unmounted 2026-08-10 (Phase 3).** Both read `platform.entities` scoped by a workspace id resolved from `sales.workspaces` — two tenancies that share ids and not members. See §7.2.2 for the measurement. `bk link` is retiring outright; cross-app search returns as a CLI fan-out. |
-| `bk workspace edit \| delete \| transfer`, `bk member leave`, `bk invite accept \| decline` | Not yet factories — the queries are still app-local to issues. `GET` on a workspace IS served, because `bk workspace use` resolves a slug through it. |
-| `bk workspace create` | D-3: a workspace is the company; sales has no create-workspace flow. |
+| `inbox` | No route, and nothing to put in one: this app raises no per-user notifications. |
+| `storage list \| rm` | No route. The delete path reaches blob deletion, which has exactly one implementation. D-28's old reason ("one ledger, same rows from issues") expired in Phase 3. |
+| `user` | **Route removed 2026-08-10 (Phase 4).** `getVisibleUsers` joins `platform.workspace_members`, so on this deployment it listed people who are in NO sales workspace — measured. `bk sales member list` is the question this app has. |
+| the bare `search`, `link` | **Unmounted 2026-08-10 (Phase 3), removed as bare verbs in Phase 4.** Both read `platform.entities` scoped by a workspace id resolved from `sales.workspaces` — two tenancies that share ids and not members. See §7.2.2 for the measurement. `link` is gone outright; `bk sales search` is this app's own. |
+| `workspace edit \| delete \| transfer`, `member leave` | No route: the queries are still app-local to issues, and the workspace delete cascade has one implementation on purpose. `GET` on a workspace IS served, because `bk sales workspace use` resolves a slug through it. |
+| `workspace create` | D-3: a workspace is the company; sales has no create-workspace flow. |
+
+**Since Phase 4 these are ABSENT from `bk sales --help` rather than present and
+404ing.** `appverbs.Config` declares what this app serves, so a verb it has no
+route for is not built at all — a command that could only 404 is a dead end with
+a help page. The table above is the reasoning behind that declaration, and
+`lib/cli-parity.test.ts` checks it against `app/api/**` in both directions.
 
 Asking for one of them from here is a recoverable dead end rather than a wall:
 
@@ -957,7 +970,8 @@ transaction; where a foreign row has none, the field is null rather than a
 guess. Both hosts now agree, and agree with the database.
 
 **`bk issues issue view` still does not show links back into sales.** Verified
-rather than assumed, as D-18 asks. The data is right — `bk link list <urn>`
+rather than assumed, as D-18 asks. (Historic: `bk link list <urn>`
 returns both links with resolved titles — and what is missing is a display in
 the issues app. Deliberately not built during a verification phase; logged as a
-Phase 13 item. `bk link list` is the working answer today.
+Phase 13 item. `bk link` was removed on 2026-08-10; the URN goes in the
+record's own text now.)

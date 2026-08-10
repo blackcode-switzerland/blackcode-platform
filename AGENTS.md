@@ -35,15 +35,18 @@ Adding an app is **`docs/adding-an-app.md`** (walked end to end). Extracting one
 is **`docs/extracting-an-app.md`** (rehearsed). The database boundary is
 **`docs/platform-db.md`**.
 
-Commands come in three tiers and the spelling says which (D-11 —
-`bk guide platform/apps`). **Neutral** stays bare (`workspace`, `member`,
-`invite`, `token`, `profile`, `inbox`, `meta`, …): the same answer from any app.
-**Cross-app** stays bare and tags its results (`search`, `activity`, `link`,
-`storage`) — but only the deployment holding the shared index answers them; one
-that does not returns 404 with a hint, and `link` is retiring (2026-08-10). **App-owned** sits behind the app name — every app noun, plus
-`upload`, `trash` and `label` since 3.0.0, because a file's ownership, a recycle
-bin and a label each belong to one app. You upload INTO one app and list ACROSS
-all of them. Shared code: `cli/internal/appverbs`.
+Commands come in TWO tiers since 2026-08-10 and the spelling says which
+(`bk guide platform/apps`). **Bare** is your account and this binary — `login`,
+`logout`, `whoami`, `token`, `profile`, `meta`, `app`, `guide`, `skill`,
+`changelog`, `version`, `super-admin`. **App-owned** is everything that touches
+an app's data, behind the app name: every app noun plus `workspace`, `member`,
+`invite`, `user`, `upload`, `trash`, `label`, `search`, `activity`, `inbox`,
+`storage`. `bk link` was removed. The cross-app tier existed because the apps
+shared a database; Phases 2–3 ended that, so a bare data verb had only a default
+taken from the home app. Shared code: `cli/internal/appverbs`, whose `Config`
+declares what each app SERVES — a permanent subset is legitimate (D-36), so a
+verb an app has no route for is absent from its group rather than 404ing. **The
+active workspace is per app**; two apps' workspace tables have overlapping ids.
 
 **URNs.** `bc:<app>:<workspace-slug>/<entity-type>/<number>`, using the workspace
 #number like everything else, and derived from the app's OWN tables. Every issue,

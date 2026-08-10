@@ -124,7 +124,7 @@ type against an app's schema.
 > table. `AppContext.workspaces` is the seam that replaced it: shared code still
 > never names an app's table, it asks the app. Seven methods rather than one
 > resolver because several shared entry points read tenancy, not one —
-> `/api/meta` resolves a default and lists members, `bk workspace use` writes
+> `/api/meta` resolves a default and lists members, `bk issues workspace use` writes
 > one, upload attribution reads one by id. A single resolver would have left
 > every one of those still naming `platform.*`: a seam that looks finished and is
 > not. See `packages/platform-api/src/workspace-source.ts`.
@@ -209,7 +209,7 @@ Why factories at all: every platform verb's route used to live physically inside
 `apps/issues/app/api/**`. With one app that was invisible; with two it means an
 app 404s on its own `/api/me`, `bk upload` attributes files to whichever app
 served the request, and a user granted one app and not another gets 403 on
-`bk search`. See `docs/sales-app-plan.md` B-2 / D-2.
+`bk issues search`. See `docs/sales-app-plan.md` B-2 / D-2.
 
 #### The error model
 
@@ -455,7 +455,7 @@ transaction — the `entities` pattern above. The risk profiles are not the same
 
 | Projection | Drift costs |
 |---|---|
-| `entities` | a stale title in `bk search`. Cosmetic |
+| `entities` | a stale title in `bk issues search`. Cosmetic |
 | `blob_references`, **extra** row | a refused delete. Leaked bytes, never data |
 | `blob_references`, **missing** row | a file still in use is reported as an orphan and **deleted**. Vercel Blob `del()` has no undo |
 
@@ -1049,7 +1049,7 @@ been **removed** — both the web app and the `bk` CLI now use
 `/api/workspaces/{ws}/activity` and `/api/workspaces/{ws}/analytics`. The former
 `/api/users/me` auth-probe was folded into `GET /api/me`, which now also returns
 `via` (`session` | `token`). `/api/users` (the visible-users list behind
-`bk user list`) is **not** a duplicate of any scoped route and remains.
+`bk issues user list`) is **not** a duplicate of any scoped route and remains.
 
 `bk analytics` keeps full web-dashboard parity through the scoped route: pass the
 workspace in the path (`/api/workspaces/{ws}/analytics`) and the same `view`,

@@ -202,7 +202,7 @@ A single Go binary distributed on npm as `@blackcode_sa/bc-issues`. `bk login` o
 ```bash
 npm install -g @blackcode_sa/bc-issues
 bk login --server https://your-deployment.app
-bk workspace use my-team
+bk issues workspace use my-team
 bk issues issue list --status todo --json
 ```
 
@@ -361,7 +361,7 @@ The seed mirrors the live page's FAQ (focused on the CLI and automation).
 An agent runs `bk guide` — the complete usage guide, embedded in the binary, so it always matches the version being run and works offline. Then `bk meta` for the live data: workspaces, the valid status/priority/health values, and every limit. Flags come from `bk <group> <command> --help`. Nothing has to be guessed or cached.
 
 ### How do I install and use the CLI?
-`npm install -g @blackcode_sa/bc-issues`, then `bk login` (opens a browser, stores a token in `~/.config/bk/config.json`), `bk workspace use <slug>`, and you're working: `bk issues issue list`, `bk issues issue create --project 1 --title "…"`. Run `bk --help` for the full command tree.
+`npm install -g @blackcode_sa/bc-issues`, then `bk login` (opens a browser, stores a token in `~/.config/bk/config.json`), `bk issues workspace use <slug>`, and you're working: `bk issues issue list`, `bk issues issue create --project 1 --title "…"`. Run `bk --help` for the full command tree.
 
 ### How do agents and scripts authenticate?
 `bk login` opens a browser, captures a token and stores it in `~/.config/bk/config.json` — that is the whole flow. For headless runs, mint a token at `/dashboard/settings/tokens` and pipe it in: `echo "$TOKEN" | bk login --token`. Tokens carry optional expiry and can be revoked from the same page.

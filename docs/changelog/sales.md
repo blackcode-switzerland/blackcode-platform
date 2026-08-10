@@ -22,6 +22,43 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-10 — every b/sales verb names the app: `bk sales workspace`, `bk sales member`, `bk sales invite`
+
+**Breaking for anything scripted.** The bare `workspace`, `member` and `invite`
+verbs answered from whichever app your CLI was homed on. Since this app got its
+own workspaces and memberships earlier today, that answer was a coin flip. They
+are spelled with the app now:
+
+```bash
+bk sales workspace list
+bk sales workspace use <slug>
+bk sales member list
+bk sales invite send <email>
+```
+
+`bk sales workspace` has `list`, `show` and `use` and deliberately **no**
+`create`, `edit`, `transfer` or `delete`: a workspace is the company, and you are
+granted one rather than opening one from a sales context (D-3). Those are
+answered by the issues deployment.
+
+**This app's active workspace is its own.** `bk sales workspace use acme` does
+not move `bk issues`, and vice versa. After upgrading, run it once — until you
+do, `bk sales …` fails with an error naming this app and the fix.
+
+`bk sales activity` replaces the bare `bk activity` and reads this app's own
+event feed. `bk sales search` is unchanged: it was always this app's full-text
+search over its own records, and it is now the only `search` this app has.
+
+**There is no `bk sales inbox`, `bk sales storage` or `bk sales user`.** This
+deployment serves no route for any of them, and a command that could only 404 is
+a dead end with a help page. `bk sales member list` is who is in your workspace.
+`GET /api/users` was removed from this deployment in the same change: it answered
+out of the platform membership table, so it listed people who are in no sales
+workspace at all.
+
+Run `bk sales --help` for this app's full surface, or `bk guide platform/apps`
+for why the app is in the command.
+
 ## 2026-08-10 — b/sales stops sharing the database: `bk search` and `bk link` are gone from this app
 
 **Breaking, for anything scripted against a sales-homed CLI.** This app's

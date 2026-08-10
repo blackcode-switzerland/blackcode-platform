@@ -347,7 +347,8 @@ now mounts. Three things about it are decisions:
 
 - **The feed is filtered to `app=sales`.** `platform.events` holds every app's
   rows for a workspace, and this page has no vocabulary, no colour and no URL for
-  an `issue`. Reading ACROSS apps is `bk activity`'s job and it tags every row
+  an `issue`. Each app's history is its own since 2026-08-10 — `bk sales activity`
+  reads this app's feed, and reading across apps means asking each one
   with the app it came from; a page that cannot show the tag must not show the
   rows. D-9's two layers, one level down.
 - **The filter options are built from the feed, not from a list.** `?action=`
@@ -550,7 +551,7 @@ one person who goes looking is the one person not told.
 | `/api/me/password/*` | **no** | needs an email sender this app does not have |
 | `…/activity` | yes | the Activity page |
 | `…/search` | **no** | D-9: the platform search is a different path, deliberately |
-| `bk inbox`, `bk super-admin errors`, `bk storage list` | **no**, permanently | [`backend.md` §7.1](./backend.md) |
+| `inbox`, `bk super-admin errors`, `storage` (absent from `bk sales` since 2026-08-10) | **no**, permanently | [`backend.md` §7.1](./backend.md) |
 
 ## 11. Super-admin: not built, and not coming
 
