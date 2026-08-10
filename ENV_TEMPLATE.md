@@ -39,8 +39,12 @@ SUPER_ADMINS=admin@yourdomain.com
 # If unset, the app still works: invitations fall back to the in-app inbox +
 # copyable accept links, and password reset is unavailable until configured.
 # Both vars must be set; RESEND_FROM_EMAIL must be on a domain verified in Resend.
+# The verified domain is the APEX `blackcode.ch`, shared by every app — the free
+# plan verifies one domain per account, so a per-app subdomain would mean the
+# second app that needs email takes the slot from the first. App identity lives
+# in the display name, not the address.
 RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL=admin@issues.blackcode.ch
+RESEND_FROM_EMAIL=admin@blackcode.ch
 
 # Vercel Blob — file/image uploads in production. If unset, uploads are written
 # to the local `public/uploads/` directory (fine for dev).

@@ -284,29 +284,45 @@ vercel env add BLOB_READ_WRITE_TOKEN production --value "<new-token>" --yes
 
 ---
 
-## RESEND_API_KEY + RESEND_FROM_EMAIL *(not yet set)*
+## RESEND_API_KEY + RESEND_FROM_EMAIL
 
 | | |
 |---|---|
 | **Purpose** | Transactional email — workspace invitations and password reset codes |
-| **Status** | Not set — invitations fall back to in-app inbox; password reset unavailable |
+| **Status** | Set ✓ on `bc-issues` only. **Deliberately unset on `bc-sales`** — sales has no email module and sends nothing |
 | **Source** | [resend.com](https://resend.com) |
-| **Impact if missing** | No email delivery; password reset disabled |
+| **Impact if missing** | No email delivery; invitations fall back to the in-app inbox and password reset is disabled — the app runs fine without it |
 
-**How to set up:**
-1. Create account at [resend.com](https://resend.com)
-2. Add and verify your sending domain
-3. API Keys → Create API Key → copy it
-4. Set both vars:
+### The sending domain is `blackcode.ch`, not a per-app subdomain
+
+Changed 2026-08-10, and the reason is structural rather than cosmetic. Resend's
+free plan verifies **one domain per account**. A per-app sender
+(`admin@issues.blackcode.ch`) meant the second app that needed email would have
+had to either take the slot from issues or force a paid plan. The apex domain
+covers every app forever, and the app identity lives in the *display name*
+instead — `fromAddress()` in each app's `lib/email/client.ts` returns
+`Blackcode Issues <admin@blackcode.ch>`.
+
+    verified in Resend   blackcode.ch          (was issues.blackcode.ch)
+    sender               admin@blackcode.ch    (was admin@issues.blackcode.ch)
+
 ```bash
 vercel env add RESEND_API_KEY production --value "re_..." --yes
-vercel env add RESEND_FROM_EMAIL production --value "admin@issues.blackcode.ch" --yes
+vercel env add RESEND_FROM_EMAIL production --value "admin@blackcode.ch" --yes
 ./devops/release.sh web issues   # the project you changed
 ```
 
-`RESEND_FROM_EMAIL` must be on a domain verified in Resend — `onboarding@resend.dev` works for testing only.
-This project's sending domain (`issues.blackcode.ch`) is verified in Resend; the
-configured sender is `admin@issues.blackcode.ch`.
+`RESEND_FROM_EMAIL` must be on a domain verified in Resend —
+`onboarding@resend.dev` works for testing only.
+
+### If a second app ever needs to send email
+
+Do **not** copy `apps/issues/lib/email/` into it. That directory is app-local
+today only because issues was the only sender; a second copy is two templates,
+two `fromAddress()` functions and one of them going stale. Promote it to
+`packages/platform-email` first, with the display name coming from the app —
+the same shape as every other thing this platform had to un-hardcode when the
+second app arrived.
 
 ---
 
