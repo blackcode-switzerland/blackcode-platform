@@ -49,11 +49,37 @@ docker cp blackcode-postgres:/tmp/pre-phase-N.dump \
 
 ## The "nothing lost" ledger
 
-`verify.sh` (written in Phase 0) is the check that runs after every step.
+Built in Phase 0: `multiAppFinalRefactor/lib-db.sh` (shared psql plumbing —
+runs `psql` natively if present, else falls back to
+`docker exec blackcode-postgres psql`, so the same scripts work against a
+Neon URL from a machine with `psql` installed and against local dev, which has
+no native `psql`), `capture-baseline.sh`, `verify.sh` (+ its diff engine,
+`verify-diff.awk`), and `backup.sh`.
 
-**What it does:** counts rows in every `platform.*` and `issues.*` table and
-diffs against `baseline.txt`. Prints PASS/FAIL per table. Exits non-zero on any
-unexplained decrease.
+**What `capture-baseline.sh` records.** Per table, in schemas `platform`,
+`issues` and `sales`: `count(*)`, `min(id)`, `max(id)`. Not just a count — a
+count alone can't tell "5 rows deleted" from "5 deleted and 5 inserted", and
+the second is what a mid-refactor bug looks like. Tables with no integer `id`
+column are recorded as `NOID` (count-only) rather than silently skipped. The
+file's header records the capture timestamp, the database name, and the
+number of tables found; it refuses to write a baseline at all if it finds
+zero tables, so an empty baseline can never look like a valid one.
+
+```bash
+./multiAppFinalRefactor/capture-baseline.sh "<connection-url>" multiAppFinalRefactor/baseline.txt
+```
+
+**What `verify.sh` does.** Re-measures the same three schemas and diffs
+against a baseline file. Prints PASS/INFO/FAIL per table, and exits non-zero
+on any of: an undeclared count decrease, `min(id)` increasing (even with the
+count unchanged — catches a delete paired with an insert), a table missing
+from the database, a table missing from the baseline, zero tables found, or a
+connection/query failure. Increases are INFO, never a failure — people are
+using issues throughout this refactor.
+
+```bash
+./multiAppFinalRefactor/verify.sh "<connection-url>" multiAppFinalRefactor/baseline.txt
+```
 
 **How to use it:** run it after every migration, every delete, and every deploy
 in phases 1, 3 and 5. Not at the end of the phase — after every step. A count
@@ -61,17 +87,48 @@ that dropped three steps ago is a debugging session; a count that dropped just
 now is a one-line fix.
 
 **Expected decreases must be declared, not discovered.** Phase 3 deletes sales'
-rows from shared tables. Before running the delete, write the expected count
-change into `baseline.txt` with a dated reason. An undeclared decrease is a bug,
-always.
+rows from shared tables. Before running the delete, add a block to
+`baseline.txt` naming the table, the exact signed delta, and the reason:
 
-### Watch it fail before you trust it
+```
+# EXPECTED 2026-08-12 phase-3 agent4
+# platform.comments -8   sales rows, parent_type LIKE 'sales:%'
+```
+
+`verify.sh` sums every declaration for a table and requires the actual
+decrease to match the sum **exactly** — not "some decrease happened". A
+declared `-8` followed by an actual `-9`, or an actual `-7`, both fail. This is
+deliberate: a declaration is not a blanket "ignore this table", and the two
+directions of mismatch were both watched to fail before this was trusted (see
+below).
+
+**Taking a backup:**
 
 ```bash
-# on a THROWAWAY Neon branch, never production
-docker exec -i blackcode-postgres psql "<branch url>" \
-  -c "DELETE FROM platform.comments WHERE id = (SELECT MIN(id) FROM platform.comments)"
-./multiAppFinalRefactor/verify.sh          # must go RED and name platform.comments
+./multiAppFinalRefactor/backup.sh "<neondb_owner url>" ~/Documents/BAK/blackcode-platform-backups/pre-phase-N.dump
+```
+
+Refuses to run without a destination path. After `pg_dump` returns, it checks
+the file is non-empty, at least 1 KB, and — via `pg_restore --list` — an
+actually-valid custom-format archive, so a `pg_dump` that exits 0 having
+written nothing or garbage cannot be read as a successful backup (finding
+#7/#15 in `CLAUDE.md`).
+
+### Watched fail before it was trusted (Phase 0, 2026-08-10)
+
+Run against local Postgres (`docker compose up -d`, `localhost:5434`), never
+production. Every case below was injected, observed red by name, then
+restored, and the real `baseline.local-example.txt` was re-verified clean
+afterward. Full detail, including two bugs this exercise found and fixed
+(`verify.sh` crashing silently on a connection failure, and a file-role
+mix-up in the awk diff engine when the declarations file is empty), is in
+`multiAppFinalRefactor/agent1/agent-2026-08-10-1.txt`.
+
+```bash
+docker exec -i blackcode-postgres psql "<local url>" \
+  -c "DELETE FROM platform.password_reset_otps WHERE id = 6"
+./multiAppFinalRefactor/verify.sh "<local url>" multiAppFinalRefactor/baseline.local-example.txt
+# must go RED and name platform.password_reset_otps — then restore the row.
 ```
 
 If it does not go red, the script is decoration. Nineteen guards in this repo
