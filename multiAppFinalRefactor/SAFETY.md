@@ -81,6 +81,10 @@ using issues throughout this refactor.
 ./multiAppFinalRefactor/verify.sh "<connection-url>" multiAppFinalRefactor/baseline.txt
 ```
 
+> **Locally the URL is port 5432, not 5434.** 5434 is the port on the HOST side;
+> these scripts run `psql` *inside* the container, where it is 5432. Using 5434
+> fails with "connection refused", which reads like a stopped container.
+
 **Run baseline and verify as `MIGRATE_DATABASE_URL`** (`neondb_owner`), the same
 role as migrations. Both scripts measure every table in one batched query, so a
 permissions problem on any single table fails the entire run rather than

@@ -114,12 +114,12 @@ single row moved or deleted.**
 | `apps` | **stays shared** | the CLI address book (`base_url`) and the blob registry |
 | `blob_references` | **stays shared** | Phase 5 keeps it — see there. Already carries `app`, and its `workspace_id` has **no FK on purpose**, so it survives the split untouched |
 | `uploads` | **issues keeps it; sales gets `sales.uploads`** | ledger, not storage. One Blob store either way |
-| `comments` | **issues keeps it; sales gets `sales.comments`** | |
+| `comments` | **issues keeps it. Sales gets NOTHING** | **CORRECTED after agent 2.** Sales has never used this table — 0 rows in production, 0 call sites. PLAN.md §4 counted 8 files that contain the *word*, in `communications` and in prose. Sales' equivalent already exists: `sales.communications` with `channel = 'note'` (D-13) |
 | `labels` | **issues keeps it; sales gets `sales.labels`** | |
 | `events` | **issues keeps it; sales gets `sales.events`** | |
-| `deletion_batches` | **issues keeps it; sales gets `sales.deletion_batches`** | sales touches it in 0 files today |
+| `deletion_batches` | **issues keeps it. Sales gets NOTHING** | **CORRECTED after agent 2.** Sales' bin is `deleted_at` on the row plus a cascade stamping one instant; there are no batches, its restore route *refuses* `--batch` by name. §4 measured 0 files and I still specified the table — a batch table with no writer is a shape somebody later mistakes for a feature |
 | `workspaces` | **issues keeps it; sales gets `sales.workspaces`** | |
-| `workspace_members` | **issues keeps it; sales gets `sales.workspace_members`** | |
+| `workspace_members` | **issues keeps it; sales gets `sales.workspace_members`** | §4's survey scored this **0 files** and was wrong — sales reaches it only through shared `platform-api` factories, so its own files never name it. Trusting the zero would have left Phase 2 with nothing to bootstrap onto |
 | `workspace_invitations` | **issues keeps it; sales gets `sales.invitations`** | |
 | `inbox_messages` | **issues keeps it, alone** | sales touches it in 0 files. Nothing to move |
 | `entities` | **issues keeps it; sales stops projecting** | sales' rows deleted in Phase 3 |
@@ -318,12 +318,38 @@ One workspace per user, invisible.
 so a broken intermediate state costs nothing, but doing them together makes a
 failure hard to attribute.
 
-For each of comments → labels → uploads → events → trash:
+For each of labels → uploads → events:
 
 1. Point sales' query layer at `sales.<table>`
 2. Delete sales' rows from the shared table
-   (`DELETE FROM platform.comments WHERE parent_type LIKE 'sales:%'`)
 3. Run `verify.sh` — **issues' counts must be unchanged**
+
+*(comments and trash are not in this list — see §4b. Sales never used either.)*
+
+### The exact counts to expect, measured in production 2026-08-10
+
+SAFETY.md says "if that count is not what the plan predicts, **stop**". So the
+plan has to predict, or the ritual trains people to ignore it. **Most of these
+are zero, and a zero here is correct — not a sign the query is wrong:**
+
+| Delete target | Rows |
+|---|---|
+| `platform.comments WHERE parent_type LIKE 'sales:%'` | **0** — table never used |
+| `platform.labels WHERE app='sales'` | **0** |
+| `platform.uploads WHERE app='sales'` | **0** |
+| `platform.events WHERE app='sales'` | **4** |
+| `platform.entities WHERE app='sales'` | **2** |
+| `platform.links` (any row naming a sales URN) | **1** |
+| `platform.workspace_apps WHERE app='sales'` | **1** — Phase 5 |
+| `platform.app_access WHERE app='sales'` | **1** — Phase 5 |
+
+Seven rows in total. Nearly all of them are residue from the 2026-08-10
+deploy-verification run, not from use.
+
+**Re-measure before deleting** — these are from 2026-08-10 and sales is
+deployed. A number that has GROWN means somebody started using sales, and that
+retires decision 2 (*"sales data does not matter"*) on the spot. That is the
+condition worth stopping for; a zero is not.
 
 **Then remove the cross-app machinery from sales:**
 
