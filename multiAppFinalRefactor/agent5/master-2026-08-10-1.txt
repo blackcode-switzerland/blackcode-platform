@@ -1,0 +1,191 @@
+FROM:    master
+TO:      agent5
+DATE:    2026-08-10
+PHASE:   4 — The CLI stops pretending the apps share a database
+STATUS:  BRIEF
+--------------------------------------------------------------------------------
+
+READ FIRST:
+  multiAppFinalRefactor/README.md    the rules — **including rule 2's box about
+                                     `bk` defaulting to PRODUCTION. Yours is the
+                                     CLI phase. Set BK_CONFIG_DIR first.**
+  multiAppFinalRefactor/PLAN.md      Phase 4 under §5, and §6b (how the CLI
+                                     routes today, and what it becomes)
+  agent4/agent-2026-08-10-1.txt      §3 — search and link are ALREADY unmounted
+                                     from sales, and why
+
+Phases 0–3 are deployed. **`apps/sales` reads and writes no `platform.*` table
+except identity.** The database half of this refactor is done. Yours is the
+half the agents actually touch.
+
+
+================================================================================
+0. BEFORE YOU RUN A SINGLE COMMAND
+================================================================================
+    export BK_CONFIG_DIR=/tmp/bk-agent5
+
+`bk` reads `~/.config/bk/config.json` by default — the human's real config,
+homed on `https://sales.blackcode.ch` with a live token. Agent 4 sent five list
+commands to production before noticing. Read-only, no harm, but you are the
+phase that will run `bk` a hundred times.
+
+
+================================================================================
+1. WHAT THIS PHASE IS
+================================================================================
+The three-tier verb model (neutral / cross-app / app-owned) was built for shared
+data. With identity as the only shared thing, the tiers collapse to two.
+
+**The prize is not tidiness.** Today `bk trash purge` destroys things in
+whichever app you were last homed on, and nothing in the command says which. An
+agent cannot read back its own command and know what it hit. After you, every
+command that touches an app's data names the app.
+
+
+================================================================================
+2. THE TARGET SHAPE
+================================================================================
+**Stays bare** — genuinely one thing everywhere, or about the binary itself:
+
+    login · logout · whoami · token · profile · app · meta
+    guide · changelog · skill · version
+
+**Becomes app-owned** — `bk <app> <verb>`:
+
+    workspace · member · invite · inbox · storage · trash · label · upload
+    search · activity
+
+`bk super-admin` is platform-wide administration over shared tables. **Leave it
+bare**, and say in your reply whether you agree.
+
+Already done by agent 4, do not redo: `search` and `link` are unmounted from
+sales' HTTP surface. **`bk link` retires entirely** (PLAN.md §3).
+
+
+================================================================================
+3. THE THINGS THAT MAKE THIS PHASE HARD
+================================================================================
+
+--- 3a. Deprecations, in the same commit --------------------------------------
+`cli/internal/commands/deprecations.go` — its own header states the rule: an
+entry in the SAME commit as any rename or removal, keyed by the OLD spelling,
+so a failed run becomes a recovered one.
+
+**You are moving ten verbs.** That is the largest deprecation batch this repo
+has ever taken, and it is the difference between an agent that retries correctly
+and one that gives up. `bk workspace list` must not die with "unknown command" —
+it must say where `workspace` went.
+
+Watch a hint fire. Not the code path — the actual binary, actual old spelling,
+actual stderr. `TestRemovedSpellingsStillCarryAHint` is CLAUDE.md finding #8: it
+asserted a hand-written error string while the real one contained the whole
+remaining argv, so the three most-used spellings fell through to the generic
+hint. **Written by the session that wrote the standing rule, an hour after.**
+
+--- 3b. The recovery hint is not available to everyone --------------------------
+Agent 4 found this and it constrains what you can promise. When sales 404s a
+verb it does not serve, the hint suggests `bk --app-server issues …`. **For a
+user who only has sales, that recovery does not exist** — `/api/meta`'s registry
+is grant-derived, so their CLI has no `issues` entry and `--app-server issues`
+answers "no server known for app".
+
+That is correct behaviour (an agent must not discover an app its user cannot
+reach). It means a hint naming another app is actionable only for people who
+have both. Take it into account in what your hints say.
+
+--- 3c. The guards, which are the point ----------------------------------------
+Every one of these must pass, and each must be watched failing:
+
+  cli/internal/commands/routes_test.go     every leaf has a `routes` annotation
+  cli/internal/commands/groups_test.go     a mistyped subcommand errors, never
+                                           a silent help-and-exit-0
+  cli/internal/commands/boundaries_test.go command packages don't import each other
+  cli/internal/guide/guide_test.go         no hardcoded dynamic values; no
+                                           cross-app references in a topic
+  apps/*/lib/cli-parity.test.ts            every route reachable, every claim real
+  packages/platform-testing/…/platform-route-coverage.test.ts
+
+`cli-parity` is CLAUDE.md finding #10: it asserted on a UNION that could not go
+empty, so deleting sales' entire guide topic tree left it 5/5 green. **When you
+move a verb between apps you are changing exactly the set that test reads.**
+
+`cd cli && make routes` after any `routes` annotation moves.
+
+--- 3d. Guide topics ------------------------------------------------------------
+`topics/platform/` shrinks to identity. Each app's topics grow. A topic under
+`topics/<app>/` may not describe another app — `guide_test.go` enforces it, and
+that test has been inert before (finding #9: a substring match over six
+hand-written strings, which passed a topic containing an entire stale vocabulary).
+
+
+================================================================================
+4. WHAT NOT TO DO
+================================================================================
+- Do not touch the database. No migrations, no deletes, nothing. This phase is
+  Go and guide text.
+- Do not un-retire `bk link`, and do not re-mount `search` on sales.
+- Do not remove `--app-server`. It stays as a flag — removing one agents may
+  have learned is a deprecation for no gain (PLAN.md §6b).
+- Do not touch `platform.workspace_apps` / `app_access` — Phase 5.
+- Do not build the cross-app fan-out — Phase 6.
+- Do not deploy or release the CLI. The human does both, after review.
+
+
+================================================================================
+5. VERIFICATION
+================================================================================
+Build the binary and drive it. Against LOCAL servers, under BK_CONFIG_DIR.
+
+Report what you OBSERVED for each:
+
+  1. `bk sales prospect list`, `bk issues issue list` — app-named, still work
+  2. `bk sales member list` and `bk issues member list` — the same verb, two
+     apps, two different answers
+  3. An old spelling (`bk workspace list`) — the hint names the new one
+  4. A mistyped subcommand — errors, does not print help and exit 0
+  5. `bk login` / `bk whoami` / `bk token` — unchanged, one login, both apps
+  6. A sales-homed CLI creating an issue in issues — **the north star still
+     works after the re-tiering**
+
+Then the full gate (README §4), including `make routes`.
+
+
+================================================================================
+6. WHERE I AM LEAST CONFIDENT
+================================================================================
+Four for four: every agent has found a false assertion in my brief.
+
+  1. **§2's list may be wrong.** I derived it from `ls cli/internal/commands/
+     platform/`. `user`, `version`, `whoami`, `routing`, `aliases` are in there
+     and I have not classified them all.
+  2. **`bk super-admin` may not be as bare as I think** — if it reads app data
+     rather than shared tables, it belongs elsewhere.
+  3. **`storage` is the interesting one.** It listed every app's files against
+     one workspace quota (D-28). With per-app upload ledgers that premise is
+     gone — but the Blob store and the quota are still shared. I think it goes
+     app-owned; the quota argument may say otherwise.
+  4. **I do not know how `appverbs` is mounted** — `cli/internal/appverbs` is
+     the shared implementation each app group mounts in one line. Moving verbs
+     into it may be easier than I think, or may not fit at all.
+  5. Four times now the thing that mattered was outside where anyone looked: a
+     Postgres trigger, a shared factory, twelve FKs, a shared route whose
+     premise another phase removed. **For "what does this verb touch", the
+     command file is not a sufficient search space.**
+
+
+================================================================================
+7. WHEN YOU ARE DONE
+================================================================================
+Full gate. Commit as you go, do not push.
+
+Write `multiAppFinalRefactor/agent5/agent-2026-08-10-1.txt`:
+
+  1. The final tier table: every verb, where it ended up, and why
+  2. The deprecation entries, and the hint you watched fire — actual stderr
+  3. §5's six checks: observed
+  4. Which guards you watched fail, and what each would STILL pass on
+  5. What you could not verify locally
+  6. Everything in §6 I got wrong, plus anything else
+
+In chat, print only the path of that file.
+--------------------------------------------------------------------------------
