@@ -263,6 +263,29 @@ Phase 3 deletes sales' rows from shared tables; Phase 5 drops two tables.
 
 **Never `DELETE` without a `WHERE` naming sales.** Not once, not "just to see".
 
+> ### A WORKSPACE #NUMBER LOOKS LIKE AN ID AND IS NOT UNIQUE
+>
+> Agent 5 destroyed data in local dev cleaning up its own probe rows:
+>
+> ```sql
+> DELETE FROM platform.events   WHERE entity_type='issue' AND entity_id=17;
+> DELETE FROM platform.entities WHERE urn LIKE '%/issue/17' AND app='issues';
+> ```
+>
+> **`entity_id` is the per-workspace #number, not a global id.** Both predicates
+> also matched a different workspace's issue #17. One entity row and three event
+> rows belonging to somebody else, gone.
+>
+> **Any predicate on `entity_id`, a `#number`, or a URN suffix must carry the
+> workspace.** A URN is only unique with its workspace segment — that is what
+> the segment is for.
+>
+> What caught it: `verify.sh`, unprompted, in the direction that matters —
+> *"count changed by -67 but declared decrease totals -66"*. Off by one, from a
+> ledger aimed at something else entirely. The entity row was recoverable
+> (`bk super-admin entity-drift --repair` found exactly one `missing`); the
+> three event rows were not.
+
 ---
 
 ## Migrations
