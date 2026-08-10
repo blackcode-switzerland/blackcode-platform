@@ -90,9 +90,10 @@ caching, errors and empty states.
 Every fetch is a **path**, never an absolute URL and never an env var pointing at
 another deployment (D-10). That is what makes the shared route factories (D-2)
 mandatory rather than nice: this app serves its own `/api/upload` and `/api/meta`
-because a fetch is not allowed to go and find somebody else's. Cross-app links
-(D-18) are the exception and they are not fetches — they are anchors carrying an
-absolute `url` the *server* built from the other app's registered `base_url`.
+because a fetch is not allowed to go and find somebody else's. There is no
+exception left: the one that used to exist — cross-app link anchors carrying an
+absolute `url` the server built from another app's `base_url` (D-18) — went with
+the shared link index in Phase 3.
 
 It exports **two** request functions and **one `fetch(`**. `apiGet`, and — since
 Phase 9 — `apiSend`, which is every non-GET request the app makes.
@@ -194,7 +195,7 @@ not repeated here. Two things are this app's own:
 | `/dashboard/{ws}` | **Today** — §7.1 |
 | `/dashboard/{ws}/metrics` | pipeline funnel + performance KPIs — §7.2 |
 | `/dashboard/{ws}/prospects` | table ⇄ board, filter bar in the URL |
-| `/dashboard/{ws}/prospects/{n}` | four tabs, journey, contacts, objections, triangulation, Related |
+| `/dashboard/{ws}/prospects/{n}` | four tabs, journey, contacts, objections, triangulation |
 | `/dashboard/{ws}/meetings` · `/communications` | the two cross-prospect ledgers |
 | `/dashboard/{ws}/products` · `/templates` · `/documents` | the catalog |
 | `/dashboard/{ws}/activity` | what changed and who changed it — §7.7 |
@@ -289,10 +290,13 @@ communications log wins by length and the shape of the deal disappears under it.
   who decided. Nothing here ranks, scores or recomputes — a component that began
   sorting products by fit in the browser would be the one thing the doctrine
   forbids, and it would look like a feature.
-- **Related** renders `platform.links` with the ABSOLUTE `url` the server built
-  from the other app's `base_url` (D-18) — an `<a>`, not a `<Link>`, because it
-  leaves this deployment. A deleted far end is shown and marked, never hidden: a
-  link that silently vanishes is indistinguishable from one never made.
+- **Related is GONE (2026-08-10, Phase 3).** It rendered `platform.links`, the
+  shared cross-app index this app no longer writes or reads. A panel that could
+  only ever be empty, telling the reader to run a command that now 404s from this
+  deployment, is worse than the absence — it advertises a capability. D-18's
+  requirement stands: a relationship has to be visible, and what carries it now
+  is the far end's URN in the prospect's own summary or a note, which is this
+  app's data rendered by this app.
 - The **Documents / Meetings / Communications tabs call the same routes as the
   standalone pages** with `?prospect=<n>`. That is what makes them filtered views
   rather than parallel stores (D-8).
@@ -410,7 +414,7 @@ direction proves nothing:
                         its stage, its next action, contacts, objections,
                         meetings, communications
     READ-ONLY IN BOTH:  products, templates, documents, matches, the journey
-                        ladder, cross-app links, trash, activity
+                        ladder, trash, activity
 
 **The line is what a human can know that the agent cannot.** A person on a call
 learns the deal moved, that a contact's email is wrong, what the meeting turned

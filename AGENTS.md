@@ -39,16 +39,19 @@ Commands come in three tiers and the spelling says which (D-11 —
 `bk guide platform/apps`). **Neutral** stays bare (`workspace`, `member`,
 `invite`, `token`, `profile`, `inbox`, `meta`, …): the same answer from any app.
 **Cross-app** stays bare and tags its results (`search`, `activity`, `link`,
-`storage`). **App-owned** sits behind the app name — every app noun, plus
+`storage`) — but only the deployment holding the shared index answers them; one
+that does not returns 404 with a hint, and `link` is retiring (2026-08-10). **App-owned** sits behind the app name — every app noun, plus
 `upload`, `trash` and `label` since 3.0.0, because a file's ownership, a recycle
 bin and a label each belong to one app. You upload INTO one app and list ACROSS
 all of them. Shared code: `cli/internal/appverbs`.
 
 **URNs.** `bc:<app>:<workspace-slug>/<entity-type>/<number>`, using the workspace
-#number like everything else. Every issue, task and project is mirrored into
-`platform.entities` **in the same transaction as the source row** — a projection
-that can drift is worse than no projection. `bk super-admin entity-drift` catches
-what you missed.
+#number like everything else, and derived from the app's OWN tables. Every issue,
+task and project is mirrored into `platform.entities` **in the same transaction
+as the source row** — a projection that can drift is worse than no projection.
+`bk super-admin entity-drift` catches what you missed. **`apps/issues` is that
+index's only writer since 2026-08-10**; `apps/sales` keeps its records, its
+labels, its upload ledger and its event feed in `sales.*`.
 
 **The blob index.** `platform.blob_references` is how one deployment learns what
 another app's content points at without reading its tables. It is maintained by

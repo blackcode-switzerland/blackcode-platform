@@ -194,7 +194,7 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
         ))}
       </nav>
 
-      {tab === 'overview' && <Overview ws={ws} n={n} journey={p.journey} links={p.links} />}
+      {tab === 'overview' && <Overview ws={ws} n={n} journey={p.journey} />}
       {tab === 'communications' && <CommunicationsTab ws={ws} n={n} />}
       {tab === 'meetings' && <MeetingsTab ws={ws} n={n} />}
       {tab === 'documents' && <DocumentsTab ws={ws} n={n} />}
@@ -234,12 +234,10 @@ function Overview({
   ws,
   n,
   journey,
-  links,
 }: {
   ws: string
   n: number
   journey: JourneyStep[]
-  links: import('@/lib/views').PublicLink[]
 }) {
   const contacts = useContacts(ws, n)
   const objections = useObjections(ws, n)
@@ -469,58 +467,20 @@ function Overview({
       </Section>
 
       {/*
-        RELATED — the north star, made visible (D-18).
+        THE "RELATED IN OTHER APPS" SECTION IS GONE (2026-08-10, Phase 3).
 
-        A link stored in `platform.links` that nobody can follow only exists in
-        the database. `url` is ABSOLUTE and was built by the server from the other
-        app's registered `base_url`, which is why this is an <a> and not a
-        <Link>: it leaves this deployment. This is the half of the north star the
-        web surface owes — an agent working in sales files an issue, and the
-        human reading the deal can see it and click through.
+        It rendered `platform.links` — the shared cross-app index this app no
+        longer writes or reads. Leaving it would have meant a permanently empty
+        panel telling the reader to run a command that 404s from this
+        deployment, which is worse than the absence: it advertises a capability.
+
+        D-18's requirement stands and is not what was deleted. A relationship has
+        to be VISIBLE and not merely storable. What carries it now is the far
+        end's URN written into the prospect's own summary or a note — this app's
+        data, rendered by this app, and something an agent reading either record
+        can act on. If a dedicated field for it is wanted later, it is a sales
+        column, not a shared table.
       */}
-      <Section
-        title="Related in other apps"
-        action={<AgentOnly what="Cross-app links" command="bk link create" />}
-      >
-        {links.length === 0 ? (
-          <EmptyState
-            title="Nothing linked yet"
-            hint="`bk link create` relates this prospect to work in another app — an issue, a task, a project."
-          />
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            {links.map((l) => (
-              <a
-                key={l.urn}
-                href={l.url ?? undefined}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={
-                  'flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent ' +
-                  (l.url ? '' : 'pointer-events-none opacity-60')
-                }
-              >
-                <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground">
-                  {l.app}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-foreground">
-                    {l.title}
-                    {/* A deleted far end is SHOWN, struck through, not hidden.
-                        A link that silently vanishes is indistinguishable from
-                        one that was never made. */}
-                    {l.deleted && <span className="ml-2 text-xs text-destructive">(deleted)</span>}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {l.rel} · {l.urn}
-                  </span>
-                </span>
-                <ExternalLink size={14} className="shrink-0 text-muted-foreground" />
-              </a>
-            ))}
-          </div>
-        )}
-      </Section>
     </div>
   )
 }

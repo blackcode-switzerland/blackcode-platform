@@ -108,6 +108,7 @@ shared handler needs from an app:
 | `appSlug` | the identity `requireAppAccess` checks against |
 | `db` | a Drizzle client typed to the platform tables; every app's is a superset. **Supply it as a getter if the app's client is lazy** — `next build` imports every route module |
 | `workspaces` | **where this app's workspaces live** (2026-08-10). A `WorkspaceSource`: seven methods over one subject — resolve one for a caller, list them, one by id, its members, the per-app access gate, and the default workspace's read/write. `apps/issues` supplies `platformWorkspaceSource(db, APP_SLUG)`; `apps/sales` supplies its own over `sales.*`. **Required, with no platform default** — a default would mean an app that never answered the question serves, correctly and silently, against another app's tenancy |
+| `uploads` | **where this app records its uploads** (2026-08-10, Phase 3). An `UploadLedger`: attribute a file to a workspace, and write the ledger row. `apps/issues` supplies `platformUploadLedger(db, APP_SLUG)`; `apps/sales` writes `sales.uploads`. **Required, with no platform default** — the cross-app delete gate asks an app whether a file is still in use, and an app writing its rows into another app's ledger would be asked the wrong question. **The STORE does not split**: one Blob store, one quota, one `platform.blob_references` |
 | `resolveUser` | the browser half is app-specific (next-auth config) |
 | `resolveSessionUser?` | session-ONLY, for `/api/tokens`. A separate field because a bearer token minting a bearer token is privilege escalation; the routes that need it throw at mount time rather than falling back |
 | `manifest?` | `X-BK-Help` / `X-BK-Changelog`. Omitted by an app with no agent landing page — a breadcrumb pointing at a 404 is worse than none |
@@ -160,6 +161,16 @@ until `resolveEventEntitySeqs` turned out to read `issues.*` two calls down.
 | **B** | `factory(ctx, contribution)` | a named, typed thing only the app can supply |
 | **C** | the app writes the route | the app-specific part *is* the route |
 
+> **`events` is on the CONTRIBUTION and not on AppContext, and the difference
+> from `workspaces` / `uploads` is the rule working rather than an
+> inconsistency.** Those two are read by several entry points — the request
+> layer, `/api/meta`, upload attribution — so an app must answer for them before
+> it serves anything. The event source is read by exactly ONE route, and an app
+> that does not mount the activity feed should not have to say where its events
+> live. Required *within* the contribution, though: a default of
+> `platform.events` would mean an app serving another app's feed for a workspace
+> id that means a different team.
+
 **Class B takes a second argument — AppContext does not grow callbacks.**
 AppContext is what every app supplies for every route, so a field two routes read
 is a tax every future app pays to mount neither of them, and omitting it fails
@@ -169,7 +180,7 @@ a pair because the contribution is a different KIND of thing in each:
 
 | Route | Contribution | Why only the app can supply it |
 |---|---|---|
-| `.../activity` | `resolveEntitySeqs` | turning an `entity_id` into a #number means reading `issues`/`tasks`/`projects` |
+| `.../activity` | `events` + `resolveEntitySeqs` | the feed's TABLE is `platform.events` for issues and `sales.events` for sales; and turning an `entity_id` into a #number means reading `issues`/`tasks`/`projects` |
 | `/api/me/password/request-otp` | `sendPasswordResetEmail` | a message carries an app's name, from-address and branding. There is no platform-branded email |
 | `.../invitations` (POST) | `sendInvitationEmail` | same reason. A person invited from sales must not receive "Blackcode Issues invited you" |
 
@@ -600,6 +611,18 @@ since 2026-08-06 it is split:
 
 An app's `recordEvent` **delegates** the platform types, in one place, passing
 its own `APP_SLUG`. No call site knows which half it reached.
+
+> **An app that owns its own tenancy does not delegate, and that is the seam
+> dissolving rather than moving (2026-08-10, Phase 3).** The delegation exists
+> because a workspace, a membership and an invitation are PLATFORM subjects. For
+> `apps/sales` they are `sales.workspaces`, `sales.workspace_members` and
+> `sales.invitations` — its own rows, in its own schema — so its `recordEvent`
+> writes every entity type into `sales.events` and calls
+> `recordPlatformEvent` not at all. The two VOCABULARIES are still imported from
+> `platform-db` rather than restated, for rule 2 below, which is the part that
+> was ever load-bearing. `apps/issues` and `apps/_scaffold` are unchanged: their
+> workspaces are `platform.workspaces`, so their platform events belong in
+> `platform.events`.
 
 **Why the split is clean rather than a compromise.** The app half of the recorder
 does exactly two app-specific things, and a platform event needs neither:

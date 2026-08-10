@@ -93,7 +93,7 @@ match_documents    ⟩
 document_prospects ⟩ pure links: composite PK, no surrogate id, cascade both ways
 document_products  ⟩
 template_documents ⟩
-prospect_labels    into platform.labels, app-scoped (D-14)
+prospect_labels    into sales.labels (migration 0005 — the 13th foreign key)
 counters           (workspace_id, entity_type, last_seq) — the #number allocator
 user_preferences   ui_mode, saved filters
 ```
@@ -530,17 +530,29 @@ has no #number, so `contact:12` is not a ref anybody could type.
 ```
 lib/http-input.ts          coercion + the vocabulary checks, shared by every route
 lib/actor.ts               who did this, and the label to write beside the FK
-lib/db/queries/events.ts   this app's recordEvent — the platform half delegated
+lib/db/queries/events.ts   this app's recordEvent — `sales.events`, every type
 lib/views.ts               the public shape: `number` not `id`, and no rendering
 ```
 
 `lib/db/queries/events.ts` is the one that did not exist before Phase 5 and is
-easy to assume away. `recordPlatformEvent` in `@blackcode/platform-db` owns the
-four **platform** entity types and nothing else (D-23); an event about a prospect
-needs a `subject_urn` derived from `sales.*`, so each app carries its own
-recorder. Sales' differs from issues' in three stated ways — no fan-out (D-13
-left this app with no inbox to fan out to), no coalescing (writes are
+easy to assume away. It writes `sales.events` — **every entity type, including
+the four platform ones**. Until 2026-08-10 it delegated `workspace`,
+`workspace_member`, `workspace_app` and `invitation` to `recordPlatformEvent`
+(D-23), because those were events about PLATFORM subjects; they are this app's
+own rows in this app's own schema now, and their events belong beside the rest.
+The two vocabularies are still imported from `platform-db` rather than restated,
+because the activity route validates `?entity_type=`/`?action=` against them and
+DROPS an unrecognised filter rather than rejecting it.
+
+Sales' recorder differs from issues' in three further stated ways — no fan-out
+(D-13 left this app with no inbox to fan out to), no coalescing (writes are
 agent-issued commands, not autosave), and `actor_token_id` actually populated.
+
+`subject_urn` survived the removal of the projection, and the reason is the
+point: a URN is `bc:sales:<slug>/<type>/<number>` and every part of it is in
+`sales.*`. `platform.entities` was where it used to be looked UP; it was never
+what made it true. So the resolver moved into this file, joins
+`sales.workspaces`, and `?subject_urn=` / `bk activity --subject` keep working.
 
 ### 7.2.1 Which records have a #number, and which do not
 
@@ -563,14 +575,25 @@ and nothing serves it.
 
 ### 7.2.2 Search: two layers, two paths (D-9)
 
-`GET …/search` is the PLATFORM route and reads `platform.entities` — titles, every
-app, URNs out. **This app does not mount it.** `GET …/sales-search` is this app's
-and reads the generated `tsvector` columns agent4 built, unioned by one query in
-`lib/db/queries/search.ts`.
+`GET …/search` is the PLATFORM route and reads `platform.entities` — titles,
+every app, URNs out. **This app does not mount it, and the reason changed on
+2026-08-10.** `GET …/sales-search` is this app's, and reads the generated
+`tsvector` columns, unioned by one query in `lib/db/queries/search.ts`.
 
-They are different PATHS on purpose. Serving both at `/search` from this host
-would make which one an agent got depend on which deployment it was pointed at —
-the exact ambiguity D-11 removes from the verbs.
+The old reason was that serving both from one host made which search an agent
+got depend on which deployment it was pointed at. That reasoning was wrong — the
+VERB decides, not the deployment — and the route was mounted on 2026-08-07 for a
+good reason: `bk search` 404'd for anyone homed here.
+
+**The real reason is a cross-tenant read, and it was measured.** `searchRoute`
+resolves the workspace through `AppContext.workspaces` — `sales.workspaces` —
+and then queries `platform.entities` BY THAT ID. Migration `0004` mirrored ids,
+and sales membership is no longer platform membership, so the two tenancies
+overlap by construction and differ in who belongs to them. Observed locally
+against the real route: a member of sales workspace 1 who is not a member of
+platform workspace 1 received issues' issue titles and dashboard URLs.
+`lib/search-parity.test.ts` asserts the absence, with the measurement.
+`…/links` was unmounted in the same change and for the same mechanism.
 
 Three things about the query, each of which would be a silent wrong answer if got
 wrong:
@@ -700,6 +723,33 @@ asserts the absence:**
 `GET|PATCH …/workspaces/{ws}/apps…` are **gone** from this deployment, with the
 "No access to b/sales" screen.
 
+### 7.4.3 …and its records (2026-08-10, Phase 3)
+
+Tenancy was half of it. The other half is everything a workspace contains.
+
+| Was | Is | What moved with it |
+|---|---|---|
+| `platform.labels` (+ an `app` column and an `app IS NULL OR app = 'sales'` predicate on every read) | `sales.labels` | `visibleToThisApp()` is **deleted, not ported**. Over a table whose foreign keys cannot reach another app's row it is a no-op that reads as protection. Migration `0005` moved `prospect_labels.label_id` with it |
+| `platform.uploads` | `sales.uploads` | `AppContext.uploads`, an `UploadLedger`. **The store did not split** — one Blob store, one quota, one `platform.blob_references` |
+| `platform.events` | `sales.events` | every entity type, no `recordPlatformEvent` delegation. The activity route's contribution now carries an `EventSource` |
+| `platform.entities` (the projection) | **nothing** | `lib/db/queries/entities.ts` is gone, with `db:reproject`. A sales record is still addressable — the URN is derived from `sales.*` — it is just not in the cross-app index |
+| `platform.links` | **nothing** | `bk link` retires (PLAN.md §3). Put the far end's URN in the record's text |
+
+**The upload attribution change is the one that was a bug rather than a move.**
+`attributeUpload` in platform-storage falls back to
+`platform.users.active_workspace_id` — the shared column this app deliberately
+never writes — so a sales upload was filed under, and attributed to, whichever
+workspace the caller last selected IN ISSUES. `lib/db/queries/uploads.ts` asks
+this app's own tenancy instead, and `uploads.test.ts` asserts the absence of the
+fallback with a caller who HAS that column set.
+
+**What stayed shared, and it is not an oversight:** `platform.blob_references`.
+It is the one piece of cross-app machinery that earns its keep — no app may
+delete a file another app still uses — it is maintained by Postgres triggers on
+this app's own content tables (migration `0002`), and Phase 3 did not touch it.
+`write-paths.integration.test.ts` re-checks those triggers precisely because the
+ledger moved out from under them.
+
 **Still hidden (PLAN.md §1):** no switcher, no create-workspace flow, no
 workspace settings page. One workspace per person, and the word never appears in
 the UI. The tables are fully multi-workspace, so that is a UI change later rather
@@ -731,22 +781,33 @@ Everything else in the plan's 2–9 exists. `sales.user_preferences` is served b
 rather than by convention (D-7, and the half of it that guard did not cover is
 written up in `frontend.md` §8.4).
 
-**Every write path owes three things, and all three take a transaction handle
-without opening one:** `allocateSeq` (`lib/db/queries/counters.ts`),
-`recordEvent` via `@blackcode/platform-db`, and `projectEntity`
-(`lib/db/queries/entities.ts`). The rollback case is proven both ways: a create
-that fails after `projectEntity` leaves nothing in `platform.entities`, and the
-same sequence written with `db` instead of `tx` leaves an orphan. Only the pair
-proves anything.
+**Every write path owes TWO things now, and both take a transaction handle
+without opening one:** `allocateSeq` (`lib/db/queries/counters.ts`) and
+`recordEvent` (`lib/db/queries/events.ts`). The third — `projectEntity`, into
+`platform.entities` — went with the projection on 2026-08-10.
 
-The one write with none of the three is `setPreferences`: a display setting is
-not an event and has no cross-app address, so there is nothing to project and
-nothing about the pipeline to record. `lib/db/queries/preferences.ts` says so
-where somebody would otherwise assume an omission.
+The rollback case is still proven both ways, and it moved with the property:
+`lib/db/queries/write-paths.integration.test.ts` asserts that a create which
+fails after `recordEvent` leaves no event, AND that the same sequence written
+with `db` instead of `tx` leaves an orphan. Only the pair proves anything — the
+first case passes just as well against a recorder that does nothing.
+
+The one write with neither is `setPreferences`: a display setting is not an
+event, so there is nothing about the pipeline to record.
+`lib/db/queries/preferences.ts` says so where somebody would otherwise assume an
+omission.
 
 ---
 
 ## 8. The north star, run from a sales login (2026-08-07)
+
+> **DATED. Read §7.4.3 first — the script below no longer runs as written.**
+> Phase 3 (2026-08-10) unmounted `bk search` and `bk link` from this deployment
+> and retires `bk link` outright, so steps that cross the boundary through the
+> shared index now fail with exit 5 and a hint. What the run PROVED — one login,
+> one token, one binary, no re-auth, no server switch — is unchanged and is what
+> the section is kept for. The crossing itself is a URN in the record's own
+> text, and Phase 6 returns cross-app search as a CLI fan-out.
 
 This section is the artefact, not the claim. §10.4 of `docs/sales-app-plan.md`
 states the sentence this project was justified by:
@@ -861,6 +922,7 @@ the rest, and why:
 | `bk super-admin …` | Platform administration lives in one app. Same answer from any host, and the issues host gives it. |
 | `bk inbox …` | No shared factory exists yet. |
 | `bk storage list \| rm` | No factory, and the delete path reaches blob deletion. D-28 still holds: one ledger, same rows from issues. |
+| `bk search`, `bk link …` | **Unmounted 2026-08-10 (Phase 3).** Both read `platform.entities` scoped by a workspace id resolved from `sales.workspaces` — two tenancies that share ids and not members. See §7.2.2 for the measurement. `bk link` is retiring outright; cross-app search returns as a CLI fan-out. |
 | `bk workspace edit \| delete \| transfer`, `bk member leave`, `bk invite accept \| decline` | Not yet factories — the queries are still app-local to issues. `GET` on a workspace IS served, because `bk workspace use` resolves a slug through it. |
 | `bk workspace create` | D-3: a workspace is the company; sales has no create-workspace flow. |
 

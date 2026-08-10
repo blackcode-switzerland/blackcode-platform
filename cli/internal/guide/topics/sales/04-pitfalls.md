@@ -4,29 +4,27 @@ Read this once before scripting against this app. Every entry is a mistake that
 is easy to make and hard to see afterwards.
 
 Related commands: `bk sales prospect delete`, `bk sales objection rm`, `bk sales
-search`, `bk search`, `bk meta`, `bk sales trash list`, `bk sales trash restore`.
+search`, `bk meta`, `bk sales trash list`, `bk sales trash restore`.
 
-## 1. The two searches are not the same command
+## 1. Search this app with `bk sales search`
 
 This is the one to learn first.
 
 ```
-bk search        reads the shared entity index — TITLES ONLY, every app.
-                 "Where is the thing called X, in ANY app?"
-                 Returns URNs, each tagged with the app it came from.
-
 bk sales search  reads this app's full text.
                  "Find X INSIDE prospect summaries, meeting outcomes,
                  communication bodies, template copy."
                  Returns records, with the matching text.
 ```
 
-A phrase from a call summary is findable with the second and **not** with the
-first, because the shared index never held it. A company name is findable with
-both, and only the first will also find it in another app.
+It is the only search this deployment serves. The bare, cross-app `bk search`
+reads a shared title index that this app no longer writes to, and asking this
+deployment for it fails with exit 5 and a hint naming what to do instead —
+loudly, rather than by returning an empty page that reads like "no matches".
 
-If you reach for the wrong one you get an empty result rather than an error,
-which is why this is at the top of the page.
+That is the direction to be careful about: a phrase from a call summary was
+never in the shared index, so reaching for the wrong command used to give you
+nothing and no error. Now the wrong command says so.
 
 ## 2. Deleting requires the NAME, not the number
 

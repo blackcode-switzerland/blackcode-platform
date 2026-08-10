@@ -22,7 +22,6 @@
 //    are things the WEB does with these — §5.1: a relative string is a
 //    rendering, never storage, and by the same argument never a wire format.
 
-import type { LinkRow } from '@blackcode/platform-db'
 import type { ProspectLabel, ProspectRow } from './db/queries/prospects'
 import { entityUrnOrNull } from './entity-address'
 import { APP_SLUG } from './app'
@@ -90,40 +89,11 @@ export function publicProspect(row: ProspectRow, workspaceSlug: string): PublicP
   }
 }
 
-/**
- * A cross-app link, as `bk sales prospect show` prints it (D-18).
- *
- * The far end is already resolved by `listLinks`, so this is a projection of its
- * row rather than a second query. `url` is absolute — built by platform-db from
- * the other app's registered `base_url` — which is the whole point: a link an
- * agent cannot follow to the other deployment is a link that only exists in the
- * database.
- */
-export interface PublicLink {
-  direction: 'out' | 'in'
-  rel: string
-  urn: string
-  app: string
-  entity_type: string
-  number: number
-  title: string
-  url: string | null
-  deleted: boolean
-}
-
-export function publicLink(l: LinkRow): PublicLink {
-  return {
-    direction: l.direction,
-    rel: l.rel,
-    urn: l.other_urn,
-    app: l.other_app,
-    entity_type: l.other_entity_type,
-    number: l.other_number,
-    title: l.other_title,
-    url: l.other_url,
-    deleted: l.other_deleted,
-  }
-}
+// THE CROSS-APP LINK SHAPE IS GONE (2026-08-10, Phase 3). It projected a
+// `platform.links` row, and this app neither writes nor reads that index any
+// more — `bk link` is retiring and the prospect route stopped serving `links`.
+// D-18's requirement, that a relationship be visible rather than merely stored,
+// is met by the far end's URN in the prospect's own text.
 
 function iso(v: Date | string | null | undefined): string | null {
   if (v == null) return null

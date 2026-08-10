@@ -15,9 +15,13 @@ in exactly one tier, and **you can see which from the command itself**:
 - **Neutral — bare.** `bk workspace list`, `bk member list`, `bk token create`,
   `bk meta`. Identity and org data: the answer is the same whichever app you ask,
   so no app can be the wrong one.
-- **Cross-app — bare, and that is the point.** `bk search`, `bk activity`,
-  `bk link`, `bk storage list`. They span every app by design and tag each
-  result with the app it came from.
+- **Cross-app — bare, and CHANGING.** `bk search`, `bk activity`, `bk link`,
+  `bk storage list`. These were built on one shared index that every deployment
+  could answer from. An app that owns its own records answers only for itself,
+  and one that never wrote the shared index does not serve the bare command at
+  all: you get exit 5 and a hint naming the server that does. `bk activity` is
+  the case to watch — from such an app it is that app's feed, not everyone's.
+  Check with `bk app list` rather than assuming; the tier is being reworked.
 - **App-owned — behind the app's name.** `bk issues issue create`, and also
   `bk issues upload`, `bk issues trash list`, `bk issues label list`. A file's
   ownership, a recycle bin and a label each belong to ONE app, so the app says

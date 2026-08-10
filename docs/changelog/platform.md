@@ -30,6 +30,34 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-10 — an app can own its upload ledger and its event feed
+
+Two more `AppContext` fields, and one contribution, for the same reason
+`workspaces` arrived earlier today: shared code can no longer assume every app's
+data is in the same table.
+
+- **`AppContext.uploads`** — an `UploadLedger`: attribute a file to a workspace,
+  and write the ledger row. `apps/issues` supplies
+  `platformUploadLedger(db, APP_SLUG)`, which is the pair of calls
+  `/api/upload` already made. **Required, with no default**: the cross-app
+  delete gate asks an app whether a file is still in use, and an app writing
+  into another app's ledger would be asked the wrong question.
+- **`ActivityContribution.events`** — an `EventSource`. On the activity route's
+  contribution rather than on `AppContext`, because exactly one route reads it
+  and an app that does not mount the feed should not have to answer. Required
+  within the contribution: a default would serve another app's feed.
+- **`platform.labels.app` is now historical.** Every row is `issues`; nothing
+  else writes the table.
+
+**The Blob store did not split.** One store, one bill, one quota, and
+`platform.blob_references` — the gate that stops one app deleting a file another
+still uses — is untouched and stays shared. What split is the LEDGER: which of
+an app's files exist.
+
+**For clients:** `GET /api/upload` and the blob handshake are unchanged, and so
+is every response shape. `bk storage list` now only sees the files of apps that
+still use the platform ledger.
+
 ## 2026-08-10 — an app can own its own workspaces (`AppContext.workspaces`)
 
 **Not breaking for `apps/issues` — nothing about its behaviour changed.** This is

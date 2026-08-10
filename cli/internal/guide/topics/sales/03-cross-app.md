@@ -1,11 +1,13 @@
-# Crossing app boundaries: URNs, links, and the round trip
+# Crossing app boundaries: URNs, and what carries a record across
 
 Work in this app regularly turns into work somewhere else — a client asks for
 something that is an engineering problem, and the two records need to point at
-each other. This page is that round trip, end to end.
+each other. This page is that round trip, end to end, and **it changed on
+2026-08-10**: what crosses the boundary now is you and the binary, not a shared
+database table.
 
-Related commands: `bk sales prospect show`, `bk search`, `bk link create`,
-`bk link list`, `bk activity`.
+Related commands: `bk sales prospect show`, `bk sales search`, `bk activity`,
+`bk app list`, `bk meta`.
 
 ## Everything addressable has a URN
 
@@ -21,77 +23,57 @@ this page does not enumerate it. Records without a #number (contacts, journey
 steps, objections, matches) have no URN, because an address nothing can resolve
 is worse than not being addressable.
 
-`bk sales prospect show <n>` prints the prospect's URN at the top. That string is
-what every command below takes.
+`bk sales prospect show <n>` prints the prospect's URN at the top, and every
+activity entry about an addressable record carries it as `subject_urn`. **The
+URN is still true and still resolvable** — it is built from this app's own
+workspace slug and #number, so nothing about it depended on the shared index.
 
-## Finding something you cannot name precisely
-
-Two different questions, two different commands:
+## Searching
 
 ```bash
-bk search "roches"            # across EVERY app, by title. Returns URNs.
 bk sales search "roches"      # inside THIS app's text. Returns records.
 ```
 
-The first reads the shared index, which holds titles only, and tags each hit with
-the app it came from. The second reads this app's own full-text columns and can
-find a phrase in a call summary — something the shared index does not contain.
-`bk guide sales/pitfalls` has more on choosing.
+This deployment serves this search and no other. It reads this app's full-text
+columns, so it finds a phrase in a call summary — and it only ever answers about
+this app's records.
 
-## Relating two records
+The bare `bk search` reads a shared title index that this app no longer writes
+to. Asked of this deployment it fails with exit 5 and a hint naming the server
+that does answer it; run `bk app list` to see which servers your token reaches.
 
-```bash
-bk link create bc:sales:<ws>/prospect/12 bc:issues:<ws>/issue/512 --rel blocks
-bk link list bc:sales:<ws>/prospect/12
-```
+## Recording that two records are related
 
-`bk link` is a **bare, cross-app verb**: relating two records is the whole point
-of it, so it is not behind any app's name. Run `bk meta` for the relation
-vocabulary — it is served live and this page does not restate it.
+**There is no longer a command that stores this.** The relation used to live in a
+shared table, and that table was the single biggest reason two apps had to share
+a database. It went with the split.
 
-Both ends must be real. A URN that nothing has projected is refused rather than
-stored, so a link cannot silently point at nothing.
-
-## The round trip, worked
-
-An agent is working a deal and finds that what the client needs is a change to
-the product.
+Put the address in the text instead — it is a string an agent can act on:
 
 ```bash
-# 1. where you are
-bk sales prospect show 12
-#    → bc:sales:acme/prospect/12
-
-# 2. record the engineering work in whichever app owns it, and note its URN
-
-# 3. relate them
-bk link create bc:sales:acme/prospect/12 <that URN> --rel blocks
-
-# 4. and back — the prospect now shows the link, with a URL you can follow
-bk sales prospect show 12
+bk sales prospect edit 12 --summary "Blocked on bc:issues:acme/issue/512 — SSO"
 ```
 
-Step 4 is the half that makes this worth doing. `prospect show` prints every
-link touching the prospect, each with an **absolute URL into the deployment that
-owns the far end** — so the relationship is something you can act on, not just
-something stored. A far end sitting in its own recycle bin is shown and flagged
-rather than hidden: something you are blocked on being deleted is exactly what
-you need to be told.
+A URN in a summary, a note or an issue description is findable by whoever reads
+either record, survives both apps' backups, and cannot drift out of step with
+the thing it points at. Run `bk meta` for this app's addressable types when you
+need to build one from the other direction.
+
+## Activity is this app's
+
+```bash
+bk activity --since 7d
+bk activity --subject bc:sales:<ws>/prospect/12
+```
+
+Bare, but it answers about **this app** when you are homed here: every entry it
+returns was produced by this deployment. `--subject` gives you the full history
+of one record in one call, which is the question it is best at.
 
 ## One login, one binary
 
 You do not authenticate twice. One token reaches every app you have been granted,
 and each app's commands go to that app's own deployment automatically — you never
-pass a URL. `bk app list` shows which apps your token can reach, and
-`bk guide platform/apps` explains which commands go where and why the spelling
-tells you.
-
-## Activity spans apps too
-
-```bash
-bk activity --since 7d
-```
-
-Bare, like `search` and `link`, and for the same reason: a feed that stopped at
-one app's boundary would not be a feed of your week. Each entry is tagged with
-the app that produced it.
+pass a URL. `bk app list` shows which apps your token can reach, `--app-server`
+sends one invocation elsewhere, and `bk guide platform/apps` explains which
+commands go where and why the spelling tells you.

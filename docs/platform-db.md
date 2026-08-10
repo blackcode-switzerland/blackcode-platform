@@ -117,7 +117,7 @@ half of expand → migrate → contract.
 |---|---|---|
 | `comments.parent_type` | `<app>:<noun>` | `issues:issue`, `sales:prospect` |
 | `deletion_batches.root_type` | `<app>:<noun>` | same |
-| `labels.app` | slug, or NULL | NULL = **shared** with every app in the workspace. `0043` claimed every existing row for `issues`, so NULL has no instances — sharing is a deliberate `SET app = NULL` |
+| `labels.app` | slug, or NULL | NULL = shared. **Historical since 2026-08-10**: `apps/sales` moved to `sales.labels`, so every row is `issues` and nothing else can write one. Kept rather than dropped for the reason `platform.*` was not renamed — moving production data for a cosmetic gain |
 | `error_events.app` | slug, nullable | Which deployment threw. `0044` backfilled every existing row to `issues`. Nullable only until both apps have deployed writing it |
 
 > **`error_events.app` is not optional information, and it is the one column
@@ -163,12 +163,23 @@ concern; `packages/platform-db/src/qualified-type.ts` is the only place that
 converts, and every read matches the qualified AND the legacy bare form until the
 contract step.
 
-**A scope column nobody reads is worse than no column.** `labels.app` is only
-worth having because every label read is filtered to
-`app IS NULL OR app = <serving app>` — and "read" means the resolve-by-name
+**A scope column nobody reads is worse than no column.** `labels.app` was only
+worth having because every label read was filtered to
+`app IS NULL OR app = <serving app>` — and "read" meant the resolve-by-name
 behind label creation, the attach, the rename and the delete, not only the list
 route. Before the filter, `bk issues label list` promised a scoping the data did
 not do; a column without it makes the promise louder and no truer.
+
+> **And the converse, found on 2026-08-10 (Phase 3): once the table holds one
+> app's rows only, the filter becomes the thing it was written to prevent.**
+> `apps/sales` moved to `sales.labels`, whose foreign keys cannot reach another
+> app's row, and its `visibleToThisApp()` helper was DELETED rather than ported.
+> Over a table that cannot hold a foreign row it is a no-op that reads as
+> protection — CLAUDE.md's whole subject. The scope is the schema now, and
+> `sales.prospect_labels.label_id` references `sales.labels` (migration `0005`,
+> the thirteenth foreign key) so an attachment cannot name a foreign label
+> either. Enforced by Postgres rather than by a WHERE clause somebody has to
+> remember.
 
 **The backfill in `0041`/`0042` is deploy-order-sensitive.** It is invisible to
 the build that ships with it (which matches both forms) and to every other app,
@@ -186,11 +197,31 @@ that stopped being self-describing — so step 2 ships commented out.
 ## An app with its own workspaces (the multi-app refactor)
 
 `sales.*` gained `workspaces`, `workspace_members`, `invitations`, `labels`,
-`uploads` and `events` on 2026-08-10 (migration `0003`), and **migration `0004`
-the same day put them to work**: sign-up, first-sign-in bootstrap, the members
-page and the invitation flow all read and write `sales.*`. `labels`, `uploads`
-and `events` are still fed from `platform.*` — that is Phase 3. See
-`multiAppFinalRefactor/PLAN.md`.
+`uploads` and `events` on 2026-08-10 (migration `0003`), and two migrations the
+same day put them to work: **`0004`** moved twelve foreign keys onto
+`sales.workspaces` (sign-up, the bootstrap, members, invitations), and **`0005`**
+moved the thirteenth, `sales.prospect_labels.label_id`, onto `sales.labels`.
+
+**Phase 3 is done: `apps/sales` reads and writes no `platform.*` table except
+identity.** Its labels, its upload ledger and its event spine are its own, its
+rows were deleted from `platform.{labels,uploads,events,entities,links}`, and it
+no longer projects into the cross-app index at all.
+
+What that leaves, and it is worth being precise because the table names have not
+changed: **`platform.{comments,labels,uploads,events,entities,links,workspaces,
+workspace_members,workspace_invitations,inbox_messages}` are `apps/issues`' data
+under a shared name.** They were not renamed to `issues.*` — that would mean
+moving production data for a cosmetic gain (PLAN.md §2). Genuinely shared, and
+written by every app: `users`, `api_tokens`, `password_reset_otps`,
+`email_whitelist`, `apps`, `error_events`, and **`blob_references`**, which is
+the one piece of cross-app machinery the refactor keeps.
+
+**The Blob store did not split.** One store, one bill, one quota, one delete
+gate. What split is the LEDGER — which of an app's files exist —
+`packages/platform-api/src/upload-ledger.ts`, and `platform.blob_references` was
+deliberately not touched.
+
+See `multiAppFinalRefactor/PLAN.md`.
 
 ### `0004` mirrored ids rather than remapping them, and that has two consequences
 

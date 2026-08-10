@@ -1,8 +1,27 @@
 # Cross-app: URNs, search and links
 
-Every addressable thing in every app has one name that works everywhere. That is
-what lets you search across apps, read one merged activity feed, and record that
-a thing in one app blocks a thing in another.
+Every addressable thing in every app has one name that works everywhere. The URN
+is the durable part of this page and it works from anywhere.
+
+## WHICH DEPLOYMENT ANSWERS — read this before the rest (changed 2026-08-10)
+
+`bk search`, `bk link` and the merged `bk activity` were built on ONE shared
+index that every deployment could read. Apps have stopped sharing their records,
+so:
+
+- an app that never wrote the shared index **does not serve these commands**. You
+  get exit 5 and a hint naming a server that does. That is deliberate — an empty
+  page would read like "no matches".
+- an app that owns its own activity answers `bk activity` about **itself**. Each
+  entry still carries the `app` that produced it, so you can tell.
+- **`bk link` is being retired.** Nothing new should depend on it. Put the far
+  end's URN in the record's own text instead; that is a fact both apps keep and
+  neither can drift from.
+
+`bk app list` shows the servers your token reaches, and `--app-server <slug>`
+sends one invocation to a named one. Cross-app search is coming back as a
+client-side fan-out over those servers — the binary asking each app and merging
+the answers — which needs no shared table.
 
 ## The URN
 
@@ -25,7 +44,7 @@ Do not hand-assemble a URN from parts you guessed. Get one from `bk search`, or
 from the `subject_urn` field on an activity entry. Run `bk meta` for the app
 slugs you can reach and the entity types each one publishes.
 
-## Search across every app
+## Search, where it is served
 
 ```bash
 bk search auth                       # titles matching "auth", any app
@@ -37,11 +56,12 @@ bk search draft --include-deleted    # include items in the recycle bin
 
 Output carries the URN, which is what `bk link` takes.
 
-This searches **titles and #numbers only**, across every app. To search
+This searches **titles and #numbers only**, and only across the apps that write
+the shared index — see the section at the top of this page. To search
 descriptions, or to filter by status, assignee or label, use that app's own
-listing instead — for the issue tracker, `bk issues issue list --search`.
+listing or its own search instead.
 
-## Linking two things
+## Linking two things (retiring — see the top of this page)
 
 Links are **directed** and stored once. `A blocks B` is a single relation: it
 shows up as an outgoing link on A and an incoming one on B. There is no separate
@@ -81,7 +101,7 @@ part of the identity. Check it with `bk link list` first rather than guessing.
   automatically. A URN you cached before a rename will stop resolving — get a
   fresh one from `bk search` rather than storing them long-term.
 
-## One activity feed across apps
+## The activity feed
 
 ```bash
 bk activity --since 24h
@@ -93,7 +113,8 @@ bk activity --ws kali-sa --since 30m --json
 `--since` takes a relative window: `30m`, `24h`, `7d`. Each entry carries the
 `app` that produced it and, where its subject is an addressable entity, that
 entity's `subject_urn` — so `--subject` gives you the full history of one thing
-in one call.
+in one call. **How many apps a single call covers depends on which server you
+ask** (top of this page); the `app` field is what tells you what you got.
 
 Entries about members, invitations, labels and comments have no `subject_urn`.
 That is an answer, not a gap: those are real events about things that have no

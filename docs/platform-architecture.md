@@ -300,33 +300,59 @@ Format: `bc:<app>:<workspace-slug>/<entity-type>/<workspace-number>`. It uses th
 **workspace #number**, consistent with the rule that the global db id is never
 exposed.
 
-Every issue, task and project is projected into **`platform.entities` in the same
-transaction as its source write**. A projection that can drift is worse than no
-projection. Read the header of `apps/issues/lib/db/queries/entities.ts` before
-touching a write path; `bk super-admin entity-drift` is the reconciler.
+> ### REWRITTEN 2026-08-10 — the shared index has one writer, and links retire
+>
+> This section described a federated index every app wrote to. It was the design
+> and it was reversed, deliberately: `multiAppFinalRefactor/PLAN.md` §1. The
+> requirement was *"an agent working in sales can create an issue through the
+> same CLI without switching login"*, and that was read as "the apps share their
+> data" when it means "**the agent is the thing that connects the apps**". The
+> rewrite is here rather than in an appended note because a doc that prescribes
+> a rejected design is worse than no doc (§4.6 was rewritten the same way).
 
-**`platform.links`** — universal typed relations between any two URNs (`blocks`,
-`relates_to`, `billed_as`, `caused_by`). Referential integrity for cross-app
-relationships instead of a URL pasted in a description.
+**The URN itself is unchanged and is the durable part.** It is derived from an
+app's own workspace slug and #number, so any app can build and print one without
+consulting anything shared.
 
-**`platform.events`** — a cross-app append-only activity stream, carrying a NOT
-NULL `app` column. Every app writes to it.
+**`platform.entities`** — still the index behind `bk search` and `bk link`, and
+since 2026-08-10 **`apps/issues` is its only writer**. Every issue, task and
+project is projected into it in the same transaction as its source write; a
+projection that can drift is worse than no projection. Read the header of
+`apps/issues/lib/db/queries/entities.ts` before touching a write path;
+`bk super-admin entity-drift` is the reconciler, and it can only ever reconcile
+the deployment it runs in.
 
-What this buys:
+**`platform.links`** — typed relations between two URNs. **Retiring.** It was the
+single biggest reason two apps had to share an index, and what it bought over a
+URN written into a record's own text did not justify that. Nothing new should
+depend on it.
 
-```bash
-bk activity --ws kali-sa --since 24h     # one merged timeline across all apps
-bk search acme                           # federated search across all apps
-bk link create bc:sales:…/deal/17 bc:issues:…/issue/482 --rel blocks
-```
+**`platform.events`** — an append-only activity stream carrying an `app` column.
+Once every app's, now `apps/issues`'; `apps/sales` writes `sales.events` and the
+shared activity route asks the app where its feed lives
+(`ActivityContribution.events`).
 
-An agent can answer "what's happening in sales that affects this issue?" without
-knowing anything about the sales schema.
+**A deployment answers for the apps whose data it holds.** An app that owns its
+own records does not serve the bare cross-app verbs at all — it answers 404 with
+a hint naming a server that does, which is recoverable, where an empty page
+would not have been.
+
+What replaces the federated query is the CLI: **`bk` asks each app's server and
+merges the answers**, using one token and the address book in `platform.apps`.
+No shared index, no projection, no drift, and it keeps working when app #3
+arrives.
 
 ### 5.1 Storage is shared, app-attributed, and reference-counted across apps
 
 `platform.uploads.app` records who uploaded each file. New uploads land under
 `<app>/<workspace>/<file>`.
+
+> **The LEDGER split on 2026-08-10; the STORE did not.** An app now says where
+> it records its uploads (`AppContext.uploads`), and `apps/sales` records them in
+> `sales.uploads`. There is still one Blob store, one bill, one quota, one path
+> convention — and, crucially, one `platform.blob_references`: the gate that
+> stops one app deleting a file another still uses is the piece of cross-app
+> machinery this refactor KEPT, because it is the one that earns its keep.
 
 > **Existing blobs were never moved, and must not be.** 104 of 105 files sit at
 > the store root with no prefix. Moving them would mean rewriting every URL

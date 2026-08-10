@@ -58,15 +58,23 @@ What the migration bought:
   implementation is `cli/internal/appverbs`; each app group mounts it in one
   line and adds its own entity-specific subcommands.
 - **Everything is addressable by URN:**
-  `bc:<app>:<workspace-slug>/<entity-type>/<number>`, using the #number. Every
-  issue/task/project is projected into `platform.entities` **in the same
+  `bc:<app>:<workspace-slug>/<entity-type>/<number>`, using the #number — built
+  from an app's OWN workspace slug and #number, so every app can print one.
+  Every issue/task/project is projected into `platform.entities` **in the same
   transaction as its source write**. Read `apps/issues/lib/db/queries/entities.ts`'s
   header before touching a write path; `bk super-admin entity-drift` is the
-  reconciler.
+  reconciler. **Since 2026-08-10 `apps/issues` is the only writer of that index**
+  (multiAppFinalRefactor Phase 3): `apps/sales` stopped projecting, `bk link` is
+  retiring, and cross-app search returns as a CLI fan-out rather than a shared
+  table. A deployment that never wrote the index does not serve `bk search` or
+  `bk link` — it answers 404 with a hint naming one that does.
 - **Storage is shared and app-attributed.** `platform.uploads.app` records who
   uploaded each file; new uploads land under `<app>/<workspace>/<file>`;
   **existing blobs were not moved** — `pathname` is where a file is, `app` is who
   owns it. Import storage from `@/lib/storage`, never from the package directly.
+  **The LEDGER is per app since 2026-08-10** (`AppContext.uploads`;
+  `apps/sales` writes `sales.uploads`) — the store, the quota and
+  `platform.blob_references` are not.
 - **Blob deletion works across deployments** via `platform.blob_references`, an
   index each app maintains **from Postgres triggers on its own content tables**.
   Read `packages/platform-db/src/schema.ts` at `blobReferences` before touching

@@ -22,7 +22,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { EventListItem } from '@blackcode/platform-db'
 import type { MetricsResult, PipelineResult, TodayResult } from '@/lib/db/queries/aggregates'
 import type { SearchHit, SearchType } from '@/lib/db/queries/search'
-import type { PublicLink, PublicProspect } from '@/lib/views'
+import type { PublicProspect } from '@/lib/views'
 import { apiGet, query, wsPath, type ListPage } from '@/lib/client'
 
 /** What is owed today, and who we are meeting today. */
@@ -124,10 +124,9 @@ export interface JourneyStep {
   note: string | null
 }
 
-/** One prospect, plus its journey and its cross-app links (D-18). */
+/** One prospect, plus its journey. */
 export type ProspectDetail = PublicProspect & {
   journey: JourneyStep[]
-  links: PublicLink[]
 }
 
 export function useProspect(ws: string, n: number) {

@@ -22,6 +22,47 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-10 — b/sales stops sharing the database: `bk search` and `bk link` are gone from this app
+
+**Breaking, for anything scripted against a sales-homed CLI.** This app's
+records — labels, uploaded files, activity — moved out of the shared
+`platform.*` tables into its own. What you can do with them here is unchanged;
+what changed is what the CROSS-APP commands answer when you ask this deployment.
+
+**What breaks**
+
+| Command, homed on sales | Now | Do instead |
+|---|---|---|
+| `bk search <q>` | exit 5, "the sales app does not serve …", with a hint | `bk sales search <q>` for this app's records — it searches full text, which the shared index never held. For another app's, `--app-server <slug>` |
+| `bk link create \| list \| rm` | exit 5, same shape | **This is going away entirely.** Put the far end's URN in the record's own text: `bk sales prospect edit 12 --summary "Blocked on bc:issues:acme/issue/512"` |
+| `bk activity` | **this app's feed**, not every app's | Nothing — each entry still carries `app`, and `--subject <urn>` still gives one record's whole history |
+| `bk storage list` (from any host) | no longer lists this app's files | An app's own files are listed by that app. This app's ledger is its own now |
+
+Failures are loud, never empty: a 404 with a `hint:` line naming
+`--app-server`, `bk app use` and `bk app list`, and exit 5. An empty result page
+would have read like "no matches".
+
+**What does not change**
+
+- Every `bk sales …` command, unchanged.
+- **URNs.** `bc:sales:<ws>/prospect/12` is still printed by `prospect show`,
+  still carried as `subject_urn` on activity entries, and still resolves — it is
+  built from this app's own workspace and #number, so it never depended on the
+  shared index.
+- Labels: same commands, same output shape. `app` is still a field on a label
+  and still says `sales`.
+- Uploads: same route, same limits, same store. A file uploaded here is now
+  attributed to your SALES workspace rather than to whichever workspace you last
+  selected in another app — which is a fix, and may change the folder a new file
+  lands in.
+- Your data. Nothing of this app's was deleted except rows in the shared tables
+  that this app had written and no longer reads.
+
+**Why**: two apps sharing one index meant one app's search could return the
+other's titles for a workspace id that means different people in each. Cross-app
+search returns later as a client-side fan-out — the binary asking each app's
+server and merging the answers — which needs no shared table.
+
 ## 2026-08-10 — b/sales has its own workspaces, its own members, and self sign-up
 
 **b/sales no longer borrows another app's tenancy.** Until today a sales user was

@@ -1,5 +1,4 @@
-// GET    /api/workspaces/{ws}/prospects/{n} — one prospect, with its journey and
-//                                             its cross-app links (D-18)
+// GET    /api/workspaces/{ws}/prospects/{n} — one prospect, with its journey
 // PATCH  /api/workspaces/{ws}/prospects/{n} — edit, and assign
 // DELETE /api/workspaces/{ws}/prospects/{n} — bin it (soft), with a confirmation
 //                                             the caller must repeat back
@@ -23,7 +22,6 @@
 // catches the wrong #number. That is the case an agent actually hits.
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors } from '@blackcode/platform-api'
-import { listLinks } from '@blackcode/platform-db'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
 import { getDb } from '@/lib/db/client'
 import { resolveActor } from '@/lib/actor'
@@ -34,8 +32,7 @@ import {
   softDeleteProspect,
   updateProspect,
 } from '@/lib/db/queries/prospects'
-import { publicLink, publicProspect } from '@/lib/views'
-import { entityUrn } from '@/lib/entity-address'
+import { publicProspect } from '@/lib/views'
 import { PROSPECT_NAME_MAX } from '@/lib/limits'
 import {
   nullableStr,
@@ -57,11 +54,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const row = await getProspectBySeq(ctx.workspace.id, seq)
   if (!row) throw prospectNotFound(seq)
 
-  const db = getDb()
-  const [journey, links] = await Promise.all([
-    listJourney(row.id),
-    listLinks(db, entityUrn(ctx.workspace.slug, 'prospect', seq)),
-  ])
+  const journey = await listJourney(row.id)
 
   return NextResponse.json({
     ...publicProspect(row, ctx.workspace.slug),
@@ -75,10 +68,12 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
       actor: s.actor_label,
       note: s.note,
     })),
-    // D-18: the link has to be VISIBLE, not just storable. Served from the
-    // single-prospect route rather than a separate one because the north star is
-    // an agent reading a prospect and finding the issue it blocks — one call.
-    links: links.map(publicLink),
+    // `links` is GONE from this response (2026-08-10, Phase 3). It read
+    // `platform.links`, the shared cross-app index this app no longer writes —
+    // so after the split it could only ever have returned another app's rows or,
+    // as now, nothing. D-18's requirement was that a relationship be VISIBLE
+    // rather than merely storable; the URN in a prospect's own summary is
+    // visible in exactly the same way and belongs to this app.
   })
 })
 
