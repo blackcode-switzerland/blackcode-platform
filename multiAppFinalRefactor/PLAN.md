@@ -267,7 +267,10 @@ work — without issues existing.
   transaction. This reverses the D-3 decision, which was correct only while sales
   had no workspace of its own.
 - `app/api/auth/register/route.ts` — self-signup, copied from issues' and pointed
-  at sales' tables. Sales has no register route at all today.
+  at sales' tables. Sales has no register route at all today. **It inherits the
+  whitelist gate** (`SUPER_ADMINS` + `platform.email_whitelist`) — decision 1.
+  Copy that check with the route; a register route without it is an open door on
+  the whole platform, since the account it creates is the shared one.
 - `app/api/workspaces/**` — stop mounting the platform factories; serve sales'
   own workspaces/members/invitations.
 - `app/dashboard/settings/members/page.tsx` — **the members page, visible by
@@ -339,7 +342,7 @@ With identity as the only shared thing, the tiers collapse:
 | `search`, `activity` | cross-app | **app-owned**, with Phase 6 offering a fan-out |
 | `link` | cross-app | **removed** |
 | `storage`, `trash`, `label`, `upload` | mixed | **app-owned**, all of them |
-| `inbox` | neutral | **issues-owned** — sales never used it |
+| `inbox` | neutral | **issues-owned** — sales never used it (decision 3) |
 
 **Work:**
 
@@ -432,16 +435,75 @@ Optional because nothing depends on it. Do it if you miss the feature.
 
 ---
 
-## 6. Open questions — answer before Phase 2
+## 6. Decisions — settled 2026-08-10
 
-1. **Sales self-signup: open or whitelisted?** Issues gates registration behind
-   `SUPER_ADMINS` + `email_whitelist`. Sales inherits that gate, or is open to
-   anyone with the URL. Recommendation: **inherit the whitelist** — it is one
-   shared identity, and an open door on sales is an open door on the platform.
-2. **Do existing sales prospects matter?** The plan assumes no. If the 2026-08-10
-   test data or anything since is worth keeping, say so before Phase 3.
-3. **Does issues keep `bk inbox`?** Sales never used it. Recommendation: yes,
-   as an issues-owned verb.
+1. **Sales self-signup inherits the whitelist.** `SUPER_ADMINS` +
+   `platform.email_whitelist`, the same gate issues uses. One shared identity
+   means an open door on sales is an open door on the platform.
+2. **Sales data does not matter.** Nobody has used it. Phase 3's deletes need no
+   preservation step, and sales' tables may be dropped and rebuilt freely.
+   *(This licence applies to `sales.*` and to sales' rows in shared tables. It
+   never applies to `issues.*` or `platform.*` rows belonging to issues.)*
+3. **`bk inbox` becomes issues-owned.** Sales touches `inbox_messages` in zero
+   files; there is nothing to move and nothing to build.
+
+---
+
+## 6b. How the CLI tells the apps apart — now, and after
+
+**Today there are two mechanisms.**
+
+**App-named groups** — the app is in the command path, which is what makes a
+command legible to the agent that wrote it:
+
+```
+bk sales prospect list
+bk issues issue create
+```
+
+**Bare verbs** — no app in the command, so they go to whichever app the user is
+"homed" on (the `*` in `bk app list`), set by `bk login --server` or
+`bk app use`, overridable for one invocation with `--app-server <slug>`:
+
+```
+bk workspace list   bk search   bk member list   bk inbox   bk storage
+```
+
+**The second mechanism exists only because the apps share data.** `bk search` is
+documented as *"search every app's entities in the active workspace"* — a
+sentence that needs a shared index to mean anything. Once the apps are separate,
+a bare `bk search` has no defensible answer to "search where?".
+
+### After Phase 4
+
+Bare stays only for what is genuinely one thing everywhere — identity and the
+binary itself:
+
+```
+login · logout · whoami · token · profile · app · meta · guide · changelog · skill · version
+```
+
+Everything else gains its app:
+
+```
+bk sales member list      bk issues member list
+bk sales trash list       bk issues inbox
+bk sales search "acme"    bk issues search "acme"
+```
+
+**So `--app-server` and the "home app" concept nearly disappear.** They exist to
+disambiguate bare verbs; with bare verbs reduced to identity there is nothing
+left to disambiguate. That is the real prize for an agent: **no hidden state
+decides where a command lands.** Today `bk trash purge` destroys things in
+whichever app you were last homed on, and nothing in the command says which.
+
+Keep `--app-server` as a flag anyway — `bk app list --app-server issues` is
+still a reasonable thing to want, and removing a flag agents may have learned is
+a deprecation for no gain.
+
+`bk app` itself narrows: it stops being *"apps enabled for a workspace, and who
+may use them"* (that is `workspace_apps`, dropped in Phase 5) and becomes purely
+the address book — which app exists, where it lives, is it reachable.
 
 ---
 
