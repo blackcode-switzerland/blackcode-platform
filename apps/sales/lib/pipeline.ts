@@ -80,6 +80,22 @@ function colorOf(options: Option[], value: string | null | undefined): string {
 /** The warm grey everything unrecognised falls back to. */
 const NEUTRAL = '#8a8578'
 
+/**
+ * The colour a label gets when its creator names none — `sales.labels.color`'s
+ * default, and the DEFAULT in migration 0003.
+ *
+ * It is re-exported from here rather than written into `lib/db/schema.ts`
+ * because D-4 is that every colour in this app is decided in this file, and
+ * `lib/palette.test.ts` enforces it by scanning for hex literals. The platform
+ * table this replaces defaults to `#6b7280` — issues' cool grey — and carrying
+ * that over is exactly the "sales feels like issues" the decision is about.
+ *
+ * `lib/db/label-default-color.test.ts` holds this and the migration's literal
+ * together; SQL cannot import a constant, so the second copy is unavoidable and
+ * the test is what stops it drifting.
+ */
+export const DEFAULT_LABEL_COLOR = NEUTRAL
+
 // ---------- stages: the deal pipeline ----------
 // Order is the pipeline order and the board's column order. `won` and `lost` are
 // the terminal pair; everything before them is open pipeline.

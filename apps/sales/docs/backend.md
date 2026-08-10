@@ -98,6 +98,39 @@ counters           (workspace_id, entity_type, last_seq) — the #number allocat
 user_preferences   ui_mode, saved filters
 ```
 
+**Six more exist and NOTHING READS THEM YET** (migration `0003`, 2026-08-10):
+
+```
+workspaces         id, slug, name, owner_id, created_at, updated_at
+workspace_members  workspace_id, user_id, role, joined_at
+invitations        workspace_id, email, invited_by, role, token, status, expires_at, …
+labels             workspace_id, name, color, description, created_by
+uploads            workspace_id, url, pathname, filename, size, mime_type, uploaded_by
+events             workspace_id, actor_user_id, actor_token_id, entity_type, entity_id, action, …
+```
+
+They are the multi-app refactor's Phase 1 (`multiAppFinalRefactor/PLAN.md`):
+this app stops borrowing the platform's workspaces, membership, labels, upload
+ledger and activity, and keeps only **identity** shared. Phase 2 points sign-up
+and first sign-in at them; Phase 3 moves the query layer over one table at a
+time. Until then every one of them is empty and this app behaves exactly as
+before — that ordering is why Phase 1 cannot break anything.
+
+Three things about them worth knowing before touching one:
+
+- **The TypeScript names are prefixed (`salesWorkspaces`), the Postgres names
+  are not.** `lib/db/schema.ts` re-exports the whole platform schema, so a local
+  `export const workspaces` would silently shadow `platform.workspaces` at every
+  existing import site. The switch-over has to be visible in a diff.
+- **They are not copies.** Every column that existed only because the platform
+  table was shared is gone: `app` everywhere, and with it the
+  `app IS NULL OR app = 'sales'` predicate `lib/db/queries/labels.ts` threads
+  through every read. So is anything with no writer (`workspaces.deleted_at`).
+- **There is no `comments` and no `deletion_batches`.** D-13: this app has no
+  platform comments, and `communications` with `channel = 'note'` is the
+  equivalent. Its bin is `deleted_at` plus a cascade stamping one instant
+  (§7.1.1), and the trash route answers `batch_id` as *absent* by design.
+
 ### 3.2 A prospect *is* the deal (D-5), and the split is pre-paid
 
 The mockup merges company and deal and the stakeholder validated that shape. It
@@ -337,9 +370,11 @@ page needs something the kit does not do, it builds its own in
 ```
 0001_sales_init.sql              schema, sales.words(), 17 tables, tsvector + GIN
 0002_blob_reference_index.sql    11 triggers over 22 columns, grants, backfill, flag
+0003_sales_own_foundations.sql   6 tables: workspaces, members, invitations,
+                                 labels, uploads, events. Additive; no reader
 ```
 
-Both are hand-written. `drizzle-kit generate` cannot express a schema that must
+All three are hand-written. `drizzle-kit generate` cannot express a schema that must
 exist before its own helper function, a `GENERATED … STORED` tsvector, or the
 `documents_one_location` CHECK — the same reasons issues' 0037 and 0041–0043 are
 hand-written.
@@ -363,8 +398,17 @@ success and created nothing.
 
 ### 6.2 Rollback
 
-`docs/sql/sales-0002-rollback.sql`, then `docs/sql/sales-0001-rollback.sql`, in
-that order — and 0001's script refuses if you get it wrong.
+`docs/sql/sales-0003-rollback.sql`, then `sales-0002-rollback.sql`, then
+`sales-0001-rollback.sql`, in that order — and 0001's script refuses if you get
+it wrong.
+
+0003's is independent of the other two: it drops only its own six tables
+(`RESTRICT`, not `CASCADE`, and it does not drop the schema), so running it
+leaves 0001's seventeen tables and 0002's triggers intact. **It is a no-op on
+data only until Phase 2**, which puts the sole copy of "who may use this app"
+into `sales.workspaces`; the file carries the count query that tells you which
+of those two worlds you are in. Verified 2026-08-10: run against the six tables
+it left 17 sales tables standing and 0 of its own.
 
 Both were rehearsed on 2026-08-07 and **the first rehearsal found a real bug in
 the guard**: `psql -f` autocommits each statement, so the `RAISE EXCEPTION`

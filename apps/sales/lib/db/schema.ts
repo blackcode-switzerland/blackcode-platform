@@ -89,8 +89,11 @@
 
 import { sql } from 'drizzle-orm'
 import {
+  bigint,
+  bigserial,
   boolean,
   char,
+  check,
   customType,
   date,
   index,
@@ -106,7 +109,8 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core'
-import { labels, users, workspaces } from '@blackcode/platform-db'
+import { apiTokens, labels, users, workspaces } from '@blackcode/platform-db'
+import { DEFAULT_LABEL_COLOR } from '@/lib/pipeline'
 
 /** This app's Postgres schema. Named for the app slug — see lib/app.ts. */
 export const salesSchema = pgSchema('sales')
@@ -1004,8 +1008,337 @@ export const userPreferences = salesSchema.table(
 )
 
 // ===========================================================================
+// THIS APP'S OWN FOUNDATIONS — workspaces, membership, invitations, labels,
+// uploads, activity
+// ===========================================================================
+//
+// Added 2026-08-10 by the multi-app refactor's Phase 1
+// (multiAppFinalRefactor/PLAN.md §5). **Nothing reads or writes them yet** —
+// that is Phase 2 (bootstrap) and Phase 3 (the switch-over), deliberately, so
+// that the phase which creates the shapes cannot break either app.
+//
+// ---------------------------------------------------------------------------
+// WHY AN APP HAS ITS OWN WORKSPACES AT ALL
+// ---------------------------------------------------------------------------
+// The platform was built on the reading that the apps SHARE their data. The
+// requirement was only ever that one account, one token and one CLI reach every
+// app — the agent is the connector, not the database. So identity stays shared
+// (`platform.users`, `api_tokens`, `email_whitelist`, `apps`) and everything
+// else becomes app-local. A sales workspace and an issues workspace are two
+// different things that happened to share a table.
+//
+// ---------------------------------------------------------------------------
+// THE `workspace_id` COLUMN IS NOT NEGOTIABLE, EVEN THOUGH SALES HIDES IT
+// ---------------------------------------------------------------------------
+// Sales keeps workspaces UNDER THE HOOD: one per user, no switcher, no picker,
+// no settings page, and a sales user never sees the word. That is a product
+// decision about the UI. Reading it as a DATA decision and dropping the column
+// would make "sales gets multiple workspaces" a migration over live rows
+// instead of a screen nobody has drawn yet.
+//
+// ---------------------------------------------------------------------------
+// THE TS NAMES ARE PREFIXED; THE POSTGRES NAMES ARE NOT
+// ---------------------------------------------------------------------------
+// `sales.workspaces` in Postgres, `salesWorkspaces` in TypeScript. The prefix
+// is not decoration: this module does `export * from '@blackcode/platform-db/schema'`,
+// so a local `export const workspaces` would SHADOW the platform table of the
+// same name at every one of this app's ~80 existing import sites, silently, and
+// the switch-over would happen by name resolution rather than by a diff anyone
+// can read. Phase 3 flips call sites one table at a time and each flip has to be
+// visible in the patch.
+//
+// ---------------------------------------------------------------------------
+// WHAT IS DELIBERATELY ABSENT
+// ---------------------------------------------------------------------------
+// **No `sales.comments`.** D-13: this app has no platform comments and never
+// had. Its equivalent is `communications` with `channel = 'note'`, above, which
+// already exists. The refactor plan listed one from a file-count survey that
+// counted the WORD; a grep for the table finds zero call sites.
+//
+// **No `sales.deletion_batches`.** This app's bin is `deleted_at` on the row
+// plus a cascade that stamps one instant — `lib/db/queries/trash.ts` — and the
+// trash route already answers `batch_id` as absent rather than inventing one.
+// A batch table with no writer is a shape for somebody to later mistake for a
+// feature.
+//
+// **No `app` column on any of these.** The platform copies carry one because
+// they are shared and had to say whose row this is. In a table owned by one app
+// the answer is the schema name. Carrying it over would be cargo-culting a
+// workaround into the place that made it unnecessary.
+//
+// **No `sales.users`.** Identity is shared, and every `*_id` below is a
+// cross-schema FK into `platform.users`. That FK is not a leak of the boundary
+// this refactor draws — it is the boundary.
+
+/**
+ * `sales.workspaces` — this app's tenancy root.
+ *
+ * Dropped from the platform shape: `logo_url` (this app renders no workspace
+ * chrome — there is no switcher to put a logo in), `storage_limit_bytes`
+ * (nothing has ever enforced it, and a storage quota is a question about one
+ * Blob store shared by every app, so it does not belong in a per-app table),
+ * and `deleted_at` (no writer, in either app — `listMyWorkspaces` says so at
+ * length. Carrying a column that has never been written forward into a new
+ * table is how it acquires two different meanings in two apps).
+ */
+export const salesWorkspaces = salesSchema.table(
+  'workspaces',
+  {
+    id: serial('id').primaryKey(),
+    name: varchar('name', { length: 80 }).notNull(),
+    slug: varchar('slug', { length: 40 }).notNull(),
+    owner_id: integer('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    // Kept, unlike the three above, because it is READ: the workspace listing
+    // orders by it.
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    slugUniq: uniqueIndex('uq_sales_workspaces_slug').on(t.slug),
+    ownerIdx: index('idx_sales_workspaces_owner').on(t.owner_id),
+  })
+)
+
+/** `sales.workspace_members` — who is in one, and whether they own it. */
+export const salesWorkspaceMembers = salesSchema.table(
+  'workspace_members',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => salesWorkspaces.id, { onDelete: 'cascade' }),
+    user_id: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: varchar('role', { length: 20 }).default('member').notNull(),
+    joined_at: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    uniq: uniqueIndex('uq_sales_workspace_members_ws_user').on(t.workspace_id, t.user_id),
+    userIdx: index('idx_sales_workspace_members_user').on(t.user_id),
+    roleCheck: check('sales_workspace_members_role_check', sql`${t.role} IN ('owner', 'member')`),
+  })
+)
+
+/**
+ * `sales.invitations` — named the short way, and the table it replaces is
+ * `platform.workspace_invitations`.
+ *
+ * The platform name says "workspace" because that table sits beside
+ * `api_tokens` and `email_whitelist`, which invite you to nothing; here the
+ * schema already says which app and there is only one kind of invitation.
+ *
+ * Dropped from the platform shape: `app`. That column exists to invite somebody
+ * straight into ONE app inside a shared workspace, under the `workspace_apps` /
+ * `app_access` gates — both of which Phase 5 drops, because gating an app
+ * inside a workspace stops being a concept when apps do not share workspaces.
+ * An invitation to a sales workspace is an invitation to sales.
+ *
+ * `status` keeps its CHECK, minus `'declined'`: nothing in either app has ever
+ * written that value, and an accepted vocabulary is a promise that some code
+ * path produces it. Phase 2 adds it back in the same change as the route that
+ * writes it, if it needs it.
+ */
+export const salesInvitations = salesSchema.table(
+  'invitations',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => salesWorkspaces.id, { onDelete: 'cascade' }),
+    email: varchar('email', { length: 255 }).notNull(),
+    invited_by: integer('invited_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: varchar('role', { length: 20 }).default('member').notNull(),
+    token: varchar('token', { length: 64 }).notNull(),
+    status: varchar('status', { length: 20 }).default('pending').notNull(),
+    expires_at: timestamp('expires_at', { withTimezone: true }).notNull(),
+    accepted_at: timestamp('accepted_at', { withTimezone: true }),
+    accepted_by: integer('accepted_by').references(() => users.id, { onDelete: 'set null' }),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    tokenUniq: uniqueIndex('uq_sales_invitations_token').on(t.token),
+    workspaceIdx: index('idx_sales_invitations_ws').on(t.workspace_id),
+    emailIdx: index('idx_sales_invitations_email').on(t.email),
+    statusCheck: check(
+      'sales_invitations_status_check',
+      sql`${t.status} IN ('pending', 'accepted', 'revoked', 'expired')`
+    ),
+  })
+)
+
+/**
+ * `sales.labels`.
+ *
+ * Dropped from the platform shape: `app`, and with it the whole
+ * `app IS NULL OR app = 'sales'` predicate that `lib/db/queries/labels.ts`
+ * threads through every read and every write. That predicate is the D-14
+ * workaround for one table serving two apps; in this table every row is this
+ * app's, so the correct scope is the absence of a scope. Phase 3 deletes
+ * `visibleToThisApp()` rather than porting it — a scope helper left behind over
+ * a table that cannot hold a foreign row reads as protection and is a no-op,
+ * which is CLAUDE.md's whole subject.
+ *
+ * `workspace_id` is NOT NULL here where the platform column is nullable. That
+ * nullability is a backfill artefact ("Phase 1: nullable during backfill") on a
+ * table with live rows; a new table starts with the constraint the code has
+ * always assumed.
+ */
+export const salesLabels = salesSchema.table(
+  'labels',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => salesWorkspaces.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 50 }).notNull(),
+    // The default is IMPORTED, not written here. D-4: every colour in this app
+    // is decided in `lib/pipeline.ts`, and `lib/palette.test.ts` fails the build
+    // on a hex literal anywhere else — it caught this line carrying the platform
+    // table's `#6b7280`, which is issues' cool grey.
+    color: varchar('color', { length: 7 }).default(DEFAULT_LABEL_COLOR),
+    description: text('description'),
+    created_by: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    wsIdx: index('idx_sales_labels_workspace').on(t.workspace_id),
+    wsNameUniq: uniqueIndex('uq_sales_labels_ws_name').on(t.workspace_id, t.name),
+  })
+)
+
+/**
+ * `sales.uploads` — the LEDGER, not the storage.
+ *
+ * There is still one Vercel Blob store, one bill and one quota; what splits is
+ * the record of which of this app's files exist. `platform.blob_references`
+ * (the cross-app delete gate) is untouched by this and stays shared — it is the
+ * one piece of cross-app machinery that earns its keep, and it is maintained by
+ * Postgres triggers, not from here.
+ *
+ * `url` is NOT in the refactor plan's column list and it has to be: it is the
+ * join key the whole ledger is addressed by, it is `NOT NULL` and UNIQUE in the
+ * platform table, and `recordUpload` is idempotent BECAUSE of that uniqueness.
+ * Without it a repeated blob callback writes a second row.
+ *
+ * Dropped from the platform shape: `app`. `workspace_id` stays nullable, unlike
+ * `labels` above — that one is deliberate and load-bearing in the source table:
+ * an upload whose workspace could not be determined is still RECORDED rather
+ * than lost, and an unattributed ledger row is recoverable where a missing one
+ * hides bytes nobody can find again.
+ */
+export const salesUploads = salesSchema.table(
+  'uploads',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id').references(() => salesWorkspaces.id, {
+      onDelete: 'cascade',
+    }),
+    url: text('url').notNull(),
+    pathname: text('pathname'),
+    filename: varchar('filename', { length: 255 }).notNull(),
+    size: bigint('size', { mode: 'number' }),
+    mime_type: varchar('mime_type', { length: 100 }),
+    uploaded_by: integer('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    urlUniq: uniqueIndex('uq_sales_uploads_url').on(t.url),
+    workspaceIdx: index('idx_sales_uploads_workspace').on(t.workspace_id),
+  })
+)
+
+/**
+ * `sales.events` — the activity spine behind `bk sales activity`.
+ *
+ * Dropped from the platform shape: `app`.
+ *
+ * KEPT, and flagged for Phase 3 rather than decided here: `subject_urn`. It is
+ * the cross-app address of what an event is about, and the refactor removes
+ * this app's projection into `platform.entities`, which is where the URN is
+ * resolved from today (`resolveSubjectUrn`). It is kept anyway because it is a
+ * READ surface with a flag behind it — `?subject_urn=` on the activity route,
+ * `bk activity --subject` — and the URN for a sales row is derivable from
+ * `sales.*` alone; the shared index is how it is looked up, not what makes it
+ * true. Whoever owns Phase 3 should confirm that and drop the column if not:
+ * dropping an unused column from an empty table is free, and adding one back to
+ * a populated one is not.
+ *
+ * `actor_token_id` references `platform.api_tokens` — a shared identity table,
+ * like `users`. This app is the one that actually fills it ("by Andrea / by
+ * Companion" attribution), so it is not speculative here.
+ *
+ * `idempotency_key` has no writer today: `recordEvent` accepts one and every
+ * call site leaves it unset. It is carried anyway because the UNIQUE index on
+ * it is what makes a retried agent command not double-log, and the cost of the
+ * column is one nullable varchar against the cost of discovering you need it
+ * after the table has rows.
+ */
+export const salesEvents = salesSchema.table(
+  'events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => salesWorkspaces.id, { onDelete: 'cascade' }),
+    actor_user_id: integer('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    actor_token_id: integer('actor_token_id').references(() => apiTokens.id, {
+      onDelete: 'set null',
+    }),
+    entity_type: varchar('entity_type', { length: 30 }).notNull(),
+    entity_id: integer('entity_id').notNull(),
+    // No FK, for the reason the platform table gives: events are append-only
+    // history and must outlive a purge of their subject.
+    subject_urn: text('subject_urn'),
+    action: varchar('action', { length: 40 }).notNull(),
+    diff: jsonb('diff'),
+    meta: jsonb('meta'),
+    occurred_at: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
+    idempotency_key: varchar('idempotency_key', { length: 80 }),
+  },
+  (t) => ({
+    wsOccurredIdx: index('idx_sales_events_ws_occurred').on(t.workspace_id, t.occurred_at),
+    wsSubjectIdx: index('idx_sales_events_ws_subject').on(
+      t.workspace_id,
+      t.subject_urn,
+      t.occurred_at
+    ),
+    wsEntityIdx: index('idx_sales_events_ws_entity').on(
+      t.workspace_id,
+      t.entity_type,
+      t.entity_id,
+      t.occurred_at
+    ),
+    wsActorIdx: index('idx_sales_events_ws_actor').on(
+      t.workspace_id,
+      t.actor_user_id,
+      t.occurred_at
+    ),
+    wsActionIdx: index('idx_sales_events_ws_action').on(t.workspace_id, t.action, t.occurred_at),
+    idempUniq: uniqueIndex('uq_sales_events_idempotency').on(t.workspace_id, t.idempotency_key),
+  })
+)
+
+// ===========================================================================
 // Row types
 // ===========================================================================
+
+export type SalesWorkspace = typeof salesWorkspaces.$inferSelect
+export type NewSalesWorkspace = typeof salesWorkspaces.$inferInsert
+export type SalesWorkspaceMember = typeof salesWorkspaceMembers.$inferSelect
+export type NewSalesWorkspaceMember = typeof salesWorkspaceMembers.$inferInsert
+export type SalesInvitation = typeof salesInvitations.$inferSelect
+export type NewSalesInvitation = typeof salesInvitations.$inferInsert
+export type SalesLabel = typeof salesLabels.$inferSelect
+export type NewSalesLabel = typeof salesLabels.$inferInsert
+export type SalesUpload = typeof salesUploads.$inferSelect
+export type NewSalesUpload = typeof salesUploads.$inferInsert
+export type SalesEvent = typeof salesEvents.$inferSelect
+export type NewSalesEvent = typeof salesEvents.$inferInsert
 
 export type Prospect = typeof prospects.$inferSelect
 export type Contact = typeof contacts.$inferSelect
