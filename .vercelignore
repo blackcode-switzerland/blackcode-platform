@@ -1,0 +1,38 @@
+# What NOT to upload to Vercel.
+#
+# READ THIS BEFORE ADDING A LINE. Vercel does NOT read .gitignore — without this
+# file it uploads essentially the whole working tree. On 2026-08-10 the first
+# production deploy of the platform changes reported an 8.5 GB upload before it
+# was cancelled: `.turbo` alone was 16 GB on disk and `cli/dist` 1.1 GB, none of
+# which the build reads.
+#
+# The rule for a new line: it belongs here only if the build REGENERATES it or
+# never reads it. Source, config and workspace manifests must NOT be listed —
+# both projects deploy from the repo root and Vercel applies each project's own
+# Root Directory setting, so an over-broad pattern here breaks the build for
+# every app at once.
+
+# Local build caches — regenerated, and by far the largest thing on disk.
+.turbo
+**/.turbo
+
+# Installed by Vercel itself during the build.
+node_modules
+**/node_modules
+
+# Next.js build output — Vercel builds fresh.
+.next
+**/.next
+
+# Compiled Go binaries for five platforms. The `bk` CLI is released through
+# GitHub + npm (devops/release.sh cli), never through a web deploy.
+cli/dist
+cli/bk
+
+# Test and tooling artefacts.
+coverage
+**/coverage
+*.log
+
+# The sales-app build's agent/human correspondence. Not code.
+salesImplementation
