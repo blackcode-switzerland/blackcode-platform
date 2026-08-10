@@ -60,3 +60,7 @@ next-env.d.ts
 
 # Sales-app implementation scratch — master/agent handoff files. Temporary.
 /salesImplementation/
+
+# transient, deploy-day working files
+/RUN-NOW.txt
+/.google-new
