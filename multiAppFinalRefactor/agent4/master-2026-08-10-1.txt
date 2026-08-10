@@ -1,0 +1,231 @@
+FROM:    master
+TO:      agent4
+DATE:    2026-08-10
+PHASE:   3 — Sales moves off the shared tables. THE ONLY PHASE THAT DELETES.
+STATUS:  BRIEF
+--------------------------------------------------------------------------------
+
+READ FIRST:
+  multiAppFinalRefactor/README.md    the rules you inherit
+  multiAppFinalRefactor/PLAN.md      §2, §4b, Phase 3 under §5 — INCLUDING the
+                                     DEPLOY NOTE box immediately above it
+  multiAppFinalRefactor/SAFETY.md    "Deletes: the only one-way steps". All of it.
+  agent3/agent-2026-08-10-1.txt      §3 especially — it is about your phase
+  agent2/agent-2026-08-10-1.txt      §1, the tables you are pointing at
+
+** PHASE 2 IS WRITTEN BUT NOT DEPLOYED. You are working on top of it, and the
+   two ship together in one deploy when you are done. ** That is not a
+   convenience: between Phase 2 and your work, a brand-new sales workspace
+   cannot create a prospect. Agent 3 made that failure loud on purpose. You are
+   the one who fixes it.
+
+
+================================================================================
+1. WHAT THIS PHASE IS
+================================================================================
+Sales stops reading and writing `platform.*` for anything except identity.
+
+Three query layers move to sales' own tables, two cross-app features are deleted
+outright, and then — and only then — sales' rows come out of the shared tables.
+
+After you, `platform.*` is issues' data and shared identity. Nothing else.
+
+
+================================================================================
+2. THE ORDER. DO NOT COMPRESS IT.
+================================================================================
+For each of **labels → uploads → events**, in that order, complete the whole
+cycle before starting the next:
+
+  1. Point sales' query layer at `sales.<table>`
+  2. Run the test suite. Sales' own features must still work
+  3. Delete sales' rows from the shared table — the ritual in §4
+  4. `verify.sh` — issues' counts unchanged, sales' decrease matches your
+     declaration exactly
+
+*(`comments` and `deletion_batches` are NOT in this list — sales never used
+either. PLAN.md §4b, corrected after agent 2.)*
+
+Then the cross-app machinery, which is deletion rather than migration:
+
+  5. Remove the entity projection — sales rows stop being written to
+     `platform.entities`; `apps/sales/lib/db/queries/entities.ts` goes
+  6. Remove sales' link routes and handling
+  7. Delete sales' rows from `platform.entities` and any `platform.links` row
+     naming a sales URN
+  8. Retire `bk super-admin entity-drift` for sales
+
+**The 13th foreign key is yours**: `sales.prospect_labels → platform.labels`
+must become `→ sales.labels`. Agent 3 left it deliberately. It travels with
+step 1's labels move, not after it.
+
+
+================================================================================
+3. THE NUMBERS. MEASURED IN PRODUCTION 2026-08-10, RE-MEASURED FOR THIS BRIEF.
+================================================================================
+SAFETY.md tells you to stop if a count is not what the plan predicts. So the
+plan predicts:
+
+    platform.events    WHERE app='sales'          4
+    platform.entities  WHERE app='sales'          2
+    platform.links     (any row naming sales)     1   (there is 1 link total)
+    platform.labels    WHERE app='sales'          0
+    platform.uploads   WHERE app='sales'          0
+    platform.comments  WHERE parent_type LIKE 'sales:%'   0
+    sales.prospect_labels                         0
+
+**Seven rows in total, and four of the seven targets are ZERO. A zero here is
+CORRECT — it is not a sign your query is wrong.** Nearly all of this is residue
+from the 2026-08-10 deploy-verification run, not from use.
+
+**Re-measure before you delete.** These are from today and sales is deployed.
+The condition that justifies stopping is **a count that has GROWN** — that would
+mean somebody started using sales, which retires PLAN.md decision 2 ("sales data
+does not matter") on the spot. Report it, do not delete it.
+
+
+================================================================================
+4. THE DELETE RITUAL — NON-NEGOTIABLE, EVERY TIME
+================================================================================
+From SAFETY.md, and you are the only agent who will ever run it:
+
+  1. `SELECT count(*)` first, with the exact WHERE you are about to delete with.
+     Read it. Compare to §3.
+  2. `BEGIN;` → `DELETE …;` → read the DELETE count → right? `COMMIT`. Wrong?
+     `ROLLBACK`.
+  3. `verify.sh` immediately after.
+  4. Never a `DELETE` without a `WHERE` naming sales. Not once, not "just to
+     see".
+
+**Declare each expected decrease in the baseline BEFORE you run it**, as
+SAFETY.md describes. verify.sh requires the actual decrease to equal the sum of
+declarations exactly — a declared -4 with an actual -3 fails, and so does -5.
+
+** AND KNOW WHAT THE INSTRUMENT DOES NOT DO. ** Agent 1 measured this and it
+matters most in your phase:
+
+  > verify.sh passing does not mean the right 4 rows went — only that 4 went and
+  > were declared.
+
+It is magnitude-and-omission. The `SELECT`-first / read-the-DELETE-count ritual
+is the identity half. **Neither substitutes for the other**, and a green verify
+after a delete is not evidence you deleted the right thing.
+
+
+================================================================================
+5. THE TRAP. READ THIS TWICE.
+================================================================================
+You will hit a foreign-key violation. It is the mechanism working.
+
+** DO NOT FIX A FOREIGN-KEY VIOLATION BY DROPPING THE FOREIGN KEY. **
+
+Verified against production while writing this: every FK on
+`platform.workspaces` is `ON DELETE CASCADE` — twelve of them, including
+`platform.events`, `platform.labels`, `platform.comments`,
+`platform.inbox_messages` — and `apps/issues/lib/db/queries/workspaces.ts:305`
+`deleteWorkspace` is a bare `db.delete(workspaces)` whose own header says
+*"cascades (FKs handle it)"*.
+
+Drop one and you remove the only mechanism that cleans up an issues workspace's
+data when it is deleted. **And verify.sh cannot see it** — it fails on
+decreases, not absences. A workspace deletion that orphans 400 rows shows up as
+counts that did not go down.
+
+A FK violation in your phase means a write path still points at the wrong table.
+Fix the write path. The FK is what is telling you which one.
+
+
+================================================================================
+6. THINGS AGENT 2 AND 3 LEFT FOR YOU, EXPLICITLY
+================================================================================
+  * **`sales.events.subject_urn`** — agent 2 kept it and asked you to confirm or
+    drop. It is the cross-app address, resolved today from `platform.entities`
+    via `resolveSubjectUrn`, which you delete. A sales URN is derivable from
+    `sales.*` alone; the shared index is how it is looked up, not what makes it
+    true. Dropping an unused column from a near-empty table is cheap. Your call,
+    with reasoning.
+  * **`visibleToThisApp()`** on labels — agent 2: *"delete it, do not port it"*.
+    It is D-14's workaround for one table serving two apps. Over a table that
+    CANNOT hold a foreign row it is a no-op that reads as protection.
+  * **Uploads have a soft version of the FK problem and need no action**: a
+    sales-only workspace resolves to no platform row, so the file lands under
+    the `unattributed` prefix with a NULL `workspace_id`. That path never
+    throws; the bytes are never at risk. It resolves when `sales.uploads` takes
+    over.
+  * `sales.comments` does not exist and must not be created. Sales' comments are
+    `sales.communications` with `channel='note'` (D-13).
+
+
+================================================================================
+7. WHAT NOT TO DO
+================================================================================
+- Do not touch `apps/issues`' data or its query layers. If a shared file must
+  change, prove issues is unaffected the way agent 3 did — a test that fails
+  when the wrong app's source is supplied.
+- Do not touch `platform.blob_references`, its triggers, or anything reaching
+  `del()`. Read `packages/platform-storage/src/references.ts` first.
+- Do not drop `platform.entities`, `links`, `labels`, `events` or `uploads`.
+  They are issues' tables now. You remove sales' ROWS, not the tables.
+- Do not `SET NOT NULL` on `error_events.app` — Phase 5.
+- Do not touch `workspace_apps` or `app_access` — Phase 5 drops them.
+- Do not re-tier CLI verbs — Phase 4.
+- Do not deploy. Both phases ship together, by the human, after review.
+
+
+================================================================================
+8. VERIFICATION
+================================================================================
+Local only, port **5432**. verify.sh before you start, after every step in §2.
+
+Then, end to end, and report what you OBSERVED:
+
+  1. A brand-new sales signup can **create a prospect** — the thing that is
+     broken right now. This is the phase's headline check.
+  2. Labels, uploads, activity and trash all still work in sales, against sales'
+     own tables
+  3. Issues is untouched: its labels, comments, activity, uploads, search all
+     behave, and `verify.sh` shows no issues table changed
+  4. `bk sales …` still works for whatever you have not re-tiered
+  5. Agent 3's five checks still pass — you are building on them
+
+Plus the full gate (README §4). `make routes` if any `routes` annotation moved.
+
+
+================================================================================
+9. WHERE I AM LEAST CONFIDENT
+================================================================================
+Every agent so far has found a false assertion in my brief. Assume one here.
+
+  1. **The §2 ordering may be wrong.** I put labels first because it looked
+     smallest. If events must move before labels for a reason in the code, say
+     so and reorder.
+  2. **I do not know how entangled the entity projection is.** PLAN.md says
+     "in the same transaction as the source write" — removing something from a
+     transaction is not always a deletion.
+  3. **`recordEvent` has ~40 call sites** per agent 2. I have not read them.
+  4. **Whether `bk search` / `bk activity` degrade gracefully** once sales rows
+     leave `platform.entities`. They should just return fewer rows. If they
+     error, that is Phase 4's problem arriving early — report, do not fix.
+  5. Three times now the thing that mattered was OUTSIDE the app's own source: a
+     Postgres trigger, a dependency through a shared factory, and twelve FKs.
+     **Check the catalog, not just the repo.**
+
+
+================================================================================
+10. WHEN YOU ARE DONE
+================================================================================
+Full gate. Commit as you go, do not push.
+
+Write `multiAppFinalRefactor/agent4/agent-2026-08-10-1.txt`:
+
+  1. Each of §2's steps: what you moved, the SELECT count, the DELETE count, the
+     declaration you added, and verify.sh after
+  2. §8's checks — observed, not implemented. Especially check 1
+  3. Any FK violation you hit, and what you changed to fix it (not "how you
+     silenced it")
+  4. `subject_urn`: kept or dropped, and why
+  5. What you watched fail, and what you could not verify locally
+  6. Everything in §9 I got wrong, plus anything else
+
+In chat, print only the path of that file.
+--------------------------------------------------------------------------------
