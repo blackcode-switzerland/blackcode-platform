@@ -22,6 +22,21 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-11 — The members page was blank; both of its lists were reading the wrong shape
+
+**Fixed. No action needed.** Settings → Members threw a client-side exception for
+everyone, and the pending-invitations list below it silently rendered nothing.
+
+Both list routes answer with the standard `{ data, next_cursor }` envelope. The
+page asked for a bare array — once by annotating `apiGet<Member[]>`, once by
+casting an envelope with `as unknown as`. TypeScript believed both. `members.data`
+was then the envelope: truthy, so the "do we have data" guard passed, and `.map`
+threw. The invitations list failed the quieter way — `.length` on an envelope is
+`undefined`, so it rendered nothing and looked like an empty list.
+
+**Nothing was wrong on the server**, which is why no route test caught it. Both
+routes returned correct responses throughout.
+
 ## 2026-08-10 — the sales dashboard was 404ing for every sales-only account
 
 **Fixed.** A brand-new sales sign-up — the account this app's Phase 2 exists to

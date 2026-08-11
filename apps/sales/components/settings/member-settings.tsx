@@ -77,9 +77,15 @@ export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boo
   const [email, setEmail] = useState('')
   const [lastSent, setLastSent] = useState<SentInvitation | null>(null)
 
+  // BOTH list routes answer with the `{ data, next_cursor }` envelope
+  // (`jsonList`), so both queryFns must UNWRAP it. Typing the call as a bare
+  // array does not make it one: on 2026-08-11 this read `apiGet<Member[]>` and
+  // `members.data` was the envelope — truthy, so the `members.data &&` guard
+  // passed, and `.map` threw. The page was blank in production for every user.
+  // See `member-settings-envelope.test.ts`.
   const members = useQuery({
     queryKey: ['members', ws],
-    queryFn: () => apiGet<Member[]>(wsPath(ws, '/members')),
+    queryFn: async () => (await apiGet<{ data: Member[] }>(wsPath(ws, '/members'))).data,
   })
 
   // Only an owner may read this — the route is owner-gated, so asking as a
@@ -88,8 +94,12 @@ export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boo
   const invitations = useQuery({
     queryKey: ['invitations', ws],
     enabled: isOwner,
+    // The `as unknown as` here was a cast that LIED — it renamed the envelope
+    // rather than opening it. This one failed QUIETLY: `.length` on the
+    // envelope is undefined, so `length > 0` was false and the list simply
+    // never rendered. Unwrap, never cast.
     queryFn: async () =>
-      (await apiGet<{ data: Invitation[] }>(wsPath(ws, '/invitations'))) as unknown as Invitation[],
+      (await apiGet<{ data: Invitation[] }>(wsPath(ws, '/invitations'))).data,
   })
 
   // Every one of these is a RECORD write and goes through `lib/mutations.ts`,
