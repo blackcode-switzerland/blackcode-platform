@@ -32,7 +32,7 @@ import type {
   WorkspaceRef,
 } from '@blackcode/platform-api'
 import { getDb } from '../client'
-import { salesWorkspaceMembers, salesWorkspaces, users } from '../schema'
+import { salesUserSettings, salesWorkspaceMembers, salesWorkspaces, users } from '../schema'
 import { recordEvent } from './events'
 import type { Actor } from '@/lib/actor'
 
@@ -98,6 +98,107 @@ export async function listWorkspacesForUser(userId: number): Promise<WorkspaceMe
     .orderBy(asc(salesWorkspaces.updated_at))
 
   return rows.map(({ role, ...ws }) => ({ ...ws, member_role: role as 'owner' | 'member' }))
+}
+
+/**
+ * Remember which workspace this person is working in.
+ *
+ * Upsert on the primary key, so a person who has never had a settings row and
+ * one who is switching for the tenth time take the same path.
+ *
+ * MEMBERSHIP IS CHECKED BY THE CALLER, not here — the route resolves the target
+ * through `getWorkspaceForUser` (which joins membership) before calling this, so
+ * a workspace you cannot reach never gets written. Re-checking here would be a
+ * second query for a fact already established one line earlier.
+ */
+export async function setActiveWorkspaceForUser(
+  userId: number,
+  workspaceId: number
+): Promise<void> {
+  await getDb()
+    .insert(salesUserSettings)
+    .values({ user_id: userId, active_workspace_id: workspaceId })
+    .onConflictDoUpdate({
+      target: salesUserSettings.user_id,
+      set: { active_workspace_id: workspaceId, updated_at: new Date() },
+    })
+}
+
+/**
+ * The workspace this person was last in — or their fallback.
+ *
+ * ── THE MEMBERSHIP RE-CHECK IS THE POINT, NOT A PRECAUTION ─────────────────
+ * The stored pointer is a workspace id, and the foreign key guarantees only
+ * that the workspace still EXISTS. It cannot express "and they are still in
+ * it", so a person removed from a shared workspace would otherwise keep being
+ * sent to it — landing on a page that 404s, with the sidebar still naming it.
+ *
+ * So the pointer is resolved through the membership list rather than read
+ * directly: if it is not in there, it is treated as absent.
+ *
+ * The fallback is the FIRST membership, which for the common case is a person's
+ * own workspace: `listWorkspacesForUser` orders oldest-first, and your own is
+ * minted at sign-in, before you can accept an invitation into anyone else's.
+ * The previous version took the LAST, which was a positional guess made when
+ * nobody could have two — it now means "the most recently updated workspace
+ * somebody else owns", which is not a sensible place to open.
+ */
+export async function getActiveWorkspaceForUser(
+  userId: number
+): Promise<WorkspaceMembershipRef | null> {
+  const [mine, storedId] = await Promise.all([
+    listWorkspacesForUser(userId),
+    getStoredActiveWorkspaceId(userId),
+  ])
+  return resolveActiveWorkspace(mine, storedId)
+}
+
+/**
+ * The DECISION, separated from the two queries that feed it.
+ *
+ * Pure and exported so its test can call THIS function rather than a copy of it.
+ * The first version of that test reimplemented the resolution in the test file
+ * and asserted on the reimplementation — green forever, whatever this function
+ * did. That is the shape CLAUDE.md's finding #10 describes: a guard that has
+ * quietly stopped pointing at the thing it names.
+ *
+ * `memberships` must be oldest-first, which is what `listWorkspacesForUser`
+ * returns; the fallback depends on it.
+ */
+export function resolveActiveWorkspace(
+  memberships: WorkspaceMembershipRef[],
+  storedId: number | null
+): WorkspaceMembershipRef | null {
+  if (memberships.length === 0) return null
+  if (storedId != null) {
+    const remembered = memberships.find((w) => w.id === storedId)
+    if (remembered) return remembered
+  }
+  return memberships[0]
+}
+
+/**
+ * The RAW stored pointer — null when nothing has been chosen.
+ *
+ * Split out from `getActiveWorkspaceForUser` because the two callers need
+ * different answers, and collapsing them loses the distinction that matters.
+ * The WorkspaceSource always wants a workspace, so it falls back; `/dashboard`
+ * must tell "they chose this" from "we picked one for them", because it only
+ * skips the picker for the first. A single function returning the fallback
+ * cannot express that, and a caller comparing against `mine[0]` to infer it
+ * would be wrong the moment somebody deliberately chooses their first
+ * workspace.
+ *
+ * No membership check here — this is the stored value, nothing more. Callers
+ * that act on it resolve it against the membership list.
+ */
+export async function getStoredActiveWorkspaceId(userId: number): Promise<number | null> {
+  const [row] = await getDb()
+    .select({ id: salesUserSettings.active_workspace_id })
+    .from(salesUserSettings)
+    .where(eq(salesUserSettings.user_id, userId))
+    .limit(1)
+  return row?.id ?? null
 }
 
 /**

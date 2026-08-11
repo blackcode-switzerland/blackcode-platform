@@ -115,7 +115,42 @@ func applyAppRegistry(cfg *config.Config, meta *client.Meta, reachedURL string) 
 	if reachedURL != "" {
 		cfg.HomeServer = reachedURL
 	}
+	seedActiveWorkspace(cfg, meta, current)
 	return mismatch
+}
+
+// seedActiveWorkspace gives THIS app an active workspace when it has none.
+//
+// ── WHY: A FRESH LOGIN COULD NOT RUN A SINGLE APP COMMAND ──────────────────
+// The active workspace is per app (two apps' workspace tables have overlapping
+// ids, so one shared field meant `bk sales workspace use x` retargeted
+// `bk issues …`). Nothing seeded it, so after `bk login` every
+// `bk sales prospect list` failed with "no active workspace for the sales app"
+// until the caller ran `bk sales workspace use` — a step nothing announced, for
+// a value the server had already computed and put in `/api/meta`.
+//
+// ── IT NEVER OVERWRITES A CHOICE ───────────────────────────────────────────
+// Only fills a hole. `bk meta` runs this on every invocation, and a person who
+// ran `bk sales workspace use b` does not want the next `bk meta` to move them
+// back to the server's default. The server's `active_workspace` is a DEFAULT
+// (`/api/meta` says so in its own agent instructions); the local value is a
+// decision, and a decision outranks a default.
+//
+// Keyed on the CURRENT app only. `/api/meta` reports one `active_workspace` —
+// the answering app's — so there is nothing to seed for the others, and
+// guessing one from a list would be exactly the cross-app mixup the per-app
+// store exists to prevent.
+func seedActiveWorkspace(cfg *config.Config, meta *client.Meta, current string) {
+	if current == "" || meta.ActiveWorkspace == nil {
+		return
+	}
+	if existing := cfg.ActiveWorkspaceFor(current); existing.Slug != "" || existing.ID > 0 {
+		return
+	}
+	cfg.SetActiveWorkspaceFor(current, config.ActiveWorkspace{
+		ID:   meta.ActiveWorkspace.ID,
+		Slug: meta.ActiveWorkspace.Slug,
+	})
 }
 
 // reportMismatch writes the notice to stderr. Stderr, not stdout, so it cannot
@@ -140,14 +175,14 @@ func reportMismatch(w io.Writer, m *registryMismatch) {
 // actually ran. What it must not do is fail SILENTLY when the registry is what
 // the user is trying to fix, so the error is printed.
 func refreshRegistry(cmd *cobra.Command, cfg *config.Config, meta *client.Meta, reachedURL string) {
-	before := fmt.Sprint(cfg.AppServers, cfg.HomeApp, cfg.HomeServer)
+	before := fmt.Sprint(cfg.AppServers, cfg.HomeApp, cfg.HomeServer, cfg.ActiveWorkspaces)
 	mismatch := applyAppRegistry(cfg, meta, reachedURL)
 	// BEFORE the early return. A stale address is STABLE — nothing changes, so
 	// the unchanged-check below returns — and stable is exactly the state that
 	// needs saying out loud. Reporting only on change would have kept this
 	// invisible for every run after the first.
 	reportMismatch(cmd.ErrOrStderr(), mismatch)
-	if before == fmt.Sprint(cfg.AppServers, cfg.HomeApp, cfg.HomeServer) {
+	if before == fmt.Sprint(cfg.AppServers, cfg.HomeApp, cfg.HomeServer, cfg.ActiveWorkspaces) {
 		return
 	}
 	if err := config.Save(cfg); err != nil {

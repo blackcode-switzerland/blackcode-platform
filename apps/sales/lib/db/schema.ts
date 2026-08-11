@@ -1352,10 +1352,35 @@ export const salesEvents = salesSchema.table(
   })
 )
 
+/**
+ * `sales.user_settings` — this app's memory of which workspace you were in.
+ *
+ * NOT `platform.users.active_workspace_id`, which holds an ISSUES workspace id.
+ * The two apps' workspace tables have overlapping ids, so a sales id written
+ * there points the issues app at a different workspace with the same number.
+ * That is the collision that already forced the CLI to keep its active
+ * workspace per app; the server needs the same separation. See migration 0006.
+ *
+ * `active_workspace_id` is nullable and ON DELETE SET NULL: a deleted workspace
+ * must empty the pointer, never delete the person's settings row. A pointer at
+ * a workspace the person has since been REMOVED from is not something a foreign
+ * key can catch — `getDefaultForUser` re-checks membership on every read.
+ */
+export const salesUserSettings = salesSchema.table('user_settings', {
+  user_id: integer('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  active_workspace_id: integer('active_workspace_id').references(() => salesWorkspaces.id, {
+    onDelete: 'set null',
+  }),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 // ===========================================================================
 // Row types
 // ===========================================================================
 
+export type SalesUserSettings = typeof salesUserSettings.$inferSelect
 export type SalesWorkspace = typeof salesWorkspaces.$inferSelect
 export type NewSalesWorkspace = typeof salesWorkspaces.$inferInsert
 export type SalesWorkspaceMember = typeof salesWorkspaceMembers.$inferSelect

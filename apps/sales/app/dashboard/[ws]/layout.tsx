@@ -44,5 +44,20 @@ export default async function WorkspaceLayout({
   const memberships = await listWorkspacesForUser(user.id)
   if (!memberships.some((w) => w.slug === ws)) notFound()
 
-  return <SalesShell ws={ws}>{children}</SalesShell>
+  // The switcher's list comes from HERE rather than a client fetch: this layout
+  // already had to load the memberships to decide the 404 above, so the sidebar
+  // renders with the right names on the first paint instead of popping in. It
+  // also means the list and the 404 can never disagree — they are one query.
+  const workspaces = memberships.map((w) => ({
+    id: w.id,
+    name: w.name,
+    slug: w.slug,
+    member_role: w.member_role,
+  }))
+
+  return (
+    <SalesShell ws={ws} workspaces={workspaces}>
+      {children}
+    </SalesShell>
+  )
 }

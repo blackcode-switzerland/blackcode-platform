@@ -324,6 +324,12 @@ plumbing shared, data not — but touches a file both apps depend on.
 **Still hidden:** no switcher, no create-workspace flow, no workspace settings.
 One workspace per user, invisible.
 
+> **Superseded 2026-08-11 — the switcher shipped.** "One workspace per user" was
+> never enforced and turned out to be false the moment invitations were used:
+> accepting one leaves you in two, because signing in mints your own first. See
+> `docs/changelog/sales.md` and `apps/sales/docs/backend.md`. The rest of the
+> sentence still holds — no create-workspace flow, no workspace settings page.
+
 **Verification — the phase is the test:**
 
 1. A brand-new email signs up at `sales.blackcode.ch`, lands in the app, and is

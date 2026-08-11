@@ -8,6 +8,26 @@ Related commands: `bk sales prospect list`, `bk sales prospect show`,
 `bk sales prospect create`, `bk sales prospect edit`, `bk sales prospect stage`,
 `bk sales prospect delete`.
 
+## Which workspace am I in?
+
+Most people in b/sales have one workspace — their own, created at sign-in — and
+never need to think about this. You get a SECOND one by being invited into
+somebody else's, and then every command needs to know which you mean.
+
+```bash
+bk sales workspace list           # both, with the active one marked *
+bk sales workspace use <slug>     # switch; remembered on the server
+bk --ws <slug> sales prospect list  # one command elsewhere, without switching
+```
+
+Two things worth knowing. **The active workspace belongs to this app alone** —
+switching here moves nothing in any other app, because each app's workspaces are
+unrelated and their ids overlap (`bk guide platform/apps`). And **it is shared
+with the web UI**: `workspace use` and the sidebar switcher write the same
+place, so `/dashboard` opens where you last were, whichever one you used.
+
+`bk login` seeds it, so a fresh login can run a command straight away.
+
 ## The one thing to do first
 
 Run `bk meta`. Every vocabulary in this app — pipeline stages, next-action types,

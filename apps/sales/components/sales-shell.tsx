@@ -23,6 +23,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { WorkspaceSwitcher, type SwitcherWorkspace } from './workspace-switcher'
 import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import {
@@ -123,7 +124,15 @@ export function PageTitle({ title }: { title: string }) {
   return null
 }
 
-export function SalesShell({ ws, children }: { ws: string; children: React.ReactNode }) {
+export function SalesShell({
+  ws,
+  workspaces = [],
+  children,
+}: {
+  ws: string
+  workspaces?: SwitcherWorkspace[]
+  children: React.ReactNode
+}) {
   const pathname = usePathname() ?? ''
   const base = `/dashboard/${ws}`
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -168,6 +177,11 @@ export function SalesShell({ ws, children }: { ws: string; children: React.React
         <Image src="/logo.png" alt="b/" width={22} height={22} className="rounded-[14%]" />
         <span className="text-[15px] font-semibold tracking-tight">sales</span>
       </Link>
+
+      {/* Renders nothing for a single workspace — see workspace-switcher.tsx.
+          Above the nav rather than in the footer because it scopes everything
+          below it: every NavLink is `/dashboard/{ws}/…`. */}
+      <WorkspaceSwitcher workspaces={workspaces} current={ws} />
 
       <nav className="flex-1 overflow-y-auto px-2.5 py-3">
         <div className="space-y-0.5">

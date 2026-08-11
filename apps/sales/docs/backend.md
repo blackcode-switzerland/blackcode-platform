@@ -751,10 +751,29 @@ this app's own content tables (migration `0002`), and Phase 3 did not touch it.
 `write-paths.integration.test.ts` re-checks those triggers precisely because the
 ledger moved out from under them.
 
-**Still hidden (PLAN.md §1):** no switcher, no create-workspace flow, no
-workspace settings page. One workspace per person, and the word never appears in
-the UI. The tables are fully multi-workspace, so that is a UI change later rather
-than a migration.
+**Mostly still hidden (PLAN.md §1):** no create-workspace flow, no workspace
+settings page. The tables are fully multi-workspace, so any of that is a UI
+change rather than a migration.
+
+**The switcher arrived on 2026-08-11**, and the premise it was withheld under —
+one workspace per person — turned out to be false. Being invited into somebody
+else's workspace leaves you in TWO: signing in mints your own (the bootstrap is
+keyed on membership, and you have none until you accept), then accepting adds
+theirs. `components/workspace-switcher.tsx` renders **nothing** below two
+memberships, so the single-tenant feel D-3 wanted is intact for everyone who has
+one.
+
+The choice lives in `sales.user_settings.active_workspace_id` — this app's own
+schema, migration `0006`. **Never `platform.users.active_workspace_id`**, which
+holds an issues workspace id: the two id spaces overlap, so writing a sales id
+there points the other app somewhere arbitrary. That is the same collision that
+forced the CLI to keep its active workspace per app.
+
+`WorkspaceSource.setDefaultForUser` was a no-op until then and is now the writer;
+`getDefaultForUser` resolves the stored pointer **through the membership list**,
+so a workspace you have been removed from stops being your default rather than
+sending you to a 404. `POST /api/me/active-workspace` is the one write path, used
+by both the sidebar switcher and `bk sales workspace use`.
 
 **Not yet moved, and it is Phase 3's:** `labels`, `uploads` and `events` still
 write `platform.*`. Because those tables' `workspace_id` foreign keys still point

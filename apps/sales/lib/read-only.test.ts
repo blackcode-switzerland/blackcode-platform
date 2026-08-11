@@ -164,6 +164,20 @@ const ACCOUNT_WRITERS = new Map<string, AccountWriter>([
   ],
   ['components/settings/token-settings.tsx', { why: 'platform API tokens — /api/tokens' }],
   [
+    'components/workspace-switcher.tsx',
+    {
+      why:
+        'choosing WHICH workspace you are looking at — POST /api/me/active-workspace, ' +
+        'added 2026-08-11 with the sidebar switcher. Deliberately NOT behind ' +
+        'useCanWrite(): read-only is a display preference about this app\'s RECORDS, ' +
+        'and refusing to let somebody move between workspaces they belong to would ' +
+        'make it a permission over their account instead (D-7) — the same reasoning ' +
+        'accept-invitation.tsx and account-settings.tsx carry. The route is ' +
+        '/api/me/*, not /api/workspaces/*: it writes a pointer in sales.user_settings, ' +
+        'not a record inside a workspace',
+    },
+  ],
+  [
     'components/password-reset-flow.tsx',
     {
       why:

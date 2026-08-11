@@ -65,11 +65,28 @@ const MINE = [
 
 const listWorkspacesForUser = vi.fn(async () => MINE)
 const setActiveWorkspace = vi.fn()
+// This app's OWN pointer, in `sales.user_settings`. Spied so the positive case
+// below can assert the write lands here — "did not write the shared column" is
+// satisfied just as well by a source that writes nothing at all, which is the
+// state this file described until 2026-08-11 and no longer does.
+const setActiveWorkspaceForUser = vi.fn()
+const getStoredActiveWorkspaceId = vi.fn(async () => null as number | null)
+// Stubbed at the module boundary, not composed here. `getActiveWorkspaceForUser`
+// calls its sibling INSIDE the module, so a module mock cannot intercept that
+// call — and reimplementing the composition in this file would assert the copy
+// rather than the code. The resolution itself has its own test against the real
+// exported function (`lib/api/active-workspace-memory.test.ts`); this file's job,
+// per its header, is the WIRING.
+const getActiveWorkspaceForUser = vi.fn(async () => MINE[0])
 
-vi.mock('@/lib/db/queries/workspaces', () => ({
+vi.mock('@/lib/db/queries/workspaces', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   listWorkspacesForUser,
   getWorkspaceForUser: async () => MINE[0],
   listWorkspaceMembers: async () => [],
+  setActiveWorkspaceForUser,
+  getStoredActiveWorkspaceId,
+  getActiveWorkspaceForUser,
 }))
 
 // Spied, not stubbed away: the point is that this app's source never REACHES
@@ -83,6 +100,9 @@ vi.mock('@blackcode/platform-db', async (importOriginal) => ({
 beforeEach(() => {
   setActiveWorkspace.mockClear()
   listWorkspacesForUser.mockClear()
+  setActiveWorkspaceForUser.mockClear()
+  getStoredActiveWorkspaceId.mockClear()
+  getActiveWorkspaceForUser.mockClear()
 })
 
 describe("apps/sales' workspace source", () => {
@@ -95,6 +115,23 @@ describe("apps/sales' workspace source", () => {
     const mine = await appContext.workspaces.listForUser(7)
     expect(mine, 'the source is wired to this app\'s own tenancy').toEqual(MINE)
     expect(listWorkspacesForUser).toHaveBeenCalledWith(7)
+  })
+
+  // ── THIS PAIR IS ONE ASSERTION IN TWO HALVES, AND THE ORDER MATTERS ───────
+  // Until 2026-08-11 `setDefaultForUser` was a NO-OP, so "did not write the
+  // shared column" was satisfied trivially — by a function that did nothing at
+  // all. The app now remembers a workspace (it grew a switcher, and a person
+  // invited into someone else's workspace has two), so the negative alone would
+  // no longer discriminate: it would pass against a switcher whose choice is
+  // silently dropped. The positive comes first for that reason.
+  it('writes the choice to THIS app\'s own settings table', async () => {
+    const { appContext } = await import('@/lib/api')
+    await appContext.workspaces.setDefaultForUser(7, 1014)
+    expect(
+      setActiveWorkspaceForUser,
+      'the switcher\'s choice was not persisted anywhere — it would survive ' +
+        'exactly one page load'
+    ).toHaveBeenCalledWith(7, 1014)
   })
 
   it('does NOT write platform.users.active_workspace_id', async () => {
@@ -111,9 +148,15 @@ describe("apps/sales' workspace source", () => {
     const { appContext } = await import('@/lib/api')
     const ws = await appContext.workspaces.getDefaultForUser(7)
     expect(ws?.id).toBe(1014)
+    // The seam moved on 2026-08-11: the default used to be derived inline from
+    // `listWorkspacesForUser`, and is now `getActiveWorkspaceForUser` — this
+    // app's own query module either way, which is the property. Asserting the
+    // OLD call would have quietly stopped meaning anything while staying green,
+    // which is CLAUDE.md finding #10's shape.
     expect(
-      listWorkspacesForUser,
-      'the default must come from sales.workspaces, not from the shared column'
+      getActiveWorkspaceForUser,
+      "the default must come from sales' own tenancy, not from the shared column"
     ).toHaveBeenCalledWith(7)
+    expect(setActiveWorkspace).not.toHaveBeenCalled()
   })
 })

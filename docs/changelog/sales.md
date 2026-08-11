@@ -22,6 +22,42 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-11 — you can be in more than one workspace, and now you can move between them
+
+**Not breaking.** Nothing changes for a person with one workspace, which is
+everyone today: the switcher renders nothing and the app looks exactly as it did.
+
+**The situation it fixes.** Invite somebody into your workspace and they end up
+in TWO — signing in mints their own (the bootstrap is keyed on membership, and
+they have none until they accept), then accepting adds yours. Measured by
+running the real sequence, not read off the code. `/dashboard` answered that
+with a full-page "Choose a workspace" screen, and the app offered **no way back
+to it**: every link in the sidebar is `/dashboard/{ws}/…`, the logo included.
+You chose once, then you were stuck there.
+
+**What is new:**
+
+- **A switcher in the sidebar**, under the b/sales mark. It lists every
+  workspace you belong to, labelled *Your workspace* or *Member*, and appears
+  only when there is more than one.
+- **The choice is remembered**, in `sales.user_settings` — this app's own
+  schema, never `platform.users.active_workspace_id`, which holds another app's
+  workspace ids and would collide. `/dashboard` now opens where you last were
+  instead of asking again. The picker survives for the one case that is still a
+  guess: more than one workspace and nothing chosen yet.
+- **The web and `bk` agree.** The sidebar switcher and
+  `bk sales workspace use <slug>` both write `POST /api/me/active-workspace`, so
+  switching in one is visible in the other.
+- **`bk login` seeds the active workspace**, so a fresh login can run
+  `bk sales prospect list` immediately. Before this it failed with "no active
+  workspace for the sales app" until you ran a command nothing had told you
+  about — for a value the server had already computed.
+- **`bk --ws <slug> sales …`** targets one command elsewhere without switching.
+
+**A workspace you are removed from stops being your default**, rather than
+sending you to a page that 404s: the stored pointer is resolved against your
+memberships on every read.
+
 ## 2026-08-11 — A super admin can invite any blackcode account from the members page; the front door wears the site's frame
 
 **Not breaking.** No route changed shape and no command changed spelling. One

@@ -18,6 +18,8 @@ import {
   getWorkspaceForUser,
   listWorkspaceMembers,
   listWorkspacesForUser,
+  getActiveWorkspaceForUser,
+  setActiveWorkspaceForUser,
 } from './db/queries/workspaces'
 import { salesUploadLedger } from './db/queries/uploads'
 import { salesFootprintSource } from './db/queries/footprint'
@@ -77,27 +79,32 @@ const salesWorkspaces: WorkspaceSource = {
 
   listMembers: (workspaceId) => listWorkspaceMembers(workspaceId),
 
-  // ── DELIBERATELY NOT `setActiveWorkspace` ─────────────────────────────────
-  // `platform.users.active_workspace_id` is ONE column shared by every app, and
-  // after the split a sales workspace id written into it is read back by
-  // `apps/issues` as an ISSUES workspace id — by `/api/meta`, by the dashboard's
-  // default-workspace picker, and by upload attribution. Writing it would be the
-  // `error_events.workspace_id` ambiguity all over again, in the identity table.
+  // ── STILL DELIBERATELY NOT `platform.users.active_workspace_id` ───────────
+  // That column is ONE column shared by every app, and a sales workspace id
+  // written into it is read back by `apps/issues` as an ISSUES workspace id —
+  // by `/api/meta`, by the dashboard's default-workspace picker, and by upload
+  // attribution. The two apps' workspace tables have overlapping ids, so this
+  // is not a theoretical collision. It is the same one that forced the CLI to
+  // keep its active workspace per app in `~/.config/bk/config.json`.
   //
-  // Nothing is lost by not writing it: a person has exactly one sales workspace,
-  // so `getDefaultForUser` below already knows the answer, and `bk workspace use`
-  // persists its choice in the CLI's own config regardless.
-  setDefaultForUser: async () => {},
+  // WHAT CHANGED ON 2026-08-11: this was a no-op, on the reasoning that one
+  // workspace per person makes the default derivable. That premise is gone.
+  // A person invited into somebody else's workspace has TWO — signing in mints
+  // their own before they can accept — and this app now renders a switcher, so
+  // the choice is real and has to survive the request that made it.
+  //
+  // It is remembered in `sales.user_settings`, this app's own schema, which is
+  // the separation the shared column cannot give: `sales_app` holds no grant on
+  // another app's schema, so this pointer CANNOT be made to name one.
+  setDefaultForUser: (userId, workspaceId) => setActiveWorkspaceForUser(userId, workspaceId),
 
-  // One workspace per person (PLAN.md §1), so "the default" is "theirs" and
-  // there is nothing to remember. `listWorkspacesForUser` is ordered oldest-first
-  // (it matches the platform listing), so the most recently touched one is the
-  // LAST — which is the sensible answer on the day this app grows a switcher and
-  // a person has two.
-  getDefaultForUser: async (userId) => {
-    const mine = await listWorkspacesForUser(userId)
-    return mine.length > 0 ? mine[mine.length - 1] : null
-  },
+  // Reads that pointer, RE-CHECKING MEMBERSHIP — a person removed from a shared
+  // workspace must not keep being sent to it. Falls back to their first
+  // membership, which is their own: `listWorkspacesForUser` is oldest-first and
+  // your own workspace is minted at sign-in, before any invitation can be
+  // accepted. See the function's own comment for why that beats the previous
+  // "take the last one".
+  getDefaultForUser: (userId) => getActiveWorkspaceForUser(userId),
 }
 
 /**
