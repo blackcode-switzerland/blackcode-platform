@@ -1,0 +1,180 @@
+FROM:    master
+TO:      agent9
+DATE:    2026-08-11
+PHASE:   9 — App-aware account deletion
+STATUS:  BRIEF
+--------------------------------------------------------------------------------
+
+READ FIRST:
+  multiAppFinalRefactor/README.md       the rules — incl. BK_CONFIG_DIR
+  multiAppFinalRefactor/PLAN.md         §1 (the contract), §9 item 8 (your bug)
+  multiAppFinalRefactor/SAFETY.md       if you touch the database
+  agent8/agent-2026-08-11-1.txt         §1 and §2. **§2 IS YOUR DESIGN — do not
+                                        re-derive it, and do not silently
+                                        replace it. Disagree in writing if you
+                                        must.**
+
+Agent 8 scoped this and refused to half-build it. You build it.
+
+
+================================================================================
+0. FIRST, BEFORE ANY DESIGN: THE HONESTY FIX
+================================================================================
+This is live and it is one small change. Do it first, commit it alone, so it can
+ship even if the rest of the phase does not.
+
+`DELETE /api/me?dry_run=true` today reports one app's workspaces as though they
+were the whole picture. Agent 8's words, and they are the specification:
+
+  > The report is not empty — it is confidently incomplete, which is worse than
+  > empty: an empty report invites suspicion and a partial one reads as
+  > authoritative.
+
+**Make the report state what it covered.** A response that can only see `issues`
+must say `issues`, not present a total. The UI must render that scope. Nothing
+else changes yet — this does not fix the bug, it stops the wrong thing being
+invisible while you build the right thing.
+
+**Then the deeper half of the same bug** (PLAN.md §9 item 8, verified in
+production):
+
+    sales.workspaces.owner_id -> platform.users.id   ON DELETE RESTRICT
+    softDeleteUser: UPDATE users SET deleted_at = now(), …
+
+The user row is UPDATED, so RESTRICT never fires and another app's workspace
+survives owned by an account that cannot authenticate. **Data stranded, not
+lost, and unrecoverable by the person.** Whatever you build must close that, and
+you should decide whether RESTRICT is even the right constraint once deletion is
+app-aware.
+
+
+================================================================================
+1. WHAT TO BUILD — THE USER'S SPECIFICATION
+================================================================================
+Quoted, because it is a good spec and the phrasing is theirs:
+
+  > Deleting an account can say it is attached to multiple apps, may list the app
+  > names. They can select all apps, or just choose the active app. If only issues
+  > or sales, but the user has active other apps, then instead of deleting the
+  > user, delete the user data and logout.
+
+So:
+
+  1. The deletion screen NAMES every app the account is attached to, and what it
+     holds there. App names, not a count.
+  2. The person chooses **this app only** or **all apps**.
+  3. **"This app only", while other apps still hold data, does NOT delete the
+     account.** It deletes that app's data for that person and signs them out.
+  4. "All apps" is the existing irreversible full close.
+
+
+================================================================================
+2. THE MECHANISM — DECIDED BY AGENT 8, YOURS TO IMPLEMENT
+================================================================================
+A **server-side HTTP fan-out over `platform.apps.base_url`**, forwarding the
+caller's own session cookie. The deployment answering `DELETE /api/me` reads the
+address book and calls each OTHER app's `GET /api/me/footprint`. Each app answers
+only for itself, from its own tables, under its own Postgres role. **Nothing
+shared is added** — which is the whole point of the last eight phases.
+
+Agent 8 verified the premise rather than assuming it: one credential is valid at
+both origins because the session cookie is domain-widened to `.blackcode.ch`
+(D-16) and `NEXTAUTH_SECRET` is deliberately identical across apps.
+
+--- 2a. THE SAFETY PROPERTY IS A TYPE, NOT A CONVENTION ------------------------
+Your explicit constraint, and it is `CLAUDE.md` finding #14 restated: a census
+must never report "no data" for an app it could not reach.
+
+    { app: 'sales', reachable: true,  holds: {...} }   -- it answered
+    { app: 'sales', reachable: false, error: '...' }   -- it did not
+
+No third shape, no default. Then two rules, which ARE the safety property:
+
+  * the UI **renders unreachable apps by name, as unknown**. Not omitted, not
+    zero.
+  * **"all apps" is REFUSED while any app is unreachable**, 409, naming which.
+    An irreversible operation may not run on a partial census. "This app only"
+    stays allowed — it is answerable locally.
+
+--- 2b. THE THING THAT WILL FOOL YOU ------------------------------------------
+** THE FAN-OUT IS NOT EXERCISABLE IN LOCAL DEV THE WAY IT RUNS IN PRODUCTION. **
+
+With `NEXTAUTH_URL` on localhost, `session-cookie.ts` deliberately emits NO
+`Domain` attribute — the documented default that keeps localhost and
+`*.vercel.app` previews working. So a local pass does not demonstrate the
+production path.
+
+**Do not conclude "it works" from a local green.** Say what you could and could
+not exercise, and what would have to be observed in production to close it.
+Agent 7 wrote "silent no-op" four times because its instrument could not see a
+4-second toast; this is the same shape with a longer feedback loop.
+
+
+================================================================================
+3. CONSTRAINTS
+================================================================================
+- **`DELETE /api/me` stays human-only.** It is one of only two capability
+  exclusions in the parity test — `CLAUDE.md`: *"an agent must never delete its
+  owner's account"*. New routes inherit that reasoning, and `/api/me/footprint`
+  being readable does not make deletion agent-reachable.
+- **A workspace with other members must survive.** `deleteAccountReport`'s
+  blocked/hard-delete split already encodes this — extend it, do not replace it.
+- Do not move `platform.*` tables into `issues.*`. Declined, twice.
+- Do not touch `platform.blob_references` or anything reaching `del()`.
+- Do not build `platform-email` or the signup screens — Phase 10.
+- Do not deploy. The human does.
+
+
+================================================================================
+4. VERIFICATION
+================================================================================
+Full gate (README §4). `verify.sh` if you touch the database — it reads
+`TRACKED_SCHEMAS` in `lib-db.sh` now.
+
+**Observed, per case, not "works":**
+
+  1. An account in BOTH apps: the report names both, with what each holds
+  2. "This app only": that app's data gone, the OTHER app's intact, **the
+     account still able to sign in**
+  3. "All apps": the full close, and nothing stranded — check the catalog, not
+     just the API
+  4. **An unreachable app**: stop the other dev server and try. The report must
+     name it as unknown, and "all apps" must be REFUSED. This is the case the
+     whole design exists for — if you verify one thing, verify this
+  5. A workspace with another member survives
+
+Then the browser pass on the deletion screens. Two production bugs in three days
+lived where every route was correct.
+
+
+================================================================================
+5. WHERE I AM LEAST CONFIDENT
+================================================================================
+Eight for eight: every phase has found something false in my brief.
+
+  1. **Whether `RESTRICT` should stay** once deletion is app-aware. It is
+     currently inert — a constraint that cannot fire is a comment.
+  2. **What "delete that app's data" means for a workspace they solely own** —
+     delete it, or orphan it to nobody? The blocked/hard-delete split may
+     already answer this and I have not read it closely.
+  3. **Whether the footprint route should be per-app or a factory.** Every app
+     needs one; the shape of "what do I hold" differs per app.
+  4. **Whether this is one phase.** Agent 8 said §2d alone is. If it is two,
+     say so and stop — that judgement has been right every time it was made.
+
+
+================================================================================
+6. WHEN YOU ARE DONE
+================================================================================
+Full gate. Commit as you go, do not push. §0 as its own commit, first.
+
+Write `multiAppFinalRefactor/agent9/agent-2026-08-11-1.txt`:
+
+  1. §0: the honesty fix, and what the report says now
+  2. The stranding bug: what closes it, and whether RESTRICT survives
+  3. §4's five cases — observed, especially case 4
+  4. What you could NOT exercise locally, and what production must show
+  5. Everything in §5 I got wrong
+
+In chat, print only the path of that file.
+--------------------------------------------------------------------------------
