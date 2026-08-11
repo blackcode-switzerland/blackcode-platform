@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -44,7 +45,18 @@ const (
 )
 
 func main() {
-	err := commands.NewRoot().Execute()
+	// ExecuteC, not Execute, for the second return value: the command cobra
+	// actually resolved. An `unknown flag` error names no command anywhere in its
+	// text, so hintFor() could only ever offer a placeholder — and the version
+	// that shipped offered a LITERAL one, printing "run `bk <group> --help`" with
+	// `<group>` never substituted. A recovery step the caller cannot execute is
+	// the failure hintFor exists to prevent, so the path comes from cobra here
+	// instead of being guessed from the message.
+	resolved, err := commands.NewRoot().ExecuteC()
+	commandPath := ""
+	if resolved != nil {
+		commandPath = resolved.CommandPath()
+	}
 
 	// Hard floor: the API reported we're below the minimum supported version.
 	// Print the upgrade requirement and exit with a distinct code.
@@ -78,7 +90,7 @@ func main() {
 		// A one-line breadcrumb, but only at the moments an agent is actually
 		// stuck (auth, drift-smelling 4xx, a command/flag that no longer exists).
 		// stderr only, so --json stdout stays clean.
-		if h := hintFor(err); h != "" {
+		if h := hintFor(err, commandPath); h != "" {
 			fmt.Fprintln(os.Stderr, "hint:", h)
 		}
 		os.Exit(classify(err))
@@ -89,7 +101,7 @@ func main() {
 // a hint would just be noise (e.g. a plain permission denial). The goal is a
 // self-service loop: hit a wall -> follow the breadcrumb -> `bk changelog` /
 // /agent-updator -> get current -> retry.
-func hintFor(err error) string {
+func hintFor(err error, commandPath string) string {
 	if errors.Is(err, config.ErrNotConfigured) {
 		return "run `bk login` to authenticate. New here? run `bk guide`"
 	}
@@ -188,9 +200,49 @@ func hintFor(err error) string {
 			return note +
 				"\n      Run `bk guide` for current usage, or `bk skill sync` to update your agent skill."
 		}
-		return "that command or flag may have been renamed or removed — run `bk <group> --help` to see the current ones, `bk guide` for usage, or `bk skill sync` to update your agent skill"
+		// NAME THE REAL GROUP. This used to print a literal `bk <group> --help`,
+		// with `<group>` never substituted — a hint whose recovery step the caller
+		// cannot execute, which is the thing hintFor() exists to avoid. Cobra's
+		// message carries the path (`unknown command "x" for "bk sales prospect"`),
+		// so the placeholder was never necessary. Falls back to the unsubstituted
+		// wording only when the path is genuinely unknowable — an `unknown flag`
+		// error names no command.
+		// Two sources, most specific first. The error text carries the path for an
+		// unknown COMMAND (`… for "bk sales prospect"`); cobra's resolved command
+		// carries it for an unknown FLAG, where the message names nothing at all.
+		group := groupFromUsageError(msg)
+		if group == "" {
+			group = commandPath
+		}
+		if group != "" && group != "bk" {
+			return fmt.Sprintf(
+				"that command or flag may have been renamed or removed — run `%s --help` to see the current ones, "+
+					"`bk guide` for usage, or `bk skill sync` to update your agent skill", group)
+		}
+		return "that command or flag may have been renamed or removed — run `bk --help` to see the current ones, `bk guide` for usage, or `bk skill sync` to update your agent skill"
 	}
 	return ""
+}
+
+// usageGroupRe pulls the command path out of cobra's unknown-command error:
+// `unknown command "view" for "bk sales prospect"` → `bk sales prospect`.
+// It is the same shape deprecations.go's cmdRe reads; this one wants the second
+// capture rather than the first, and tolerates the `(have: …)` list that
+// rejectUnknownSubcommands appends after it.
+var usageGroupRe = regexp.MustCompile(`unknown command "[^"]*" for "([^"]+)"`)
+
+func groupFromUsageError(msg string) string {
+	m := usageGroupRe.FindStringSubmatch(msg)
+	if m == nil {
+		return ""
+	}
+	// The bare root is not a useful thing to point at: `bk --help` is where the
+	// caller already is, and the deprecation rows handle the tier mistakes that
+	// actually produce it.
+	if strings.TrimSpace(m[1]) == "bk" {
+		return ""
+	}
+	return m[1]
 }
 
 // maybeNotifyUpdate prints a once-per-24h "update available" notice to STDERR

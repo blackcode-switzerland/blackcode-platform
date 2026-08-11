@@ -179,6 +179,11 @@ func NewRoot() *cobra.Command {
 	// own exit instead of dead-ending an agent mid-run. A hint outliving the
 	// thing it replaces is the point.
 
+	// Order matters only in one direction: synonyms must be attached BEFORE the
+	// tree is walked for group RunEs, so that availableSubcommands() below sees a
+	// stable set. Aliases never appear in that list — it names canonical
+	// spellings, which is what the caller should learn.
+	attachVerbSynonyms(root)
 	rejectUnknownSubcommands(root)
 	return root
 }

@@ -218,6 +218,16 @@ func DeprecationHint(errMsg string) string {
 			}
 		}
 		if note, ok := deprecations[sub]; ok {
+			// SAY WHAT THE CALLER TYPED. Every bare-verb row opens with
+			// "`bk inbox …` is now `bk issues inbox …`", which is exactly right
+			// for `bk inbox list` and off-key for `bk sales inbox list` — the
+			// caller never wrote the spelling being corrected, so the first
+			// clause reads as being about somebody else. The advice underneath
+			// is correct in both cases, so this prefixes the context rather than
+			// duplicating every row for the app-prefixed form.
+			if parent != "" {
+				return "`bk " + parent + " " + sub + "` does not exist. " + note
+			}
 			return note
 		}
 		// `sub` may be cobra's whole remaining argv rather than one word — e.g.

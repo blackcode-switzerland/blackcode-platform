@@ -7,6 +7,52 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-11 — a guessed verb now resolves, and every dead end names a command you can run
+
+**Not breaking.** Four changes to how `bk` answers a caller who typed something
+it did not expect. Nothing that worked before works differently.
+
+**1. Verb synonyms resolve.** The two apps never shared one vocabulary —
+`bk issues issue view` and `bk sales prospect show` are the same operation, as are
+`create`/`add` and `delete`/`rm`, and each app disagrees with itself in places.
+An agent that learned one app dead-ended in the other. Every verb now also accepts
+the other spellings of its own operation:
+
+| Operation | Spellings that all work |
+|---|---|
+| read one | `view`, `show`, `get` |
+| list many | `list`, `ls` |
+| make one | `create`, `add`, `new` |
+| change one | `edit`, `update` |
+| destroy one | `delete`, `rm`, `remove` |
+
+`--help` still shows exactly one canonical spelling per command, and that is the
+one to write down — the rest are a landing pad for a guess, not a second
+documented way in. **The app tier is unaffected**: dropping the app name is still
+an error, and a spelling that a sibling command already owns is never reassigned
+(where a group has both `rm` and `show`, each keeps its meaning).
+
+**2. The generic recovery hint named nothing.** It printed a literal
+`` run `bk <group> --help` `` — the placeholder never substituted, so the only
+step it offered could not be executed. It now names the actual command, taken
+from the error for an unknown command and from cobra's resolved command for an
+unknown flag, which names nothing in its own message.
+
+**3. A tier hint typed at an app now says what you typed.** `bk sales inbox list`
+answered `` `bk inbox …` is now `bk issues inbox …` `` — correct advice opening
+with a spelling the caller never wrote. It is now prefixed with
+`` `bk sales inbox` does not exist. ``
+
+**4. `bk login` and `bk changelog` default to `https://issues.blackcode.ch`**,
+not the `bc-issues.vercel.app` project hostname. Both addresses work; the new one
+is what every doc says and does not name the platform after an npm package.
+Declared once now, in `cli/internal/config/config.go`. **`--server` is unchanged**,
+and one login still covers every app.
+
+`bk guide platform/apps` documents the vocabulary rule, and that topic now sorts
+second of the platform topics instead of thirteenth — four hints and three help
+screens point at it as *the* rule to read.
+
 For how the CLI **works** (rather than what changed), run **`bk guide`** — the
 complete usage guide, embedded in the binary, so it always describes the version
 you are running. For live values (vocabularies, limits, your workspaces), run

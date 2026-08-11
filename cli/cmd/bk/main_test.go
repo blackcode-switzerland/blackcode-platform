@@ -78,7 +78,7 @@ func TestRemovedBareVerbsFailWithARecoverableHint(t *testing.T) {
 			if got := classify(err); got != exitUsage {
 				t.Errorf("exit code = %d, want %d (usage) for %v", got, exitUsage, err)
 			}
-			hint := hintFor(err)
+			hint := hintFor(err, "")
 			if hint == "" {
 				t.Fatalf("no hint for `bk %s` — the run dead-ends here: %v", verb, err)
 			}
@@ -150,7 +150,7 @@ func TestUnrelatedUnknownCommandGetsNoNamedHint(t *testing.T) {
 	if err == nil {
 		t.Fatal("an unknown command must fail")
 	}
-	hint := hintFor(err)
+	hint := hintFor(err, "")
 	for _, replacement := range removedBareVerbs {
 		if strings.Contains(hint, replacement) {
 			t.Errorf("an unrelated unknown command was told to run %q:\n  %s", replacement, hint)
@@ -161,11 +161,67 @@ func TestUnrelatedUnknownCommandGetsNoNamedHint(t *testing.T) {
 	}
 }
 
+// THE GENERIC HINT MUST NAME A COMMAND THE CALLER CAN ACTUALLY RUN.
+//
+// It printed a literal `bk <group> --help` until 2026-08-11 — the placeholder
+// never substituted, so the one recovery step it offered could not be executed.
+// hintFor takes the path from two sources: the error text for an unknown
+// COMMAND, and cobra's resolved command for an unknown FLAG, whose message names
+// nothing at all.
+//
+// Asserts the absence of `<group>` AND the presence of the real path. Checking
+// only for the placeholder would pass against a hint that named nothing, which
+// is how this class of guard goes quiet.
+func TestGenericHintNamesTheRealCommand(t *testing.T) {
+	cases := []struct {
+		name        string
+		err         error
+		commandPath string
+		want        string
+	}{
+		{
+			// Unknown command: the path is inside the message.
+			name: "unknown command",
+			err:  errors.New(`unknown command "frobnicate" for "bk issues issue"`),
+			want: "bk issues issue --help",
+		},
+		{
+			// Unknown flag: the message names nothing; cobra's resolved command does.
+			name:        "unknown flag",
+			err:         errors.New("unknown flag: --badflag"),
+			commandPath: "bk sales prospect list",
+			want:        "bk sales prospect list --help",
+		},
+		{
+			// Neither source knows: the fallback must still be runnable.
+			name: "nothing known",
+			err:  errors.New("unknown flag: --badflag"),
+			want: "bk --help",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hint := hintFor(tc.err, tc.commandPath)
+			if hint == "" {
+				t.Fatal("no hint at all — the caller is left with nothing to run")
+			}
+			if strings.Contains(hint, "<group>") {
+				t.Errorf("the hint still carries the literal placeholder: %q", hint)
+			}
+			if !strings.Contains(hint, tc.want) {
+				t.Errorf("the hint does not name %q, so its recovery step cannot be run:\n  %s",
+					tc.want, hint)
+			}
+		})
+	}
+}
+
 // hintFor must keep preferring the server's own suggestion where there is one —
 // asserted because the deprecation branch sits in the same function and a rewrite
 // there is exactly where this would be lost.
 func TestHintForPrefersNothingOverNoise(t *testing.T) {
-	if got := hintFor(errors.New("some runtime failure")); got != "" {
+	if got := hintFor(errors.New("some runtime failure"), ""); got != "" {
 		t.Errorf("a plain runtime error should carry no hint, got %q", got)
 	}
 }
@@ -188,7 +244,7 @@ func TestRemovedStorageAttachmentsIsRedirected(t *testing.T) {
 	if got := classify(err); got != exitUsage {
 		t.Errorf("exit code = %d, want %d (usage) for %v", got, exitUsage, err)
 	}
-	hint := hintFor(err)
+	hint := hintFor(err, "")
 	if !strings.Contains(hint, "bk issues attachment list") &&
 		!strings.Contains(hint, "bk issues storage") {
 		t.Errorf("`bk storage attachments` failed with %q and hint %q — it must name "+
@@ -213,7 +269,7 @@ func TestRemovedLinkNamesWhatToDoInstead(t *testing.T) {
 	if got := classify(err); got != exitUsage {
 		t.Errorf("exit code = %d, want %d (usage) for %v", got, exitUsage, err)
 	}
-	hint := hintFor(err)
+	hint := hintFor(err, "")
 	if !strings.Contains(hint, "removed") {
 		t.Errorf("the hint for `bk link` does not say it was removed: %q", hint)
 	}
@@ -281,7 +337,7 @@ func TestNotServedHintOnlySuggestsAppsTheConfigKnows(t *testing.T) {
 		writeTestConfig(t, dir, `{"token":"t","home_app":"sales","home_server":"https://s",
 			"app_servers":{"sales":"https://s","issues":"https://i"}}`)
 
-		hint := hintFor(notServed)
+		hint := hintFor(notServed, "")
 		if !strings.Contains(hint, "--app-server issues") {
 			t.Errorf("a config that knows issues must be told to try it:\n  %s", hint)
 		}
@@ -294,7 +350,7 @@ func TestNotServedHintOnlySuggestsAppsTheConfigKnows(t *testing.T) {
 		writeTestConfig(t, dir, `{"token":"t","home_app":"sales","home_server":"https://s",
 			"app_servers":{"sales":"https://s"}}`)
 
-		hint := hintFor(notServed)
+		hint := hintFor(notServed, "")
 		if strings.Contains(hint, "--app-server") {
 			t.Errorf("a sales-only account was told to redirect to another app, which its "+
 				"registry does not have — the retry cannot work:\n  %s", hint)

@@ -14,7 +14,11 @@ import (
 // defaultChangelogServer is used when the user runs `bk changelog` before ever
 // logging in. The changelog is public, and the whole point of the command is to
 // help an out-of-date setup get current — so it must work without a config file.
-const defaultChangelogServer = "https://bc-issues.vercel.app"
+//
+// It shares config.DefaultServer rather than repeating an address: the two are
+// the same fact ("where does a binary that knows nothing go?"), and they were
+// separate long enough to disagree with every doc in the repo.
+const defaultChangelogServer = config.DefaultServer
 
 // `bk changelog` mirrors GET /api/changelog: the dated record of what changed.
 //

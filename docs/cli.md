@@ -374,7 +374,9 @@ See [The embedded guide & skill](#the-embedded-guide--skill) for how to maintain
 | `bk changelog [--full] [--reference] [--server URL]` | What changed + the current CLI version floor (`GET /api/changelog`). **Public — works before `bk login`.** |
 
 `bk changelog` is public: it works without authentication. It targets the
-logged-in server if there is one, else `https://bc-issues.vercel.app`;
+logged-in server if there is one, else `config.DefaultServer`
+(`https://issues.blackcode.ch`) — the same address `bk login` opens without
+`--server`, declared once in `cli/internal/config/config.go`;
 `--server URL` overrides the host. Default output is a `DATE`/`CHANGE` table of
 the dated entries; `--full` prints the platform reference plus every entry in
 full; `--reference` prints only the baseline reference.

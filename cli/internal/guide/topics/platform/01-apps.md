@@ -197,6 +197,31 @@ and a human or agent can resolve. There is no command that records a relation
 between two apps' records; the `link` verb was removed on 2026-08-10 for that reason,
 because it needed one index that every app wrote into.
 
+## The verbs are not spelled the same everywhere
+
+Two apps grew separately, and so did their vocabulary. `bk issues issue view` and
+`bk sales prospect show` are the same operation; so are `create` and `add`, and
+`delete` and `rm`. Each app also disagrees with itself in places.
+
+**You do not have to remember which is which.** Every verb accepts the other
+spellings of its own operation, so a guess resolves rather than dead-ending:
+
+| Operation | Spellings that all work |
+|---|---|
+| read one | `view`, `show`, `get` |
+| list many | `list`, `ls` |
+| make one | `create`, `add`, `new` |
+| change one | `edit`, `update` |
+| destroy one | `delete`, `rm`, `remove` |
+
+`--help` shows one canonical spelling per command — that is the one to write down
+and the one the docs use. The others are there so a wrong guess costs nothing.
+
+Two things this does **not** do. It never crosses the app tier — dropping the app
+name is still an error whichever verb you pair it with, because the app is not a
+spelling preference. And it never overrides a real command: where a group already
+has both `rm` and `show`, each keeps its own meaning.
+
 The rule of thumb, if you remember nothing else: **if the answer would differ
 between two deployments, the app is in the command.**
 

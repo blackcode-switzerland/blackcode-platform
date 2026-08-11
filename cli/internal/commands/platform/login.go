@@ -42,7 +42,7 @@ own question, and `+"`bk <app> workspace list`"+` asks it.
 Use --token to paste a token manually instead (useful for headless/CI).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if server == "" {
-				server = "https://bc-issues.vercel.app"
+				server = config.DefaultServer
 			}
 
 			if pasteToken {
@@ -51,7 +51,7 @@ Use --token to paste a token manually instead (useful for headless/CI).`,
 			return runBrowserLogin(server)
 		},
 	}
-	cmd.Flags().StringVar(&server, "server", "", "Server base URL (default: https://bc-issues.vercel.app)")
+	cmd.Flags().StringVar(&server, "server", "", "Server base URL of any Blackcode app (default: "+config.DefaultServer+")")
 	cmd.Flags().BoolVar(&pasteToken, "token", false, "Paste a pre-existing token from stdin instead of opening a browser")
 	return cmd
 }

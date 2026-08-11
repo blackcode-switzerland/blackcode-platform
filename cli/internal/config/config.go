@@ -9,6 +9,24 @@ import (
 	"strings"
 )
 
+// DefaultServer is the address a fresh binary talks to before it has learned
+// anything — the one `bk login` opens without --server, and the one
+// `bk changelog` reads when there is no config at all.
+//
+// DECLARED ONCE, on this repo's rule that a value with more than one reader has
+// exactly one source. It was typed out three times as `https://bc-issues.vercel.app`
+// — Vercel's generated hostname for the issues PROJECT, which still resolves but
+// is not where this platform lives and names an app by an npm package slug.
+// Production has been issues.blackcode.ch since before either app shipped, and
+// the first URL a new user sees should be the one in every doc.
+//
+// WHICH app is arbitrary and that is the point: one login covers every app, and
+// whichever server answers hands back the address book, so `bk sales …` routes
+// from a login that never mentioned sales. This is a starting address, not a
+// home. `--server` overrides it, and after the first login the config's own
+// per-app map does.
+const DefaultServer = "https://issues.blackcode.ch"
+
 // The stored credentials, and — since 2.0.0 — the APP ADDRESS BOOK (D-1).
 //
 // ---------------------------------------------------------------------------
