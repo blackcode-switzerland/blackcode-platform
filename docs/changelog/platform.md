@@ -30,6 +30,43 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-11 — Password reset works on every app, not just one
+
+**Not breaking.** Everything here is additive, and the one changed response
+shape is browser-only.
+
+**Every app can send email now.** `apps/issues/lib/email/` became
+`packages/platform-email`. An app supplies a four-field identity — display name,
+logo origin, accent colour, reply-to — and the shared templates and Resend
+client do the rest. The *address* stays platform-wide (`admin@blackcode.ch`, the
+apex domain, because Resend verifies one domain per account); the app identity
+rides in the display name, so a b/sales code arrives from
+`b/sales <admin@blackcode.ch>` and an issues code from
+`Blackcode Issues <admin@blackcode.ch>`.
+
+**A deployment that cannot deliver now refuses instead of pretending.** The
+password-reset request routes answer **`503 email_not_configured`** — with a
+`suggestion` naming the two variables to set — when the deployment has no Resend
+key, and they answer it *before* minting a code or spending a rate-limit slot.
+Previously they returned `{ ok: true }` and delivered nothing, which is
+indistinguishable from a slow email to the person waiting. Outside production
+the OTP still goes to the server log, so local development is unaffected.
+
+**If you run an app deployment, set `RESEND_API_KEY` and `RESEND_FROM_EMAIL`
+for it.** Without them, production password resets fail closed with the 503
+above. Invitations are unaffected — they still return `accept_url`.
+
+**The logged-out reset pair is a shared factory.**
+`publicPasswordResetRequestRoute` / `publicPasswordResetConfirmRoute` in
+`@blackcode/platform-api/routes`. The route files stay in each app's
+`app/api/auth/`, but the OTP policy — code shape, expiry, attempt cap, which
+failure maps to which code — is now written once. Behaviour and response bodies
+are unchanged for `apps/issues`.
+
+No `bk` surface changed: every route involved is browser-only and already
+excluded from the CLI-parity harness with a reason. An agent proves identity
+with a `bk_live_…` token, which it can only hold because a human has an account.
+
 ## 2026-08-11 — closing an account now reaches every app
 
 **Breaking for one route. Fixes a data-stranding bug that was live.**

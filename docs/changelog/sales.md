@@ -22,6 +22,48 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-11 — Sign up, reset a forgotten password, and change your password here
+
+**Not breaking**, with one changed response shape on a browser-only route.
+
+b/sales has front doors now. All three were capabilities the app already had, or
+could have had, with nothing linking to them:
+
+- **`/login` has a "Create account" tab.** `POST /api/auth/register` has existed
+  since 2026-08-10 and minted a workspace on success; nothing on screen reached
+  it. The whitelist gate is unchanged and still server-side — the account this
+  creates is the shared platform account, so an ungated sign-up here would be an
+  ungated sign-up everywhere.
+- **`/login` has "Forgot password?"** New routes:
+  `POST /api/auth/password-reset/request` and `/confirm`.
+- **Settings → Account changes your password here.** New routes:
+  `POST /api/me/password/request-otp` and `/confirm`. It used to link out to
+  another app, because b/sales could not send the one-time code the change
+  needs. It can now.
+- **Invitation emails are actually sent.** `email_sent` in the response to
+  `POST /api/workspaces/{ws}/invitations` was a hardcoded `false`; it is the
+  real result. `accept_url` is still returned either way.
+
+**Changed response shape:** `POST /api/auth/register` now answers the platform
+error envelope `{ error, code, suggestion }` instead of `{ error, message }`.
+`error` is the human sentence and `code` is what a client branches on — so a
+whitelist refusal is `code: "not_in_whitelist"` with a readable `error`, where
+before `error` itself carried the string `not_in_whitelist`. Browser-only route;
+no `bk` command reaches it.
+
+**The login page's footer was wrong and is fixed.** It said "Ask a workspace
+owner to invite you and grant you b/sales." There has been nothing to grant
+since `platform.app_access` was dropped on 2026-08-10 — each app owns its
+workspaces and membership is the whole gate — and access is no longer
+invitation-only.
+
+**Changing your password signs you out of every app**, not just this one. It is
+one credential; that was always true and is now stated on the page.
+
+`RESEND_API_KEY` and `RESEND_FROM_EMAIL` must be set on this project. Without
+them, password resets refuse in production with `503 email_not_configured`
+rather than silently not sending. See `platform.md`.
+
 ## 2026-08-11 — Settings → Members: editing is hidden in read-only mode, and every invitation link is copyable
 
 Two things, both found by opening the page rather than by calling its routes.

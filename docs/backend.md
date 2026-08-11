@@ -1267,29 +1267,57 @@ Both reject `image/svg+xml` (XSS). `POST /api/upload` returns
 `{ url, filename, size, contentType }`. No new env var is needed —
 `BLOB_READ_WRITE_TOKEN` (already required for Blob) activates the prod path.
 
-### Email (`lib/email/`)
+### Email (`@blackcode/platform-email`, bound in `lib/email/send.ts`)
 
-Resend client (`lib/email/client.ts`), lazily constructed and **only enabled
+**Promoted out of this app on 2026-08-11** (multiAppFinalRefactor Phase 10).
+It used to be `lib/email/{client,send,templates}.ts` here, with
+`const BRAND = 'Blackcode Issues'` at the top of the templates and a direct
+import of this app's `db` for failure logging. `apps/sales` becoming a second
+sender ended that: two copies would have meant two `fromAddress()` functions and
+two template sets, with the second going stale silently because nothing renders
+both.
+
+What is left in this app is `lib/email/send.ts` — a **binding**, not a module.
+It calls `createEmailSender()` with the three facts the package cannot know:
+`APP_SLUG` (for `error_events.app`), this app's `db`, and an `EmailIdentity`
+(display name from `APP_NAME`, logo origin from `NEXTAUTH_URL`, accent, and a
+reply-to). **Import from `@/lib/email/send`, never from the package directly** —
+the same rule `@/lib/storage` follows, and for the same reason: the binding is
+where identity and database are attached.
+
+The behaviour is unchanged by the move. The client is lazy and **only enabled
 when both `RESEND_API_KEY` and `RESEND_FROM_EMAIL` are set** (`emailEnabled()`).
-`fromAddress()` sends as `"Blackcode Issues" <RESEND_FROM_EMAIL>` (falls back to
-a bare `no-reply@example.com` if unset — should never happen once configured).
-`lib/email/send.ts` wraps every send in try/catch — sending is always
-best-effort and never breaks the triggering action; failures log a `warn`-level
-`error_events` row (recipient domain only, never the full address) and the
-caller still succeeds. Templates (`lib/email/templates.ts`) are plain
-subject/html/text builders — inline-styled, single shared layout, brand logo
-pulled from `NEXTAUTH_URL`/logo.png — not React Email components.
+`fromAddress(identity)` sends as `Blackcode Issues <RESEND_FROM_EMAIL>`; the
+address is platform-wide (the apex domain — Resend's free plan verifies one
+domain per account) and the app identity rides in the display name. Every send
+is wrapped in try/catch: sending is best-effort and never breaks the triggering
+action, and failures log a `warn`-level `error_events` row recording the
+recipient **domain only**, never the full address.
+
+**`canDeliverEmail()` is NOT `emailEnabled()`, and the difference is the honest-
+degradation rule.** A deployment with no key must refuse rather than accept a
+password-reset request and deliver nothing — "no email arrived" and "the email
+is slow" are indistinguishable to the person waiting. So the request routes
+check it FIRST, before minting an OTP or spending a rate-limit slot, and answer
+`503 email_not_configured` with a `suggestion`. Outside production there is a
+real fallback channel — the OTP is printed to the server log, where the only
+person who could read that mailbox is already looking — so `canDeliverEmail()`
+returns true there and local development needs no Resend account.
 
 Three transactional stages send today; everything else (mentions, assignments,
 activity) stays in-app-only via the inbox:
 
 1. **Password reset (logged out)** — `app/api/auth/password-reset/request/route.ts`,
-   from the "forgot password" flow on `/login`. Sends `passwordResetEmail` (OTP
-   + expiry). Always responds `{ ok: true }` regardless of send outcome, to
-   avoid leaking which emails have accounts.
+   from the "forgot password" flow on `/login`. Mounted from the shared
+   `publicPasswordResetRequestRoute` factory since 2026-08-11 — the route file
+   is app-local (it sits beside this app's NextAuth handler) but the body is
+   not, because a second copy would be a second OTP policy against one shared
+   credential. Always responds `{ ok: true }` when it can deliver, regardless of
+   send outcome, to avoid leaking which emails have accounts.
 2. **Password set/change OTP (logged in)** — `app/api/me/password/request-otp/route.ts`,
    from account settings (including Google-only users adding a password). Same
-   `passwordResetEmail` template.
+   `passwordResetEmail` template, mounted from `passwordRequestOtpRoute`, which
+   takes the sender as a named Class B contribution (D-22).
 3. **Workspace invitation** — `app/api/workspaces/[ws]/invitations/route.ts`,
    when an owner invites someone by email. The invitation row is committed to
    the DB first, then `sendInvitationEmail()` fires (workspace name, inviter,

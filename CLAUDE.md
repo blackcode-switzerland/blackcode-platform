@@ -34,8 +34,11 @@ A **monorepo** (npm workspaces + Turborepo) holding Blackcode's internal apps.
 
 What the migration bought:
 
-- `packages/platform-{db,api,ui,auth,agent,storage,testing}` — seven shared
-  libraries. Apps import these; apps never import each other.
+- `packages/platform-{db,api,ui,auth,agent,storage,testing,email}` — eight shared
+  libraries. **`platform-email` landed 2026-08-11** (multiAppFinalRefactor Phase
+  10): an app supplies a four-field identity and its own db handle, and
+  `apps/sales` stopped sending people to `apps/issues` to change a password both
+  apps share. Apps import these; apps never import each other.
   **`apps/issues/lib/auth.ts` (next-auth `authOptions`) deliberately did NOT
   move** — the reason is in `packages/platform-auth/src/index.ts`.
 - The database is **`platform.*` + `issues.*`**, never `public`. Production runs
@@ -156,7 +159,7 @@ npm run lint       # eslint, all apps and packages
 > guardrail, test, assertion or probe works, break the thing it guards and watch
 > it go red. Then restore.
 
-This is not a style preference. **Twenty guardrails in this repo have been
+This is not a style preference. **Twenty-one guardrails in this repo have been
 found green-but-inert** — eight during the migration, and the count is still growing.
 Every one looked like working protection:
 
@@ -185,10 +188,21 @@ Every one looked like working protection:
 
 | 20 | Migration `0003_scaffold_owns_its_tenancy.sql`'s foreign-key swap | The DROP was guarded on a constraint NAME — `notes_workspace_id_workspaces_id_fk`, Drizzle's spelling. Postgres had called it `notes_workspace_id_fkey`, because `0001` is hand-written SQL with an inline `REFERENCES` clause and the server names those itself. So the DROP matched nothing, the ADD succeeded, and the table ended up carrying **both** foreign keys: a row then had to satisfy `platform.workspaces` AND `scaffold.workspaces` at once — strictly worse than the coupling the migration existed to remove. **Every statement succeeded and psql exited 0.** Found by reading `pg_constraint` after running it, not by review. It matches on `confrelid` now, which is also what makes it correct for a copy whose `0001` was drizzle-generated. Fourth time on this project that the catalog contradicted the code (agent 1's trigger, agent 3's twelve FKs, agent 4's cascade ordering) |
 
+| 21 | `password-degradation.test.ts`'s POSITIVE case | Written 2026-08-11 **to satisfy finding #16** — the rule that a guard built only on "was this denied?" cannot tell a working check from a subject that refuses everything. So it asserted the route "got past the 503" by watching a flag set on any access to a `db` proxy. It passed against `if (true \|\| !contribution.canDeliverEmail())` — an unconditional refusal — because **`apiHandler` writes an `error_events` row when it catches the ApiError, and that touched the db and set the flag**. The guard was satisfied by the error path of the exact bug it existed to catch. Found by mutating the route and watching the test stay green; it asserts the RESPONSE now (`status !== 503`). **The positive case written to cure #16 had #16's own disease** |
+
 **Findings 10–14 all landed on 2026-08-07, in the phase whose entire job was to
 disbelieve the previous seven agents — and 11 and 12 are that phase's own new
 guards, found inert within minutes of being written.** The rate does not fall as
 the rule gets better known.
+
+**#21 is the sharpest lesson in the table about writing guards.** It was
+written deliberately to implement finding #16's corollary — assert the thing
+that must SUCCEED — and the success assertion it chose was satisfied by the
+failure path. **A positive case has to assert the OUTCOME, not a side effect on
+the way to it**: a flag, a counter or a spy that the error handler also trips is
+not evidence the happy path ran. It was found by mutation, not by review, and
+the mutation that caught it (refuse unconditionally) is one worth running
+against any check whose job is to discriminate.
 
 **#20 landed on 2026-08-11 and is the first one in this table that is not a
 test.** It is a MIGRATION step: guarded, re-runnable, idempotent, and it did

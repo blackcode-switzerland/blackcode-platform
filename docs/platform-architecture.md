@@ -81,9 +81,12 @@ blackcode-platform/                 (monorepo, Turborepo)
 └── tsconfig.base.json
 ```
 
-**There are seven platform packages.** `platform-storage` and `platform-testing`
+**There are eight platform packages.** `platform-storage` and `platform-testing`
 arrived during the migration and are as load-bearing as the rest — the first owns
-the only code that can reach `del()`.
+the only code that can reach `del()`. **`platform-email` arrived last**, on
+2026-08-11, when `apps/sales` became the second sender; it was the final piece of
+shared behaviour still living inside `apps/issues`, and the screens that deferred
+to another app for a password change were the visible cost of that.
 
 Each app keeps its own `app/api/**`, its own Drizzle schema file for its own
 Postgres schema, its own guide topics, its own `docs/`, and its own Vercel

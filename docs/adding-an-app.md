@@ -91,6 +91,7 @@ import each other.**
 | `platform-ui` | The design system: `components/ui/` primitives, the TipTap rich-text editor and its media companions. **Two lines, not one:** `transpilePackages` in `next.config.js` makes it compile, and `@source "…/packages/platform-ui/src"` in your Tailwind stylesheet makes its CSS exist. Neither implies the other and only the first fails loudly — see step 1 |
 | `platform-storage` | The upload ledger, app-prefixed paths, the per-app reference-scanner registry, and the GC **that will not delete a file any app still references** |
 | `platform-agent` | The merged changelog feed and the advertised CLI version floor |
+| `platform-email` | Transactional email: the Resend client, the shared invitation/reset templates, and `createEmailSender()`. The app supplies an **identity** (name, url, accent, reply-to) and its own db handle — never a palette or its own templates. See open item 8 |
 | `platform-testing` | The two guards every app copies: the CLI-parity harness and the app-isolation checks (`findCrossAppImports`, `findCrossSchemaQueries`) |
 
 **When does something belong in a package rather than your app?** One question:
@@ -1095,23 +1096,46 @@ cheaper than pretending otherwise.
 7. **A 409 has no branch in the CLI's `classify()`**, so `confirm_mismatch` exits
    1 from the server and 2 from the binary. One condition, two exit codes, and an
    agent cannot write one recovery.
-8. **Email is app-local, and the first app that needs it twice will copy it.**
-   `apps/issues/lib/email/` — a lazy Resend client, `fromAddress()`, and the
-   templates — is the last significant piece of shared behaviour that never
-   became a package, because `apps/issues` was the only sender and still is.
-   **If your app needs to send email, promote it to `packages/platform-email`
-   first; do not copy the directory.** Two copies means two `fromAddress()`
-   functions and two sets of templates, and the second one goes stale silently —
-   nothing renders both, so nothing compares them.
+8. **Email is a package — `packages/platform-email`.** ~~Open.~~ **Closed
+   2026-08-11** (multiAppFinalRefactor Phase 10), when `apps/sales` became the
+   second sender. It is left here rather than deleted because the shape it
+   settled is what a third app needs to know.
 
-   The move is small and the shape is already decided: the **address** is
-   platform-wide (`admin@blackcode.ch`, on the apex domain, because Resend's
-   free plan verifies one domain per account), and the **app identity lives in
-   the display name** — `Blackcode Issues <admin@blackcode.ch>`. So
-   `fromAddress()` takes the app, exactly like every other value that had to
-   stop assuming one deployment: `platform.uploads.app`, `labels.app`,
-   `comments.parent_type`. Written down 2026-08-10, when the sending domain was
-   made generic and the module was the one thing left that was not.
+   The app supplies an **identity** at one binding site,
+   `apps/<app>/lib/email/send.ts`, and everything else in the app imports from
+   that binding rather than from the package — the same rule `@/lib/storage`
+   follows, and for the same reason: the binding is where the app's name and
+   database are attached, so an import that skips it skipped them.
+
+   ```ts
+   export const { canDeliverEmail, emailEnabled, sendInvitationEmail, sendPasswordResetEmail } =
+     createEmailSender({
+       app: APP_SLUG,
+       getDb: () => getDb(),
+       identity: { name: APP_NAME, appUrl: …, accent: …, contactEmail: … },
+     })
+   ```
+
+   Four fields: the display name (the **address** is platform-wide,
+   `admin@blackcode.ch`, because Resend's free plan verifies one domain per
+   account), the origin the logo is loaded from, the button colour, and a
+   reply-to. **Not a palette and not a template set** —
+   `packages/platform-email/src/identity.ts` argues that at length, because it
+   is the question a third app will re-ask.
+
+   Two things to get right when you copy the scaffold:
+
+   - **Set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` for your project.** Without
+     them your app builds, deploys and serves, and then refuses every password
+     reset in production with `503 email_not_configured`. That refusal is the
+     deliberate design — a reset that reports success and delivers nothing is
+     worse — but it makes provisioning a real step rather than an optimisation.
+     Outside production the OTP goes to the server log instead, so local
+     development needs no key and you will not notice the omission there.
+   - **Your accent is a hex, and your app may have a rule about where a hex may
+     live.** `apps/sales` does (`lib/palette.test.ts`, colour belongs to
+     `lib/pipeline.ts`), and it caught the accent being written in the email
+     binding during Phase 10.
 
 ## The record: what walking this document found
 

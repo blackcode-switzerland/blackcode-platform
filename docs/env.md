@@ -29,7 +29,7 @@ with `vercel env ls` rather than trusting it; it is a snapshot, not a mechanism.
 | `SUPER_ADMINS` | ✅ | ✅ | issues has two addresses, sales one — deliberate, per app |
 | `GOOGLE_CLIENT_ID` / `_SECRET` | ✅ | ✅ | **the same client and secret on both**, project `blackcode-platform` since 2026-08-10 |
 | ~~`PLATFORM_ENFORCE_APP_ACCESS`~~ | — | — | **removed 2026-08-10** — nothing reads it; delete it from both projects |
-| `RESEND_API_KEY` / `_FROM_EMAIL` | ✅ | ❌ unset | sales has no email module, deliberately. Sender is `admin@blackcode.ch` on the apex domain since 2026-08-10 |
+| `RESEND_API_KEY` / `_FROM_EMAIL` | ✅ | ✅ **now required** | **2026-08-11: sales sends its own email.** It was deliberately unset while sales had no email module; `packages/platform-email` ended that, and sales' password reset, forgot-password and invitation mail all need it. Sender is `admin@blackcode.ch` on the apex domain since 2026-08-10; the app identity is the display name |
 
 **Removed 2026-08-10:** 17 `NEON_*` variables that were injected by the Neon
 integration and read by no code in this repo — they duplicated live database
@@ -344,9 +344,9 @@ vercel env add BLOB_READ_WRITE_TOKEN production --value "<new-token>" --yes
 | | |
 |---|---|
 | **Purpose** | Transactional email — workspace invitations and password reset codes |
-| **Status** | Set ✓ on `bc-issues` only. **Deliberately unset on `bc-sales`** — sales has no email module and sends nothing |
+| **Status** | Required on **both** `bc-issues` and `bc-sales` as of 2026-08-11. It was set on `bc-issues` only while sales had no email module — see the note below, because that absence was documented as deliberate and stopped being true |
 | **Source** | [resend.com](https://resend.com) |
-| **Impact if missing** | No email delivery; invitations fall back to the in-app inbox and password reset is disabled — the app runs fine without it |
+| **Impact if missing** | In **production**, the password-reset routes refuse with `503 email_not_configured` rather than accepting the request and delivering nothing (`canDeliverEmail()`); invitations still work and fall back to `accept_url` plus the in-app inbox. Outside production the OTP is printed to the server log instead, so local development needs no key |
 
 ### The sending domain is `blackcode.ch`, not a per-app subdomain
 
@@ -355,8 +355,10 @@ free plan verifies **one domain per account**. A per-app sender
 (`admin@issues.blackcode.ch`) meant the second app that needed email would have
 had to either take the slot from issues or force a paid plan. The apex domain
 covers every app forever, and the app identity lives in the *display name*
-instead — `fromAddress()` in each app's `lib/email/client.ts` returns
-`Blackcode Issues <admin@blackcode.ch>`.
+instead — `fromAddress(identity)` in `packages/platform-email` returns
+`Blackcode Issues <admin@blackcode.ch>` or `b/sales <admin@blackcode.ch>`
+depending on which app asked. Verified end to end on 2026-08-11: both strings
+appear in the Resend record for real delivered messages.
 
     verified in Resend   blackcode.ch          (was issues.blackcode.ch)
     sender               admin@blackcode.ch    (was admin@issues.blackcode.ch)
@@ -370,14 +372,30 @@ vercel env add RESEND_FROM_EMAIL production --value "admin@blackcode.ch" --yes
 `RESEND_FROM_EMAIL` must be on a domain verified in Resend —
 `onboarding@resend.dev` works for testing only.
 
-### If a second app ever needs to send email
+### A second app needs to send email — this is DONE (2026-08-11)
 
-Do **not** copy `apps/issues/lib/email/` into it. That directory is app-local
-today only because issues was the only sender; a second copy is two templates,
-two `fromAddress()` functions and one of them going stale. Promote it to
-`packages/platform-email` first, with the display name coming from the app —
-the same shape as every other thing this platform had to un-hardcode when the
-second app arrived.
+This section used to say "do **not** copy `apps/issues/lib/email/` into it —
+promote it to `packages/platform-email` first". That promotion happened, so
+there is nothing to decide any more:
+
+```ts
+// apps/<app>/lib/email/send.ts — the ONLY place identity meets the sender
+export const { canDeliverEmail, emailEnabled, sendInvitationEmail, sendPasswordResetEmail } =
+  createEmailSender({ app: APP_SLUG, getDb: () => getDb(), identity: {
+    name: APP_NAME, appUrl: …, accent: …, contactEmail: … } })
+```
+
+Everything else in the app imports from that binding, never from the package —
+the same rule `@/lib/storage` follows. The app supplies four fields and **not a
+palette or a template set**; `packages/platform-email/src/identity.ts` argues
+why, at length, because that is the question the next app will re-ask.
+
+**Setting the two variables is still per project**, and that is the part that
+did not become automatic: a new app with no `RESEND_API_KEY` builds, deploys and
+serves, and then refuses password resets with `503 email_not_configured` in
+production. That refusal is deliberate — the alternative is a reset that reports
+success and delivers nothing — but it means provisioning the key is a real step
+on the checklist, not a nice-to-have.
 
 ---
 

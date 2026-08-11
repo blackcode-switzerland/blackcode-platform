@@ -100,7 +100,7 @@ everything that reaches production.
 > A check you have not watched fail is not a check.
 
 Break the thing it guards, watch it go red, restore. Then ask what it would
-*still* pass on, inject that, and watch again. **Nineteen guardrails in this
+*still* pass on, inject that, and watch again. **Twenty-one guardrails in this
 repo have been found green and inert**, several written by the same session that
 wrote the rule about it. Report which checks you watched fail and how.
 
@@ -153,7 +153,7 @@ risk is.
   21 `platform.*` tables
 - **`SAFETY.md`** — backups, the row-count ledger, and what to do when it goes
   wrong. Read before any phase that touches the database
-- **`CLAUDE.md`** (repo root) — the standing rules, and the nineteen green-but-
+- **`CLAUDE.md`** (repo root) — the standing rules, and the twenty-one green-but-
   inert guardrails that are the reason for rule 3
 - **`docs/adding-an-app.md`** — the current checklist. This refactor changes it;
   agent 7 rewrites it
