@@ -26,22 +26,26 @@ const Short = "Issue tracker — issues, tasks, projects, analytics"
 
 const long = `The issues app: projects, issues, tasks, their comments and their analytics.
 
-  bk issues issue     list, view, create, edit, delete, assign, watch, comment(s),
-                      edit-comment, delete-comment, attach, detach, activity
+  bk issues issue     list, view, create, edit, delete, assign, unassign, watch,
+                      unwatch, comment(s), edit-comment, delete-comment, attach,
+                      detach, attachments, activity
   bk issues task      list, view, create, edit, delete, comment(s)
-  bk issues project   list, view, create, edit, delete, members, updates, comment(s)
+  bk issues project   list, view, create, edit, delete, issues, tasks, members,
+                      add-member, remove-member, updates, comment(s)
   bk issues attachment  files attached to issues, workspace-wide
   bk issues move      move projects/tasks/issues to another workspace (--to)
   bk issues copy      the same, leaving the source in place
   bk issues analytics summary, throughput and distributions for this app
 
-APP-OWNED PLATFORM VERBS — the same three under every app, each answering for
-ITS app:
+APP-OWNED PLATFORM VERBS — the same verbs every app has, each answering for ITS
+app. An app serves only the ones it has routes for, so another app's list is a
+subset of this one, not a copy of it:
 
   bk issues workspace  this app's workspaces: list, show, use, create, edit,
                        transfer, delete
   bk issues member     list, remove, leave
-  bk issues invite     send, list, accept, decline, revoke, pending, candidates
+  bk issues invite     send, list, revoke, candidates; show, accept, decline,
+                       pending (redeeming one addressed to you)
   bk issues user       the people you share a workspace with, in this app
   bk issues upload     store a file against this app
   bk issues trash      this app's recycle bin: list, restore, purge, empty

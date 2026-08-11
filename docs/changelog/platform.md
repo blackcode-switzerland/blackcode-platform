@@ -30,6 +30,47 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-11 — `bk meta` and `bk app list` are an ADDRESS BOOK, not a grant list — the help said otherwise
+
+**No behaviour change. Correcting what the binary CLAIMS, in three places agents
+read before doing anything else.** If you built logic on the old wording, it was
+wrong on 2026-08-10 and this is the notice.
+
+`bk meta`'s `apps` block lists **every app that exists and where it is deployed**.
+It has never been filtered by access since the per-app gate was dropped on
+2026-08-10 (`platform.workspace_apps` and `platform.app_access`). But
+`bk guide platform/overview`, `bk guide platform/cross-app` and the installed
+agent skill all still said the opposite — *"`bk meta` tells you which apps you can
+actually reach; you will not be shown one you have no access to"*.
+
+**How to adapt:**
+
+- Do **not** treat an app's presence in `bk meta` / `bk app list` as a grant.
+- Do **not** read `apps.<slug>.workspaces == []` as *"you have no workspace
+  there"*. It is populated only for the app that answered; for any other app it
+  means **"not known here"**. One deployment cannot answer for another — each
+  app's membership lives in its own schema.
+- To find out what you actually have in an app, ask that app:
+  `bk <app> workspace list`.
+
+Run **`bk skill sync`** to pick up the corrected skill file.
+
+Also corrected in the same pass, all help text only:
+
+- `bk login` said it authenticated against *"a blackcode-issues server"* — one
+  app's name, from before there were two. One login covers every app.
+- `bk <app> search`'s summary said it searched *"the shared entity index"*,
+  which reads as *searches every app* — the cross-app tier that ended on
+  2026-08-10. It returns that app's records only.
+- `bk --help`'s app-owned tier omitted `user`, `inbox` and `storage`, and
+  `bk issues --help` / `bk sales --help` both called the app-owned verbs *"the
+  same three under every app"* while `issues` listed eleven. An app serves the
+  subset it has routes for, and that is deliberate.
+- Both apps' `invite` summaries were still missing `show`, added the day before
+  — the same drift as the top-level list, in the two places that were missed.
+
+---
+
 ## 2026-08-11 — `bk <app> invite show <token>`: preview an invitation before accepting
 
 **New, additive. Nothing changes for existing commands.**

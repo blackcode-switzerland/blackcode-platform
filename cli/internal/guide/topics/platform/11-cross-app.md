@@ -107,8 +107,10 @@ bk sales activity --since 24h
 
 ## Which deployment answers
 
-`bk app list` shows the servers your token reaches. An app you have no access to
-is not in your registry at all, and `bk <app> …` fails naming the app rather than
-sending the request somewhere else.
+`bk app list` shows every app this binary knows and the server each answers on.
+It is an address book, not a grant: an app you have no workspace in is still
+listed, and you find that out from the app itself — `bk <app> workspace list`.
+An app the binary does NOT know fails naming the app, rather than sending the
+request somewhere else.
 
 Related commands: `bk issues search`, `bk sales search`, `bk issues activity`, `bk sales activity`, `bk meta`, `bk app list`

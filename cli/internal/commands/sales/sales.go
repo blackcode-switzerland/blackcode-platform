@@ -53,8 +53,9 @@ const long = `The sales app: the business-development pipeline.
                       permission — the server does not consult them, and bk
                       writes the same either way
 
-APP-OWNED PLATFORM VERBS — the same three under every app, each answering for
-ITS app:
+APP-OWNED PLATFORM VERBS — the same verbs every app has, each answering for ITS
+app. An app serves only the ones it has routes for, so this is a SUBSET of what
+"bk issues" offers, and deliberately so:
 
   bk sales upload     store a file against this app
   bk sales trash      this app's recycle bin: list, restore, purge, empty
@@ -75,7 +76,8 @@ THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
   bk sales workspace  list, show, use. There is no create/edit/delete here: a
                       workspace is the COMPANY (D-3), and you are granted one
   bk sales member     list, remove
-  bk sales invite     send, list, accept, decline, revoke, pending, candidates
+  bk sales invite     send, list, revoke, candidates; show, accept, decline,
+                      pending (redeeming one addressed to you)
   bk sales activity   this app's history (--since 24h)
 
 "bk sales workspace use x" sets THIS app's active workspace and no other's.

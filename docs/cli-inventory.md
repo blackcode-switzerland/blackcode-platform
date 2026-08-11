@@ -2,7 +2,8 @@
 
 > ## ⚠️ A SNAPSHOT, NOT THE REFERENCE. IT WILL GO STALE.
 >
-> **206 commands, captured 2026-08-11 16:56 UTC, from a built `bk` v2.2.0.**
+> **206 commands, captured 2026-08-11 17:24 UTC, from a build of the working
+> tree at v2.2.0 + the help-text corrections of that afternoon.**
 >
 > Every row was read from the **binary**, not from source and not from a doc —
 > a command whose help has drifted looks identical to a correct one in source.
@@ -44,9 +45,9 @@
 | `bk app use` | Switch the home app: which server the bare identity verbs talk to | — |
 | `bk changelog` | What's changed in the API and CLI (read this to get up to date) | — |
 | `bk guide` | The complete usage guide for this bk binary (offline, no auth) | — |
-| `bk login` | Authenticate against a blackcode-issues server | — |
+| `bk login` | Authenticate against any Blackcode app's server | — |
 | `bk logout` | Remove stored credentials | — |
-| `bk meta` | Bootstrap context: who am I + every workspace I can write to | GET /api/meta |
+| `bk meta` | Bootstrap context: who am I + every app + where each command goes | GET /api/meta |
 | `bk profile edit` | Update your profile (name, tagline, avatar URL) | PATCH /api/me |
 | `bk profile view` | Show your profile | — |
 | `bk skill check` | Report whether the skill and the binary are current (exit 9 = update available) | — |
@@ -135,7 +136,7 @@
 | `bk issues project updates delete` | Delete a project health update (author only) | DELETE /api/workspaces/{ws}/projects/{id}/updates/{updateId} |
 | `bk issues project updates list` | List health updates for a project | GET /api/workspaces/{ws}/projects/{id}/updates |
 | `bk issues project view` | Show a single project | GET /api/workspaces/{ws}/projects/{id} |
-| `bk issues search` | Search the shared entity index from the active workspace | GET /api/workspaces/{ws}/search |
+| `bk issues search` | Search this app's entity index from the active workspace | GET /api/workspaces/{ws}/search |
 | `bk issues storage list` | List uploaded files with reference counts and total usage | GET /api/workspaces/{ws}/storage |
 | `bk issues storage rm` | Permanently delete an orphaned file | DELETE /api/workspaces/{ws}/storage/{id} |
 | `bk issues task comment` | Post a comment on a task | POST /api/workspaces/{ws}/tasks/{id}/comments |

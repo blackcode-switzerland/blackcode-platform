@@ -10,11 +10,12 @@ All access goes through the `bk` CLI. There is no supported HTTP API.
 ## First, always
 
 1. `bk guide`  — the complete, current usage guide for the installed binary.
-2. `bk meta`   — who you are, every workspace you can write to, this app's
-                 vocabularies, and every size limit. Pick the workspace by NAME
-                 or SLUG, never by numeric id.
-3. `bk app list` — which apps exist and which you can reach. **There is more
-                 than one, and this skill covers all of them.**
+2. `bk meta`   — who you are, this app's vocabularies and limits, and the
+                 workspaces you belong to IN THE APP THAT ANSWERED. Pick one by
+                 NAME or SLUG, never by numeric id.
+3. `bk app list` — which apps exist and where. **There is more than one, and
+                 this skill covers all of them.** It lists addresses, not
+                 grants: ask `bk <app> workspace list` what you have in one.
 
 ## Rules
 

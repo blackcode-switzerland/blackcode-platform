@@ -43,8 +43,16 @@ func newSearchCmd(acfg Config) *cobra.Command {
 		// The SCOPE wording was narrowed for the same reason: this reads
 		// `platform.entities`, and since 2026-08-10 `apps/issues` is its only
 		// writer, so "every app's entities" over-promises.
-		Short:       "Search the shared entity index from the active workspace",
-		Long: fmt.Sprintf(`Search the shared entity index (`+"`platform.entities`"+`) from the active workspace.
+		// 2026-08-11: "the SHARED entity index" survived that narrowing in both
+		// the Short and the first line of the Long, and it is the word that
+		// misleads — it reads as "searches every app", which is the cross-app
+		// tier that Phase 3 ended. The table is still named, because it is a fact
+		// worth having; what is gone is the claim that anyone else writes to it.
+		Short:       "Search this app's entity index from the active workspace",
+		Long: fmt.Sprintf(`Search this app's entity index (`+"`platform.entities`"+`) from the active workspace.
+
+It returns THIS app's records only. There is no cross-app search: ask each app,
+`+"`bk <app> search`"+`, and the binary is the connector.
 
 Matches titles case-insensitively; a bare number (or #482) also matches the
 workspace #number. Results carry the URN — put it in a description or comment to

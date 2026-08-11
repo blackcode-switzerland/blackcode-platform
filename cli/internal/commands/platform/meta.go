@@ -21,9 +21,21 @@ func newMetaCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:         "meta",
 		Annotations: map[string]string{"routes": "GET /api/meta"},
-		Short:       "Bootstrap context: who am I + every workspace I can write to",
+		Short:       "Bootstrap context: who am I + every app + where each command goes",
 		Long: `Print the agent bootstrap context (GET /api/meta): the authenticated
-user, the active workspace, and EVERY workspace you belong to.
+user, the active workspace, and every workspace you belong to IN THE APP THAT
+ANSWERED — which is your home app, or whichever one ` + "`--app-server`" + ` names.
+
+ONE DEPLOYMENT CANNOT ANSWER FOR ANOTHER. Since 2026-08-10 each app keeps its
+own workspaces and membership in its own schema, and no app holds a grant on
+another's. So:
+
+  - ` + "`apps`" + ` is the ADDRESS BOOK — which apps exist and where they are
+    deployed. It is not a grant list, and being in it does not mean you have a
+    workspace there.
+  - ` + "`workspaces`" + ` is populated ONLY for the app that answered. An empty
+    array under another app means "NOT KNOWN HERE" — never "you have none
+    there". To find out, ask that app: ` + "`bk <app> workspace list`" + `.
 
 Pick the workspace you write to by its NAME/SLUG from the list below — not by the
 numeric id (ids are opaque and easy to confuse). Then target it with

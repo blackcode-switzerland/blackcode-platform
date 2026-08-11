@@ -28,10 +28,16 @@ func newLoginCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "login",
 		Annotations: map[string]string{"routes": "GET /api/me"},
-		Short:       "Authenticate against a blackcode-issues server",
+		Short:       "Authenticate against any Blackcode app's server",
 		Long: `By default, opens a browser to /cli/authorize on the server, captures
 the minted token via a loopback HTTP server, and saves credentials to
 ~/.config/bk/config.json (mode 0600).
+
+ONE LOGIN COVERS EVERY APP. --server names whichever app's URL you have; the
+token it mints is valid against all of them, and `+"`bk login`"+` also learns the
+address book, so `+"`bk <app> …`"+` routes without anyone typing a second URL.
+It does NOT grant anything: whether you have a workspace in an app is that app's
+own question, and `+"`bk <app> workspace list`"+` asks it.
 
 Use --token to paste a token manually instead (useful for headless/CI).`,
 		RunE: func(cmd *cobra.Command, args []string) error {

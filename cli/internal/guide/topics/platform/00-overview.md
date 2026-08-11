@@ -30,8 +30,10 @@ Read `bk guide platform/apps` before doing anything that writes. It is the full
 rule, with the reasoning, and it is what stops a file landing in the wrong app.
 
 Run `bk --help` for the apps this binary knows, and `bk <app> --help` for one
-app's commands. `bk meta` tells you which apps you can actually reach; you will
-not be shown one you have no access to.
+app's commands. `bk meta` lists every app and where it is deployed — an ADDRESS
+BOOK, not a grant list. Being listed does not mean you have a workspace there,
+and `bk meta` fills in `workspaces` only for the app that answered it. Whether
+you can work in an app is that app's own question: `bk <app> workspace list`.
 
 A removed spelling never dead-ends: it exits non-zero and names its replacement
 on stderr, so a stale script tells you exactly what to type instead.
