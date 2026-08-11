@@ -1,0 +1,571 @@
+FROM:    agent6
+TO:      master
+DATE:    2026-08-10
+PHASES:  5 (retire the gates) — DONE.  6 (fan-out search) — DECLINED, §4.
+STATUS:  REPLY — gate green, four commits, not pushed.
+         ** I FOUND A LIVE BUG THAT PREDATES THIS PHASE: THE SALES WEB UI
+            404'd FOR EVERY SALES-ONLY ACCOUNT. §2. IT IS FIXED. **
+--------------------------------------------------------------------------------
+
+SUMMARY
+
+The gates are gone — code, routes, commands, screens and tables. `/api/meta`'s
+registry is the address book, and your §2a question turned out to be the whole
+phase, exactly as you suspected.
+
+Six things to read even if you skip the rest:
+
+  1. §2 — ** apps/sales' DASHBOARD 404'd FOR EVERY SALES-ONLY USER, and had
+     since Phase 2. ** Not caused by me and not in my brief. Measured on a
+     brand-new signup. Every API route worked, which is why four phases of
+     route-level verification missed it.
+  2. §3 — your §2a answer. The registry could not stay grant-derived, AND it was
+     already answering falsely. I have the measurement.
+  3. §1 — the precondition: YES, I got a `sales` row. Also: `error_events.
+     workspace_id` has never been written, on any of 328 rows, which retires the
+     stated reason the `app` column exists.
+  4. §4 — Phase 6 DECLINED, and NOT for the reason you feared. Your constraint 2
+     does not make it incoherent. Something else does, and it is your call.
+  5. §6 — I added the guard that would have caught §2, after watching both
+     existing boundaries stay GREEN on the real regression.
+  6. §7.4 — I destroyed my own uncommitted work with `git checkout`, and one of
+     my new deprecation rows was unreachable.
+
+
+================================================================================
+1. §1's PRECONDITION — YES, AND SOMETHING ELSE
+================================================================================
+** I OBSERVED A `sales` ROW IN `platform.error_events`. **
+
+Method: injected a deliberate `throw` into `apps/sales`' prospects GET behind a
+query flag, signed in as a brand-new sales account through the app's own
+`/api/auth/register` + next-auth, hit it, read the row, reverted the injection.
+Real HTTP, real session, the real `apiHandler`, local only.
+
+    id  | app   | level | code           | status | route
+    333 | sales | error | internal_error | 500    | /api/workspaces/agent-6-probe/prospects
+
+Before: 327 rows, all `issues`. After: 327 `issues`, 1 `sales`.
+
+So sales' `AppContext` does supply its slug through the real request path, not
+only in a unit test. ** I did NOT run `SET NOT NULL`, per your §4. ** It is now
+schedulable as its own step. `git diff` is clean — the injection is not in any
+commit.
+
+--- ** AND THE REASON THE COLUMN EXISTS IS WRONG ** ---------------------------
+PLAN.md §4b justifies the `app` column like this:
+
+  > Today it has a bare `workspace_id` with no foreign key... After the split
+  > there are two, and `workspace_id = 1` means two different things depending on
+  > who wrote it. Every error becomes ambiguous and `bk super-admin errors`
+  > starts reporting confidently wrong workspaces.
+
+    SELECT count(*), count(user_id), count(workspace_id) FROM platform.error_events;
+      328 | 89 | 0
+
+** `workspace_id` IS NULL ON ALL 328 ROWS. IT HAS NEVER BEEN WRITTEN. ** The
+column is in `ErrorEventRow` as an optional field and NO call site supplies it;
+`safeLog` passes `row.workspace_id ?? null`. The ambiguity the `app` column was
+added to resolve could not have occurred.
+
+The column is still worth having — it says which deployment threw, and `user_id`
+IS populated 89 times against the shared `users` table, so it disambiguates the
+row that way. But the stated reason is not the real one, and a `SET NOT NULL`
+scheduled on the strength of that paragraph is being scheduled on a premise
+nobody checked.
+
+`error_events.workspace_id` is the same shape as `transaction_log`: a column
+with no writer. It is your call whether to give it one or drop it; I did neither.
+
+
+================================================================================
+2. ** THE BUG THAT WAS ALREADY LIVE: SALES' WEB UI 404'd FOR ITS OWN USERS **
+================================================================================
+Found while removing `listMyWorkspaces`' `{ app }` filter, because that filter
+had a call site nobody had looked at.
+
+`apps/sales/app/dashboard/[ws]/layout.tsx` resolved membership with
+
+    listMyWorkspaces(getDb(), user.id, { app: APP_SLUG })
+
+— the SHARED helper, reading `platform.workspaces`. Phase 2 moved this app's
+workspaces to `sales.workspaces` and repointed the SIBLING
+`app/dashboard/layout.tsx`; this file, one directory down, was missed.
+
+MEASURED, not inferred. A brand-new sales signup (the account Phase 2 exists to
+create), loading their own dashboard:
+
+    GET /dashboard/agent-6-probe   ->  HTTP 404, "This page could not be found"
+
+while the same session against the same app:
+
+    GET /api/meta                                    -> 200, active workspace
+    GET /api/workspaces/agent-6-probe/prospects      -> 200
+    GET /api/workspaces                              -> 200, their workspace
+
+** The entire sales web UI was unreachable for anyone without an ISSUES
+workspace, and every API route worked. ** That is why agents 3, 4 and 5 did not
+catch it — all three drove routes, all three explicitly flagged "the members page
+and prospect detail page are still owed a look in a browser", and the thing owed
+was this.
+
+Fixed: it reads `listWorkspacesForUser` from this app's own query layer. After:
+`GET /dashboard/agent-6-probe` -> HTTP 200 with the real shell rendered
+(Prospects / Pipeline / Meetings present).
+
+** ONE THING WORTH MORE THAN THE FIX: ** dropping only the `{ app }` filter —
+the minimal change my phase required — would have been WORSE than leaving the
+bug. The page would then have matched any PLATFORM workspace sharing the slug,
+and migration 0004 mirrored ids and slugs on purpose. That is a cross-tenant
+frame rendered to the wrong person. It had to move to sales' own source, and I
+would not have seen that if I had treated the filter removal as mechanical.
+
+Changelog entry in `docs/changelog/sales.md`, dated, describing the symptom.
+
+
+================================================================================
+3. §2a — WHAT THE REGISTRY DERIVES FROM NOW
+================================================================================
+You said "this may be the whole phase". It was.
+
+--- WHAT IT WAS ---------------------------------------------------------------
+`/api/meta`'s `apps` came from `appsReachableByUser`, joining `app_access` to
+`workspace_apps`. `bk app list` separately called `GET /api/workspaces/{ws}/apps`.
+
+--- ** IT WAS ALREADY WRONG, AND THAT IS THE ANSWER ** -------------------------
+I did not have to reason about what breaks when `app_access` goes, because I
+could measure what it was already saying. `enableAllAppsForWorkspace` granted
+EVERY enabled app to every new workspace, so a brand-new ISSUES signup was told:
+
+    GET /api/meta (on issues), user 120:
+      apps.issues.workspaces = ["agent-6-both-s-workspace"]
+      apps.sales.workspaces  = ["agent-6-both-s-workspace"]     <-- a lie
+
+And against sales, the same person, same second:
+
+    GET /api/workspaces/agent-6-both-s-workspace/prospects  -> 404 workspace_not_found
+    GET /api/meta (on sales)                                -> workspaces: []
+    SELECT count(*) FROM sales.workspace_members WHERE user_id=120  -> 0
+
+The grants named `platform.workspaces` ids for an app whose workspaces had moved
+to its own schema. So the registry was not about to become meaningless; it was
+already reporting a workspace in an app that answers 404 for it.
+
+--- THE ANSWER ----------------------------------------------------------------
+** `platform.apps` — the address book. ** Which is what PLAN.md §6b already said
+`bk app` narrows to.
+
+Grant-derivation cannot be replaced, and this is the load-bearing sentence:
+reachability now lives in each app's OWN membership table, and no deployment
+holds a Postgres grant on another app's schema (§4.3). **A server can answer for
+itself and for nobody else.** Same wall as CLAUDE.md finding #14.
+
+So `apps` is every enabled row of `platform.apps`, and `workspaces` is populated
+ONLY for the app answering the request. `[]` for another app means "not known
+here", NOT "you have none there" — conflating those two is precisely what
+produced the false claim above.
+
+    after, same user, same request:
+      apps.issues.workspaces = ["agent-6-both-s-workspace"]
+      apps.sales.workspaces  = []
+
+--- WHAT IT COSTS, AND WHY I DECIDED IT RATHER THAN ASKING --------------------
+docs/platform-architecture.md §4.5: *"an agent working for somebody with no sales
+access must not learn that a sales app exists."* ** I RETIRED IT. ** I rewrote
+the section rather than footnoting it, per the docs rule.
+
+I decided rather than reporting because the alternative is not available: there
+is no implementation of that rule left to choose. The only other option —
+listing the current app alone — is worse than it looks, and I checked rather
+than assumed: `applyAppRegistry` calls `cfg.SetAppServers(servers)`, which
+REPLACES the map. A single `bk meta` from a sales-homed CLI would have wiped the
+`issues` entry out of a both-apps user's config, breaking agent 5's north star
+(`bk issues issue create` from a sales-homed CLI) on a read-only diagnostic.
+
+The rule was also only ever skin-deep: `cli/internal/guide/guide.go` embeds
+`topics/*/*.md` — one binary, every app's guide. Anybody who installs `bk`
+already holds sales' documentation.
+
+** If you disagree, this is the one decision in the phase I would most want
+reviewed. ** Reverting means restoring `appsReachableByUser`, which means not
+dropping `app_access`, which is most of Phase 5.
+
+
+================================================================================
+4. PHASE 6 — DECLINED, AND NOT FOR YOUR REASON
+================================================================================
+--- ** YOUR CONSTRAINT 2 DOES NOT MAKE IT INCOHERENT ** ------------------------
+You wrote: *"'search this workspace across apps' is not [well defined], because
+the workspace is per app now. Decide what `--all-apps` means and say so plainly."*
+
+I can say it plainly: **`--all-apps` searches EACH APP'S OWN ACTIVE WORKSPACE.**
+That is well defined, it is "search my stuff", and agent 5's `ActiveWorkspaces`
+map is exactly the right input. The incoherent phrasing is "search THIS workspace
+across apps" — nobody needs that, and nothing would have to build it.
+
+Your constraint 1 also got easier, not harder: with a grant-derived registry the
+CLI had to know which apps a user could reach. With the address book it asks all
+of them and reports per-app status. An app it cannot reach is a row saying so,
+not an error. That is more honest than the old behaviour.
+
+--- ** WHY I DECLINED ANYWAY: IT NEEDS A NAME, AND THE NAME IS YOURS ** --------
+A fan-out spans apps, so it cannot live under `bk <app> …` — `bk issues search
+--all-apps` says "issues" in the command and then does not mean it. It has to be
+a BARE verb.
+
+**`bk search` was removed as a bare verb ONE DAY AGO**, in Phase 4, with a
+deprecation row that currently tells every agent:
+
+    `bk search …` is now `bk <app> search …` — there is no cross-app index any
+    more. Try `bk issues search <query>` …
+
+Reintroducing `bk search` as a fan-out makes that hint false while it is still
+the live recovery path for the removal. Inventing a new bare verb (`bk find`,
+`bk search-all`) adds vocabulary to a surface Phase 4 just spent a breaking
+release shrinking.
+
+That is a decision about the CLI's advertised surface, one release after a
+breaking change to the same spelling. It is not mine to take quietly, and the
+README says a brief that turns out to be wrong is worth more than obedience —
+so is a gap the brief did not anticipate.
+
+Everything else is ready. The design is above; it is half a day whenever you name
+it. PLAN.md already records the loss as deliberate, so nothing is blocked.
+
+
+================================================================================
+5. WHAT I REMOVED, AND THE TWO DROPS
+================================================================================
+--- 5a. CODE ------------------------------------------------------------------
+`requireAppAccess` · `WorkspaceSource.assertAppAccess` · `isAppAccessEnforced` ·
+`PLATFORM_ENFORCE_APP_ACCESS` · `platform-db/src/app-access.ts` (whole file) ·
+`listMyWorkspaces`' `{ app }` filter · `listForUser`'s `scopedToApp` ·
+`platformWorkspaceSource`'s `appSlug` argument · the four
+`/api/workspaces/{ws}/apps**` routes (issues AND scaffold) · `?all=1` on
+`GET /api/workspaces` · the Apps settings panel · **the "No access to <APP>"
+dashboard screen in apps/issues** (sales deleted its copy in Phase 2; this was
+the other half) · the app-grant half of the invitation flow.
+
+CLI: `bk app enable|disable|default-access` and `bk app access list|grant|revoke`
+removed; `bk <app> workspace list --all` and `bk <app> invite send --app`
+removed. Five deprecation rows in the same commit, each watched firing.
+
+** `bk app list` NO LONGER NEEDS AN ACTIVE WORKSPACE. ** It read
+`GET /api/workspaces/{ws}/apps`, which only issues mounted — your §4.5 flag from
+agent 5. It reads the learned config registry now and probes. Observed working
+from a config with no token and no workspace at all.
+
+`POST …/invitations` REJECTS a body still carrying `app` (400 + suggestion)
+rather than ignoring it: silently dropping it would tell a client its invitation
+granted access it did not.
+
+--- 5b. THE DROPS — migration 0045, rollback in docs/sql -----------------------
+Local, port 5432. Production counts are declared in `baseline.txt`.
+
+    BEFORE (local)   workspace_apps 8 · app_access 10 · transaction_log 4
+                     transaction_log newest = 2026-05-22  (stale, as PLAN.md §4b predicts)
+
+** NO ROW-COUNT ASSERTION ON THE TWO GATE DROPS, AND THE HEADER SAYS WHY. **
+SAFETY.md's assertion is for a DELETE with a WHERE. These are whole-table drops
+whose readers are already gone; the counts differ per database (production 20/49,
+local 8/10), so an exact assertion would block the deploy for being run somewhere
+else — which trains people to delete the guard. The real risk is dropping
+something still depended on, and `DROP TABLE` WITHOUT `CASCADE` is that
+assertion, enforced by Postgres. Watched: a dependent view made it exit 3 and
+NAME the view.
+
+transaction_log IS gated, on `max(created_at)` per your §2b. Watched refusing:
+inserted a fresh row, ran it, got
+
+    ERROR: REFUSING to drop platform.transaction_log: its newest row is
+    2026-08-11 ... (within 30 days). Something is writing this table that the
+    Phase 5 audit did not find.
+    psql EXIT=3, nothing dropped.
+
+It reports what it destroys (`RAISE NOTICE` with all three counts) before
+dropping — irreversible commands report WHAT, not how many.
+
+** IT IS IDEMPOTENT, AND MY FIRST VERSION WAS NOT. ** Re-running after the
+rollback (which restores the two gates and deliberately leaves transaction_log
+out) died on `relation "platform.transaction_log" does not exist` before reaching
+any DROP. Found by actually running the rollback/re-apply cycle SAFETY.md asks
+for. Every read and drop is `to_regclass`-guarded now; applied 3x, exit 0.
+
+Rollback script: applied, re-applied (idempotent), composite FK confirmed back.
+`\set ON_ERROR_STOP on` watched DISCRIMINATING — with it, a bad statement exits
+3; without it, psql prints ERROR and exits **0** (findings #7/#15).
+
+--- 5c. ** verify.sh COULD NOT DECLARE A DROP AT ALL ** ------------------------
+Your §5 says "with the drops DECLARED in the baseline first". **There was no such
+declaration.** `verify-diff.awk` rule (c) fails any table in the baseline and
+missing from the database, and the delta arithmetic never runs because there is
+no live row to compare. The one phase whose job is dropping tables would have had
+to run against a guaranteed red — which is the state where a real loss hides,
+because the operator is already expecting it.
+
+Added `# <table> DROPPED <reason>`. Watched fail FOUR ways:
+
+  1. declared DROPPED, tables still present (migration not run)  -> FAIL, 3 tables
+  2. undeclared drop                                             -> FAIL, 3 tables
+  3. declared and gone                                           -> INFO + PASS,
+     reporting the row count each took with it
+  4. declaration naming a table not in the baseline (a typo)     -> FAIL
+
+`DROPPED` is kept out of the delta sum deliberately: `"DROPPED" + 0` is 0 in awk,
+so folding it in would have silently declared "expect no change" — a declaration
+that reads strict and asserts nothing.
+
+`verify.sh` green after every step and at the end.
+
+
+================================================================================
+6. WHICH GUARDS I WATCHED FAIL, AND THE ONE I HAD TO WRITE
+================================================================================
+--- ** 6.1 THE HEADLINE: BOTH EXISTING BOUNDARIES WERE BLIND TO §2's BUG ** ----
+I injected the real regression back into `app/dashboard/[ws]/layout.tsx` and ran
+`apps/sales/lib/app-isolation.test.ts`:
+
+    Tests  5 passed (5)      <-- GREEN on the bug that 404'd every sales user
+
+Neither existing case is wrong; it is not what they check:
+  * `imports nothing from another app` — `@blackcode/platform-db` is not another
+    app. It is the package every app is SUPPOSED to import.
+  * `queries no other app schema` — the file names no schema at all, and
+    `platform` is not in OTHER_SCHEMAS and must not be (sales reads
+    `platform.users` on every request).
+
+** The gap is a shared helper whose PREMISE moved. ** Agent 4's §3 (searchRoute
+leaking issues' titles into sales) and agent 5's §4.2 (`/api/users` answering
+from issues' membership) are the same shape. This is the third instance and the
+first one that is guarded.
+
+NEW: a third boundary in that file — no file this app SERVES may import a
+platform TENANCY reader (`listMyWorkspaces`, `getWorkspaceForUser`,
+`getWorkspaceById`, `listWorkspaceMembers`, `setActiveWorkspace`,
+`getMembership`).
+
+Watched RED on three spellings, each ASSERTED to have landed first (agent 5 §5.3):
+    (a) named import                    -> RED
+    (b) aliased `listMyWorkspaces as pf`-> RED  (matching the local name would miss it)
+    (c) `import * as pdb` + `pdb.list…` -> ** GREEN on the first version. ** Found
+        by asking what it would still pass on, then closed.
+
+** AND IT REPORTED ITSELF. ** Once (c) was closed, the guard flagged
+`lib/app-isolation.test.ts` — its own prose names the banned helpers. That is the
+FIFTH self-reference trap on this project (cited-tests-exist's header counts
+four). Test files are excluded from the scan now, which is also right on the
+merits and is a stated gap.
+
+STILL PASSES ON: raw SQL, a re-export through a local module, and any tenancy
+reader added to platform-db and not added to the list. The "has something to look
+for" assertion stops the list emptying silently; it cannot know about a function
+nobody told it about.
+
+--- 6.2 WATCHED RED, RESTORED, EACH INJECTION ASSERTED ------------------------
+  * `platform-route-coverage.test.ts` — re-added `bk app list`'s claim on the
+    dropped route -> RED naming the command. (It also fired unprompted the moment
+    I removed the routes, before I touched the CLI — that is what told me the
+    CLI half was owed.)
+  * `apps/issues/lib/cli-parity.test.ts` — mounted a route no command claims ->
+    RED naming `GET /api/workspaces/{ws}/agent6probe`.
+  * `meta-shape.test.ts`'s premise assertion — my registry change left its mocks
+    stale and the file 500'd; the "the fixture must produce a real 200 document"
+    assertion caught it loudly instead of letting five cases silently check an
+    error envelope. That assertion earned its keep today.
+  * migration 0045's transaction_log gate, its no-CASCADE dependency guard, and
+    the rollback's `ON_ERROR_STOP` — §5b.
+  * verify.sh's `DROPPED`, four ways — §5c.
+  * The widened `packages/*` eslint config (finding #19) caught TWO dead imports
+    after the tables went (`foreignKey`, `recordPlatformEvent`) plus an unused
+    type. Third time that config has paid since it was widened.
+
+--- 6.3 A GUARD I DELETED RATHER THAN ADAPTED ---------------------------------
+`apps/issues/lib/api/workspace-source.test.ts` had three cases about
+`assertAppAccess`: a kill-switch premise, an ADMIT case, and a REFUSE case driven
+through a slug-aware fake executor (itself the fix for a version that stayed green
+on `platformWorkspaceSource(db, 'sales')`). All three now assert something that
+cannot happen — there is no gate, no switch, and no slug to get wrong. Deleted,
+with the reasoning in the header, rather than left as green stubs.
+
+Same for two cases in `apps/sales/lib/workspace-source.test.ts`. What that COSTS
+is stated in both files: neither app now has a test proving a non-member of an
+APP is refused, because that is not a state. The refusal that still matters — a
+non-member of the WORKSPACE — is `resolveWorkspace`'s 404.
+
+
+================================================================================
+7. §5's CHECKS — WHAT I OBSERVED, AND WHERE I WAS WRONG
+================================================================================
+Local only. Two dev servers (issues :3200, sales :3100), real HTTP, real
+sessions, real bearer token, `BK_CONFIG_DIR=/tmp/bk-agent6-cfg` from the first
+`bk` invocation. No production credential held or asked for.
+
+(1) AN ISSUES MEMBER CAN STILL USE ISSUES — the gate is gone, not inverted.
+    `/api/meta` 200 with their workspace; `bk issues workspace list`,
+    `bk issues member list`, `bk issues project create`, `bk issues issue create`
+    -> `created #1`. The dashboard renders.
+
+(2) A SALES USER IS UNAFFECTED — and better than before (§2). `/api/meta` 200,
+    prospects 200, `GET /api/workspaces` returns their sales workspace, and the
+    dashboard now renders instead of 404ing.
+
+(3) `/api/meta`'s REGISTRY — §3. Both apps listed with `base_url`; `workspaces`
+    only for the app answering; `links.relations` gone (agent 5 §4.6), URN format
+    kept.
+
+(4) `bk` END TO END from ONE binary and ONE config:
+      bk app list      -> both apps, servers, REACHABLE yes/yes  (no workspace needed)
+      bk meta          -> routing table, both apps
+      bk issues …      -> workspace list, member list, project + issue created
+      bk sales …       -> "(you are a member of no sales workspace — each app has its own)"
+    All five removed spellings + both removed flags exit non-zero with a hint
+    naming what to do instead.
+
+(5) PHASE 6 — not done, §4.
+
+--- ** 7.1 bk meta WAS ABOUT TO MISLEAD AN AGENT, AND I CHANGED IT ** ----------
+The apps table printed `—` for another app's workspaces. With the registry now
+listing apps this server cannot answer for, `—` reads as "you have none there" —
+a claim the output cannot make, and one that would make an agent skip an app it
+can actually use. It prints `not asked` with a footnote pointing at
+`bk <app> workspace list`.
+
+--- 7.2 WHAT I COULD NOT VERIFY ----------------------------------------------
+  * Anything in production or on Neon. No credentials held or requested. The
+    production counts in `baseline.txt` (app_access 48) differ by one from your
+    §1 (49) — measured at different moments, worth re-reading before the drop.
+  * A real Vercel Blob callback. Same gap agents 4 and 5 report.
+  * Google sign-in. Same as agents 3, 4 and 5.
+  * The issues web UI in a browser beyond the dashboard shell — I removed the
+    Apps panel from workspace settings and confirmed it builds and typechecks,
+    but did not look at the settings page rendered.
+  * `bk skill` output against the new tree.
+
+--- 7.3 THINGS I DID THAT THE BRIEF DID NOT ASK FOR, so you can overrule -------
+  a. Fixed the sales dashboard 404 (§2). Out of scope; it was in the code I was
+     changing and the minimal change would have made it cross-tenant.
+  b. Added `DROPPED` to verify.sh (§5c). Your §5 assumes it exists.
+  c. Removed `bk <app> workspace list --all` and `bk <app> invite send --app`.
+     Both were pure gate surface; leaving them would have left flags that filter
+     by a dropped table.
+  d. Removed `links.relations` from `/api/meta` (agent 5 §4.6 flagged it for this
+     phase). `bk link` is gone and no app writes the table.
+  e. Wrote the new isolation guard (§6.1).
+
+--- 7.4 WHERE I WAS WRONG ----------------------------------------------------
+  a. ** I DESTROYED MY OWN UNCOMMITTED WORK. ** To undo one injection I ran
+     `git checkout apps/sales/lib/app-isolation.test.ts` — a file whose NEW guard
+     was uncommitted. It reverted to HEAD and took the whole guard with it. Local,
+     rewritten from context, and the rewrite was re-verified against all three
+     injections. The lesson is agent 5's §9.2 one directory over: a command that
+     "undoes a change" undoes every change in its target. Commit a new guard
+     before injecting into anything near it.
+  b. ** MY FIRST DEPRECATION-HINT TEST WAS A FALSE NEGATIVE. ** I looped
+     `for c in "app enable issues"; do bk $c; done` and reported that NONE of my
+     five new hints fired. zsh does not word-split unquoted expansions, so the
+     whole string arrived as one argv element and cobra reported it verbatim. All
+     five fire correctly when invoked properly. This is agent 5's §5.3 exactly —
+     an injection you have not asserted landed is not an injection — and it
+     nearly went into this file as a finding.
+  c. ** ONE DEPRECATION ROW I WROTE WAS UNREACHABLE. ** I added an `app list` row
+     warning that its columns had narrowed. Command keys match cobra's
+     `unknown command "<sub>" for "<parent>"`, and `list` still EXISTS under
+     `bk app`, so that error is never produced; `bk app list --bogus` is an
+     unknown FLAG and matches nothing. Verified rather than reasoned about, then
+     deleted with a note. A command whose OUTPUT changed while its spelling did
+     not has no vehicle in that table — that is what the changelog is for.
+  d. My first migration was not idempotent (§5b).
+  e. My first tenancy guard missed namespace imports and then reported itself
+     (§6.1).
+
+--- 7.5 PROBE ROWS LEFT IN LOCAL DEV, ON PURPOSE ------------------------------
+Two accounts and their workspaces, all named `agent6*`:
+
+    platform.users 119 (agent6probe@blackcode.ch), 120 (agent6both@blackcode.ch)
+    sales.workspaces 1023 (agent-6-probe)
+    platform.workspaces 303 (agent-6-both-s-workspace) + 1 project, 1 issue
+
+** I did NOT delete them, and that is a decision. ** Removing them means a
+cascade across six tables to tidy local dev, and cleaning up probe rows is
+exactly the operation that destroyed data on this project once already
+(SAFETY.md's box, agent 5 §9.2). They are harmless, clearly named, and local. The
+API token I minted through `POST /api/tokens` I DID delete, inside a transaction
+asserting `ROW_COUNT = 1` — a credential is worth the one-row delete.
+
+`verify.sh` is green against a baseline captured before them; whoever re-captures
+the local baseline should know the increases are mine.
+
+
+================================================================================
+8. THE GATE, AND THE COMMITS
+================================================================================
+From the repo root:
+
+  npm run typecheck            10/10
+  npx turbo test --force       4/4 — issues 252 / 76 skipped, sales 83 / 8
+                               skipped (+3 mine), scaffold 11, platform-testing 37
+  npm run lint                 0 errors, 7 warnings (all pre-existing React hooks)
+  npm run build                3/3
+  cd cli && go build / vet / test    7/7 packages ok
+  cd cli && make routes        RUN. routes.json -30 lines (the six removed
+                               commands' claims)
+
+FOUR COMMITS, local, not pushed:
+  074bcdc  feat(platform): the per-app access gate is gone — membership is the whole answer
+  754ba53  feat(db): drop workspace_apps, app_access and transaction_log
+  203b252  docs: the per-app gate is gone, and the registry is an address book
+  209c2cc  test(sales): guard the boundary the dashboard bug crossed, and honest bk meta
+
+
+================================================================================
+9. FOR THE HUMAN, AND FOR PHASE 7
+================================================================================
+--- 9a. THE HUMAN, IN THIS ORDER ---------------------------------------------
+  1. Neon branch `pre-phase-5` + a version-matched `pg_dump` (SAFETY.md's box —
+     `backup.sh` still cannot dump production as written).
+  2. RE-MEASURE before deploying. `baseline.txt` declares the three drops; if
+     `transaction_log`'s newest row is recent, the migration REFUSES and that is
+     the correct outcome — do not work around it.
+  3. Deploy web issues, then web sales. Migration 0045 runs with issues'
+     `RUN_MIGRATIONS`.
+  4. `verify.sh` — expect three INFO lines and PASS.
+  5. ** Remove `PLATFORM_ENFORCE_APP_ACCESS` from BOTH Vercel projects. **
+     Nothing reads it. `vercel env rm PLATFORM_ENFORCE_APP_ACCESS production`.
+  6. This is a BREAKING CLI change (six commands, two flags). It needs a CLI
+     release, and `docs/devops.md`'s order: web (both), npm, web (both) again.
+  7. Delete the Neon branch once verified.
+
+--- 9b. PHASE 7 ---------------------------------------------------------------
+  * `workspace_invitations.app` now has NO reader. New rows are NULL; historical
+    rows kept. Decide it deliberately — do not let it become another
+    `transaction_log`.
+  * `error_events.workspace_id` — §1. Give it a writer or drop it.
+  * `WorkspaceSource.getById` still has no caller (agent 4 §9.5, agent 5 §9.6).
+    The interface is six methods now, one of which nobody calls.
+  * The scaffold lost its `apps` route and its `platformWorkspaceSource` call
+    changed shape. Phase 7 gives it its own tenancy; `assertAppAccess` is no
+    longer a method it has to explain.
+  * `docs/adding-an-app.md` needed no change for this phase — it never mentioned
+    the gate. That is worth a look rather than relief: the checklist may be
+    silent about tenancy where it should be loud.
+
+--- 9c. YOUR §6, ITEM BY ITEM ------------------------------------------------
+  1. "The registry question — this may be the whole phase." It was. §3.
+  2. "Whether workspace_apps has other readers." The Apps panel, `bk app list`,
+     `bk app enable/disable/default-access`, the invitation's `getWorkspaceApp`
+     check, `enableAllAppsForWorkspace` in createWorkspace, and sales' seed
+     script. Six beyond the one you knew.
+  3. "Whether Phase 6 is coherent at all." It is. §4.
+  4. "Whether removing requireAppAccess leaves a hole." ** It does not, and you
+     had the right reason. ** Membership is per app and that IS the gate. I read
+     it: the 403 was reachable only after `getForUser` had already confirmed
+     membership in THIS app's table, so every caller it could refuse is a member
+     of a workspace belonging to the app refusing them.
+  5. "Cheaper to say it now than to have agent 7 document it." §2, §1's second
+     half, and §7.4.
+
+--------------------------------------------------------------------------------
+WHAT I NEED FROM YOU: a ruling on §3 (retiring §4.5's discovery rule — the one
+decision that is hard to reverse), on §4 (Phase 6's name, if you want it), and on
+§7.3. Everything else is done, green, and committed.
+--------------------------------------------------------------------------------
