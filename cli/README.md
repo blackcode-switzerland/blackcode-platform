@@ -55,7 +55,7 @@ echo "$MY_TOKEN" | ./bk login --server "$SERVER_URL" --token
 There are no `BK_SERVER` / `BK_TOKEN` env vars — the servers and token live in the
 config file, chosen at login time.
 
-Login also **learns the app address book** (3.0.0): each app's server, read from
+Login also **learns the app address book** (2.0.0): each app's server, read from
 the platform's own `/api/meta`. `--server` may name any app — the token works on
 all of them, and whichever one you log into becomes the *home app*.
 
@@ -71,16 +71,18 @@ somewhere else.
 
 ## Active workspace
 
-Projects, issues, tasks, labels, members, and invitations are scoped to a
-workspace. Pick one once:
+An app's records are scoped to a workspace, and **each app remembers its own** —
+they are separate tables since 2026-08-10, so one app's active workspace says
+nothing about another's:
 
 ```sh
-./bk workspace list            # active row marked with *
-./bk workspace use acme        # by slug or numeric id
+./bk issues workspace list          # active row marked with *
+./bk issues workspace use acme      # by slug or numeric id
+./bk sales  workspace use acme      # a DIFFERENT setting, same command shape
 ```
 
-Workspace-scoped groups (`label`, `member`, `invite`) require an active
-workspace; workspace paths accept the slug or the numeric id.
+Workspace-scoped groups (`label`, `member`, `invite`, `trash`, …) are app-owned
+and need that app's active workspace. Paths accept the slug or the numeric id.
 
 ## Output formats
 
@@ -94,8 +96,8 @@ Every read command supports a global output flag, so you can pipe into `jq`,
 ```
 
 ```sh
-./bk project list --json | jq '.[].name'
-./bk issue list --project 6 --yaml > issues.yaml
+./bk issues project list --json | jq '.[].name'
+./bk issues issue list --project 6 --yaml > issues.yaml
 ```
 
 ## Exit codes
@@ -112,11 +114,18 @@ Stable across releases so scripts/agents can branch on outcome:
 | 5 | not found (404) |
 | 6 | validation error (400/422) |
 | 7 | user aborted at a confirm prompt |
+| 8 | this binary is below `CLI_MIN_VERSION` — upgrade, nothing else will work |
+
+**409 exits 2, not 6.** A conflict is the server refusing a well-formed request
+on content grounds, which is a usage problem for the caller — `classify()` in
+`cmd/bk/main.go` owns the table and says why.
 
 ## Confirmations and non-interactive use
 
-Destructive commands that prompt (`project delete`, `project remove-member`,
-`issue delete`, `issue detach`, `undo`) ask before acting. Skip the prompt with:
+Destructive commands prompt before acting — `bk issues project delete`,
+`bk issues issue delete`, `bk sales prospect delete` and the rest. (They are
+app-owned since 2026-08-10; `bk undo` was removed entirely.) Skip the prompt
+with:
 
 - `--yes` / `-y` on the command,
 - the env var `BK_NO_PROMPT=1` (set this for agents/CI), or
@@ -132,8 +141,8 @@ markdown without quoting it (the `*-file` form wins if both are given):
 - `--description-file FILE` / `--body-file FILE`
 
 ```sh
-printf '## Plan\n- item\n' | ./bk issue create --project 6 --title "..." --description -
-./bk issue comment 42 --body-file ./review.md
+printf '## Plan\n- item\n' | ./bk issues issue create --project 6 --title "..." --description -
+./bk issues issue comment 42 --body-file ./review.md
 ```
 
 ## Attaching files
@@ -141,12 +150,12 @@ printf '## Plan\n- item\n' | ./bk issue create --project 6 --title "..." --descr
 `--file` uploads a local file and embeds it **inline** in the description/comment
 body — images preview, video/audio get players, everything else gets a download
 card (the same result as web drag-and-drop). It's repeatable and works on
-`issue/task/project create` and `issue comment`:
+`bk issues issue|task|project create` and `bk issues issue comment`:
 
 ```sh
-./bk issue   create --project 6 --title "Crash" --file ./screenshot.png --file ./trace.log
-./bk issue   comment 42 --body "see clip" --file ./demo.mp4
-./bk project create --name "Q3 brief" --file ./brief.pdf
+./bk issues issue create --project 6 --title "Crash" --file ./screenshot.png --file ./trace.log
+./bk issues issue comment 42 --body "see clip" --file ./demo.mp4
+./bk issues project create --name "Q3 brief" --file ./brief.pdf
 ```
 
 `--file` *appends* to the body. For a **structured** doc (files under specific
@@ -160,7 +169,7 @@ cat > doc.md <<'MD'
 ## Recording
 [](<~/clips/screen recording (1).mov>)
 MD
-./bk issue create --project 6 --title "Bug" --description-file doc.md
+./bk issues issue create --project 6 --title "Bug" --description-file doc.md
 ```
 
 A path is only uploaded when it has no `http(s)://` scheme and exists on disk;
@@ -177,258 +186,35 @@ URL=$(./bk issues upload ./diagram.png --json | jq -r '.[0].url')
 `bk <app> upload` and the local-path method create **no** sidebar attachment record.
 `bk issue attach` is the opposite: it adds a file to the issue's **attachments
 list** (sidebar), not the body.
+## What is NOT in this file
 
-## Commands
+**The command reference used to be here — about 200 lines of it — and on
+2026-08-11 an audit found ~65 of its spellings had been wrong since 2026-08-10,
+when ten verbs moved behind their app name.** It also carried a permissions
+table, a pagination note and an attachment MIME list, each of which had drifted
+from the thing it described.
 
-### Auth / session
-```
-bk login [--server URL] [--token]   authorize via browser (or paste token)
-bk logout                           remove credentials
-bk whoami                           print authenticated user
-bk version                          print CLI version / commit / build date
-```
+It was not corrected. It was **deleted**, because a second copy of a reference is
+a copy that goes stale, and this repo already has two that cannot:
 
-### Workspaces
-```
-bk workspace list
-bk workspace show [slug|id]            defaults to active
-bk workspace create --name N [--use]   --use sets active (default true)
-bk workspace use <slug|id>             set active workspace
-```
+| You want | Read |
+|---|---|
+| what the commands are, right now | **`bk guide`** — embedded in the binary, so it describes the exact version you are running |
+| vocabularies, limits, your workspaces | **`bk meta`** — served live; changes without a release |
+| CLI internals, conventions, release | [`../docs/cli.md`](../docs/cli.md) |
+| what changed, and when | `bk changelog`, or `docs/changelog/` |
 
-### Moving / copying items between workspaces
-```
-bk move --to <ws> [--project N ...] [--task N ...] [--issue N ...]   copy then bin the source
-bk copy --to <ws> [--project N ...] [--task N ...] [--issue N ...]   copy, leave source in place
-      [--cascade-tasks=false]    move a project WITHOUT its tasks
-      [--cascade-issues=false]   move a project/task WITHOUT its issues
-```
-One atomic transfer (no data loss on failure); items get fresh #numbers in the
-target, labels are matched/created by name, and non-member user refs are dropped
-into an `adjustments` report. `--project`/`--task`/`--issue` take #numbers and
-are repeatable.
-
-### Projects
-```
-bk project list
-bk project view <id>
-bk project members <id>
-bk project issues <id> [--status S] [--assignee <id|email|name|me>]
-bk project tasks <id>
-
-bk project create --name N [--description D | --description-file F]
-bk project edit <id> [--name N] [--description D | --description-file F] [--status S]
-bk project delete <id> [--yes] [--cascade | --detach]   move to Trash
-
-bk project add-member <id> --email E [--role owner|admin|member|viewer]
-bk project remove-member <id> --user <id|email|name> [--yes]
-```
-
-### Issues
-```
-bk issue list [--project N] [--status S]
-              [--assignee <id|email|name|me>] [--mine] [--search TEXT]
-bk issue view <id>
-
-bk issue create --project N --title "..."
-                [--description D | --description-file F]
-                [--priority 1-5] [--status S]
-                [--assignee <id|email|name|me>] [--task N]
-                [--start-date YYYY-MM-DD] [--due-date YYYY-MM-DD]
-                [--attach FILE]      add to the attachments list (sidebar)
-                [--file FILE ...]    upload + embed inline in the description
-
-bk issue edit <id> [--title T] [--description D | --description-file F]
-                   [--status S] [--priority N]
-                   [--assignee <id|email|name|me|none>]
-                   [--task <N|none>]
-                   [--start-date <YYYY-MM-DD|none>]
-                   [--due-date <YYYY-MM-DD|none>]
-
-bk issue assign <id> <user>        set assignee (id, email, name, or me)
-bk issue unassign <id>             clear assignee
-bk issue delete <id> [--yes]       move to Trash (restore with `bk <app> trash`)
-
-bk issue comment <id> --body "..." | --body-file F | --body -
-                      [--reply-to COMMENT_ID]   threaded reply
-                      [--file FILE ...]         upload + embed inline
-bk issue comments <id>
-bk issue activity <id>             comments + change history
-
-bk issue attach <id> --file F      add to attachments list (sidebar; not the body)
-bk issue attachments <id>
-bk issue detach <issue-id> <attachment-id> [--yes]
-```
-
-Canonical issue statuses: `backlog`, `todo`, `in_progress`, `done`, `cancelled`.
-`--assignee` accepts a numeric id, an email, a display name, or `me`. Pass `none`
-(or `null`/`unset`/`clear`) on `issue edit` to clear `--assignee`, `--task`,
-`--start-date`, or `--due-date`; omit the flag to leave it unchanged.
-
-### Tasks
-```
-bk task list [--project N]
-bk task view <id> [--include-issues]
-bk task create --project N --name M
-                    [--description D | --description-file F] [--due-date YYYY-MM-DD]
-bk task edit <id> [--name M] [--description D | --description-file F]
-                       [--due-date <YYYY-MM-DD|none>]
-bk task delete <id> [--yes] [--cascade | --detach]   move to Trash
-```
-
-### Trash (recycle bin, workspace-scoped)
-
-Deleting an issue, project, or task moves it to the Trash instead of
-removing it permanently. Restore items individually, in bulk, or as a delete
-group. Purging (permanent delete) is **owner-only**.
-
-**App-owned since 3.0.0** — each app has its own bin, so the app names itself.
-
-```
-bk <app> trash list [--type ...]
-bk <app> trash restore <type:#number>...   e.g. bk issues trash restore issue:42
-bk <app> trash restore --batch <id>        restore a whole delete group
-      [--restore-parents | --standalone]   force how dangling parents resolve
-bk <app> trash purge <type:#number>... [--yes]  permanent delete (owner only)
-bk <app> trash purge --batch <id> [--yes]
-bk <app> trash empty [--yes]               permanently delete everything (owner only)
-```
-
-When a project/task is deleted with `--cascade`, its attached issues (and
-a project's tasks) go to the Trash with it as one batch, so restoring the
-batch brings the whole group back, re-linked. With `--detach` (the default) only
-the parent is binned and the children stay active, unlinked. On restore, if an
-item's parent is itself still in the Trash, the items it was deleted *with*
-restore as a group; items deleted alone restore standalone — override per item in
-the UI, or force it CLI-wide with `--restore-parents` / `--standalone`.
-
-### Labels (workspace-scoped, app-owned since 3.0.0)
-```
-bk <app> label list
-bk <app> label view <id>
-bk <app> label create --name N [--color #rrggbb] [--description D]
-bk <app> label edit <id> [--name N] [--color #rrggbb] [--description D]
-bk <app> label delete <id>
-bk issues label attach <issue-id> <label-id>     # attach/detach name an entity,
-bk issues label detach <issue-id> <label-id>     # so they are per-app
-```
-
-### Members (workspace-scoped)
-```
-bk member list
-bk member remove <user-id>         (owner only)
-bk member leave                    (owner cannot leave)
-```
-
-### Invitations (workspace-scoped)
-```
-bk invite send <email>             prints a share link if the invitee has no account
-bk invite list [--all]             owner only; --all includes accepted/revoked/expired
-bk invite revoke <id>
-bk invite accept <token>
-bk invite decline <token>
-bk invite pending                  invitations pending for your email
-```
-
-### Inbox
-```
-bk inbox list [--unread]           prints an unread count to stderr
-bk inbox read [id ...] | --all     mark messages read
-bk inbox archive <id> [id ...]     archive messages
-```
-
-### Users
-```
-bk user list                       list every user on the server
-bk user view <id|email>            show one user (filtered client-side)
-```
-
-### Files
-```
-bk <app> upload <file> [<file> ...]   upload file(s), print url(s) (no sidebar record)
-bk storage list [--app <slug>]        every app's files + refs + usage (owner)
-bk storage rm <id> [--yes]            permanently delete an orphan (owner)
-bk issues attachment list             this app's attachment rows, workspace-wide
-```
-`upload` is app-owned: it has no bare spelling and no default, because the
-receiving app is recorded on the file. `storage` is cross-app and bare, because
-every app returns the same rows. **You upload INTO one app and list ACROSS all
-of them.**
-
-### Activity / Analytics / Undo
-```
-bk activity [--limit N] [--cursor N]   global change feed (keyset-paginated)
-bk analytics [flags]                    workspace analytics (summary + filters)
-bk undo [--count N] [--yes]             roll back your last N writes (1-10)
-```
-
-`bk analytics` mirrors the web dashboard. Flags (all optional): `--view`
-workspace|project|task|member, `--id`, `--ws <slug|id>`, `--from`/`--to`,
-`--interval day|week`, and the `--status`/`--priority`/`--label`/`--assignee`
-filters (repeatable or comma-separated). Default output is a readable summary;
-`--json`/`--yaml` emit the full payload.
-
-```
-```
-
-### Super admin (platform-wide; super admins only)
-```
-bk super-admin users                          list every member on the platform
-bk super-admin whitelist list                 list allowed domains + emails
-bk super-admin whitelist add --type domain|email --value V   allow a domain/email
-bk super-admin whitelist remove <id> [--yes]  remove a whitelist entry
-bk super-admin errors list [--status open|resolved] [--level L] [--from] [--to] [--limit] [--cursor] [--stats]
-bk super-admin errors view <id>               full detail incl. stack + context
-bk super-admin errors resolve <id>            mark resolved
-bk super-admin errors unresolve <id>          re-open
-bk super-admin errors delete <id> [id ...] [--yes]   permanently delete
-bk super-admin errors stats                   total / open / resolved counts
-```
-
-These require a **super-admin token** — an account whose email is in the
-server's `SUPER_ADMINS` env var. Any other token gets a `403` (exit code 4).
-`admin` is an alias for `super-admin`. Whitelist and error changes apply across
-the whole platform, not a single workspace. `bk whoami` shows `super: yes` when
-your token has access.
-
-## Permissions cheat-sheet
-
-The CLI inherits whatever the underlying token can do. Roughly:
-
-| Action | Required role |
-|--------|---------------|
-| Read projects/issues you belong to | any project member |
-| Create/edit issues, comment, attach | project member (non-viewer) |
-| Delete issue, delete attachment, edit project | project admin/owner |
-| Delete project | project owner |
-| Manage project members | project admin/owner |
-| Remove workspace member, list invitations | workspace owner |
-| `bk analytics` | any workspace member |
-| `bk super-admin …` (users, whitelist, errors) | super admin (email in `SUPER_ADMINS`) |
-
-A 403 on any command means the API rejected it for permissions; check your role
-with `bk project members <id>`, `bk member list`, and `bk whoami`.
-
-## Pagination
-
-The main list commands (`bk issue list`, `bk project list`, `bk task list`)
-return every matching item in one response — no pagination. `bk issue list`
-includes a server-side `total` in `--json` / `--yaml` output.
-
-Only the keyset-paginated feeds accept `--limit` / `--cursor`: `bk activity`,
-`bk issues trash list`, and `bk super-admin errors list`. Their envelope is
-`{ "data": [...], "next_cursor": <id|null> }`, and in table output the next
-cursor is printed to stderr as `next page: --cursor=X` when more rows remain.
+**Do not reintroduce a command list here.** If a maintainer needs one, it belongs
+in `bk guide`, where a test already fails the build if a topic hardcodes a value
+that `bk meta` should serve.
 
 ## Environment
 
 - `BK_CONFIG_DIR` — override the config directory (default `~/.config/bk`).
-- `BK_NO_PROMPT=1` — skip every interactive confirmation prompt
-  (recommended for agents).
-
-## Attachments
-
-`bk issue create --attach FILE` and `bk issue attach <id> --file FILE` upload via
-`POST /api/upload` (Vercel Blob), then attach the result. The server must have
-`BLOB_READ_WRITE_TOKEN` configured. Allowed types: JPEG, PNG, GIF, WebP, PDF,
-plain text, JSON, Markdown.
+  **Set this in any automated context**: the default points at whatever server
+  the developer last logged into, which is usually production.
+- `BK_NO_PROMPT=1` — skip every interactive confirmation prompt. Note that this
+  makes `Confirm()` auto-approve, which is why irreversible commands require the
+  target repeated back (`--confirm <slug>`) rather than a yes/no.
+- `BK_CLI_LATEST` / `BK_CLI_MIN` — override the advertised and minimum versions
+  without a redeploy.

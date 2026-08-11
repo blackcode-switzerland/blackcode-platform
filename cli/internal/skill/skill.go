@@ -32,14 +32,14 @@ var template string
 
 // Name is the skill's directory/identifier under .claude/skills/.
 //
-// `blackcode`, not `blackcode-issues`, since 3.0.0 (D-17). NOT COSMETIC: an
+// `blackcode`, not `blackcode-issues`, since 2.0.0 (D-17). NOT COSMETIC: an
 // agent scanning the available skills, seeing one called "blackcode-issues"
 // while it has been asked to do sales work, and concluding "not my job" is the
 // single failure this file exists to prevent. The skill describes the CLI, and
 // the CLI drives every app.
 const Name = "blackcode"
 
-// LegacyName is what the skill was called before 3.0.0. It survives in three
+// LegacyName is what the skill was called before 2.0.0. It survives in three
 // places and each has a different reason:
 //
 //   - the installed DIRECTORY, which `bk skill sync` migrates (see MigrateFrom);
@@ -122,7 +122,7 @@ func Classify(content string) Ownership {
 }
 
 // findBlock locates bk's delimited region, under EITHER the current markers or
-// the pre-3.0.0 ones, and reports where it starts and ends.
+// the pre-2.0.0 ones, and reports where it starts and ends.
 //
 // Accepting both is the whole of the marker migration. A file written by bk
 // 2.0.0 carries `blackcode-issues` markers; if `Classify` only knew the new
@@ -164,7 +164,7 @@ func UpsertSkillFile(existing, version string) (string, error) {
 		_, body := splitFrontMatter(strings.TrimSpace(template))
 		block := strings.TrimRight(renderBlock(body, version), "\n")
 		// Always writes the CURRENT markers, whichever pair it found — which is
-		// what converts a pre-3.0.0 file in place, without a separate migration
+		// what converts a pre-2.0.0 file in place, without a separate migration
 		// step and without disturbing a byte outside the block.
 		return existing[:start] + block + existing[end:], nil
 	default:
@@ -190,7 +190,7 @@ const (
 	blockBegin = "<!-- BEGIN blackcode (managed by bk skill install) -->"
 	blockEnd   = "<!-- END blackcode -->"
 
-	// The pre-3.0.0 pair. READ-ONLY: `findBlock` still recognises these so an
+	// The pre-2.0.0 pair. READ-ONLY: `findBlock` still recognises these so an
 	// older file stays Managed, and nothing writes them again.
 	legacyBlockBegin = "<!-- BEGIN blackcode-issues (managed by bk skill install) -->"
 	legacyBlockEnd   = "<!-- END blackcode-issues -->"
@@ -224,7 +224,7 @@ func RenderAgentsSection(version string) string {
 }
 
 // UpsertAgentsSection replaces the delimited block in doc, or appends it when
-// there isn't one yet. Recognises the pre-3.0.0 markers too, so an AGENTS.md
+// there isn't one yet. Recognises the pre-2.0.0 markers too, so an AGENTS.md
 // written by an older bk is updated in place rather than gaining a second copy.
 func UpsertAgentsSection(doc, section string) string {
 	if start, end, ok := findBlock(doc); ok {
@@ -282,7 +282,7 @@ func FilePath(dir string) string {
 	return filepath.Join(dir, "SKILL.md")
 }
 
-// LegacyDir returns where a pre-3.0.0 bk would have installed, given where this
+// LegacyDir returns where a pre-2.0.0 bk would have installed, given where this
 // one does: the same `skills/` parent, under the old name.
 //
 // Derived from the target rather than resolved independently so that `--dir`,
@@ -292,7 +292,7 @@ func LegacyDir(dir string) string {
 	return filepath.Join(filepath.Dir(dir), LegacyName)
 }
 
-// MigrationPlan is what `bk skill sync` would do about a pre-3.0.0 install.
+// MigrationPlan is what `bk skill sync` would do about a pre-2.0.0 install.
 //
 // A plan rather than an action because this is the destructive path: `sync` runs
 // unattended, on an agent's own initiative, and the one thing it must never do

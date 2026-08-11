@@ -374,7 +374,7 @@ func newProjectDeleteCmd() *cobra.Command {
 		Use:         "delete <id>",
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/projects/{id}"},
 		Short:       "Move a project to the Trash",
-		Long: "Move a project to the recycle bin. Restore it later with `bk trash restore`.\n\n" +
+		Long: "Move a project to the recycle bin. Restore it later with `bk issues trash restore`.\n\n" +
 			"Attached issues and tasks: by default they stay active and are\n" +
 			"unlinked from the project (--detach). Pass --cascade to move them to the\n" +
 			"Trash along with the project so they can be restored as a group.",

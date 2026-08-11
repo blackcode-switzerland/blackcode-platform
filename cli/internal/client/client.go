@@ -195,7 +195,7 @@ func (c *Client) do(req *http.Request, out any) error {
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		// A dial/TLS/DNS failure, not an API answer. Since 3.0.0 the address
+		// A dial/TLS/DNS failure, not an API answer. Since 2.0.0 the address
 		// came out of the app registry rather than a single configured server,
 		// so "connection refused" alone leaves the caller unable to tell a dead
 		// deployment from a stale registry entry. Name both.

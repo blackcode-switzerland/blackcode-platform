@@ -49,7 +49,12 @@ export function searchRoute(app: AppContext) {
       throw Errors.badRequest(
         'query_too_short',
         `q must be at least ${SEARCH_QUERY_MIN} character(s)`,
-        'pass a longer query, e.g. `bk search auth`'
+        // Built from `appSlug`, not typed as a literal. The bare `bk search`
+        // this used to name was removed on 2026-08-10 — the verb is app-owned
+        // now — so a hard-coded spelling here would hand an agent a hint that
+        // exits 2, which is worse than no hint. Interpolating means the hint is
+        // correct for whichever app mounts the route, including the next one.
+        `pass a longer query, e.g. \`bk ${app.appSlug} search auth\``
       )
     }
 

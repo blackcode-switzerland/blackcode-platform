@@ -373,7 +373,7 @@ func TestAppTopicsDoNotDescribeAnotherApp(t *testing.T) {
 // moved. A guide that teaches the deprecated form is worse than none: it is
 // confidently wrong, and the agent has no reason to doubt it.
 //
-// EXTENDED in 3.0.0 for the app-owned tier (docs/sales-app-plan.md D-11).
+// EXTENDED in 2.0.0 for the app-owned tier (docs/sales-app-plan.md D-11).
 // `upload`, `trash` and `label` moved behind the app name for the same reason
 // the nouns did, and the same failure mode applies with more force: a topic that
 // still says the bare form is teaching an agent to file a sales contract under
@@ -400,12 +400,12 @@ func TestTopicsUseNamespacedAppCommands(t *testing.T) {
 	moved := []string{
 		// 1.10.0 — the app nouns.
 		"issue", "task", "project", "analytics", "move", "copy",
-		// 3.0.0 — the first app-owned platform verbs.
+		// 2.0.0 — the first app-owned platform verbs.
 		"upload", "trash", "label",
-		// 4.0.0 — the rest of them, when the cross-app tier stopped existing.
+		// 2.1.0 — the rest of them, when the cross-app tier stopped existing.
 		"workspace", "member", "invite", "user", "inbox", "storage", "search",
 		"activity",
-		// 4.0.0 — removed outright, with no namespaced form to move to.
+		// 2.1.0 — removed outright, with no namespaced form to move to.
 		"link",
 	}
 	for _, top := range Topics() {

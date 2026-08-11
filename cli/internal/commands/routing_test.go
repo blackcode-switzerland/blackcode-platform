@@ -477,7 +477,7 @@ func TestWorkspaceUseIsPerApp(t *testing.T) {
 	}
 }
 
-// A 3.x config carries ONE active workspace and no per-app map. It must come
+// A pre-2.1.0 config carries ONE active workspace and no per-app map. It must come
 // forward as the HOME app's — and as nobody else's, because a slug resolved
 // against issues is not a sales workspace.
 func TestLegacyActiveWorkspaceMigratesToTheHomeAppOnly(t *testing.T) {
@@ -497,7 +497,7 @@ func TestLegacyActiveWorkspaceMigratesToTheHomeAppOnly(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 	if got := cfg.ActiveWorkspaceFor("issues"); got.Slug != "legacy-ws" || got.ID != 7 {
-		t.Errorf("a 3.x config's active workspace did not come forward for the home app: %+v — "+
+		t.Errorf("a pre-2.1.0 config's active workspace did not come forward for the home app: %+v — "+
 			"every `bk issues …` command would say \"no active workspace\" after an upgrade", got)
 	}
 	if got := cfg.ActiveWorkspaceFor("sales").Slug; got != "" {

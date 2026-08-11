@@ -30,17 +30,26 @@ func newActivityCmd(acfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "activity",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/activity"},
-		Short:       "Show the workspace activity feed (all apps)",
-		Long: `Show the workspace activity feed.
+		// "(all apps)" until 2026-08-11. Each app has kept its OWN event feed
+		// since 2026-08-10 — `deprecations.go`'s `activity` row says so in the
+		// same binary — so the one-line summary contradicted the hint.
+		Short:       fmt.Sprintf("Show %s's workspace activity feed", acfg.App),
+		// Every example is built from acfg.App rather than typed. They read
+		// `bk activity …` until 2026-08-11 — a spelling removed on 2026-08-10,
+		// when the verb moved behind the app name — so all three exited 2 for
+		// anyone who copied one. A literal example in a SHARED app-verb cannot
+		// be right for both apps anyway; interpolating is what makes it stay
+		// right for the next app too.
+		Long: fmt.Sprintf(`Show the workspace activity feed.
 
-One merged timeline across every app in the workspace, newest first.
+This app's own timeline, newest first.
 
-  bk activity --since 24h
-  bk activity --ws kali-sa --since 7d --json
-  bk activity --subject bc:issues:kali-sa/issue/482
+  bk %[1]s activity --since 24h
+  bk %[1]s activity --ws kali-sa --since 7d --json
+  bk %[1]s activity --subject bc:issues:kali-sa/issue/482
 
 --since takes a relative window: 30m, 24h, 7d. Use --ws to read another
-workspace without switching the active one.`,
+workspace without switching the active one.`, acfg.App),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {

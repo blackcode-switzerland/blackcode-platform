@@ -25,7 +25,7 @@ import (
 //	                    nothing else under commands/
 //	commands/platform   may import the same — and NOT any app
 //
-// `internal/appverbs` (added 3.0.0 for D-11's app-owned tier) sits outside
+// `internal/appverbs` (added 2.0.0 for D-11's app-owned tier) sits outside
 // `internal/commands/` for exactly the reason `cmdutil` does: it holds command
 // trees that SEVERAL app groups mount — `bk issues upload`, `bk sales upload` —
 // and neither `platform` nor any app package could host that without one of the

@@ -230,7 +230,7 @@ func newTaskDeleteCmd() *cobra.Command {
 		Use:         "delete <id>",
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/tasks/{id}"},
 		Short:       "Move a task to the Trash",
-		Long: "Move a task to the recycle bin. Restore it later with `bk trash restore`.\n\n" +
+		Long: "Move a task to the recycle bin. Restore it later with `bk issues trash restore`.\n\n" +
 			"Attached issues: by default they stay active and are unlinked from the\n" +
 			"task (--detach). Pass --cascade to move them to the Trash too so they\n" +
 			"can be restored as a group.",

@@ -11,7 +11,7 @@ import (
 )
 
 // Construction of the API client, and the two questions every command answers
-// before it makes a request: WHICH WORKSPACE, and — since 3.0.0 — WHICH SERVER.
+// before it makes a request: WHICH WORKSPACE, and — since 2.0.0 — WHICH SERVER.
 //
 // This lives in cmdutil rather than in a command package because the command
 // tree is split by app (internal/commands/platform, internal/commands/issues)
@@ -116,7 +116,7 @@ func (e *UnknownAppError) Error() string {
 	var b strings.Builder
 	if e.NoRegistry {
 		fmt.Fprintf(&b, "no app registry yet, so `bk %s …` has no address to use "+
-			"(this config predates bk 3.0.0)", e.App)
+			"(this config predates bk 2.0.0)", e.App)
 	} else {
 		fmt.Fprintf(&b, "no server known for app %q (registry has: %s)",
 			e.App, strings.Join(e.Known, ", "))

@@ -13,21 +13,26 @@ import (
 // `bk sales search` — the INSIDE-the-records half of D-9.
 //
 // ---------------------------------------------------------------------------
-// THIS IS NOT `bk search`, AND THE DIFFERENCE IS THE POINT
+// THERE IS NO LONGER A `bk search` TO CONFUSE THIS WITH
 // ---------------------------------------------------------------------------
+// This header, and the `Long` below, used to contrast two commands:
 //
-//	bk search        cross-app, bare. Reads the platform entity index, which
-//	                 holds TITLES ONLY. "Where is the thing called X, in ANY
-//	                 app?" Returns URNs, tagged with the app they came from.
+//	bk search        cross-app, bare. Read the platform entity index (TITLES
+//	                 ONLY) and return URNs tagged with the app they came from.
+//	bk sales search  app-owned. Read this app's full-text columns.
 //
-//	bk sales search  app-owned. Reads this app's full-text columns. "Find X
-//	                 INSIDE prospect summaries, meeting outcomes, communication
-//	                 bodies, template copy." Returns records, with the matching
-//	                 text.
+// **The first one was removed on 2026-08-10** (multiAppFinalRefactor Phase 4).
+// `apps/sales` stopped projecting into `platform.entities` in Phase 3, so a
+// bare `bk search` had no cross-app index left to read from a sales context;
+// search is app-owned now and `bk search` exits 2.
 //
-// Reaching for the wrong one is the most likely mistake an agent makes here, so
-// the snippet column exists partly to make the difference visible: a hit with a
-// snippet came from a column the cross-app index does not have.
+// The prose was left behind, and it did not merely go stale — the `Long` told
+// an agent to run `bk search` INSTEAD of this command, at the exact moment it
+// was choosing between them. That is CLAUDE.md's `bk undo` defect inside the
+// binary's own help. Corrected 2026-08-11 (parity audit).
+//
+// The snippet column still earns its place: it shows WHICH text matched, which
+// is what separates this from a name filter like `prospect list --q`.
 func newSearchCmd() *cobra.Command {
 	var types []string
 	var limit int
@@ -38,9 +43,10 @@ func newSearchCmd() *cobra.Command {
 		Long: `Search the text inside this app's records — summaries, outcomes, message
 bodies, objections, product pitches, template copy.
 
-For "where is the thing called X" across every app, use "bk search" instead: it
-reads the shared entity index and returns URNs. This one reads this app's own
-columns and returns what matched.
+For "where is the thing called X" — a prospect or product by NAME rather than by
+a phrase inside it — use the listing filters ("bk sales prospect list --q",
+"bk sales product list"). This one reads this app's own text columns and returns
+what matched, with the snippet it matched in.
 
 --type narrows it; run "bk meta" for the searchable types. Note they are WIDER
 than the addressable ones: a contact and an objection are searchable and have no
@@ -79,8 +85,12 @@ than the addressable ones: a contact and an objection are searchable and have no
 					return err
 				}
 				if len(hits) == 0 {
+					// The empty result is the moment the caller most needs a next
+					// step, so this line names one that EXISTS. It named `bk search`
+					// until 2026-08-11 — removed on 2026-08-10 — which meant a search
+					// that found nothing handed back a command that exits 2.
 					fmt.Fprintln(cmd.ErrOrStderr(),
-						"(no matches inside this app's records — `bk search` looks across apps by title)")
+						"(no matches inside this app's records — `bk sales prospect list --q <name>` filters by company name)")
 				}
 				return nil
 			})

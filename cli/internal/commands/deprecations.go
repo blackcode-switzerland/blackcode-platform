@@ -12,6 +12,18 @@ import (
 // one: the agent is told the new spelling and can retry immediately, instead of
 // giving up on "unknown flag".
 //
+// ** THE PRUNING SCHEDULE IS COUNTED IN RELEASES AND THE RELEASES ARE DAYS APART. **
+// Corrected 2026-08-11: this file used to label its batches 3.0.0 and 4.0.0,
+// versions that were never released. The real series is v2.0.0 (06 Aug),
+// v2.1.0 (10 Aug), v2.2.0 (11 Aug) — three minors in five days.
+//
+// So "keep for two minor releases" now says the 2.0.0 batch is due for pruning
+// AT 2.2.0, i.e. today, for renames that are five days old. Do not prune on the
+// number alone. The rule exists so a hint outlives the agents and scripts that
+// learned the old spelling, and that is measured in WEEKS OF USE, not in tags.
+// Prune when the old spelling has plausibly stopped being typed; if in doubt,
+// keep it — a stale hint is noise, a missing one is a dead end.
+//
 // THE RULE: add an entry here in the SAME commit as any rename or removal.
 // Keep entries for two minor releases, then prune — a hint for a rename nobody
 // remembers is just noise.
@@ -42,7 +54,7 @@ var deprecations = map[string]string{
 	"copy":      "`bk copy …` is now `bk issues copy …` — app verbs sit behind their app name. Same flags, same output.",
 	"analytics": "`bk analytics …` is now `bk issues analytics …` — it reports this app's statuses and priorities, so it moved with the app. Same flags, same output.",
 
-	// --- 3.0.0 (2026-08-06): the four app-owned verbs moved under the app ---
+	// --- 2.0.0 (2026-08-06): the four app-owned verbs moved under the app ---
 	//
 	// D-11. `upload`, `trash` and `label` are the verbs whose ANSWER DEPENDS ON
 	// THE APP: a file is attributed to the app that received it, a bin holds one
@@ -53,7 +65,7 @@ var deprecations = map[string]string{
 	// Unlike the 1.10.0 rename, these rows are LIVE from day one: there is no
 	// alias, because an alias would have to pick an app silently, which is the
 	// exact accident being removed. The failure is loud and names its replacement.
-	// Keep for two minor releases (through 3.2.0), then prune.
+	// Keep for two minor releases (through 2.2.0), then prune.
 	"upload": "`bk upload …` is now `bk <app> upload …` — a file is stored against one app, so the app names itself: `bk issues upload contract.pdf`. Run `bk --help` for the apps this binary knows, or `bk guide platform/apps` for why.",
 	"trash":  "`bk trash …` is now `bk <app> trash …` — each app has its own recycle bin, e.g. `bk issues trash list`. Run `bk guide platform/apps`.",
 	"label":  "`bk label …` is now `bk <app> label …` — labels are filtered by app, e.g. `bk issues label list`. Run `bk guide platform/apps`.",
@@ -73,16 +85,16 @@ var deprecations = map[string]string{
 	// contains the word it was asserting on.
 	"template": "`bk template …` is now `bk scaffold …` — the scaffold app's slug was renamed on 2026-08-07 (D-38) because `template` collides with `bk sales template`. Same commands, same output: `bk scaffold note list`.",
 
-	// `bk storage attachments` moved to a noun of the issues app in 3.0.0 — one
+	// `bk storage attachments` moved to a noun of the issues app in 2.0.0 — one
 	// noun must not straddle two tiers. `bk storage` itself has since moved too
-	// (see 4.0.0 below), so cobra now reports the FIRST token and the `storage`
-	// row answers. This entry stays until the 3.0.0 batch is pruned: it names a
+	// (see 2.1.0 below), so cobra now reports the FIRST token and the `storage`
+	// row answers. This entry stays until the 2.0.0 batch is pruned: it names a
 	// different replacement from the group's row, and a caller who typed the
 	// two-word form is better served by the specific one if cobra ever reports
 	// it again.
 	"storage attachments": "`bk storage attachments` is now `bk issues attachment list` — it lists issue attachments and only ever did, so it is a noun of that app.",
 
-	// --- 4.0.0 (2026-08-10): the cross-app tier is gone; the apps are separate ---
+	// --- 2.1.0 (2026-08-10): the cross-app tier is gone; the apps are separate ---
 	//
 	// multiAppFinalRefactor Phase 4. Every verb below read a `platform.*` table
 	// that two apps shared, which is what made a bare spelling defensible:
@@ -98,9 +110,9 @@ var deprecations = map[string]string{
 	//
 	// TEN VERBS AT ONCE, which is the largest batch this repo has taken, and the
 	// rows are what make the difference between an agent that retries correctly
-	// and one that stops. Live from day one with no alias, for 3.0.0's reason: an
+	// and one that stops. Live from day one with no alias, for 2.0.0's reason: an
 	// alias would have to pick an app silently, which is the accident being
-	// removed. Keep for two minor releases (through 4.2.0), then prune.
+	// removed. Keep for two minor releases (through 2.3.0), then prune.
 	//
 	// Each hint names `bk <app> <verb>` AND a concrete example, because "use the
 	// app name" is not something an agent can execute. `bk --help` lists the apps
@@ -114,8 +126,8 @@ var deprecations = map[string]string{
 	"search":    "`bk search …` is now `bk <app> search …` — there is no cross-app index any more. Try `bk issues search <query>` for issues, tasks and projects, or `bk sales search <query>`, which searches INSIDE sales' records.",
 	"activity":  "`bk activity …` is now `bk <app> activity …` — each app keeps its own event feed. Try `bk issues activity --since 24h` or `bk sales activity`.",
 
-	// `--app` is gone from `search`, `activity` and `storage list` (4.0.0) and from
-	// `invite send` (4.1.0). On the first three it selected among the apps writing
+	// `--app` is gone from `search`, `activity` and `storage list` (2.1.0) and from
+	// `invite send` (2.2.0). On the first three it selected among the apps writing
 	// one shared index; on `invite send` it named an app to also grant on accept.
 	// Both premises died with the same two tables.
 	//
@@ -142,9 +154,9 @@ var deprecations = map[string]string{
 	// run. A documented agent-facing command that does nothing is worse than a
 	// missing one: an agent that believes it can undo takes risks it would not
 	// otherwise take. Trash is the working undo and always was.
-	"undo": "`bk undo` was removed in 1.12.0 — it never recorded anything and could not undo. Deletes are restorable: use `bk issues trash list` then `bk issues trash restore <type>:<#number>` (the recycle bin is per-app since 3.0.0).",
+	"undo": "`bk undo` was removed in 1.12.0 — it never recorded anything and could not undo. Deletes are restorable: use `bk issues trash list` then `bk issues trash restore <type>:<#number>` (the recycle bin is per-app since 2.0.0).",
 
-	// --- 4.1.0 (2026-08-10): the per-app access gate is gone ---
+	// --- 2.2.0 (2026-08-10): the per-app access gate is gone ---
 	//
 	// multiAppFinalRefactor Phase 5. `platform.workspace_apps` and
 	// `platform.app_access` answered "is this app switched on inside this
@@ -176,7 +188,7 @@ var deprecations = map[string]string{
 
 	// `--all` on `bk <app> workspace list`. Keyed bare, like `--app` above: this
 	// only fires on an `unknown flag` error, and the commands that still take
-	// `--all` (`bk <app> invite list`, `bk issues inbox mark-read`) accept it, so
+	// `--all` (`bk <app> invite list`, `bk issues inbox read`) accept it, so
 	// they never produce one.
 	"--all": "`--all` was removed from `bk <app> workspace list` on 2026-08-10 — it showed workspaces this app was switched off in, plus the apps reachable in each, and neither exists now: these are this app's own workspaces, so the plain listing is the whole answer. It is unchanged on `bk <app> invite list --all`.",
 }

@@ -26,7 +26,7 @@ import (
 // `bk guide`. What stays here: what bk is, the first run, the global flags, the
 // exit codes, the command groups, and one loud pointer.
 //
-// ORGANISED BY TIER, and there are TWO of them since 4.0.0
+// ORGANISED BY TIER, and there are TWO of them since 2.1.0
 // (multiAppFinalRefactor Phase 4). This is the first text an agent reads, and
 // the question it has to answer on the first pass is not "what verbs exist?" but
 // "which app is this command talking to?". A flat list cannot answer that; two
@@ -104,7 +104,7 @@ APPS — every app verb sits behind its app name:
   issues      issue, task, project, attachment, move, copy, analytics
   sales       prospect, contact, meeting, comm, product, template, doc, …
 
-CHANGED 2026-08-10 (4.0.0), and it is a breaking change for anything scripted:
+CHANGED 2026-08-10 (2.1.0), and it is a breaking change for anything scripted:
 "workspace", "member", "invite", "user", "inbox", "storage", "search" and
 "activity" moved behind the app name, and "link" was REMOVED. The apps stopped
 sharing a database, so a bare spelling had no correct answer — only a default,

@@ -97,7 +97,7 @@ Target, in order of preference:
   --format agents-md    instead append (or update in place) a delimited
                         "blackcode" section in ./AGENTS.md
 
-The skill was called ` + "`blackcode-issues`" + ` before 3.0.0.
+The skill was called ` + "`blackcode-issues`" + ` before 2.0.0.
 ` + "`bk skill sync`" + ` moves an existing one; this command does not, so
 that installing never deletes anything.
 
@@ -231,7 +231,7 @@ func newSkillPathCmd() *cobra.Command {
 // skillStatus is the shared state `check` and `sync` both compute.
 type skillStatus struct {
 	Path string `json:"path"`
-	// LegacyPath is a pre-3.0.0 install sitting beside the target, when one
+	// LegacyPath is a pre-2.0.0 install sitting beside the target, when one
 	// exists and the target does not. Surfaced rather than silently handled so
 	// `check --json` tells an agent WHY it is being sent to `sync` — "no skill
 	// installed" next to a skill that plainly is installed reads as a bug.
@@ -393,7 +393,7 @@ func newSkillSyncCmd() *cobra.Command {
      self-replacing binary is fragile and often permission-blocked. Printing
      the command and returning a distinct exit code is more reliable, and an
      agent handles it fine.
-  2. If a pre-3.0.0 skill sits under the old name, move it — carrying over
+  2. If a pre-2.0.0 skill sits under the old name, move it — carrying over
      anything you added around bk's block — and remove the old copy. A
      hand-written file under the old name is reported and left alone.
   3. If the binary is current, rewrite the skill file from the embedded
@@ -414,7 +414,7 @@ func newSkillSyncCmd() *cobra.Command {
 				return err
 			}
 
-			// The 3.0.0 rename (D-17). Only fires when the target is empty and
+			// The 2.0.0 rename (D-17). Only fires when the target is empty and
 			// something is sitting under the old name; `inspect` has already
 			// established both, and once the new file exists it stops looking —
 			// which is what makes a repeat run a no-op rather than a second

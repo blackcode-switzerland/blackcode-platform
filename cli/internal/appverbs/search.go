@@ -30,18 +30,32 @@ func newSearchCmd(acfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "search <query>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/search"},
-		Short:       "Search every app's entities in the active workspace",
-		Long: `Search every app's entities in the active workspace.
+		// Two corrections, 2026-08-11 (parity audit), both dating from the
+		// 2026-08-10 verb move:
+		//
+		//   1. The three examples read `bk search …` — a spelling REMOVED that
+		//      day. Every one exited 2. They are built from acfg.App now.
+		//   2. "Results carry the URN, which is what `bk link` takes" named a
+		//      command removed in the same change, with no replacement. A URN
+		//      still identifies a record across apps; what changed is that you
+		//      put it in a description or comment yourself.
+		//
+		// The SCOPE wording was narrowed for the same reason: this reads
+		// `platform.entities`, and since 2026-08-10 `apps/issues` is its only
+		// writer, so "every app's entities" over-promises.
+		Short:       "Search the shared entity index from the active workspace",
+		Long: fmt.Sprintf(`Search the shared entity index (`+"`platform.entities`"+`) from the active workspace.
 
 Matches titles case-insensitively; a bare number (or #482) also matches the
-workspace #number. Results carry the URN, which is what "bk link" takes.
+workspace #number. Results carry the URN — put it in a description or comment to
+point one record at another.
 
-  bk search auth
-  bk search "#482"
-  bk search acme --type issue,project --json
+  bk %[1]s search auth
+  bk %[1]s search "#482"
+  bk %[1]s search acme --type issue,project --json
 
 Binned items are hidden unless --include-deleted. Run "bk meta" for the entity
-types each app publishes.`,
+types published into the index.`, acfg.App),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)

@@ -38,20 +38,31 @@ import (
 func newStorageCmd(acfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "storage",
-		Short: "Uploaded files across every app in the workspace (owner only)",
-		Long: `Review and clean up files uploaded into the workspace.
+		// Rewritten 2026-08-11 (parity audit). This described D-28's pairing —
+		// "you upload INTO one app, and you list ACROSS all of them" — which is
+		// why the verb used to be bare. **The LEDGER became per app on
+		// 2026-08-10**, which is what moved `storage` behind the app name in the
+		// first place, and CLAUDE.md records that the pairing "no longer
+		// describes anything". The code twelve lines below already said so in a
+		// comment; only the help text still claimed otherwise.
+		//
+		// What IS still shared, and is kept here because it is the reason `rm`
+		// can refuse: the Blob STORE, the workspace QUOTA, and the reference
+		// count, which reads `platform.blob_references` across every app.
+		Short: fmt.Sprintf("Files %s has uploaded into the workspace (owner only)", acfg.App),
+		Long: fmt.Sprintf(`Review and clean up files uploaded into the workspace.
 
-Storage is ONE shared cabinet with one workspace quota: this listing spans every
-app, and each row carries the app that uploaded it. That is why the verb is bare
-while "bk <app> upload" is not — you upload INTO one app, and you list ACROSS all
-of them.
+The LEDGER is per app: this lists what "bk %[1]s upload" stored. The STORE and the
+workspace QUOTA are shared with every other app, which is why the usage total can
+exceed what this listing accounts for, and why a file can still be referenced by
+an app that is not this one.
 
 Every file ever uploaded (via the web, the API, or the CLI) is tracked. Removing
 a file from a description or comment does NOT delete the stored bytes — that is
 deliberate, so trash-restore stays safe. Use these commands to see what is taking
 up space and to permanently delete files that nothing references.
 
-Owner only.`,
+Owner only.`, acfg.App),
 	}
 	cmd.AddCommand(newStorageListCmd(acfg), newStorageRmCmd(acfg))
 	return cmd
@@ -62,15 +73,22 @@ func newStorageListCmd(acfg Config) *cobra.Command {
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/storage"},
 		Short:       "List uploaded files with reference counts and total usage",
-		Long: `List every uploaded file in the workspace, across every app.
+		// `--app <slug>` was documented here until 2026-08-11 and **the flag does
+		// not exist** — it was removed on 2026-08-10 with the rest of the
+		// cross-app tier (`deprecations.go`'s `--app` row), and the RunE below
+		// passes "" unconditionally. A documented flag that does not exist is
+		// worse than a stale example: an agent that reads this and passes it
+		// gets exit 2 on a command that would otherwise have worked.
+		Long: fmt.Sprintf(`List the files %[1]s has uploaded into the workspace.
 
-APP is the app that uploaded each file; --app <slug> narrows the list to one. The
-usage total stays workspace-wide even when the list is filtered, because the
-quota belongs to the workspace.
+The APP column is retained from when one ledger served every app; every row here
+reads %[1]s. The usage total is workspace-wide, because the quota belongs to the
+workspace and is shared with every other app.
 
 REFS is how many things reference the file (descriptions, comments, attachments —
-including items in the recycle bin), counted across every app. A file with
-REFS = 0 is an orphan and can be removed with "bk storage rm <id>".`,
+including items in the recycle bin), counted across every app: that count reads
+`+"`platform.blob_references`"+`, which every app maintains. A file with REFS = 0 is an
+orphan and can be removed with "bk %[1]s storage rm <id>".`, acfg.App),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -122,12 +140,12 @@ func newStorageRmCmd(acfg Config) *cobra.Command {
 		Use:         "rm <id>",
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/storage/{id}"},
 		Short:       "Permanently delete an orphaned file",
-		Long: `Permanently delete a stored file by its id (from "bk storage list").
+		Long: fmt.Sprintf(`Permanently delete a stored file by its id (from "bk %s storage list").
 
 The server refuses (exit non-zero) if anything still references the file,
 including items in the recycle bin — remove those references or empty the trash
 first. The check spans every app, not just the one that uploaded the file.
-Deletion is irreversible.`,
+Deletion is irreversible.`, acfg.App),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])

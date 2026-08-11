@@ -37,10 +37,14 @@ Mirrors the web dashboard: pick a scope with --view (workspace|project|
 task|member) and --id, narrow the window with --from/--to/--interval, and
 slice with the --status/--priority/--label/--assignee filters. The default
 output is a readable summary; --json / --yaml emit the full payload.`,
-		Example: `  bk analytics
-  bk analytics --view project --id 12 --from 2026-01-01 --interval week
-  bk analytics --status todo,in_progress --priority 1 --priority 2
-  bk analytics --view member --id 5 --json`,
+		// `bk analytics …` until 2026-08-11 — the bare spelling was removed in
+		// the 1.10.0 rename (`deprecations.go`'s `analytics` row) and every one
+		// of these four exited 2. This group is `issues`-only, so the app name
+		// is a literal here rather than interpolated.
+		Example: `  bk issues analytics
+  bk issues analytics --view project --id 12 --from 2026-01-01 --interval week
+  bk issues analytics --status todo,in_progress --priority 1 --priority 2
+  bk issues analytics --view member --id 5 --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {

@@ -34,7 +34,7 @@ listed under "adjustments".`
 		short = "Copy projects/tasks/issues to another workspace (leaves the source in place)"
 		long = `Copy items from the active workspace into another workspace you belong to.
 
-Identical to ` + "`bk move`" + ` except the source items are left exactly where they
+Identical to ` + "`bk issues move`" + ` except the source items are left exactly where they
 are — you end up with the items in BOTH workspaces.`
 	}
 
@@ -131,7 +131,10 @@ func renderMoveReport(w io.Writer, mode string, report map[string]any) error {
 		}
 	}
 	if mode == "move" {
-		fmt.Fprintln(w, "\nSource items were moved to the recycle bin (restore with `bk trash`).")
+		// `bk trash` until 2026-08-11: the bin became per app on 2026-08-10, so
+		// the bare spelling exits 2. This line prints AFTER a successful move,
+		// which is exactly when somebody reaches for the recovery it names.
+		fmt.Fprintln(w, "\nSource items were moved to the recycle bin (restore with `bk issues trash restore`).")
 	}
 	return nil
 }

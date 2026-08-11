@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// The stored credentials, and — since 3.0.0 — the APP ADDRESS BOOK (D-1).
+// The stored credentials, and — since 2.0.0 — the APP ADDRESS BOOK (D-1).
 //
 // ---------------------------------------------------------------------------
 // WHY ONE `server` FIELD STOPPED BEING ENOUGH
@@ -206,7 +206,7 @@ func (c *Config) migrate() {
 	if c.ActiveWorkspaces == nil {
 		c.ActiveWorkspaces = map[string]ActiveWorkspace{}
 	}
-	// The per-app store arrived in 4.0.0. A 3.x config carries ONE active
+	// The per-app store arrived in 2.1.0. A pre-2.1.0 config carries ONE active
 	// workspace, and the only app it can have meant is the home app — that is
 	// the app whose server answered `bk workspace use`. Adopting it for the home
 	// app and for no other is the difference between an upgrade that keeps

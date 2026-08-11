@@ -61,8 +61,8 @@ func newProspectListCmd() *cobra.Command {
 		Long: `List prospects, most recently touched first.
 
 --q is a SUBSTRING match on the COMPANY NAME — a filter on this listing, not a
-search. Finding a phrase inside a record is a different thing, and so is finding
-something by name across every app ("bk search").
+search. Finding a phrase INSIDE a record is a different thing: "bk sales search"
+reads the text columns and returns the snippet that matched.
 
 --owner takes an email, or the literal "me".
 --stage may be repeated or comma-separated; run "bk meta" for the current values.`,

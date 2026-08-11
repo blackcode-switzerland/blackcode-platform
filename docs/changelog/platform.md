@@ -30,6 +30,56 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-11 — `--help` stopped printing examples that exit 2
+
+**Not breaking. No route, command, flag or payload changed** — only the text
+`bk` prints about itself, and one server `suggestion`.
+
+Ten verbs moved behind their app name on 2026-08-10 (see that entry below). The
+commands moved; **the hand-written prose around them did not**, and a web ⇄ CLI
+parity audit resolved every ``bk …`` spelling in the repo against the built
+binary to find where. Fourteen spellings in live help text named a command that
+had been removed. Every one of them exited 2 for anyone who copied it.
+
+**The `Example:` blocks were the worst of it** — the one part of `--help` a
+reader is most likely to paste:
+
+| Command | Its examples read | Now |
+|---|---|---|
+| `bk <app> activity` | `bk activity --since 24h` (×3) | `bk issues activity …` / `bk sales activity …`, built from the app slug |
+| `bk issues search` | `bk search auth` (×3) | `bk issues search auth` |
+| `bk issues analytics` | `bk analytics --view project …` (×4) | `bk issues analytics …` |
+
+And four more, each naming a dead command at the moment it was most likely to be
+followed:
+
+- **`bk issues storage list`'s `Long` documented `--app <slug>`. That flag does
+  not exist** — it was removed on 2026-08-10 with the rest of the cross-app tier.
+  A documented flag that isn't there is worse than a stale example: it turns a
+  command that would have worked into exit 2.
+- `bk issues move`, on success, printed *"restore with `bk trash`"*. Now
+  `bk issues trash restore`.
+- `bk issues project|task delete`'s `Long` said *"Restore it later with
+  `bk trash restore`"*. Now `bk issues trash restore`.
+- `bk sales search`, **when it found nothing**, printed *"`bk search` looks
+  across apps by title"*, and its `Long` told you to run `bk search` **instead
+  of** the command you were reading. Both now name commands that exist.
+- The `query_too_short` **suggestion** on `GET /api/workspaces/{ws}/search` read
+  ``e.g. `bk search auth` ``. It is built from the mounting app's slug now, so it
+  cannot go stale for the next app that mounts the route.
+
+Three one-line summaries also stopped contradicting `deprecations.go` in the same
+binary: `activity` said *"(all apps)"*, `storage` said *"across every app"*, and
+`storage`'s `Long` still explained D-28's *"you upload INTO one app and list
+ACROSS all of them"* — the pairing that ended when the upload **ledger** became
+per app. The store, the workspace quota and the `platform.blob_references`
+reference count are still shared, and the help now says which is which.
+
+**Nothing to adapt.** Every spelling these now print already worked; the ones
+they replaced already failed.
+
+---
+
 ## 2026-08-11 — Both apps write their own name the same way: `b/issues` and `b/sales`
 
 **Not breaking.** No route, command or payload changed. What changed is the

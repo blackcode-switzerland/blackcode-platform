@@ -173,7 +173,7 @@ deployment answers the same way, so the home app decides only who is asked.
 
 Everything else names its app and is unaffected: "bk issues upload" always talks
 to the issues app, whatever the home app is, because its name says so. That is
-the point of the 4.0.0 verb move — no hidden state decides where a command lands,
+the point of the 2.1.0 verb move — no hidden state decides where a command lands,
 and each app remembers its own active workspace.
 
 This is local state, written to ~/.config/bk/config.json. Run "bk app list" to

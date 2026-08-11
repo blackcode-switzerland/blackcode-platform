@@ -40,7 +40,7 @@ func runBK(t *testing.T, argv ...string) error {
 
 // The removed bare spellings, and the app-qualified form each must name.
 //
-// Three from D-11 (3.0.0) and EIGHT from multiAppFinalRefactor Phase 4, when the
+// Three from D-11 (2.0.0) and EIGHT from multiAppFinalRefactor Phase 4, when the
 // cross-app tier stopped existing because the apps stopped sharing a database.
 //
 // `storage` and `search` are here now and were not before, and that is a change
