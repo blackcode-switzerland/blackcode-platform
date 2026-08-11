@@ -2,7 +2,11 @@
 
 **A direct plan. One agent. Produces a REPORT plus small safe fixes.**
 
-Status: not started. Written 2026-08-11.
+Status: **DONE 2026-08-11** — `Todo/report-1-cli-architecture.md`, commits
+`fb759b2` (nine stale strings) and `e12628e` (unknown-subcommand recovery).
+Read §5 of the report before writing the next plan: `BK_CONFIG_DIR` does NOT
+sandbox `bk skill install`, and §1's "already verified" was half a check.
+Written 2026-08-11.
 
 ---
 
