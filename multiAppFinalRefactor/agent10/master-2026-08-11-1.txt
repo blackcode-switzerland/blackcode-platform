@@ -1,0 +1,164 @@
+FROM:    master
+TO:      agent10
+DATE:    2026-08-11
+PHASE:   10 — platform-email, and the front doors
+STATUS:  BRIEF
+--------------------------------------------------------------------------------
+
+READ FIRST:
+  multiAppFinalRefactor/README.md    the rules — incl. BK_CONFIG_DIR
+  multiAppFinalRefactor/PLAN.md      §1 (the contract), §9 (the ledger)
+  docs/adding-an-app.md              open item 7 — this phase closes it
+  agent8/agent-2026-08-11-1.txt      §5.3 — why this is bigger than it looks
+
+Phases 0–9 are deployed. Account deletion is app-aware and the stranding bug is
+closed. **This is the last phase of what the human originally asked for.**
+
+
+================================================================================
+1. THE PROBLEM, IN THE USER'S WORDS
+================================================================================
+Looking at sales' Settings → Account, which sends people to issues for a
+password change and to issues to close their account:
+
+  > "sales is independent, but the user login is shared. That means a user
+  >  created in sales or issues can reset their password in sales or issues,
+  >  right? … Where in sales I have to go to issues app."
+
+And at sales' login page, which says *"Access is by invitation"*:
+
+  > "as sales is independent, through sales can also a user account be created
+  >  right? also supporting forget password screens etc."
+
+**Both are true and neither is a policy decision.** Sales cannot send email, so
+it cannot deliver a one-time code, so it defers to issues. Everything on that
+screen traces to `apps/issues/lib/email/` never having become a package.
+
+
+================================================================================
+2. WHAT ALREADY EXISTS — DO NOT REBUILD
+================================================================================
+I checked, so you do not spend the phase discovering it.
+
+  * `POST /api/auth/register` exists on **both** apps, with the whitelist gate.
+  * Issues has the full reset API already:
+        /api/auth/password-reset/request  · /confirm
+        /api/me/password/request-otp      · /confirm
+  * `packages/platform-auth/src/password-reset.ts` is where the logic lives.
+  * **`users.password_changed_at` already invalidates every other session**,
+    verified end to end by agent 8 against two real sessions.
+
+**So the missing pieces are: the email PACKAGE, sales' half of the reset API,
+and the SCREENS. Neither app has a signup screen or a forgot-password screen.**
+The capability has existed for months with no front door.
+
+
+================================================================================
+3. WHAT TO BUILD
+================================================================================
+
+--- 3a. `packages/platform-email` ---------------------------------------------
+`adding-an-app.md` open item 7 says promote, do not copy, and names the shape:
+
+  * the ADDRESS is platform-wide — `admin@blackcode.ch`, the apex domain,
+    because Resend's free plan verifies ONE domain per account
+  * the APP IDENTITY is the display name: `Blackcode Issues <admin@…>`
+  * so `fromAddress()` takes the app, the same un-hardcoding as `uploads.app`
+
+**Agent 8 says this is larger than "promote a module" (§5.3) and every estimate
+on this project that assumed a move was mechanical has been wrong.** If it is
+larger than one phase with §3b, say so and stop — that judgement has been right
+every time an agent made it.
+
+`emailEnabled()` already exists. **An app without a key must degrade honestly**,
+not silently not-send. A reset that reports success and delivers nothing is
+worse than one that refuses.
+
+--- 3b. The front doors, in BOTH apps ------------------------------------------
+  * `/signup` — posting to the register route that already exists. **The
+    whitelist gate must hold, and you must WATCH a non-whitelisted email be
+    refused**, in the browser, not in a unit test. The account is shared: an
+    ungated signup on any app is an ungated signup on every app.
+  * `/forgot-password` and the code-entry step. Sales needs the API half too.
+  * Sales' Settings → Account stops deferring to issues.
+
+**Sales' login page says "Access is by invitation. Ask a workspace owner to
+invite you and grant you b/sales."** The second half is already false — the
+grant was `app_access`, dropped in Phase 5. Fix the whole sentence in the same
+commit as the signup screen. Agent 7 found the landing page selling `bk undo`
+for months; a page describing a capability the product does not have, or now
+does, is the same defect.
+
+Each app's own visual language. Sales' colours are decided in
+`apps/sales/lib/pipeline.ts` — agent 2 was caught by a guard for importing
+issues' grey.
+
+
+================================================================================
+4. WHAT NOT TO DO
+================================================================================
+- **Do not weaken the whitelist.** It is the only thing standing between a
+  public signup form and a shared account on every app.
+- Do not send real email to anyone but yourself in testing.
+- Do not touch `platform.blob_references` or anything reaching `del()`.
+- Do not move `platform.*` tables into `issues.*` — declined twice.
+- Do not deploy or set production env vars. The human does both.
+
+
+================================================================================
+5. VERIFICATION
+================================================================================
+Full gate (README §4).
+
+**Observed, per case:**
+  1. Signup on sales, whitelisted → lands in the app with a workspace
+  2. Signup on sales, NOT whitelisted → refused, visibly
+  3. Forgot-password end to end on sales, **including the email arriving**
+  4. Password change → the other session dies (agent 8 has the method)
+  5. Sales' Settings → Account no longer points at issues
+
+**Then the browser pass on every page you touched.** Three production bugs in
+four days lived where every route was correct — a 404 layout, a blank members
+page, and a landing page selling a removed command.
+
+** AND THE THING THAT WILL FOOL YOU: ** an email that does not arrive looks
+identical to an email that arrived slowly. Agent 7 wrote "silent no-op" four
+times because its instrument could not see a 4-second toast. Decide how you will
+tell "not sent" from "not yet" BEFORE you test, and say what you used.
+
+
+================================================================================
+6. WHERE I AM LEAST CONFIDENT
+================================================================================
+Nine for nine: every phase has found something false in my brief.
+
+  1. **The size of §3a.** See agent 8.
+  2. **Whether sales should send email at all**, or whether "one app sends, and
+     it is issues" is a defensible platform design. I think not — it is what
+     produced the screen the user objected to — but it is worth one paragraph
+     rather than assuming.
+  3. **Whether signup belongs on every app.** An invitation-only app is a
+     legitimate choice; the user's objection was that it was accidental, not
+     that it was wrong.
+  4. **`docs/env.md` currently says sales' `RESEND_*` is "unset, deliberately —
+     sales has no email module".** That becomes false in this phase. A doc
+     explaining a deliberate absence is exactly the kind that gets believed
+     after it stops being true.
+
+
+================================================================================
+7. WHEN YOU ARE DONE
+================================================================================
+Full gate. Commit as you go, do not push.
+
+Write `multiAppFinalRefactor/agent10/agent-2026-08-11-1.txt`:
+
+  1. `platform-email`: what moved, what each app supplies, what a keyless app does
+  2. The screens, and the whitelist refusal you WATCHED in a browser
+  3. §5's five cases — observed
+  4. How you told "not sent" from "not yet"
+  5. Which env vars the human must set, exactly
+  6. Everything in §6 I got wrong
+
+In chat, print only the path of that file.
+--------------------------------------------------------------------------------
