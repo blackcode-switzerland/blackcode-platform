@@ -181,7 +181,7 @@ export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boo
       {isOwner && (
         <Section
           title="Invite somebody"
-          note="They need a blackcode account, or an address a super admin has approved. b/sales does not send email — copy the link and send it yourself."
+          note="They need a blackcode account, or an address a super admin has approved. We email them an invitation; the link below works too, if it does not arrive."
         >
           {/* The note, not silence. `ui-mode.ts`'s READ_ONLY_NOTE exists because
               a control that is simply absent teaches nothing: the reader
@@ -275,13 +275,17 @@ export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boo
                     </div>
                   </div>
                   {/* ── THE LINK, ON EVERY PENDING ROW AND NOT ONLY THE FRESH ONE ──
-                      This section's own note says "b/sales does not send email —
-                      copy the link and send it yourself", and until 2026-08-11
-                      the only place the link appeared was the `lastSent` banner
-                      above: it survived until the next reload and then the
-                      invitation became unsendable from the UI. The owner's
-                      remaining options were to revoke and re-invite, or to read
-                      the token out of Postgres.
+                      Until 2026-08-11 the only place the link appeared was the
+                      `lastSent` banner above: it survived until the next reload
+                      and then the invitation became unsendable from the UI. The
+                      owner's remaining options were to revoke and re-invite, or
+                      to read the token out of Postgres.
+
+                      **This app sends the invitation by email now** (Phase 10),
+                      so the link is a fallback rather than the only channel —
+                      which is why the note above changed on the same day. It
+                      stays because email is best-effort by design: a bounce
+                      must not strand an invitation that is already valid.
 
                       Nothing new is exposed — `token` is already in this row's
                       payload, which is what made the gap invisible: the data was

@@ -73,9 +73,20 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     )
   }
 
-  // THE LINK IS PART OF THE RESPONSE because this app sends no email — there is
-  // no `platform-email` package yet (docs/adding-an-app.md open item 7). A link
-  // nobody can copy is not a delivery mechanism.
+  // THE LINK IS PART OF THE RESPONSE because THIS app sends no email. That is a
+  // property of the scaffold, not of the platform: `packages/platform-email`
+  // exists as of 2026-08-11 and `apps/sales` uses it — see
+  // `docs/adding-an-app.md` open item 8, which shows the four-line binding.
+  //
+  // The scaffold deliberately does NOT bind a sender, so a copied app starts
+  // with no dependency on a Resend key and `email_sent: false` stays honest.
+  // Add the binding when your app needs to send, and set the two environment
+  // variables at the same time — without them, production password resets
+  // refuse with 503 `email_not_configured` rather than silently not sending.
+  //
+  // A link nobody can copy is not a delivery mechanism, so it is returned
+  // either way — `apps/sales` still returns it now that it does send, because
+  // email is best-effort and a bounce must not strand a valid invitation.
   const origin = new URL(req.url).origin
   return NextResponse.json(
     {
