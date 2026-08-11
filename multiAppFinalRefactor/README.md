@@ -1,5 +1,30 @@
 # How this refactor is run
 
+> ## ARCHIVED 2026-08-11 — the refactor is finished, all ten phases shipped.
+>
+> **The ten `agentN/` correspondence folders have been moved** to
+> `~/Documents/BAK/blackcode-platform-backups/multiAppFinalRefactor-correspondence/`.
+> They are the record of how it was built; nothing depends on them.
+>
+> **What stayed here is still live, and is why this folder was not archived
+> whole:**
+>
+> | | |
+> |---|---|
+> | `verify.sh`, `capture-baseline.sh`, `backup.sh`, `lib-db.sh`, `verify-diff.awk` | the row-count ledger. Working tools — use them before any future migration |
+> | `baseline.txt` | the production baseline. Re-capture after any deploy that changes data |
+> | `SAFETY.md` | backups, the delete ritual, and what each instrument cannot see |
+> | `PLAN.md` §9 | **the open ledger** — four items still open |
+>
+> Eight docs cite this path (`docs/platform-db.md`, `adding-an-app.md`,
+> `CLAUDE.md`, …), so the folder keeps its name even though the project it is
+> named after is over. Renaming it is eight citation updates for a naming
+> preference, and on this project a citation is a claim.
+>
+> The protocol below is kept because it worked, and because the next multi-phase
+> job should use it.
+
+
 Read this first, whoever you are.
 
 ---
