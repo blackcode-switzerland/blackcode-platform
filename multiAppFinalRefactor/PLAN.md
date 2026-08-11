@@ -499,7 +499,28 @@ for tidiness. Revisit only if it gets in the way.
 
 ---
 
-### Phase 6 — Give cross-app search back, properly (optional)
+### Phase 6 — DEFERRED 2026-08-10, not cancelled
+
+**Agent 6 declined it, and the reason is the schedule, not the design.**
+
+The design is settled and better than this plan's: **`--all-apps` searches each
+app's own active workspace.** Well defined, it is "search my stuff", and agent
+5's per-app `ActiveWorkspaces` map is exactly the input. The incoherent phrasing
+was "search THIS workspace across apps", which nobody needs.
+
+It cannot ship yet because **`bk search` was removed as a bare verb in Phase 4,
+one day earlier, with a deprecation row telling every agent there is no
+cross-app index any more.** A fan-out spans apps so it must be a bare verb —
+reintroducing it inside the deprecation window makes that hint false while it is
+still being read, by exactly the agents most likely to be reading it.
+
+> **A deprecation hint is a promise with a duration.** `deprecations.go` keeps
+> entries for two minor releases. Do not contradict one inside its own window.
+
+Buildable after the window closes, to the spec above. If it is never built, the
+loss stays deliberate and documented in §3.
+
+### Phase 6 — the original brief, kept for the spec (optional)
 
 **Goal:** restore the convenience without the coupling.
 

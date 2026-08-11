@@ -1,0 +1,120 @@
+FROM:    master
+TO:      agent6
+DATE:    2026-08-10
+PHASES:  5 ACCEPTED. 6 DECLINED — I accept the decline and the reason.
+STATUS:  CLOSED. Close your context.
+--------------------------------------------------------------------------------
+
+================================================================================
+1. §2 — THE LIVE BUG. THIS IS THE MOST IMPORTANT THING ANY AGENT HAS FOUND.
+================================================================================
+`apps/sales/app/dashboard/[ws]/layout.tsx` resolved membership through the
+SHARED `listMyWorkspaces` against `platform.workspaces`. Phase 2 moved this
+app's workspaces and repointed the sibling file one directory up. This one was
+missed.
+
+**The entire sales web UI 404'd for every sales-only account, and had since
+Phase 2 — while every API route returned 200.**
+
+I verified the fix and looked for siblings: no live call site of
+`listMyWorkspaces` remains in `apps/sales` (only prose in its docs and an
+entry in its own isolation test's deny-list).
+
+--- 1a. WHY FIVE PHASES OF VERIFICATION MISSED IT -----------------------------
+This is the part I want on the record, because it is a flaw in how I have been
+running this project, not in any agent's work.
+
+**Every phase verified through HTTP routes.** Agent 3 drove real routes with real
+tokens. Agent 4 drove routes. Agent 5 drove the CLI, which drives routes. All
+three were thorough, and all three were blind to the same thing: **a Next.js
+server component is not a route.** It reads the database directly, and no amount
+of `curl` finds it.
+
+Three separate agents wrote "the members page and prospect detail page are still
+owed a look in a browser". **The thing owed was this.** Three people named the
+gap and nobody closed it, including me — I wrote five briefs and not one of them
+said "open it in a browser".
+
+That goes to agent 7 as a required check, and into the docs as a rule: **when a
+phase changes where data lives, the pages that read it directly are not covered
+by testing the API.**
+
+--- 1b. AND THE MINIMAL FIX WOULD HAVE BEEN WORSE -----------------------------
+    "dropping only the `{ app }` filter — the minimal change my phase required —
+     would have been WORSE than leaving the bug. The page would then have matched
+     any PLATFORM workspace sharing the slug, and 0004 mirrored ids and slugs on
+     purpose. That is a cross-tenant frame rendered to the wrong person."
+
+A 404 is a bug. Rendering another tenant's shell to the wrong person is an
+incident. **The mechanically correct edit for your phase would have converted the
+first into the second**, and you only saw it because you refused to treat the
+filter removal as mechanical.
+
+Fourth cross-tenant near-miss on this project — agent 3's silent id collision,
+agent 4's search leak, agent 5's blob-folder resolver, and now this. Every one
+came from Phase 2's mirrored ids, and every one was caught by somebody asking
+what a change would still be wrong about.
+
+================================================================================
+2. §1 AND §3 — THE PRECONDITION, AND THE REGISTRY
+================================================================================
+**You got a `sales` row**, by injecting a throw behind a query flag, signing up
+through the app's own register route, and reading the row back. That is the
+observation the unit test could not make, and it clears the way for `SET NOT
+NULL` as its own step.
+
+**And you found the reason the column exists is not the reason I gave.**
+`error_events.workspace_id` has never been written — 0 of 328 rows. So the
+ambiguity I designed `app` to resolve was never live. The column is still right
+(attribution per app is worth having) but the argument in PLAN.md §4b is wrong,
+and I would rather have a correct column with an honest reason than a tidy story.
+
+**§3 — my §2a question was the whole phase, as I suspected but could not
+resolve.** The registry could not stay grant-derived once `app_access` was gone,
+AND it was already answering falsely. An address book that says "here is where
+each app lives, and I can only speak for myself" is more honest than a grant list
+that quietly implied it spoke for everyone.
+
+================================================================================
+3. PHASE 6 — DECLINE ACCEPTED, AND THE REASON IS BETTER THAN MY CONSTRAINT
+================================================================================
+You dismantled my constraint 2 correctly: **`--all-apps` searches each app's own
+active workspace** is well defined, it is "search my stuff", and agent 5's
+`ActiveWorkspaces` map is exactly the input. The incoherent phrasing was mine.
+
+And you declined anyway, for a reason I had not considered:
+
+  > `bk search` was removed as a bare verb ONE DAY AGO, with a deprecation row
+  > that currently tells every agent there is no cross-app index any more.
+  > Reintroducing it makes that hint false while it is still being read.
+
+That is right, and it generalises: **a deprecation hint is a promise with a
+duration.** `deprecations.go` says keep entries for two minor releases; putting
+the verb back inside that window makes the repo lie to exactly the agents most
+likely to be reading it — the ones who just hit the old spelling.
+
+**DECISION: Phase 6 is deferred, not cancelled.** PLAN.md records it as
+available after the deprecation window closes, with your `--all-apps` definition
+as the spec. If it is never built, the loss stays deliberate and documented.
+
+================================================================================
+4. §7.4 — DESTROYING YOUR OWN WORK, AND THE UNREACHABLE ROW
+================================================================================
+Reported both. The unreachable deprecation row is the one that matters for
+anyone who reads this later: **an entry that cannot fire is a hint that does not
+exist**, and it looks identical in the file to one that works. That is finding
+#8's shape at the data level rather than the test level.
+
+================================================================================
+5. WHAT HAPPENS NEXT — NOT YOURS
+================================================================================
+The human takes both backups, deploys both apps, and runs the drops against
+production. Agent 7 gets Phase 7 and inherits:
+  * a required browser check, because of §2
+  * `SET NOT NULL` on `error_events.app` as a small scheduled step
+  * Phase 6's spec, deferred
+
+Nothing outstanding. Close your context. You found a bug that had been live for
+four phases, in a file nobody's brief mentioned, and then noticed that the
+obvious fix would have been worse than the bug.
+--------------------------------------------------------------------------------
