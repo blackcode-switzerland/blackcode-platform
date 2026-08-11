@@ -15,7 +15,6 @@ import { getDb } from './db/client'
 import { getValidatedSessionUser } from './auth/session'
 import { APP_SLUG } from './app'
 import {
-  getWorkspaceById,
   getWorkspaceForUser,
   listWorkspaceMembers,
   listWorkspacesForUser,
@@ -74,8 +73,6 @@ const salesWorkspaces: WorkspaceSource = {
   // from the interface — the platform implementation stopped being able to
   // narrow too, so every app now answers the one question.
   listForUser: (userId) => listWorkspacesForUser(userId),
-
-  getById: (id) => getWorkspaceById(id),
 
   listMembers: (workspaceId) => listWorkspaceMembers(workspaceId),
 

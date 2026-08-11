@@ -101,22 +101,6 @@ export async function listWorkspacesForUser(userId: number): Promise<WorkspaceMe
 }
 
 /**
- * One workspace by id with NO membership check.
- *
- * Narrow in who may call it — an unchecked lookup reaching a route would let the
- * API confirm which workspaces exist. The caller is upload attribution,
- * resolving an id the caller was already given by being a member.
- */
-export async function getWorkspaceById(id: number): Promise<WorkspaceRef | null> {
-  const rows = await getDb()
-    .select(WS_COLUMNS)
-    .from(salesWorkspaces)
-    .where(eq(salesWorkspaces.id, id))
-    .limit(1)
-  return rows[0] ?? null
-}
-
-/**
  * Everyone in one workspace, joined to `platform.users`.
  *
  * `deleted_at` is SELECTED, not filtered: a soft-deleted user who is still a

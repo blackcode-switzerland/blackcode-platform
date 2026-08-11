@@ -4,7 +4,7 @@
 // ===========================================================================
 // WHY THE NO-OP NEEDS A TEST AND THE QUERIES DO NOT
 // ===========================================================================
-// `getForUser`, `listForUser`, `getById` and `listMembers` are queries: they
+// `getForUser`, `listForUser` and `listMembers` are queries: they
 // fail loudly and visibly when they are wrong, and the whole app exercises them
 // on every request.
 //
@@ -69,7 +69,6 @@ const setActiveWorkspace = vi.fn()
 vi.mock('@/lib/db/queries/workspaces', () => ({
   listWorkspacesForUser,
   getWorkspaceForUser: async () => MINE[0],
-  getWorkspaceById: async () => MINE[0],
   listWorkspaceMembers: async () => [],
 }))
 

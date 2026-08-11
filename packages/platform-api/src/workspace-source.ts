@@ -33,19 +33,25 @@
 // unchanged by construction rather than by review.
 //
 // ---------------------------------------------------------------------------
-// WHY SIX METHODS AND NOT ONE RESOLVER
+// WHY FIVE METHODS AND NOT ONE RESOLVER
 // ---------------------------------------------------------------------------
 // The obvious shape was `resolveWorkspace`, and it is not enough: several
 // shared entry points read an app's tenancy tables, not one. `/api/meta`
 // resolves a default workspace and lists members; `bk workspace use` writes
-// one; upload attribution reads one by id. A single resolver would have left
-// every one of those still naming `platform.*` — a seam that looks finished and
-// is not.
+// one. A single resolver would have left every one of those still naming
+// `platform.*` — a seam that looks finished and is not.
 //
-// Six methods over ONE subject — this app's workspaces and this caller's
+// Five methods over ONE subject — this app's workspaces and this caller's
 // place in them — is a port, not a bag. The bar from `app-context.ts` still
 // applies to each: a shared route cannot be written without it, and no app
 // could supply a sensible default.
+//
+// It was SIX until 2026-08-11, and the sixth is the cautionary one. The
+// paragraph above used to end "…; upload attribution reads one by id", which
+// was `getById`'s entire justification — and Phase 3 moved upload attribution
+// to `UploadLedger` without anyone noticing that the sentence, and the method,
+// had outlived it. **The bar is not "was this justified when it was added"; it
+// is "is the caller still there".** See the note where `getById` used to be.
 //
 // What is deliberately NOT here: creating a workspace, renaming one, deleting
 // one, membership writes, and the whole invitation state machine. Those are an
@@ -54,7 +60,6 @@
 
 import {
   getUserById,
-  getWorkspaceById,
   getWorkspaceForUser,
   listMyWorkspaces,
   listWorkspaceMembers,
@@ -127,14 +132,25 @@ export interface WorkspaceSource {
    */
   listForUser(userId: number): Promise<WorkspaceMembershipRef[]>
 
-  /**
-   * One workspace by id with NO membership check.
-   *
-   * Narrow in who may call it: an unchecked lookup reaching a route would let
-   * the API confirm which workspaces exist. The caller is upload attribution,
-   * resolving an id the user record already carries.
-   */
-  getById(id: number): Promise<WorkspaceRef | null>
+  // ── `getById` WAS HERE, AND ITS REMOVAL IS THE LESSON ──────────────────────
+  // "One workspace by id with NO membership check. The caller is upload
+  // attribution, resolving an id the user record already carries."
+  //
+  // That sentence stopped being true in Phase 3. Upload attribution moved to
+  // `UploadLedger`, which resolves through the app's own ledger rather than
+  // through a bare id read out of `platform.users.active_workspace_id` — and
+  // `apps/sales/lib/db/queries/uploads.test.ts` asserts, by name, that this
+  // method "must not be reached". So the ONE caller was deliberately severed,
+  // the doc comment kept describing it, and three apps plus two fakes went on
+  // implementing a method nobody called. Agents 4, 5 and 7 each flagged it;
+  // agent 7 added a third implementation while flagging it.
+  //
+  // Deleted 2026-08-11 (Phase 8). **A required interface method with no caller
+  // is not free.** Every app must invent an answer for it, which means every
+  // app must decide what an unchecked cross-tenant lookup returns — a security
+  // question asked of everyone and read by no one. If a future caller genuinely
+  // needs a membership-free lookup, add it back WITH that caller in the same
+  // commit, so the justification and the use arrive together.
 
   /** Everyone in one workspace. */
   listMembers(workspaceId: number): Promise<WorkspaceMemberRef[]>
@@ -185,8 +201,6 @@ export function platformWorkspaceSource(db: PlatformDb): WorkspaceSource {
     getForUser: (slugOrId, userId) => getWorkspaceForUser(db, slugOrId, userId),
 
     listForUser: (userId) => listMyWorkspaces(db, userId),
-
-    getById: (id) => getWorkspaceById(db, id),
 
     listMembers: (workspaceId) => listWorkspaceMembers(db, workspaceId),
 

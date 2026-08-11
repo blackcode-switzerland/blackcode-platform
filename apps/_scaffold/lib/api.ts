@@ -34,7 +34,6 @@ import { getDb } from './db/client'
 import { getValidatedSessionUser } from './auth/session'
 import { APP_SLUG } from './app'
 import {
-  getWorkspaceById,
   getWorkspaceForUser,
   listWorkspaceMembers,
   listWorkspacesForUser,
@@ -85,7 +84,6 @@ async function resolveUser(req: NextRequest) {
 const scaffoldWorkspaceSource: WorkspaceSource = {
   getForUser: (slugOrId, userId) => getWorkspaceForUser(slugOrId, userId),
   listForUser: (userId) => listWorkspacesForUser(userId),
-  getById: (id) => getWorkspaceById(id),
   listMembers: (workspaceId) => listWorkspaceMembers(workspaceId),
   setDefaultForUser: async () => {},
   getDefaultForUser: async (userId) => {

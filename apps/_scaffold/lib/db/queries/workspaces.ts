@@ -106,16 +106,6 @@ export async function listWorkspacesForUser(userId: number): Promise<WorkspaceMe
   }))
 }
 
-/** One workspace by id, WITHOUT a membership check. */
-export async function getWorkspaceById(id: number): Promise<WorkspaceRef | null> {
-  const rows = await getDb()
-    .select(WS_COLUMNS)
-    .from(scaffoldWorkspaces)
-    .where(eq(scaffoldWorkspaces.id, id))
-    .limit(1)
-  return rows[0] ?? null
-}
-
 /** The people in a workspace, with their platform identity. */
 export async function listWorkspaceMembers(workspaceId: number): Promise<WorkspaceMemberRef[]> {
   return await getDb()

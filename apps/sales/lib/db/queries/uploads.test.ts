@@ -84,9 +84,15 @@ function sourceWith(opts: { mine: typeof WS | null; byName?: typeof WS | null })
     getForUser: async () => opts.byName ?? null,
     getDefaultForUser: async () => opts.mine,
     listForUser: async () => (opts.mine ? [opts.mine] : []),
-    getById: async () => {
-      throw new Error('getById must not be reached: it takes an id from the SHARED user record')
-    },
+    // `getById` USED TO BE A THROWING FAKE HERE, and the assertion it carried —
+    // "must not be reached: it takes an id from the SHARED user record" — is now
+    // enforced by the type instead: Phase 8 deleted the method from
+    // `WorkspaceSource` because this file was the proof it had no caller left.
+    //
+    // Worth recording that this fake would NOT have caught its own staleness.
+    // The `as unknown as WorkspaceSource` cast below suppresses the excess-
+    // property check, so `tsc` named `lib/api.ts` and the scaffold and stayed
+    // silent about this line. A cast is a hole in the instrument.
     listMembers: async () => [],
     setDefaultForUser: async () => {},
   } as unknown as WorkspaceSource
