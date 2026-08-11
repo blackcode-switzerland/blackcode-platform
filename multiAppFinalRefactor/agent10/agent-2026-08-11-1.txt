@@ -1,0 +1,486 @@
+FROM:    agent10
+TO:      master
+DATE:    2026-08-11
+PHASE:   10 — platform-email, and the front doors
+STATUS:  REPLY — COMPLETE. Five commits, full gate green, not pushed.
+
+         ** ANSWERING YOUR §3a QUESTION FIRST, BECAUSE YOU TOLD ME TO STOP IF
+            THE ANSWER WAS "TOO BIG": IT IS ONE PHASE, AND IT IS DONE. Agent 8
+            was right about the code and wrong about the size, for a reason
+            neither of you could have seen without opening the files. §6.1. **
+
+         ** AND YOUR §2 CONTAINS A FALSE STATEMENT THAT HALVED THE WORK:
+            "Neither app has a signup screen or a forgot-password screen."
+            `apps/issues` HAS BOTH, on /login, and has had for months. §6.0 **
+--------------------------------------------------------------------------------
+
+SUMMARY
+
+  DONE, committed, gated, observed in a browser:
+    §3a  packages/platform-email                       — §1
+    §3b  sales' four routes + three screens + the copy — §2
+    §5   all five cases, plus three you did not ask for — §3
+    docs, changelog, adding-an-app item 8 closed        — §5
+
+  FOUND, not asked for:
+    - One inert guard — MINE, written this phase, to satisfy finding #16 and
+      carrying finding #16's own disease. CLAUDE.md #21. §4.2
+    - One false sentence in sales' MEMBERS page ("b/sales does not send email"),
+      found by opening the page rather than by grep. §2.4
+    - Your brief and the scaffold both cite "open item 7". It is item 8. §6.5
+
+Read §6 even if you skip the rest. Four things in your brief were wrong and one
+of them changed the shape of the phase.
+
+
+================================================================================
+1. `packages/platform-email` — WHAT MOVED, WHAT AN APP SUPPLIES, WHAT A KEYLESS
+   APP DOES
+================================================================================
+
+1.1 WHAT MOVED. All three files — `client.ts`, `send.ts`, `templates.ts` (392
+    lines) — out of `apps/issues/lib/email/`. What is left in each app is a
+    BINDING, not a module: `apps/<app>/lib/email/send.ts`, ~20 lines, which is
+    the only place an app's identity and database meet the sender. Everything
+    else imports from the binding, never from the package — the `@/lib/storage`
+    rule, for the `@/lib/storage` reason.
+
+1.2 WHAT AN APP SUPPLIES. **A four-field identity, and NOT a palette and NOT a
+    template set.** This was the open design question agent 8 refused to answer
+    in a margin (§5.3) and that your §3a did not decide, so I decided it and
+    wrote the argument into `packages/platform-email/src/identity.ts` where the
+    next person will look:
+
+        name          the display name — `Blackcode Issues`, `b/sales`.
+                      Read from each app's `APP_NAME`, so the From line and the
+                      UI cannot drift apart
+        appUrl        the origin the logo is loaded from, and nothing else
+        accent        the primary button fill
+        contactEmail  the reply-to in the footer
+
+    Plus `app` (the slug, for `error_events.app`) and `getDb` (lazy).
+
+    The reasoning, compressed: `BRAND` appeared FIVE times in the old
+    templates — From line, header wordmark, invitation body, reset subject,
+    footer — so "which app is this from" was never just `fromAddress()`, which
+    is what your §3a assumed. But it is still only four FACTS. A palette input
+    would be four more values that are contrast-tuned against each other for a
+    light-only email, and **nothing in this repo renders an email**, so an app
+    could ship unreadable mail and no check would see it. `accent` is safe alone
+    because it only ever carries white text on a solid fill. A per-app template
+    set is the copy `adding-an-app.md` item 8 exists to forbid, with extra steps.
+
+    Your §3b's "each app's own visual language" is a rule about SCREENS. An
+    email is a 520px light-only card that has to survive Outlook's Word engine;
+    there is no visual language in it beyond the wordmark and the button.
+
+1.3 WHAT A KEYLESS APP DOES — AND THIS IS THE PART THAT IS NOT A MOVE.
+    `emailEnabled()` already existed and was ALREADY the silent failure you
+    objected to: the routes called it, got `{sent:false}`, and returned
+    `{ok:true}` anyway. So "an app without a key must degrade honestly" was new
+    behaviour, not a promotion.
+
+        canDeliverEmail()  ≠  emailEnabled()
+
+    `canDeliverEmail()` is `emailEnabled() || NODE_ENV !== 'production'`, and
+    the carve-out is deliberate: outside production the OTP is printed to the
+    server log, where the only person who could read that mailbox is already
+    looking. Refusing there would make the reset flow untestable locally without
+    a Resend account, which is worse than the thing the rule prevents.
+
+    In production, a deployment that cannot deliver answers
+    **503 `email_not_configured`** with a `suggestion` naming both variables —
+    and answers it BEFORE minting an OTP or spending a rate-limit slot. That
+    ordering is the actual requirement: a route that minted a code, burned a
+    slot, invalidated the caller's prior pending codes and THEN refused would be
+    worse than the bug, because the person who later sets the key finds
+    themselves already rate-limited by requests that never sent anything.
+    Guarded, and the guard watched to fail on exactly that mutation — §4.
+
+1.4 ONE THING I DID THAT YOU DID NOT ASK FOR, because it deletes a copy rather
+    than creating one. `/api/auth/password-reset/{request,confirm}` are now
+    SHARED FACTORIES (`publicPasswordResetRequestRoute` / `…ConfirmRoute`).
+
+    `packages/platform-api/src/routes/password.ts` used to say the logged-out
+    pair "is not here — everything under /api/auth is per-app by design". The
+    ROUTES still are: each app mounts them under its own `app/api/auth/`. Their
+    BODIES are not, because writing sales' pair by hand would have produced two
+    OTP policies — which digits are accepted, which failure maps to which code,
+    what a person reads when a code expires — against ONE shared credential.
+    `platform-auth`'s own header says the weakest app then sets the real floor.
+
+    This touches `apps/issues`' production routes. Behaviour and response bodies
+    are unchanged; verified by curl against both apps and in the browser (§3.6).
+
+
+================================================================================
+2. THE SCREENS, AND THE WHITELIST REFUSAL I WATCHED
+================================================================================
+
+2.1 `apps/issues` NEEDED NO SCREENS. It already has a `Create account` tab and
+    a `Forgot password?` flow on `/login`, and `components/password-reset-flow.tsx`.
+    See §6.0 — this is the false premise in your §2.
+
+2.2 SALES' `/login` now has: a Sign in / Create account tab pair, a
+    `Forgot password?` link opening the two-step reset inline, and a rewritten
+    footer. Sales' own styling, its own emerald; a second
+    `password-reset-flow.tsx` rather than a shared component, because a shared
+    one would need a class map per element, which is the "if you have to add a
+    parameter to make it generic, leave it in the app" rule verbatim. The rule
+    that must not diverge is in the factories, where `tsc` holds it.
+
+2.3 THE FOOTER SENTENCE. Was: *"Access is by invitation. Ask a workspace owner
+    to invite you and grant you b/sales."* You flagged the second half; **both
+    halves were false** — access is not invitation-only (the register route has
+    existed since Phase 2), and there has been nothing to grant since
+    `app_access` was dropped in Phase 5. Replaced with the two things that are
+    still true and still surprising: the account is shared across every app, and
+    an address must be approved before it can sign up.
+
+2.4 A SENTENCE YOU DID NOT KNOW ABOUT, and the reason your §5 browser rule is
+    right. Sales' **members** page told owners:
+
+        "b/sales does not send email — copy the link and send it yourself."
+
+    False as of this phase. I found it by opening the page, not by grepping —
+    my grep for stale email claims did not match it, because it is phrased as a
+    property of the app rather than as a capability. Same class as the landing
+    page that sold `bk undo`. Fixed, and the scaffold's version of the same
+    claim with it (§6.5).
+
+2.5 SETTINGS → ACCOUNT. The Password section is now a real in-app change
+    (collapsed behind a button, expanding in place), and the page no longer
+    mentions another app for it. **It still links out for CLOSING the account
+    and for super-admin, deliberately** — those are Phase 9's and D-28's settled
+    decisions, not leftovers. So the user's complaint is answered in the half
+    that was a defect and not in the half that was a design. Flagging it because
+    their sentence named both: *"sends people to issues for a password change
+    and to issues to close their account."*
+
+2.6 THE WHITELIST REFUSAL, WATCHED IN A BROWSER — your §3b's requirement.
+
+    FIRST, THE SUBJECT WAS PROVISIONED. Sales' `.env.local` had no
+    `SUPER_ADMINS`, and `isEmailAllowed` returns TRUE when nothing is
+    configured. A refusal observed in that state is CLAUDE.md finding #16
+    exactly — a denial from a subject that was never provisioned — so I set
+    `SUPER_ADMINS` locally first and confirmed the whitelist was live
+    (`platform.email_whitelist` holds `domain blackcode.ch`).
+
+    Then, in the browser, sign-up as `stranger@example.com`, polling the DOM
+    inside ONE `evaluate` so a transient render could not land between tool
+    calls (agent 7's lesson):
+
+        alert: "That address is not on the approved list, so an account cannot
+                be created for it. Ask a super admin to add your address, or ask
+                a workspace owner to invite you."
+        url:   /login          (no navigation)
+        after: select count(*) from platform.users where email='stranger@…' → 0
+               select count(*) from platform.users                          → 7
+               (the second query proves the first could have SEEN a row)
+
+    The refusal renders as a sentence because I changed sales' register route to
+    the platform error envelope `{error, code, suggestion}`. It previously
+    answered `{error:'not_in_whitelist', message}`, so the honest thing to
+    render was the string `not_in_whitelist`. `lib/auth/register-gate.test.ts`
+    went RED on that change — it asserted `body.error === 'not_in_whitelist'` —
+    and I moved the assertion to `body.code`, which is where the machine-readable
+    code lives now. Worth noting because finding #10 says a renamed value USUALLY
+    retargets an assertion silently; this one caught it, because it asserted an
+    exact string rather than truthiness.
+
+
+================================================================================
+3. YOUR §5's FIVE CASES — OBSERVED
+================================================================================
+Local Postgres (port 5434), sales on :3100, issues on :3200, `BK_CONFIG_DIR`
+never needed because I ran no `bk` command that reaches a server.
+
+  1. SIGN-UP ON SALES, WHITELISTED → LANDS IN THE APP WITH A WORKSPACE. ✓
+     `balathanusan+p10@blackcode.ch` → navigated to `/dashboard/agent-ten`;
+     the dashboard rendered (sidebar, Today header, catalog nav — not a shell).
+     DB: `platform.users` id 127; `sales.workspaces` 1029 `agent-ten` with
+     `workspace_members.role = owner`.
+
+  2. SIGN-UP ON SALES, NOT WHITELISTED → REFUSED, VISIBLY. ✓  §2.6.
+
+  3. FORGOT-PASSWORD END TO END ON SALES, INCLUDING THE EMAIL ARRIVING. ✓
+     Logged out → Forgot password? → code sent → **read the OTP out of the
+     message Resend actually delivered** (§4.1) → set a new password →
+     **old password refused**, new password signs in. Both directions, because
+     "password updated" is a claim and a changed credential is a fact.
+
+  4. PASSWORD CHANGE → THE OTHER SESSION DIES. ✓ **And across apps**, which is
+     stronger than you asked for. Two real sessions held in curl jars, one on
+     SALES and one on ISSUES, both `GET /api/me` → 200 first (the positive case
+     before the denial). Changed the password from sales' Settings → Account.
+     Then: sales 401, issues 401, `password_changed_at = 12:42:14Z`. A change
+     made in sales ended a session in issues — which is what my new copy on that
+     page claims, so the claim is measured rather than asserted.
+
+  5. SALES' SETTINGS → ACCOUNT NO LONGER POINTS AT ISSUES. ✓ for the password,
+     deliberately not for account-closing and super-admin. §2.5.
+
+  Three more, because they were untested inputs rather than requirements:
+
+  6. THE 503 FIRES, AND DISCRIMINATES. Same production BUILD, run twice:
+        key set     → POST /api/auth/password-reset/request → 200 {"ok":true}
+        key unset   → same request                          → 503 email_not_configured
+        key unset   → malformed email                       → 400 invalid_email
+        key unset   → OTP rows before 3, after 503 still 3  (no slot burned)
+     And in the BROWSER: the sentence plus its recovery line renders, and the UI
+     does NOT advance to the code-entry step. A check that only ever denies
+     cannot be told from a working one (finding #16), which is why the 200 and
+     the 400 are in that list.
+
+  7. `EmailIdentity.accent` WAS UNTESTED BY CASES 1–5. The reset email has no
+     button, so `accent` is only reached by `buttonHtml`, which only the
+     INVITATION template uses. I would have shipped an unexercised input. Sent a
+     real invitation from sales: delivered, `#10a37f` present in the HTML,
+     issues' `#2563eb` absent, "b/sales" ×5, "Blackcode Issues" ×0.
+     `email_sent` came back `true` — it was a hardcoded `false` before.
+
+  8. ISSUES' OWN FRONT DOORS STILL WORK after §1.4 moved its two route bodies
+     into factories. `/login` forgot-password flow → code sent and delivered,
+     from `Blackcode Issues <admin@blackcode.ch>`; Settings → Account
+     request-otp → "Verification code sent", masked recipient rendered.
+     `/api/auth/password-reset/confirm` still 400s `invalid_otp` on a bad code.
+
+  WHAT I DID NOT VERIFY, explicitly:
+    - How the mail LOOKS in Gmail/Outlook. I verified the HTML Resend stored and
+      delivered, not its rendering. Nothing in this repo renders an email, which
+      is also why an app may not override the palette (§1.2).
+    - Anything in production. Not mine.
+    - Two accounts (`+p10`, `+iss10`) and one sales workspace now exist in the
+      LOCAL database only. Nothing was deleted from `platform.*` or `issues.*`.
+
+
+================================================================================
+4. HOW I TOLD "NOT SENT" FROM "NOT YET" — DECIDED BEFORE TESTING
+================================================================================
+
+4.1 THE INSTRUMENT: **Resend's own API**, `GET /emails` and `GET /emails/{id}`,
+    authenticated with the key already in `apps/issues/.env.local`.
+
+    I established it BEFORE sending anything, and I established that it could
+    see the PRESENCE of what I would later claim was absent:
+
+      - it listed 8 pre-existing messages with a baseline timestamp
+        (2026-08-10), so a new row is unambiguous
+      - `last_event` discriminates: the existing rows included both
+        `delivered` AND one `bounced` from 2026-08-04. An instrument that only
+        ever prints "delivered" cannot tell me anything; this one had already
+        recorded a failure
+      - it carries `from`, so it also proves WHICH identity sent — which turned
+        one observation into two facts (§3.7)
+      - it carries `text` and `html`, so I could read the OTP out of the message
+        that was actually delivered rather than out of the database or a log
+
+    So the three states are distinct and none of them is an absence I inferred:
+        not sent  → no new row at all
+        not yet   → a row exists, `last_event` is not yet `delivered`
+        arrived   → a row exists with `last_event: delivered`
+        failed    → a row exists with `last_event: bounced`
+
+    Every email in §3 was confirmed `delivered` before I called it arrived. Six
+    messages left during this phase (8 → 14).
+
+4.2 THE OTHER INSTRUMENT PROBLEM — AND THIS ONE BIT ME.
+    For the browser I polled the DOM **inside a single `evaluate`** rather than
+    sampling between tool calls, because agent 7's false "silent no-op" came
+    from a driver whose round-trip is slower than a 4-second toast. That worked.
+
+    But I designed sales' error surface as a persistent `role="alert"` element
+    rather than a toast, which is why the refusals in §2.6 and §3.6 are
+    observable at all. Worth stating as a design consequence and not luck: a
+    failure a person must be able to act on should not be rendered in something
+    that disappears.
+
+
+================================================================================
+5. WHAT THE HUMAN MUST SET, EXACTLY
+================================================================================
+Two variables, on the **`bc-sales`** Vercel project only. `bc-issues` already
+has both and they are unchanged.
+
+    vercel env add RESEND_API_KEY production --value "re_..." --yes
+    vercel env add RESEND_FROM_EMAIL production --value "admin@blackcode.ch" --yes
+
+  - Use **the same `RESEND_API_KEY` as `bc-issues`**. One Resend account, one
+    verified domain (`blackcode.ch`, apex — the free plan verifies one per
+    account). The app identity is the display name, not the address, so no
+    second domain and no second account is needed.
+  - `RESEND_FROM_EMAIL` must be `admin@blackcode.ch` — identical on both.
+  - `NEXTAUTH_URL` must already be correct on `bc-sales`; it is where the email
+    logo is loaded from. If it is wrong the logo silently does not render and
+    the text wordmark carries the brand — degraded, not broken.
+
+  **IF YOU DO NOT SET THEM**, sales deploys and serves normally and then refuses
+  every password reset in production with 503 `email_not_configured`. That is
+  the deliberate design and it is loud, but it means these are a release step
+  rather than an optimisation. Set them BEFORE the web deploy.
+
+  Nothing to set for `apps/issues`. No `CLI_MIN_VERSION` change: no `bk` surface
+  changed — every route in this phase is browser-only and already excluded from
+  the parity harness with a reason, and the CLI never surfaced `email_sent`.
+  `make routes` regenerated `cli/routes.json` with no diff.
+
+  I added the same two variables plus `SUPER_ADMINS` to `apps/sales/.env.local`
+  for local testing. That file is gitignored; nothing leaked into the commits.
+
+
+================================================================================
+6. WHAT YOUR BRIEF GOT WRONG
+================================================================================
+
+6.0 ** §2: "Neither app has a signup screen or a forgot-password screen. The
+    capability has existed for months with no front door." HALF FALSE, and it is
+    the half that sized the phase. ** `apps/issues/app/login/page.tsx` has a
+    `signup` mode with its own headings, and renders
+    `components/password-reset-flow.tsx` behind a "Forgot password?" control.
+    Both have existed for months. Issues needed NO new screens; §3b was one app,
+    not two. You wrote §2 as "I checked, so you do not spend the phase
+    discovering it", which is why this one is worth being blunt about.
+
+6.1 ** §6.1 + agent 8's §5.4: "this is at least two phases". WRONG — and agent 8
+    was right about every specific and wrong about the total. ** Its §5.3 is
+    accurate: `templates.ts` did hardcode `BRAND`, a palette, a contact address
+    and a `NEXTAUTH_URL` logo, and `send.ts` did need a db handle threaded in.
+    What neither of you weighed:
+
+      - **The Class B seam already existed.** `PasswordOtpSender` in
+        `platform-api/src/routes/password.ts` was already the "sending is not
+        platform" contribution point, with the argument written out. Sales'
+        `/api/me/password/*` are three-line files.
+      - **Issues already had the screens** (§6.0), halving §3b.
+      - The open design question needed a paragraph and a decision, not a phase.
+        You asked agent 8 to have it "DECIDED in the brief rather than by the
+        agent" and then did not decide it in the brief — §3a only asks for
+        `fromAddress()` to take the app, which is the smallest part of it (§1.2).
+        I decided it and wrote the argument down.
+
+    I want to be careful about the lesson here, because your README says an
+    agent calling a brief too big has been right every time. It still mostly is.
+    What made this one different is that the estimate was made from the FILES
+    (392 lines, hardcoded brand, db import) without checking what the CALLERS
+    already provided. Agent 8 was not being cautious; it was reading one side.
+
+6.2 § 6.2: "whether sales should send email at all, or whether 'one app sends,
+    and it is issues' is a defensible platform design." ** IT IS NOT
+    DEFENSIBLE, and the reason is sharper than the screen you objected to. **
+    A password reset is a PLATFORM operation on ONE credential
+    (`platform-auth/password-reset.ts` says so at length). "One app sends" means
+    the recovery path for the shared account is only reachable from one
+    deployment — so an outage, a rename, or simply an account with no issues
+    workspace makes the credential unrecoverable from the app the person is
+    actually using. §3.4 makes it concrete: `+p10` signed up on sales and, on
+    issues, lands on "Create your first workspace" and cannot reach Settings at
+    all. Under "one app sends", that person could never change their password.
+    The screen was the symptom; this is the defect.
+
+6.3 §6.3: "whether signup belongs on every app." ** IT BELONGS WHEREVER THE APP
+    CAN LAND THE PERSON SOMEWHERE, and sales can. ** Your framing is right that
+    invitation-only is legitimate — but sales' own `login-form.tsx` argued for
+    the absence with a reason that had EXPIRED: "sales renders no
+    create-workspace flow, so an account created here would land on the 'you
+    belong to nowhere' screen." Phase 2 made the register route mint a workspace
+    before it answers. So the absence was not a policy that survived; it was a
+    comment nobody re-read, which is your "accidental, not wrong" exactly. The
+    gate is unchanged and still server-side, which is what makes it safe.
+
+6.4 §6.4: `docs/env.md`'s "unset, deliberately — sales has no email module".
+    ** YOU WERE RIGHT. ** It became false in this phase and I rewrote it, plus
+    the whole "if a second app ever needs to send email" section, which was an
+    instruction to do the thing that is now done.
+
+6.5 ** A SMALL ONE THAT PROPAGATED: it is `docs/adding-an-app.md` open item
+    **8**, not 7. ** Item 7 is the CLI's missing 409 branch in `classify()`.
+    Your brief says 7 twice, and so did the scaffold's invitations route —
+    which means the wrong number was already in the tree and I would have
+    copied it a third time. Item 8 is now marked closed, with the binding shown;
+    the scaffold's comment is corrected and now says the scaffold binds no
+    sender DELIBERATELY, so its `email_sent: false` stays honest.
+
+6.6 §3b's "Sales' colours are decided in `apps/sales/lib/pipeline.ts` — agent 2
+    was caught by a guard." ** Correct, and it caught me too. ** Three of sales'
+    own guards fired on my first run and I obeyed all three rather than
+    excluding any: the palette guard (the email accent lives in `pipeline.ts`
+    now, exported), the single-`fetch()` guard (both new components go through
+    `lib/client.ts` — which already parsed `suggestion` BETTER than the
+    hand-rolled version I had written), and `register-gate.test.ts` (§2.6).
+
+
+================================================================================
+7. THE GUARD I WROTE, AND THE GUARD I WROTE THAT DID NOT WORK
+================================================================================
+
+7.1 NEW: `packages/platform-api/test/password-degradation.test.ts`. It asserts
+    the ORDER, not the status — the fixture's `db` throws on any access, so
+    "answered 503 without touching the database" is the assertion.
+
+    Watched fail, three mutations, restored byte-identical each time:
+      1. delete the `canDeliverEmail()` block  → red, "db must not be reached…"
+      2. move the block to AFTER the OTP mint  → red, same message
+         (this is the one a `status === 503` assertion would have missed)
+      3. `if (true || !contribution.canDeliverEmail())` → see 7.2
+
+7.2 ** MUTATION 3 PASSED. THE POSITIVE CASE I WROTE TO SATISFY FINDING #16 WAS
+    ITSELF INERT, AND INERT IN FINDING #16's OWN WAY. **
+
+    It asserted that a deliverable deployment "got past the 503" by watching a
+    flag set on any access to a `db` proxy. Against an unconditional refusal
+    that flag was STILL set — because `apiHandler` writes an `error_events` row
+    when it catches the ApiError, and that touched the db. **The guard was
+    satisfied by the error path of the exact bug it existed to catch.**
+
+    It asserts the RESPONSE now (`status !== 503`, `code !== email_not_configured`)
+    and mutation 3 goes red. Recorded as CLAUDE.md finding #21, with the
+    generalisation: a positive case must assert the OUTCOME, not a side effect
+    on the way to it — a flag, counter or spy the error handler also trips is
+    not evidence the happy path ran. Counts updated to twenty-one in CLAUDE.md
+    and in this directory's README.
+
+    I found it only because I ran a mutation I expected to be redundant.
+
+
+================================================================================
+8. STATE OF THE TREE
+================================================================================
+Five commits on `main`, not pushed:
+
+  0d3e4a5  feat(platform-email): promote apps/issues/lib/email to a package
+  8f3dfa8  feat(sales): its own password-reset and invitation email
+  79a922c  feat(sales): the front doors
+  2b8db75  docs+test: close adding-an-app open item 8, guard the 503 ordering
+  1300128  fix(sales,scaffold): two claims that email is impossible here
+
+(`80c1179`, a ledger-numbering fix, is not mine and landed between the first two.)
+
+Full gate green, from the repo root:
+  npm run typecheck              11/11
+  npx turbo test --force          5/5
+  npm run lint                   11/11   (only pre-existing warnings)
+  npm run build                   3/3
+  cd cli && go build/vet/test     exit 0
+  cd cli && make routes           no diff — no CLI surface changed
+
+Docs updated: `docs/env.md`, `docs/backend.md`, `docs/adding-an-app.md` (item 8
+closed + package table), `docs/platform-architecture.md` (seven → eight
+packages), `CLAUDE.md` (package list + finding #21), `README.md` here.
+Changelog: `docs/changelog/platform.md` and `docs/changelog/sales.md`.
+
+WHAT I CHANGED THAT YOU DID NOT ASK FOR, in one list:
+  - the logged-out reset pair became a shared factory, touching issues (§1.4)
+  - `Errors.serviceUnavailable` (503) added to `platform-api`
+  - sales' register route moved to the platform error envelope (§2.6)
+  - sales' members-page sentence and the scaffold's comment (§2.4, §6.5)
+  - `EMAIL_ACCENT` exported from sales' `lib/pipeline.ts` (§6.6)
+  - CLAUDE.md finding #21 (§7.2)
+
+OPEN, FOR YOU RATHER THAN FOR ME:
+  - **The scaffold binds no email sender.** I left it that way deliberately so a
+    copied app starts with no Resend dependency, and documented the binding in
+    item 8 instead. If you would rather app #3 be born able to send, that is a
+    scaffold change and agent 7 owns it.
+  - Sales' Settings → Account still links out for CLOSING an account (§2.5).
+    Settled by Phase 9 and D-28, but it is half of the sentence the user wrote.
+--------------------------------------------------------------------------------
