@@ -59,20 +59,47 @@ func appOwnedVerbs() []*cobra.Command {
 	return set.All()
 }
 
+// THE SECOND ARGUMENT TAKES A NAME OR AN ID, AND THAT IS THE WHOLE FIX.
+//
+// `bk issues issue create --label urgent` has always taken a NAME, creating it
+// if it did not exist. `label attach` took two IDs and needed a `label list`
+// first. The two shapes describe one operation and only one of them is
+// guessable, which is what produced Todo/issues-app-feedback.md item 1: the
+// reporter, and then an agent, concluded from the friction that labelling was
+// not exposed at all.
+//
+// **The server never required an id.** `POST …/issues/{id}/labels` accepts
+// `{"label_id": n}` OR `{"name": "…"}` and has since it was written. The
+// restriction was one `strconv.Atoi` in this file with no counterpart on the
+// route — a CLI that was stricter than its own API.
+//
+// A bare integer still means an ID. That is deliberate and it is the one
+// ambiguity here: a label literally named "58" cannot be attached by name. It is
+// the right way round, because every id in this binary is an integer and every
+// script that already passes one keeps working, whereas a numeric label name is
+// a thing nobody has.
+func labelTargetArg(arg string) (id int, name string) {
+	if n, err := strconv.Atoi(arg); err == nil {
+		return n, ""
+	}
+	return 0, arg
+}
+
 func newLabelAttachCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:         "attach <issue_id> <label_id>",
+		Use:         "attach <issue_id> <label>",
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/issues/{id}/labels,GET /api/workspaces/{ws}/issues/{id}/labels"},
-		Short:       "Attach a label to an issue",
-		Args:        cobra.ExactArgs(2),
+		Short:       "Attach a label to an issue (by name or id)",
+		Long: `<label> is a NAME or an id. A name is matched case-insensitively and
+CREATED if it does not exist yet — the same resolution ` + "`bk issues issue create --label`" + `
+uses, so no ` + "`label list`" + ` is needed first. A bare integer is read as an id.`,
+		Example: `  bk issues label attach 189 urgent
+  bk issues label attach 189 58`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issueID, err := strconv.Atoi(args[0])
 			if err != nil {
 				return fmt.Errorf("invalid issue_id %q", args[0])
-			}
-			labelID, err := strconv.Atoi(args[1])
-			if err != nil {
-				return fmt.Errorf("invalid label_id %q", args[1])
 			}
 			c, cfg, err := cmdutil.NewClientAndConfig()
 			if err != nil {
@@ -81,6 +108,14 @@ func newLabelAttachCmd() *cobra.Command {
 			ws, err := cmdutil.RequireActiveWorkspace(cfg)
 			if err != nil {
 				return err
+			}
+			labelID, name := labelTargetArg(args[1])
+			if name != "" {
+				if err := c.AttachIssueLabelByName(ws, issueID, name); err != nil {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "attached label %q to issue %d\n", name, issueID)
+				return nil
 			}
 			if err := c.AttachIssueLabel(ws, issueID, labelID); err != nil {
 				return err
@@ -93,18 +128,19 @@ func newLabelAttachCmd() *cobra.Command {
 
 func newLabelDetachCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:         "detach <issue_id> <label_id>",
-		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid}"},
-		Short:       "Detach a label from an issue",
-		Args:        cobra.ExactArgs(2),
+		Use:         "detach <issue_id> <label>",
+		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid},GET /api/workspaces/{ws}/issues/{id}/labels"},
+		Short:       "Detach a label from an issue (by name or id)",
+		Long: `<label> is a NAME or an id. A name is resolved against the labels this
+issue actually carries, and a miss is an error naming what it does have —
+never a silent success. A bare integer is read as an id.`,
+		Example: `  bk issues label detach 189 urgent
+  bk issues label detach 189 58`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issueID, err := strconv.Atoi(args[0])
 			if err != nil {
 				return fmt.Errorf("invalid issue_id %q", args[0])
-			}
-			labelID, err := strconv.Atoi(args[1])
-			if err != nil {
-				return fmt.Errorf("invalid label_id %q", args[1])
 			}
 			c, cfg, err := cmdutil.NewClientAndConfig()
 			if err != nil {
@@ -113,6 +149,14 @@ func newLabelDetachCmd() *cobra.Command {
 			ws, err := cmdutil.RequireActiveWorkspace(cfg)
 			if err != nil {
 				return err
+			}
+			labelID, name := labelTargetArg(args[1])
+			if name != "" {
+				if err := c.DetachIssueLabelByName(ws, issueID, name); err != nil {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "detached label %q from issue %d\n", name, issueID)
+				return nil
 			}
 			if err := c.DetachIssueLabel(ws, issueID, labelID); err != nil {
 				return err

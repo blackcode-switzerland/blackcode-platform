@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // Workspace-aware client methods. Companion to client.go; the legacy methods
@@ -386,6 +387,64 @@ func (c *Client) DetachIssueLabel(slugOrID string, issueID, labelID int) error {
 		nil,
 		nil,
 	)
+}
+
+// AttachIssueLabelByName posts a NAME rather than an id. The route has always
+// accepted either — `{"name": …}` matches case-insensitively and CREATES the
+// label if it does not exist, which is the same resolution
+// `bk issues issue create --label urgent` uses. Only the CLI insisted on an id,
+// via a strconv.Atoi that had no counterpart on the server.
+func (c *Client) AttachIssueLabelByName(slugOrID string, issueID int, name string) error {
+	return c.postJSON(
+		fmt.Sprintf("/api/workspaces/%s/issues/%d/labels", slugOrID, issueID),
+		map[string]string{"name": name},
+		nil,
+	)
+}
+
+// ListIssueLabels returns the labels currently on one issue.
+//
+// It exists so a name can be turned into an id for DETACH, which the route only
+// takes by id — and deliberately reads the ISSUE's labels rather than the
+// workspace's. Detaching is removing something that is already there, so the
+// only names that can succeed are on this list, and resolving against the wider
+// set would let `--label-remove typo` resolve to a real label the issue does
+// not carry and report a removal that removed nothing.
+func (c *Client) ListIssueLabels(slugOrID string, issueID int) ([]Label, error) {
+	var resp struct {
+		Data []Label `json:"data"`
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/issues/%d/labels", slugOrID, issueID), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+// DetachIssueLabelByName resolves a name against the issue's own labels, then
+// detaches by id.
+//
+// A miss is an ERROR naming what the issue does have, never a silent success.
+// "removed a label that was not there" and "removed it" must not print the same
+// line — that is the shape of the defect this whole triage was about.
+func (c *Client) DetachIssueLabelByName(slugOrID string, issueID int, name string) error {
+	labels, err := c.ListIssueLabels(slugOrID, issueID)
+	if err != nil {
+		return err
+	}
+	want := strings.ToLower(strings.TrimSpace(name))
+	for _, l := range labels {
+		if strings.ToLower(l.Name) == want {
+			return c.DetachIssueLabel(slugOrID, issueID, l.ID)
+		}
+	}
+	if len(labels) == 0 {
+		return fmt.Errorf("issue %d has no labels, so %q cannot be removed", issueID, name)
+	}
+	have := make([]string, 0, len(labels))
+	for _, l := range labels {
+		have = append(have, l.Name)
+	}
+	return fmt.Errorf("issue %d has no label %q — it has: %s", issueID, name, strings.Join(have, ", "))
 }
 
 // ---------- project updates ----------

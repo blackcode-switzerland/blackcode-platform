@@ -351,14 +351,37 @@ func newIssueCreateCmd() *cobra.Command {
 	return cmd
 }
 
+// LABELS ARE A SUB-RESOURCE, AND `edit --label` IS A CLI CONVENIENCE OVER IT.
+//
+// `PATCH …/issues/{id}` does not and will not take labels — it rejects the field
+// with `labels_not_patchable` (2026-08-11), because label membership lives at
+// `…/issues/{id}/labels` where attach and detach are separate, auditable writes.
+//
+// But `bk issues issue create --label urgent` HAS always accepted labels in one
+// call, and that asymmetry is what produced Todo/issues-app-feedback.md item 1:
+// someone learned `create --label`, guessed `edit --label`, got "unknown flag",
+// and concluded from it that labelling was not exposed at all. Two people
+// reached that conclusion while `label attach` sat one `--help` away.
+//
+// So this flag exists on the CLI and NOT on the route. It takes NAMES, like
+// `create --label` does, and fans out to the sub-resource — one extra HTTP call
+// per label, no new HTTP surface, and no second opinion about what PATCH means.
+// `bk issues label attach|detach` remain the primitive and are what a caller
+// wanting one precise write should use.
+//
+// ORDER MATTERS AND IS DELIBERATE: the PATCH runs FIRST, then removals, then
+// additions. If a field update fails, no label has moved yet; and doing removals
+// before additions means `--label-remove x --label x` ends with x attached
+// rather than depending on flag order.
 func newIssueEditCmd() *cobra.Command {
 	var status, title, description, descriptionFile string
 	var priority int
 	var assignee, task, startDate, dueDate string
+	var addLabels, removeLabels []string
 	cmd := &cobra.Command{
 		Use:         "edit <id>",
-		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/issues/{id}"},
-		Short:       "Edit an issue (status, title, priority, description, assignee, task, dates)",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/issues/{id},POST /api/workspaces/{ws}/issues/{id}/labels,DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid},GET /api/workspaces/{ws}/issues/{id}/labels"},
+		Short:       "Edit an issue (status, title, priority, description, assignee, task, dates, labels)",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -426,6 +449,34 @@ func newIssueEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			// Labels, after the PATCH landed. Removals before additions — see the
+			// header. A failure here is returned as-is rather than swallowed: a
+			// label that did not move must not be reported as though it had, which
+			// is the exact defect (a success that changed nothing) that this whole
+			// triage started from.
+			if len(addLabels) > 0 || len(removeLabels) > 0 {
+				ws, err := cmdutil.RequireActiveWorkspace(cfg)
+				if err != nil {
+					return err
+				}
+				for _, name := range removeLabels {
+					if err := c.DetachIssueLabelByName(ws, id, name); err != nil {
+						return err
+					}
+				}
+				for _, name := range addLabels {
+					if err := c.AttachIssueLabelByName(ws, id, name); err != nil {
+						return err
+					}
+				}
+				// Re-read so the rendered issue carries the labels just written —
+				// `iss` came from the PATCH, which answered before any of them.
+				if fresh, err := c.GetIssue(id); err == nil {
+					iss = fresh
+				}
+			}
+
 			return output.Render(format, iss, func(w io.Writer) error {
 				fmt.Fprintf(w, "updated %s (status=%s priority=P%d)\n", issueRef(iss), iss.Status, iss.Priority)
 				return nil
@@ -441,6 +492,8 @@ func newIssueEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&task, "task", "", "Task id (or 'none' to clear)")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD (or 'none')")
 	cmd.Flags().StringVar(&dueDate, "due-date", "", "Due date YYYY-MM-DD (or 'none')")
+	cmd.Flags().StringArrayVar(&addLabels, "label", nil, "Attach a label by NAME, created if new (repeatable)")
+	cmd.Flags().StringArrayVar(&removeLabels, "label-remove", nil, "Detach a label by NAME (repeatable); errors if the issue does not carry it")
 	return cmd
 }
 

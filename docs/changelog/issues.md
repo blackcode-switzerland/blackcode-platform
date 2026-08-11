@@ -35,6 +35,46 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-08-11 — labelling an existing issue now takes a NAME, everywhere
+
+**Not breaking. CLI only — no HTTP surface changed.**
+
+`bk issues issue create --label urgent` has always taken a label NAME, creating
+unknown ones. Everything else took an id and needed a `bk issues label list`
+first. That asymmetry is what produced the report behind today's other label
+entry: someone learned `create --label`, guessed `edit --label`, got "unknown
+flag", and concluded labelling was not exposed at all. Two people reached that
+conclusion while the working command was one `--help` away.
+
+Both halves are closed:
+
+```bash
+bk issues issue edit 189 --label urgent --label-remove stale   # new flags
+bk issues label attach 189 urgent                              # was id-only
+bk issues label detach 189 urgent
+```
+
+- **`issue edit --label` / `--label-remove`** — repeatable, take names. Each
+  occurrence is taken whole, so a name containing a comma is one label. The
+  PATCH runs first, then removals, then additions, so `--label-remove x --label x`
+  ends with `x` attached regardless of flag order.
+- **`label attach` / `detach`** now accept a name in the second position. A bare
+  integer is still read as an ID, so every existing script keeps working — the
+  one consequence is that a label literally *named* `58` cannot be reached by
+  name. **The server never required an id**: `POST …/issues/{id}/labels` has
+  always accepted `{"name": …}`. The restriction was one `strconv.Atoi` in the
+  CLI with no counterpart on the route.
+- **`detach <issue> <name>` resolves against the labels that issue actually
+  carries**, not the workspace's, and a miss is an error naming what it does
+  carry. A removal that removed nothing must not print the same line as one that
+  worked.
+
+**`PATCH` still has no labels field** and still rejects one — see the entry
+below. `issue edit --label` is a CLI convenience that fans out to the
+sub-resource; it does not mean the route grew a field.
+
+`bk guide issues/items` documents both shapes and when to reach for each.
+
 ## 2026-08-11 — labels on an existing issue: the PATCH route stops pretending, and `issue view` always shows them
 
 **Breaking for one shape nobody could have been relying on.**

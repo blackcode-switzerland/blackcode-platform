@@ -196,7 +196,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/issues/{id}/labels",
-      "command": "bk issues label attach",
+      "command": "bk issues label detach",
       "app": "issues"
     },
     {

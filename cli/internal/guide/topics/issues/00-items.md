@@ -69,28 +69,35 @@ Applies to `--assignee`, `--task`, `--start-date`, `--due-date`.
 
 ## Labels on an issue that already exists
 
-Labels are a **sub-resource**, not a field on the issue, so they are not on
-`issue edit`. Attaching one after the fact is its own verb, and takes two
-POSITIONAL arguments — the issue and the label, no flags:
-
-```bash
-bk issues label list                  # find the label id
-bk issues label attach 189 58         # <issue_id> <label_id>
-bk issues label detach 189 58
-bk issues issue view 189              # confirm — the Labels line is always shown
-```
-
-At creation time the flag form exists, and takes a NAME rather than an id
-(unknown names are created):
+**Every way of labelling takes a NAME.** Unknown names are created on the fly, so
+nothing needs a `label list` first:
 
 ```bash
 bk issues issue create --title "…" --label urgent --label client-facing
+bk issues issue edit 189 --label urgent --label-remove stale
+bk issues label attach 189 urgent
+bk issues label detach 189 urgent
+bk issues issue view 189              # confirm — the Labels line is always shown
 ```
 
-`bk issues issue edit --label` does not exist, and neither does a `labels` or
-`label_ids` field on the PATCH route — that field is **rejected** with a
-suggestion rather than accepted and ignored, so a caller who guesses it gets
-told where to go instead of a 200 that changed nothing.
+Both flags repeat, and each occurrence is taken whole — a name containing a
+comma is one label, not two.
+
+An id still works anywhere a name does: `bk issues label attach 189 58` reads a
+bare integer as an id. The one consequence is that a label literally *named*
+`58` cannot be reached by name.
+
+Two shapes for one job, because they answer different questions.
+`issue edit --label` is the convenient one when you are already changing the
+issue. `label attach`/`detach` is the precise one — a single write, and
+`detach` fails naming what the issue *does* carry rather than reporting a
+removal that removed nothing.
+
+Labels are a **sub-resource**, not a field on the issue, and that survives at the
+HTTP layer: there is no `labels` or `label_ids` field on the PATCH route, and one
+sent there is **rejected** with a suggestion rather than accepted and ignored.
+`issue edit --label` is a CLI convenience that fans out to
+`…/issues/{id}/labels` — it does not mean PATCH grew a labels field.
 
 ## User references
 
