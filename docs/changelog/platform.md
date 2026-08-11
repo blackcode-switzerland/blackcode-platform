@@ -7,6 +7,36 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-11 — `bk login --token` explains itself, and a usage mistake exits 2
+
+**Not breaking.** `echo <token> | bk login --token` is unchanged and still the
+only way to hand `bk` a token you already have. What changed is what happens when
+you guess one of the other two spellings.
+
+`--token` is a **switch, not a value**: it reads the token from stdin so the
+secret never lands in your shell history, your process list, or a CI log of the
+command line. That was never stated anywhere, and both natural guesses failed
+describing something other than the mistake:
+
+| You type | You used to get | You now get |
+|---|---|---|
+| `bk login --token=<tok>` | `invalid argument … strconv.ParseBool: parsing "bk_live_…"` | the same parse error, plus a `hint:` naming `echo <token> \| bk login --token` |
+| `bk login --token <tok>` | `Server: …` then `read token: EOF` | `--token takes no value …` and the piped form |
+| `bk login --token` with no pipe | `read token: EOF` | `no token on stdin …`, the piped form, and `bk login` with no flags as the way to mint one |
+
+All three now exit **2** (usage) rather than **1** (runtime fault), which is what
+the exit-code table in `bk guide platform/output-and-exit-codes` has always
+promised for a flag mistake. If you branch on `$?`, a mistyped `--token` moves
+from 1 to 2.
+
+`bk guide platform/install-auth` also gained a **Windows** section: PowerShell's
+default execution policy blocks the `bk.ps1` and npm shims, and the way through
+is `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` or running the `.cmd`
+shim via `cmd.exe`. Reported from a real first run; the fix is documentation, not
+code, and it is untested on Windows.
+
+From `Todo/issues-app-feedback.md` item 5.
+
 ## 2026-08-11 — a guessed verb now resolves, and every dead end names a command you can run
 
 **Not breaking.** Four changes to how `bk` answers a caller who typed something

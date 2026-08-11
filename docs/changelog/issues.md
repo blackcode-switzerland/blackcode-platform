@@ -35,6 +35,52 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-08-11 — labels on an existing issue: the PATCH route stops pretending, and `issue view` always shows them
+
+**Breaking for one shape nobody could have been relying on.**
+
+`PATCH /api/workspaces/{ws}/issues/{id}` accepted `labels` and `label_ids`,
+ignored them, and returned **200** with the issue unchanged. It never applied
+them — `updateIssue` copies a fixed set of keys and those were not among them —
+so the only behaviour that changes is the status code on a request that was
+already doing nothing.
+
+It now returns **400 `labels_not_patchable`** with a suggestion naming the
+commands that do work. Sending `labels` or `label_ids` to this route rejects the
+whole patch, so move those keys to the sub-resource:
+
+```bash
+bk issues label list                  # find the label id
+bk issues label attach 189 58         # <issue_id> <label_id> — positional
+bk issues label detach 189 58
+```
+
+```http
+POST   /api/workspaces/{ws}/issues/{id}/labels   {"label_id": 58}
+POST   /api/workspaces/{ws}/issues/{id}/labels   {"name": "urgent"}   # created if new
+DELETE /api/workspaces/{ws}/issues/{id}/labels/{label_id}
+```
+
+Labels are a many-to-many edge with create-on-the-fly-by-name behaviour, not a
+column on the issue, and that sub-resource stays the one write path. **Labeling
+an existing issue has always worked** — two reporters concluded from the silent
+200 that it was a UI-only feature and worked around it.
+
+**`bk issues issue view <id>` now always prints a `Labels:` line**, showing `—`
+when there are none. It printed the line only when the list was non-empty, so a
+caller checking whether an attach had stuck could not tell an issue with no
+labels from a response with no such field. The `labels` array itself has always
+been in the JSON on both `GET` and `PATCH`.
+
+Also: **`/agent-updater` and `/changelog` now redirect (307)** instead of
+404ing — to `/agent-updator` (the page's real, misspelled path) and to
+`/api/changelog` respectively. Both were links shared with agents for
+self-diagnosis, and both dead-ended. The `/changelog` **page** is still gone and
+is not coming back; the redirect points at the API surface that replaced it.
+
+`bk guide issues/items` gained a "Labels on an issue that already exists"
+section. From `Todo/issues-app-feedback.md` items 1 and 4.
+
 ## 2026-08-11 — the landing page stopped making claims it cannot keep
 
 **Not breaking.** No route, command or payload changed. This is the public page
