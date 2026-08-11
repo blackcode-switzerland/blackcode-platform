@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid JSON body', code: 'invalid_body' }, { status: 400 })
   }
 
   const email = (body.email ?? '').trim().toLowerCase()
@@ -66,21 +66,31 @@ export async function POST(request: NextRequest) {
   const name = body.name?.trim() || null
 
   const emailErr = validateEmail(email)
-  if (emailErr) return NextResponse.json({ error: emailErr }, { status: 400 })
+  if (emailErr) return NextResponse.json({ error: emailErr, code: 'invalid_email' }, { status: 400 })
 
   const passwordErr = validatePassword(password)
-  if (passwordErr) return NextResponse.json({ error: passwordErr }, { status: 400 })
+  if (passwordErr)
+    return NextResponse.json({ error: passwordErr, code: 'weak_password' }, { status: 400 })
 
   // THE GATE. Before any write, and before the existence check below — which
   // also means a non-whitelisted address cannot use this route to find out
   // whether somebody else already has an account.
   const allowed = await isEmailAllowed(getDb(), email)
   if (!allowed) {
+    // `{ error, code, suggestion }` — the platform error envelope
+    // (`packages/platform-api/src/errors.ts`), NOT the `{ error: '<code>',
+    // message }` shape this route used to answer. It was changed on 2026-08-11
+    // when the sign-up SCREEN was built and had to render the refusal: with the
+    // old shape the honest thing to display was the string `not_in_whitelist`.
+    // `error` is the human sentence, `code` is what a client branches on, and
+    // `suggestion` is the recovery line — the same three fields `lib/client.ts`
+    // already parses for every other route in this app.
     return NextResponse.json(
       {
-        error: 'not_in_whitelist',
-        message:
-          'b/sales is invite-only for Blackcode team members. Ask a super admin to add your address, or ask a workspace owner to invite you.',
+        error: 'That address is not on the approved list, so an account cannot be created for it.',
+        code: 'not_in_whitelist',
+        suggestion:
+          'Ask a super admin to add your address, or ask a workspace owner to invite you.',
       },
       { status: 403 }
     )
@@ -90,7 +100,8 @@ export async function POST(request: NextRequest) {
   if (existing) {
     return NextResponse.json(
       {
-        error: 'Email already registered',
+        error: 'That email already has an account.',
+        code: 'email_taken',
         suggestion: 'Sign in instead, or use a different email',
       },
       { status: 409 }
@@ -100,7 +111,11 @@ export async function POST(request: NextRequest) {
   try {
     const password_hash = await hashPassword(password)
     const user = await createUserWithPassword(getDb(), { email, password_hash, name })
-    if (!user) return NextResponse.json({ error: 'Failed to create user' }, { status: 500 })
+    if (!user)
+      return NextResponse.json(
+        { error: 'Failed to create user', code: 'internal_error' },
+        { status: 500 }
+      )
 
     // A workspace, immediately, so the person lands in a working app rather than
     // on a "somebody has to invite you" screen — which is the whole difference
@@ -116,6 +131,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ id: user.id, email: user.email, name: user.name }, { status: 201 })
   } catch (error) {
     console.error('Register failed:', error)
-    return NextResponse.json({ error: 'Failed to create user' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Failed to create user', code: 'internal_error' },
+      { status: 500 }
+    )
   }
 }

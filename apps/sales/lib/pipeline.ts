@@ -81,6 +81,22 @@ function colorOf(options: Option[], value: string | null | undefined): string {
 const NEUTRAL = '#8a8578'
 
 /**
+ * This app's primary, as a literal hex — the emerald-teal `--primary` in
+ * `app/globals.css`.
+ *
+ * It is here rather than in `lib/email/send.ts` because `lib/palette.test.ts`
+ * is right: colour is decided in this file and nowhere else. An email is the
+ * one surface that cannot read a CSS variable — mail clients get inline styles
+ * or nothing — so the value has to be written down somewhere in TypeScript, and
+ * this is where writing a colour down is allowed.
+ *
+ * If `--primary` ever changes, this changes with it. That is one coupling in
+ * one place, which is strictly better than the alternative the guard caught: a
+ * hex sitting in the email binding, where nothing would ever compare the two.
+ */
+export const EMAIL_ACCENT = '#10a37f'
+
+/**
  * The colour a label gets when its creator names none — `sales.labels.color`'s
  * default, and the DEFAULT in migration 0003.
  *

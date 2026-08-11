@@ -164,6 +164,31 @@ const ACCOUNT_WRITERS = new Map<string, AccountWriter>([
   ],
   ['components/settings/token-settings.tsx', { why: 'platform API tokens — /api/tokens' }],
   [
+    'components/password-reset-flow.tsx',
+    {
+      why:
+        'changing YOUR OWN blackcode password — POST /api/{me/password,auth/password-reset}/* , ' +
+        'added 2026-08-11 when this app gained an email sender and stopped pointing ' +
+        'people at another app for a password both apps share. Not workspace-scoped ' +
+        'and not gateable, for accept-invitation.tsx\'s reason exactly: read-only is a ' +
+        'browser display PREFERENCE, and a preference that could stop somebody ' +
+        'recovering their own account would be a permission over that account (D-7). ' +
+        'The logged-out half is not gateable in any case — it renders on /login, where ' +
+        'there is no session to hold a preference',
+    },
+  ],
+  [
+    'components/login-form.tsx',
+    {
+      why:
+        'creating an account — POST /api/auth/register, added 2026-08-11 with this ' +
+        'app\'s sign-up screen. It runs with NO SESSION, so there is no ui_mode to ' +
+        'consult and nothing for read-only to mean; the only gate that matters here ' +
+        'is the whitelist, which is server-side in the route and asserted by ' +
+        'lib/auth/register-gate.test.ts',
+    },
+  ],
+  [
     'components/accept-invitation.tsx',
     { why: 'accepting or declining an invitation — POST /api/invitations/{accept,decline}, ' +
       'added 2026-08-10 with this app\'s own invitations. It is NOT workspace-scoped ' +

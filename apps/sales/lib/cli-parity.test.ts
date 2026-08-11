@@ -50,9 +50,9 @@ const CLI_DIR = join(REPO_ROOT, 'cli')
 /**
  * Routes deliberately not reachable from the CLI. Each needs a reason.
  *
- * Both entries are browser session machinery rather than product capabilities,
- * and neither is a capability an agent loses: an agent authenticates with a
- * `bk_live_…` token and reaches neither path.
+ * Every entry is browser session machinery rather than a product capability,
+ * and none is a capability an agent loses: an agent authenticates with a
+ * `bk_live_…` token and reaches none of these paths.
  *
  * Excluding NextAuth's catch-all also settles how it exports its handlers: it
  * necessarily writes `export { handler as GET, handler as POST }`, which the
@@ -62,6 +62,15 @@ const CLI_DIR = join(REPO_ROOT, 'cli')
  * them in cannot hide a capability.
  */
 const EXCLUDED_PATHS = new Map<string, string>([
+  [
+    '/api/auth/password-reset/request',
+    'browser password recovery (added 2026-08-11, Phase 10). Same entry, same reason, in ' +
+      'apps/issues: the logged-out flow proves ownership of an EMAIL INBOX, which is not a ' +
+      'thing a binary holding a `bk_live_…` token can do',
+  ],
+  ['/api/auth/password-reset/confirm', 'browser password recovery — see the request route above'],
+  ['/api/me/password/request-otp', 'in-app password change; session-only by design'],
+  ['/api/me/password/confirm', 'in-app password change; session-only by design'],
   [
     '/api/me/footprint',
     'session-only by design, the same reason `/api/me/password/*` carries — and here it ' +

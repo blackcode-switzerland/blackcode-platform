@@ -170,9 +170,19 @@ describe('POST /api/auth/register — the whitelist gate', () => {
 
     const { status, body } = await postRegister(STRANGER)
     expect(status, 'a non-whitelisted address must be refused').toBe(403)
+    // `body.code`, not `body.error`: on 2026-08-11 this route moved to the
+    // platform error envelope (`{ error, code, suggestion }`) so the new sign-up
+    // SCREEN could render a sentence instead of the string `not_in_whitelist`.
+    // The machine-readable code lives in `code` now, and `error` is prose.
+    //
+    // This test went RED on that change rather than quietly passing, which is
+    // the outcome CLAUDE.md finding #10 says not to count on: a widened or
+    // renamed value usually retargets an assertion silently. It caught this one
+    // because it asserted on an exact string rather than on truthiness.
+    //
     // The CODE, not just the status: a 403 for some other reason must not be
     // able to stand in for this one.
-    expect(body.error).toBe('not_in_whitelist')
+    expect(body.code).toBe('not_in_whitelist')
     expect(created, 'no account may be created for a refused address').toEqual([])
     expect(bootstrapped, 'no workspace may be created for a refused address').toEqual([])
   })
@@ -184,6 +194,6 @@ describe('POST /api/auth/register — the whitelist gate', () => {
     existingUsers = [STRANGER]
     const { status, body } = await postRegister(STRANGER)
     expect(status, 'existence must not be observable to a non-whitelisted caller').toBe(403)
-    expect(body.error).toBe('not_in_whitelist')
+    expect(body.code).toBe('not_in_whitelist')
   })
 })

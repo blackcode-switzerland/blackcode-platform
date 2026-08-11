@@ -15,6 +15,7 @@
 import { createEmailSender } from '@blackcode/platform-email'
 import { getDb } from '@/lib/db/client'
 import { APP_NAME, APP_SLUG } from '@/lib/app'
+import { EMAIL_ACCENT } from '@/lib/pipeline'
 
 export type { SendResult } from '@blackcode/platform-email'
 
@@ -34,7 +35,10 @@ export const {
     // point of `EmailIdentity.accent` is that a b/sales code arrives in b/sales'
     // colour rather than in the issues blue — the difference a recipient
     // actually sees between the two apps' mail.
-    accent: '#10a37f',
+    //
+    // From `lib/pipeline.ts`, not written here: `lib/palette.test.ts` decides
+    // where a hex may live in this app, and it caught this line spelling one.
+    accent: EMAIL_ACCENT,
     contactEmail: 'contact@blackcode.ch',
   },
 })
