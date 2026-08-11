@@ -13,3 +13,15 @@
 // anything else on purpose: a slug inferred from `process.cwd()` or a directory
 // listing would be a slug that changes when someone moves a folder.
 export const APP_SLUG = 'sales'
+
+/**
+ * Human name — for UI, for denial messages an agent reads, and for the From
+ * line of every email this app sends (`b/sales <admin@blackcode.ch>`).
+ *
+ * `apps/issues` has carried the same constant since Phase 5. This app gained
+ * one on 2026-08-11 when it started sending its own mail: the alternative was
+ * the display name living in `lib/email/send.ts`, which is a second place for
+ * the app's name to be written down and therefore a second place for it to go
+ * stale.
+ */
+export const APP_NAME = 'b/sales'

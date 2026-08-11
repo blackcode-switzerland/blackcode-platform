@@ -728,7 +728,7 @@ somebody has to make, not a bug somebody forgot.
    unmentioned. **This is the whole subject of the next phase**; see agent 8's
    reply for the mechanism and why the alternatives lose.
 
-8. **Closing an account STRANDS another app's data — live today.** Measured by
+9. **Closing an account STRANDS another app's data — live today.** Measured by
    agent 8 on 2026-08-11, and it is not the reporting bug it first looked like.
    `deleteAccountReport` reads `platform.workspaces`, which is issues-only since
    Phase 2, so the dry-run names one workspace and never mentions the person's
@@ -772,7 +772,7 @@ somebody has to make, not a bug somebody forgot.
    itself in its reply and both the census and the purge reject an answer from an
    app they did not address.
 
-9. **A config error can make one app answer AS another, and every guard stays
+10. **A config error can make one app answer AS another, and every guard stays
    green.** Found in Phase 9 by asking *what would this still pass on?* — not by
    review, not by any test. Point one app's `base_url` at another app in the
    suite and the census reports BOTH as `reachable: true`, with the same data,
