@@ -16,7 +16,6 @@ import {
   Terminal,
   Trash2,
   Users,
-  Workflow,
   Zap,
 } from 'lucide-react'
 
@@ -42,98 +41,113 @@ interface Feature {
   status: FeatureStatus
 }
 
-// Every card here describes something that ships today (or is tagged "in
-// preview"). Speculative / not-yet-built work is intentionally left off.
+// ===========================================================================
+// THE TEST EVERY LINE ON THIS PAGE HAS TO PASS
+// ===========================================================================
+// **Would this become false if somebody changed the product and never opened
+// this file?** If yes, it does not belong here. Nothing on a marketing page is
+// covered by typecheck, lint, a test or a build — prose is the one surface in
+// this repo with no guard at all, which is why `bk undo` was advertised here
+// for months over a journal that never had a writer.
+//
+// In practice that rules out four things, and they were all here on 2026-08-11:
+//
+//   1. **Vocabularies and enum values.** The status list, the project role list,
+//      a priority number in an example. `bk meta` serves those live, precisely
+//      because a page cannot.
+//   2. **Limits and counts.** "up to 100 MB", "SVG excluded", the exit-code
+//      table. Declared once in `lib/limits.ts` / `cmd/bk/main.go` and served or
+//      embedded; a second copy here is a copy that drifts.
+//   3. **`bk` commands beyond the two or three needed to get started.** Every
+//      one is a claim that a spelling still exists. `bk guide` ships inside the
+//      binary and therefore cannot drift; this page points at it.
+//   4. **Capabilities rather than benefits.** A capability can be removed. What
+//      the product is FOR cannot, and a reader wants that anyway.
+//
+// Say what a person gets. Let `bk guide` and `bk meta` say what the tool does.
 const FEATURES: Feature[] = [
   {
     icon: Hash,
-    title: 'Integer IDs',
+    title: 'Issues you can say out loud',
     description:
-      '"Issue 42" is easier to dictate, easier to grep, and easier for a model to keep in working memory than a 36-character UUID. Each workspace numbers its issues from #1.',
+      '"Issue 42" is easier to dictate, easier to grep, and easier for a model to hold in working memory than a 36-character UUID. Every workspace numbers its own.',
     status: 'live',
   },
   {
     icon: Layers,
-    title: 'Kanban board',
+    title: 'Board, timeline, list',
     description:
-      'Drag-and-drop columns per status — backlog, todo, in progress, done, cancelled. Moves persist instantly with optimistic updates.',
-    status: 'live',
-  },
-  {
-    icon: Workflow,
-    title: 'Timeline & list views',
-    description:
-      'A Gantt-style timeline places issues and projects on a date axis from their start and due dates. Switch to a dense list when you just want rows.',
+      'The same issues as a drag-and-drop board, as a date axis, or as dense rows — whichever one answers the question you are holding. Moves persist as you make them.',
     status: 'live',
   },
   {
     icon: Files,
-    title: 'Rich-text issues & comments',
+    title: 'Write like it matters',
     description:
-      'A TipTap editor with a slash menu, bubble toolbar, headings, lists, checklists, code blocks, links, @mentions and inline media. Sanitized before save.',
+      'Headings, checklists, code blocks, tables, links and @mentions in every description and comment, with a slash menu to reach them. Sanitized before it is stored.',
     status: 'live',
   },
   {
     icon: Boxes,
-    title: 'File attachments',
+    title: 'Attach the evidence',
     description:
-      'Paste, drag, or attach any file type (SVG excluded for safety) up to 100 MB. Stored on Vercel Blob in production, on the local disk in development.',
+      'Paste, drag or attach a file straight into an issue or a comment. The screenshot that explains the bug lives beside the bug.',
     status: 'live',
   },
   {
     icon: Tag,
-    title: 'Labels & tasks',
+    title: 'Labels, tasks, projects',
     description:
-      'Workspace-wide labels with colors, and tasks that stand alone or belong to a project — each with its own issues, comments and progress.',
+      'Group work the way your team already talks about it — a label across a workspace, a task that stands alone or belongs to a project, each with its own issues and progress.',
     status: 'live',
   },
   {
     icon: Users,
-    title: 'Teams & roles',
+    title: 'A team, and its agents',
     description:
-      'Invite by email. Workspaces have owners and members, with owner-only gates on destructive actions; projects add their own roles (owner, admin, member, viewer).',
+      'Invite by email into a shared workspace. The destructive actions are gated, and the gate is the same whether a person or an agent is asking.',
     status: 'live',
   },
   {
     icon: Inbox,
-    title: 'Activity feed & inbox',
+    title: 'Nothing happens silently',
     description:
-      'Every mutation is recorded on an append-only event spine that powers a workspace activity feed and a per-user inbox of mentions, assignments and changes.',
+      'Every change lands on an append-only spine that feeds a workspace activity feed and a personal inbox — so an agent working overnight is something you can read in the morning.',
     status: 'live',
   },
   {
     icon: Sparkles,
-    title: 'Workspace analytics',
+    title: 'Analytics that answer',
     description:
-      'Snapshot counts, completion rate, cycle time, velocity and aging — sliced by status, priority, assignee, label and project, plus per-task burndown.',
+      'Completion, cycle time, velocity and aging, sliced by the things you already file work under. Built from the same rows the board draws, not a separate pipeline.',
     status: 'live',
   },
   {
     icon: KeyRound,
-    title: 'API tokens for scripts',
+    title: 'Tokens for unattended work',
     description:
-      'Mint a bk_live_… token in settings. Stored as a SHA-256 hash with a short visible prefix so you know which one is which; optional expiry and one-click revoke.',
+      'Mint a token in settings for a script, a CI job or an agent. It is stored hashed, carries an optional expiry, and revoking it takes one click.',
     status: 'live',
   },
   {
     icon: BookOpen,
-    title: 'Self-describing CLI',
+    title: 'A CLI that describes itself',
     description:
-      '`bk guide` is the complete usage guide, embedded in the binary — so it always describes the version you are running, offline and unauthenticated. `bk meta` returns your context, the valid vocabulary and every limit in one call.',
+      '`bk guide` is the complete usage guide, embedded in the binary — so it can never describe a version you are not running, and it works offline. `bk meta` supplies everything that changes without a release.',
     status: 'live',
   },
   {
     icon: Trash2,
-    title: 'Trash & restore',
+    title: 'A wrong delete is not a lost one',
     description:
-      'Deleting an issue, project or task moves it to a recoverable Trash. Restore brings items back as a group; owners can purge or empty the bin.',
+      'Deleting moves work to a recoverable Trash, and things deleted together come back together. Emptying it is a second, separate decision.',
     status: 'live',
   },
   {
     icon: Moon,
-    title: 'Dark mode by default',
+    title: 'Dark by default',
     description:
-      'Token-driven theming with next-themes. Dark out of the box; flip the entire app’s accent by changing one CSS variable.',
+      'Token-driven theming, dark out of the box, light when you want it. It follows you across both surfaces.',
     status: 'live',
   },
   // ── THE "Reversible edits" CARD WAS REMOVED ON 2026-08-11 ─────────────────
@@ -147,6 +161,14 @@ const FEATURES: Feature[] = [
   // restore is the real version of the promise and has its own card above.
   //
   // Do not reinstate it without a writer for the journal.
+  //
+  // ── AND ON THE SAME DAY, THE SAME DEFECT IN FIVE MORE CARDS ──────────────
+  // "Kanban board" printed the whole status vocabulary; "File attachments"
+  // printed a size cap and a blocked MIME type; "Teams & roles" printed the
+  // project role vocabulary; "Workspace analytics" and "API tokens" described
+  // implementation. None of them was wrong on the day it was written, and every
+  // one of them was a fact with a second home. They were rewritten as benefits,
+  // which is the only kind of sentence a marketing page can keep true.
 ]
 
 function StatusPill({ status, className }: { status: FeatureStatus; className?: string }) {
@@ -248,7 +270,7 @@ function Hero() {
           <BrowserFrame
             srcDark="/hero-dark.png"
             srcLight="/hero-light.png"
-            alt="Screenshot of the Blackcode Issues dashboard"
+            alt="Screenshot of the b/issues dashboard"
             url="app.blackcode.issues/dashboard"
             width={2880}
             height={1800}
@@ -276,14 +298,14 @@ function Surfaces() {
         </>
       ),
       copy:
-        'A single Go binary on npm. Table, JSON, or YAML output. Stable exit codes. bk login opens a browser; you’re authed in seconds.',
-      meta: '→ bk issues issue list --json',
+        'A single Go binary on npm. Table, JSON or YAML output, stable exit codes, and a browser login that takes seconds.',
+      meta: '→ bk guide',
     },
     {
       icon: Zap,
       title: 'Agent skill',
       copy:
-        '`bk skill install` writes a ~30-line skill file your coding agent reads. It holds no facts that can rot — only pointers to `bk guide` and `bk meta` — so it never goes stale, and `bk skill sync` repairs it when anything does.',
+        'One command writes a short skill file your coding agent reads. It holds no facts that can rot — only pointers to the guide and the live data — so it never goes stale.',
       meta: '→ bk skill install',
     },
   ]
@@ -291,7 +313,10 @@ function Surfaces() {
     <section className="border-t border-border/60">
       <div className="mx-auto max-w-7xl px-6 py-20 sm:py-24">
         <SectionHead
-          eyebrow="Two surfaces"
+          // "Two surfaces" over three cards until 2026-08-11. The third is the
+          // agent skill, which is not a surface — it is a pointer file telling
+          // an agent to use the second one.
+          eyebrow="Two surfaces, one of them scriptable"
           title="Web for humans. CLI for agents. Same data."
           sub="Anything you can do in the web app, an agent can do with bk — and an automated parity test fails the build if a capability ever exists in one and not the other."
         />
@@ -364,13 +389,21 @@ function CommandLine() {
     {
       title: 'Built for scripts and agents',
       copy:
-        '--json / -o yaml for machine-readable output, cursor pagination, and stable exit codes (0 ok … 7 aborted). Set BK_NO_PROMPT=1 to skip confirmations.',
+        'Machine-readable output, cursor pagination, and stable exit codes to branch on — so an unattended run can tell "nothing found" from "not allowed" without parsing English.',
     },
     {
       title: 'Everything the UI can do',
       copy:
-        'issues, projects, tasks, comments, labels, members, invites, inbox, trash, analytics, and undo — all from the terminal.',
+        'A parity test fails the build if a capability exists on one surface and not the other. `bk guide` lists what that means today, for the binary in your hand.',
     },
+    // ── WHAT THESE TWO SAID UNTIL 2026-08-11 ────────────────────────────────
+    // The first printed the exit-code table (`0 ok … 7 aborted`), which lives in
+    // `cmd/bk/main.go` and is the CLI's contract — a second copy on a web page
+    // is a copy nobody updates. The second listed eleven command groups and
+    // ended with **`undo`**, a verb removed in CLI 1.12.0 whose route has been a
+    // 410 ever since. That is the same card, the same sentence and the same
+    // month as the `bk undo` FEATURE card removed above: a list of capabilities
+    // is a list of things that can quietly stop being true.
   ]
   return (
     <section id="cli" className="border-t border-border/60">
@@ -384,19 +417,27 @@ function CommandLine() {
           <CodeBlock
             label="Quickstart"
             lang="bash"
+            // THREE COMMANDS, AND EVERY ONE OF THEM WAS RUN BEFORE IT WAS PUT
+            // HERE (2026-08-11). It was six, and two of the six carried enum
+            // values in their flags (`--status todo`, `--priority 1`) — the
+            // vocabulary `bk meta` serves live and a page cannot.
+            //
+            // `workspace use` is not optional padding: without an active
+            // workspace `bk issues issue list` exits 2 with
+            // "no active workspace", which is the first thing a reader
+            // following this block would have hit.
+            //
+            // Anything past these three belongs in `bk guide`, which ships
+            // inside the binary and therefore describes the version being run.
             code={`# 1. install (npm fetches the prebuilt binary for your platform)
 $ npm install -g @blackcode_sa/bc-issues
 
 # 2. authenticate — opens your browser, done in seconds
-$ bk login --server https://your-deployment.app
+$ bk login
 
-# 3. pick a workspace — each app has its own, so the app names itself
+# 3. pick a workspace, then work
 $ bk issues workspace use my-team
-
-# 4. work
-$ bk issues issue list --status todo
-$ bk issues issue create --project 1 --title "Fix signup bug" --priority 1
-$ bk issues issue list --json | jq '.data[].title'`}
+$ bk issues issue list`}
           />
           <div className="flex flex-col gap-4">
             <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border bg-card px-3 py-1 font-mono text-xs text-muted-foreground">
@@ -415,9 +456,10 @@ $ bk issues issue list --json | jq '.data[].title'`}
               ))}
             </ul>
             <p className="text-xs text-muted-foreground/80">
-              Tip: run <span className="font-mono">bk --help</span> for the full
-              command tree, or <span className="font-mono">bk whoami</span> to
-              confirm you’re signed in.
+              Everything past these three is in{' '}
+              <span className="font-mono">bk guide</span>, which ships inside the
+              binary — so it describes the version you just installed, not this
+              page&rsquo;s memory of it.
             </p>
           </div>
         </div>
@@ -454,8 +496,10 @@ function HowItWorks() {
       <div className="mx-auto max-w-7xl px-6 py-20 sm:py-24">
         <SectionHead
           eyebrow="How it works"
-          title="One backend. Three doors in."
-          sub="Not a black box. Every interface reads and writes the same Postgres tables, through the same auth, with the same validation."
+          // "Three doors in" over a grid whose second and third box were both
+          // `bk` holding the same bearer token. There are two.
+          title="One backend. Two doors in."
+          sub="Not a black box. Both interfaces read and write the same Postgres tables, through the same auth, with the same validation."
         />
         <div className="mt-12 grid gap-10 lg:grid-cols-2 lg:items-center">
           <ol className="space-y-6">
@@ -473,11 +517,10 @@ function HowItWorks() {
           </ol>
 
           <div className="rounded-2xl border border-border bg-card p-6 sm:p-8">
-            <div className="grid grid-cols-3 gap-3 text-center text-xs">
+            <div className="grid grid-cols-2 gap-3 text-center text-xs">
               {[
                 { label: 'Web', tag: 'cookie' },
-                { label: 'CLI / bk', tag: 'bearer' },
-                { label: 'Agent / bk', tag: 'bearer' },
+                { label: 'bk — you or an agent', tag: 'bearer' },
               ].map((n) => (
                 <div
                   key={n.label}
@@ -524,49 +567,35 @@ function ForAgents() {
         There is no supported HTTP API.
           npm install -g @blackcode_sa/bc-issues
           bk login
-          bk skill install
           bk guide
         `bk guide` is the complete usage guide for the binary you just installed
-        and works offline. `bk meta` returns your workspaces plus the live
-        status/priority vocabularies and limits. Machine-readable copy of this
-        note: /llms.txt
+        and works offline; it names every other command, including the one that
+        installs the agent skill file. `bk meta` returns the live data — your
+        workspaces, the valid vocabularies, every server-enforced limit — which
+        is deliberately NOT restated here or anywhere else that can go stale.
+        Machine-readable copy of this note: /llms.txt
       */}
       <div className="mx-auto max-w-7xl px-6 py-20 sm:py-24">
         <SectionHead
           eyebrow="For agents"
           title="Built so an agent can do the work."
-          sub="Four commands take an agent from nothing to working. There is no HTTP API to learn: `bk guide` ships inside the binary and describes exactly the version in your hand, and `bk meta` supplies everything that can change without a release."
+          sub="Three commands take an agent from nothing to working. There is no HTTP API to learn: `bk guide` ships inside the binary and describes exactly the version in your hand, and `bk meta` supplies everything that can change without a release."
         />
-        <div className="mt-12 grid gap-5 lg:grid-cols-2">
-          <CodeBlock
-            label="Create an issue with the CLI"
-            lang="bash"
-            code={`# bk reads your token from ~/.config/bk/config.json
-$ bk issues issue create \\
-    --project 1 \\
-    --title "Triage onboarding bug" \\
-    --priority 1 \\
-    --json
-
-{
-  "id": 152,
-  "seq": 87,
-  "title": "Triage onboarding bug",
-  "status": "backlog",
-  "priority": 1,
-  "project_id": 1
-}`}
-          />
+        {/* ── ONE BLOCK, NOT TWO, SINCE 2026-08-11 ────────────────────────────
+            The one that went was "Create an issue with the CLI": a `bk issues
+            issue create` invocation carrying `--priority 1` and a response body
+            printing `"status": "backlog"`. Both are the live vocabulary, which
+            is `bk meta`'s job — a page that prints an enum value is a page that
+            is wrong the first time somebody adds one. And the point it was
+            making ("an agent can do the work") is made better by the block that
+            stayed, which is the only one a reader has to type. */}
+        <div className="mt-12 grid gap-5">
           <CodeBlock
             label="Bootstrap from zero"
             lang="bash"
             code={`$ npm install -g @blackcode_sa/bc-issues
 $ bk login              # opens a browser, stores a token
-$ bk skill install      # writes the agent skill file
-$ bk guide              # the complete usage guide for THIS binary
-
-# then, before you write anything:
-$ bk meta --json        # your workspaces + live vocabularies + limits`}
+$ bk guide              # the complete usage guide for THIS binary`}
           />
         </div>
 
@@ -594,31 +623,34 @@ function FAQ() {
   const items: { q: string; a: string }[] = [
     {
       q: 'How does an agent discover what it can do?',
-      a: 'It runs `bk guide` — the complete usage guide, embedded in the binary, so it always matches the version being run and works offline. Then `bk meta` for the live data: your workspaces, the valid status/priority/health values, and every server-enforced limit. Flags come from `bk <group> <command> --help`. Nothing has to be guessed or cached.',
+      a: 'It runs `bk guide` — the complete usage guide, embedded in the binary, so it always matches the version being run and works offline. Then `bk meta` for the live data: its workspaces, the valid vocabularies, and every server-enforced limit. Nothing has to be guessed or cached.',
     },
     {
       q: 'Is there an HTTP API?',
       a: 'Not a public one. The CLI is the only supported interface; the HTTP routes behind it are private plumbing with no contract, and the OpenAPI spec has been retired. This is deliberate: the same facts used to be maintained in seven places that had to agree, and drift between them is exactly what breaks an agent mid-run. Existing HTTP integrations still work — see /agent-updator for the migration.',
     },
+    // ── FIVE ANSWERS WERE PRUNED HERE ON 2026-08-11 ────────────────────────
+    // Between them they printed the exit-code table, the three commands that
+    // happen to paginate, a settings URL, and four more `bk` spellings with
+    // their flags. All four kinds are facts with a home that cannot drift —
+    // `cmd/bk/main.go`, `bk guide output`, the app itself — and a copy on a
+    // marketing page is a copy nobody will update. What is left says what is
+    // true and names where to look.
     {
       q: 'How do I install and use the CLI?',
-      a: 'npm install -g @blackcode_sa/bc-issues, then bk login (it opens a browser and stores a token in ~/.config/bk/config.json), bk issues workspace use <slug>, and you’re working: bk issues issue list, bk issues issue create --project 1 --title "…". Run bk --help for the full command tree.',
+      a: 'npm install -g @blackcode_sa/bc-issues, then bk login — it opens a browser and stores a token. From there `bk guide` is the complete usage guide for the binary you just installed, offline and unauthenticated.',
     },
     {
       q: 'How do agents and scripts authenticate?',
-      a: 'Run `bk login` — it opens a browser and stores the token in ~/.config/bk/config.json. For headless setups, mint a token at /dashboard/settings/tokens and pipe it in: echo \"$TOKEN\" | bk login --token. Tokens carry optional expiry and can be revoked from the same page.',
+      a: 'The same `bk login` a person runs. For headless setups — CI, an unattended agent — mint a token in your settings and pipe it into `bk login --token` instead of opening a browser. Tokens carry an optional expiry and can be revoked at any time.',
     },
     {
       q: 'Is the CLI scriptable for automation and CI?',
-      a: 'Yes. Add --json or -o yaml for machine-readable output, pipe it through jq, and branch on stable exit codes (0 ok, 3 unauthenticated, 4 forbidden, 5 not found, 6 validation, 7 aborted). Set BK_NO_PROMPT=1 to skip confirmations in unattended runs.',
-    },
-    {
-      q: 'How does pagination work?',
-      a: 'Most lists return everything in one response. Only the keyset feeds paginate — bk issues activity, bk issues trash list and bk super-admin errors list — via --limit / --cursor, following next_cursor until it is null. Run `bk guide output` for the details.',
+      a: 'That is what it is for. Machine-readable output, cursor pagination on the feeds that need it, and stable exit codes so an unattended run can tell "not allowed" from "nothing there" without parsing English. Run `bk guide` for the specifics of the version you have.',
     },
     {
       q: 'What happens when I delete something?',
-      a: 'Issues, projects and tasks soft-delete into a recoverable Trash rather than vanishing. Items deleted together restore as a group; workspace owners can purge selected items or empty the bin. Purging is deliberately a second decision — run bk issues trash list to see what is in there.',
+      a: 'Work soft-deletes into a recoverable Trash rather than vanishing, and things deleted together come back together. Emptying the bin is deliberately a second, separate decision.',
     },
     {
       q: 'Can a team and its agents share a workspace?',
@@ -626,7 +658,7 @@ function FAQ() {
     },
     {
       q: 'What stack does the project use?',
-      a: 'Next.js 16 (App Router) + TypeScript + Tailwind v4 + shadcn/ui, NextAuth, TanStack Query and Framer Motion on the front; Postgres + Drizzle ORM on the server; Go for the CLI.',
+      a: 'Next.js (App Router) + TypeScript + Tailwind + shadcn/ui, NextAuth and TanStack Query on the front; Postgres + Drizzle ORM on the server; Go for the CLI.',
     },
   ]
   return (

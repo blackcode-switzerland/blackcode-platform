@@ -30,6 +30,28 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-11 — Both apps write their own name the same way: `b/issues` and `b/sales`
+
+**Not breaking.** No route, command or payload changed. What changed is the
+display name one of the two apps calls itself, and the place you meet it is the
+**From line of the mail both apps send** — from one domain, through one account,
+about one shared blackcode login.
+
+    before   Blackcode Issues <admin@blackcode.ch>     b/sales <admin@blackcode.ch>
+    after    b/issues <admin@blackcode.ch>             b/sales <admin@blackcode.ch>
+
+If you filter mail on the sender's display name, that filter needs the new
+spelling. The address is unchanged, and matching on the address was always the
+sturdier rule.
+
+The same name is now on each app's browser tab, its sign-in screen and its
+sidebar, where the two apps had drifted into three different treatments of one
+logo. **`platform.apps.name` still reads `Blackcode Issues`** — that is a row in
+the address book `GET /api/meta` and `bk app list` serve, and changing it is a
+data change rather than a code one. Do not key anything on it: use `slug`.
+
+---
+
 ## 2026-08-11 — Password reset works on every app, not just one
 
 **Not breaking.** Everything here is additive, and the one changed response

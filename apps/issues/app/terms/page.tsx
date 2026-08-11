@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import { MarketingLayout } from '@/components/marketing/layout'
 
 export const metadata: Metadata = {
-  title: 'Terms · Blackcode Issues',
-  description: 'Terms of service for using Blackcode Issues.',
+  title: 'Terms · b/issues',
+  description: 'Terms of service for using b/issues.',
 }
 
 export default function TermsPage() {
@@ -43,7 +43,7 @@ export default function TermsPage() {
 
           <Section title="Acceptable use">
             <p>
-              Do not use Blackcode Issues to break laws, harass others, distribute malware, or
+              Do not use b/issues to break laws, harass others, distribute malware, or
               host illegal content. Don&rsquo;t attempt to circumvent rate limits or
               auth controls. Don&rsquo;t use the product to facilitate the same against
               other services.
@@ -61,7 +61,7 @@ export default function TermsPage() {
 
           <Section title="Service status">
             <p>
-              Blackcode Issues is in working-alpha state. Features may change, ship, or roll
+              b/issues is in working-alpha state. Features may change, ship, or roll
               back. Status pills on the landing page reflect the current state of each
               feature.
             </p>

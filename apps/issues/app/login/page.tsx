@@ -432,7 +432,7 @@ function LoginPageInner() {
                 </form>
 
                 <p className="mt-6 text-center text-sm text-muted-foreground">
-                  New to Blackcode Issues?{' '}
+                  New to b/issues?{' '}
                   <button
                     type="button"
                     className="cursor-pointer font-medium text-primary hover:underline"
@@ -582,15 +582,19 @@ function LoginPageInner() {
           />
           <div className="relative m-auto max-w-md p-12">
             <div className="mb-3 text-xs font-medium uppercase tracking-wider text-primary">
-              Blackcode Issues
+              b/issues
             </div>
             <h2 className="text-3xl font-semibold leading-[1.2] tracking-tight">
               Issue tracking for humans and the{' '}
               <span className="text-gradient-brand">AI working</span> alongside them.
             </h2>
             <p className="mt-3 text-muted-foreground">
-              Web, CLI, and HTTP — three equal interfaces over one Postgres-backed
-              data model. Sign in once, work from anywhere.
+              {/* "Web, CLI, and HTTP — three equal interfaces" until 2026-08-11.
+                  The HTTP API is private plumbing with no public contract; its
+                  own reference route answers 410. A sign-in page promising a
+                  third door is the `bk undo` defect in a smaller frame. */}
+              A web UI for people and a CLI for agents, over one Postgres-backed
+              data model. Sign in once, work from either.
             </p>
 
             <ul className="mt-8 space-y-5">

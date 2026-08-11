@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
 import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { NoWorkspace } from '@/components/no-workspace'
 
 /**
  * `/dashboard` → `/dashboard/{ws}` (D-3).
@@ -26,9 +27,13 @@ export default async function DashboardIndex() {
 
   const reachable = await listWorkspacesForUser(user.id)
   if (reachable.length === 1) redirect(`/dashboard/${reachable[0].slug}`)
-  // Zero is the layout's "no access" empty, which has already rendered instead
-  // of this page. Reaching here with zero would mean the two disagreed.
-  if (reachable.length === 0) return null
+  // Zero is THIS page's case as of 2026-08-11. It used to be the layout's, and
+  // the line here read `return null` — a blank page that could only be reached
+  // if the two disagreed. The layout stopped rendering it so that
+  // `/dashboard/settings/*` survives a person with no workspace; see
+  // `components/no-workspace.tsx` for why, and note that the screen has to live
+  // somewhere a reader can find it rather than being inlined twice.
+  if (reachable.length === 0) return <NoWorkspace email={user.email} />
 
   return (
     <div className="flex min-h-screen items-center justify-center p-8">

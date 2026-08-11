@@ -14,7 +14,7 @@ const HTML = `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>API reference retired · Blackcode Issues</title>
+    <title>API reference retired · b/issues</title>
   </head>
   <body style="font-family: ui-sans-serif, system-ui, sans-serif; max-width: 42rem; margin: 4rem auto; padding: 0 1.5rem; line-height: 1.6">
     <h1>The API reference has been retired</h1>

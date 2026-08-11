@@ -4,8 +4,21 @@ import { Providers } from './providers'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'b/sales',
+  // `b/<app> — <what it is>`, the same shape as apps/issues. The name half comes
+  // from the same place the sidebar and the email From line do (`lib/app.ts`);
+  // it is spelled out here because `metadata` is a static export and cannot
+  // interpolate a value a server component would have to compute.
+  title: 'b/sales — business development pipeline',
   description: "blackcode's business-development pipeline",
+  // `public/logo.png` — the same blackcode mark both apps carry. Without this the
+  // tab shows Next.js's default, which is what it showed until 2026-08-11.
+  //
+  // The file is opaque (a white `b/` on near-black, no alpha), so it reads in a
+  // light tab and a dark one alike. That is not incidental: a white-on-
+  // transparent mark is invisible on exactly one of them, and half the readers
+  // never see the half that is broken. The same file is what the email template
+  // fetches as `${appUrl}/logo.png` — see `lib/email/send.ts`.
+  icons: { icon: '/logo.png' },
   // Internal tooling holding third parties' contact details (D-19). Nothing here
   // should ever be indexed.
   robots: { index: false, follow: false, googleBot: { index: false, follow: false } },

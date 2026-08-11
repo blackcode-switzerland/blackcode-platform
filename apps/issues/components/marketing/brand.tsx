@@ -13,7 +13,7 @@ export function Brand({ href = '/', className, size = 'md' }: BrandProps) {
   return (
     <Link
       href={href}
-      aria-label="Blackcode Issues home"
+      aria-label="b/issues home"
       className={cn(
         'inline-flex items-center gap-2 font-semibold tracking-tight',
         size === 'sm' ? 'text-base' : 'text-lg',
@@ -28,7 +28,9 @@ export function Brand({ href = '/', className, size = 'md' }: BrandProps) {
         className="rounded-[6px]"
         priority
       />
-      <span>Issues</span>
+      {/* Lowercase, and no `blackcode` — the mark to its left already draws the
+          `b/`. Same treatment as the app sidebar and as apps/sales. */}
+      <span>issues</span>
     </Link>
   )
 }

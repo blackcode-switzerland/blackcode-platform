@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
 import { listMyWorkspaces } from '@/lib/db/queries/workspaces'
-import { APP_SLUG, APP_NAME } from '@/lib/app'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { OnboardingCreateWorkspace } from '@/components/onboarding-create-workspace'
 

@@ -254,7 +254,13 @@ export function CommunicationsPage({ ws }: { ws: string }) {
       ) : comms.data.length === 0 ? (
         <EmptyState
           title="No exchanges logged"
-          hint="Every email, WhatsApp, call and internal note the agent records with `bk sales comm log` appears here."
+          // "Every email, WhatsApp, call and internal note …" until 2026-08-11,
+          // which spelled four of the six values of the `channels` vocabulary
+          // into prose. That vocabulary is `lib/pipeline.ts`'s, served live by
+          // `bk meta`, and it can gain a channel without a deploy — at which
+          // point this sentence is a list that silently stops being "every".
+          // The same reasoning `labelOf`'s header sets out for the third time.
+          hint="Every exchange the agent records with `bk sales comm log` appears here, whichever channel it came through."
         />
       ) : (
         <div className="space-y-2">

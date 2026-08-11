@@ -5,8 +5,13 @@ import { AgentManifest } from '@/components/agent-manifest'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Blackcode Issues — AI-Native Issue Tracking',
-  description: 'Issue tracking for humans and the agents working alongside them. Three surfaces (web, CLI, HTTP), one data model.',
+  // `b/<app> — <what it is>`, the same shape as apps/sales. Static export, so
+  // the name is spelled rather than read from `lib/app.ts` — see the note there.
+  title: 'b/issues — AI-native issue tracking',
+  // "Three surfaces (web, CLI, HTTP)" until 2026-08-11. The HTTP API is private
+  // plumbing with no public contract (CLAUDE.md, agent surface contract) — the
+  // OpenAPI spec is a 410 and there is no third door. Two.
+  description: 'Issue tracking for humans and the agents working alongside them. A web UI and a CLI over one data model.',
   icons: {
     icon: '/logo.png',
   },

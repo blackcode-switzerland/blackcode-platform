@@ -53,7 +53,41 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   return (
     <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center">
       <p className="text-sm text-foreground">{title}</p>
-      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{ticks(hint)}</p>}
     </div>
+  )
+}
+
+/**
+ * `` `bk sales comm log` `` → a <code> chip. Everything else passes through.
+ *
+ * ── WHY THIS EXISTS ─────────────────────────────────────────────────────────
+ * Thirteen strings in this app named a command inside backticks and rendered
+ * them as LITERAL BACKTICKS, beside `forms.tsx`'s `AgentOnly`, which builds the
+ * same sentence out of JSX and gets a proper chip. Two treatments of one idea,
+ * on the same screen, a few lines apart — the prospect page showed both at once.
+ *
+ * The fix is here rather than at each call site because the call sites are the
+ * thing that keeps growing: a new empty state is one string, and asking every
+ * author to remember to hand-build a fragment is asking for the fourteenth.
+ *
+ * Deliberately NOT markdown. It handles one delimiter, unnested, and leaves
+ * every other character alone — a page of prose is not a document format, and a
+ * markdown dependency here would be a second renderer to keep honest.
+ * An unbalanced backtick renders as itself, which is the visible failure.
+ */
+export function ticks(text: string): React.ReactNode {
+  const parts = text.split('`')
+  // Odd length ⇒ balanced pairs. Anything else is a typo in the string; show it
+  // verbatim rather than silently eating half a sentence.
+  if (parts.length === 1 || parts.length % 2 === 0) return text
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <code key={i} className="rounded bg-muted px-1 py-0.5">
+        {part}
+      </code>
+    ) : (
+      part
+    )
   )
 }

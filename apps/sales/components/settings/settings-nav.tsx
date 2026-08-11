@@ -5,12 +5,17 @@ import { usePathname } from 'next/navigation'
 
 const TABS = [
   { seg: 'profile', label: 'Profile' },
-  // VISIBLE BY DEFAULT, not behind a flag or a role check. An owner needs it to
-  // invite; a member needs it to see who else is here and that they are in the
-  // right place. The page itself hides the invite form from non-owners, which is
-  // where that decision belongs — a tab that appears for some people and not
-  // others is how "why can Ana see this and I can't" becomes unanswerable.
-  { seg: 'members', label: 'Members' },
+  // ── `members` WAS THE SECOND TAB UNTIL 2026-08-11 ─────────────────────────
+  // It is a workspace list, and the four tabs that remain are all about the
+  // ACCOUNT — one `platform.users` row, the same in every blackcode app. It is
+  // a sidebar item at `/dashboard/{ws}/members` now, where the workspace is in
+  // the URL rather than guessed. The old path still resolves; it redirects.
+  //
+  // The visibility note that was here travelled with it and now lives on the
+  // page: the entry is shown to everybody, and the page — not the nav — hides
+  // the invite form from non-owners. A nav item that appears for some people
+  // and not others is how "why can Ana see this and I can't" becomes
+  // unanswerable.
   { seg: 'account', label: 'Account' },
   { seg: 'tokens', label: 'API tokens' },
   { seg: 'preferences', label: 'Preferences' },

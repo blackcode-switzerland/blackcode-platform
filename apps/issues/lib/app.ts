@@ -12,5 +12,20 @@
 /** This app's slug in `platform.apps`. Must match migration 0034. */
 export const APP_SLUG = 'issues'
 
-/** Human name, for UI and for the denial messages an agent reads. */
-export const APP_NAME = 'Blackcode Issues'
+/**
+ * Human name, for UI and for the denial messages an agent reads.
+ *
+ * `b/issues` since 2026-08-11, and the rename is not cosmetic. This app had been
+ * `Blackcode Issues` while `apps/sales` called itself `b/sales`, and the two
+ * spellings met in a place a reader can compare them: the From line of the mail
+ * both apps send from the same domain, through the same Resend account, about
+ * the same shared account. One product family that cannot agree on how to write
+ * its own name reads as two vendors.
+ *
+ * WHAT THIS CONSTANT ACTUALLY REACHES, MEASURED rather than assumed: exactly one
+ * call site, `lib/email/send.ts`. `app/dashboard/layout.tsx` imported it and
+ * never used it — the sidebar brand is written out in
+ * `components/dashboard-layout.tsx`, which is why changing this alone did not
+ * change the UI, and why that file was edited in the same commit.
+ */
+export const APP_NAME = 'b/issues'

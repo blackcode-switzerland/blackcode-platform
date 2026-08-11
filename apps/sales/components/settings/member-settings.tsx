@@ -39,10 +39,11 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Copy, Trash2, UserPlus, X } from 'lucide-react'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 import { apiGet, wsPath } from '@/lib/client'
 import { useInviteMember, useRemoveMember, useRevokeInvitation } from '@/lib/mutations'
 import { useCanWrite, READ_ONLY_NOTE } from '@/lib/ui-mode'
-import { BlockSkeleton, ErrorState } from '@/components/states'
+import { BlockSkeleton, ErrorState, ticks } from '@/components/states'
 import { Section } from './profile-settings'
 
 interface Member {
@@ -141,7 +142,7 @@ export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boo
           <ul className="divide-y divide-border">
             {members.data.map((m) => (
               <li key={m.user_id} className="flex items-center gap-3 py-3">
-                <Avatar name={m.name} email={m.email} url={m.avatar_url} />
+                <MemberAvatar name={m.name} email={m.email} avatarUrl={m.avatar_url} size={32} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm text-foreground">
                     {m.name ?? m.email}
@@ -188,7 +189,14 @@ export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boo
               concludes the feature does not exist, or that they are not allowed
               — and here the second reading would be actively wrong, since an
               owner in read-only mode can still invite through `bk sales`. */}
-          {!canWrite && <p className="text-xs text-muted-foreground">{READ_ONLY_NOTE}</p>}
+          {/* `ticks`, because READ_ONLY_NOTE names a command in backticks and
+              this was the last place in the app still printing them literally
+              (2026-08-11). It is the only call site of that constant, so the
+              alternative — dropping the backticks from `ui-mode.ts` — would
+              have made the constant unable to mark a command at all. */}
+          {!canWrite && (
+            <p className="text-xs text-muted-foreground">{ticks(READ_ONLY_NOTE)}</p>
+          )}
 
           {canWrite && (
           <form
@@ -327,23 +335,11 @@ export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boo
   )
 }
 
-function Avatar({
-  name,
-  email,
-  url,
-}: {
-  name: string | null
-  email: string
-  url: string | null
-}) {
-  if (url) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={url} alt="" className="size-8 shrink-0 rounded-full object-cover" />
-  }
-  const initial = (name ?? email).trim().charAt(0).toUpperCase()
-  return (
-    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-      {initial}
-    </span>
-  )
-}
+// ── THE LOCAL `Avatar` WAS DELETED HERE ON 2026-08-11 ───────────────────────
+// It rendered a bare `<img>` with `alt=""` and, with no URL, ONE grey initial —
+// so two teammates whose names start with the same letter were the same circle.
+// `@blackcode/platform-ui/ui/member-avatar` already did the better thing (two
+// initials, a colour derived from the label, a title attribute), was already
+// used in 20 files in `apps/issues`, and this file predated nothing: it was a
+// second implementation of a solved problem, which is the defect the platform
+// spent a week removing. Import it; do not write a third.

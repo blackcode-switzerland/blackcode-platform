@@ -114,8 +114,16 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
             <span key={v}>{v}</span>
           ))}
           <span>Owner: {p.owner?.name ?? p.owner?.email ?? '—'}</span>
-          {/* The URN, because this row is addressable from every other app and a
-              human who is about to write `bk link` needs to be able to copy it. */}
+          {/* The URN, because this row is addressable from every other app and
+              somebody about to reference it elsewhere needs to be able to copy
+              it.
+
+              This said "about to write `bk link`" until 2026-08-11. That command
+              was REMOVED in Phase 4 and its route is unmounted everywhere; the
+              URN goes into the other record's own text now. The comment was the
+              last thing in this app still naming it — found by probing every
+              `bk …` spelling the sales UI mentions against the real binary, not
+              by reading. (Every other one of the fifteen is still real.) */}
           {p.urn && <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{p.urn}</code>}
         </div>
         {p.summary && <p className="text-sm leading-relaxed text-foreground">{p.summary}</p>}
@@ -127,7 +135,13 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
           `stage` outright with a 400 naming the other route, so a single form
           carrying both would be a form that always fails on one field.
         */}
-        <WriteGate ws={ws}>
+        {/* Both gates on this page carried the DEFAULT note until 2026-08-11,
+            so a read-only reader met the identical sentence twice inside 150px
+            — the header's and the next-action strip's. Every other block on the
+            page already names its own command; these two now do the same, which
+            keeps `forms.tsx`'s "both always SAY something" rule while saying two
+            different things. */}
+        <WriteGate ws={ws} note="The deal is edited with `bk sales prospect edit` and moved with `bk sales prospect stage`.">
           <div className="flex flex-wrap gap-2">
             <EditProspectForm ws={ws} p={p} />
             <MoveStageForm ws={ws} p={p} />
@@ -163,7 +177,7 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
           ) : (
             <p className="mt-1 text-sm text-muted-foreground">Nothing owed.</p>
           )}
-          <WriteGate ws={ws}>
+          <WriteGate ws={ws} note="What is owed is set with `bk sales prospect next`.">
             <div className="mt-2">
               <NextActionForm ws={ws} p={p} />
             </div>

@@ -35,6 +35,36 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-08-11 — the landing page stopped making claims it cannot keep
+
+**Not breaking.** No route, command or payload changed. This is the public page
+at `/`, and it matters to an agent only because an agent may have read it.
+
+Removed from it, all for the same reason — a web page is covered by no test in
+this repo, so anything on it that can go stale eventually does:
+
+- **`bk undo` was still advertised**, in a card listing what the CLI can do, six
+  months after the verb was removed in CLI 1.12.0 and `/api/undo` became a 410.
+  A FEATURE card making the same promise had already been deleted on 2026-08-11;
+  this was the second copy, one section further down.
+- **The exit-code table.** It lives in the binary and `bk guide` describes it.
+- **Status and priority values**, in a card and in two example commands.
+  `bk meta` serves the live vocabulary; a page cannot.
+- **The upload size cap and the blocked file type.** `bk meta` serves those too.
+- **Three of the six commands in the quickstart.** What is left is install,
+  `bk login`, `bk issues workspace use`, `bk issues issue list` — and every one
+  of them was run before it was written down. `workspace use` is not padding:
+  without it, `issue list` exits 2 with "no active workspace", which is what a
+  reader following the old block hit.
+- **"Web, CLI and HTTP — three equal interfaces"**, on the sign-in page and in
+  the site description. There are two. The HTTP API is private plumbing with no
+  public contract, and its own reference route answers 410.
+
+Nothing was added. For what the CLI can actually do, run **`bk guide`**; for what
+the data currently is, **`bk meta`**.
+
+---
+
 ## 2026-08-10 — every issues data verb names the app: `bk issues workspace`, `bk issues search`, `bk issues storage`
 
 **Breaking for anything scripted.** Ten verbs that were bare now sit behind the

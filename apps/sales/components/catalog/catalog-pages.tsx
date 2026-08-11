@@ -190,7 +190,17 @@ export function DocumentsPage({ ws }: { ws: string }) {
     return (
       <EmptyState
         title="The library is empty"
-        hint="Documents are uploaded with `bk sales upload` or linked with `bk sales doc create --url`."
+        // ── A COMMAND THAT DOES NOT EXIST, ON THE ONLY SCREEN THAT NAMES IT ──
+        // This said `bk sales doc create --url` until 2026-08-11. There is no
+        // `doc create`: the verb is `add`, and it takes `--title` and `--kind`
+        // as well, so somebody following this line got "unknown command" and had
+        // no way to tell whether the feature or the sentence was wrong.
+        //
+        // It is the `bk undo` defect at app scale — prose naming a spelling,
+        // covered by nothing. Found by probing every `bk …` string in this app's
+        // components against the real binary; it was the only false one of the
+        // fifteen. If you add another, run it first.
+        hint="Documents are uploaded with `bk sales upload` and added to the library with `bk sales doc add`."
       />
     )
   }

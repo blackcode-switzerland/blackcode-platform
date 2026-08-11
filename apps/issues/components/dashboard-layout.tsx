@@ -115,8 +115,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         href="/?from=app"
         className="flex items-center gap-2 border-b border-sidebar-border px-3.5 py-3 transition-colors hover:bg-sidebar-accent/60"
       >
-        <Image src="/logo.png" alt="blackcode" width={22} height={22} className="rounded-md" />
-        <span className="text-[15px] font-semibold tracking-tight">blackcode</span>
+        {/* THE MARK IS THE `b/`, SO THE WORDMARK BESIDE IT MUST NOT REPEAT IT.
+            This read `blackcode` until 2026-08-11, next to a logo that already
+            draws `b/` — and `apps/sales` drew a text `b/` badge next to the word
+            `sales`. Two apps, two treatments, and the issues one did not name
+            the app at all. Mark + app word, identical in both apps: the eye
+            reads `b/issues` and `b/sales`, which is what `APP_NAME` says and
+            what the emails now say. Changing one of these without the other is
+            worse than what was here. */}
+        <Image src="/logo.png" alt="b/" width={22} height={22} className="rounded-md" />
+        <span className="text-[15px] font-semibold tracking-tight">issues</span>
       </Link>
 
       {/* Workspace switcher / top */}
@@ -237,7 +245,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         >
           <Menu size={18} />
         </button>
-        <span className="text-sm font-semibold">blackcode</span>
+        <Image src="/logo.png" alt="b/" width={18} height={18} className="rounded" />
+        <span className="text-sm font-semibold">issues</span>
       </header>
 
       {/* Mobile drawer */}

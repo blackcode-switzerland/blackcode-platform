@@ -25,6 +25,39 @@ import type { SearchHit, SearchType } from '@/lib/db/queries/search'
 import type { PublicProspect } from '@/lib/views'
 import { apiGet, query, wsPath, type ListPage } from '@/lib/client'
 
+/**
+ * The signed-in person's own account row — name, email, photo.
+ *
+ * ── WHY NOT `useSession()`, WHICH IS ALREADY THERE ──────────────────────────
+ * The next-auth session is minted at SIGN-IN and this app's `jwt` callback only
+ * refreshes it when `account` is present, i.e. on sign-in. So `session.user
+ * .image` is the photo as it was when you last signed in — and the account is
+ * shared with every other blackcode app, so it goes stale two ways: you change
+ * your photo here (measured 2026-08-11: the sidebar kept the old initials until
+ * a re-login, even after `update()`), or you change it in another app and this
+ * one never hears.
+ *
+ * `GET /api/me` is the live row. The session stays the source for *identity* —
+ * who you are, whether you are signed in — and this is the source for what to
+ * DRAW. `apps/issues` settled it the same way in its own shell.
+ *
+ * NOT workspace-keyed, unlike everything else in this file: the account is one
+ * row across every workspace and every app.
+ */
+export function useMe() {
+  return useQuery({
+    queryKey: ['me'],
+    queryFn: () =>
+      apiGet<{
+        id: number
+        email: string
+        name: string | null
+        avatar_url: string | null
+      }>('/api/me'),
+    staleTime: 60_000,
+  })
+}
+
 /** What is owed today, and who we are meeting today. */
 export function useToday(ws: string) {
   return useQuery({

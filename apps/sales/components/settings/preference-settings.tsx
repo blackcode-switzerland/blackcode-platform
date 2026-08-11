@@ -23,7 +23,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { apiSend, wsPath } from '@/lib/client'
-import { BlockSkeleton, ErrorState } from '@/components/states'
+import { BlockSkeleton, ErrorState, ticks } from '@/components/states'
 import { useUiPreferences } from '@/lib/ui-mode'
 import { UI_MODES } from '@/lib/pipeline'
 import { Section } from './profile-settings'
@@ -114,8 +114,14 @@ function WorkspacePreferences({
                     )}
                   </span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {DESCRIPTIONS[m.value] ??
-                      'Run `bk meta` for what this mode means — this app has not been told.'}
+                    {/* `ticks` so the fallback's `bk meta` renders as a chip
+                        rather than as two literal backticks. It is the branch
+                        nobody sees until the vocabulary gains a mode, which is
+                        exactly why it was the one left unrendered. */}
+                    {ticks(
+                      DESCRIPTIONS[m.value] ??
+                        'Run `bk meta` for what this mode means — this app has not been told.'
+                    )}
                   </span>
                 </span>
               </label>

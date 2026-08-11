@@ -87,13 +87,26 @@ export async function apiSend<T>(
   path: string,
   body?: unknown
 ): Promise<T> {
+  // ── `FormData` PASSES THROUGH UNTOUCHED, AND WITHOUT A content-type ────────
+  // Added 2026-08-11 for the profile photo, which is the app's first multipart
+  // write. Serialising it would send the string "[object FormData]"; setting the
+  // header would send a `multipart/form-data` with **no boundary parameter**,
+  // which the parser rejects — the browser has to write that header itself,
+  // from the FormData it is given.
+  //
+  // It is here rather than in a second helper because `lib/read-only.test.ts`
+  // asserts there is exactly ONE `fetch(` in this app, and that assertion is the
+  // thing that makes "no mutation reaches the network except through this
+  // module" checkable rather than merely intended. It caught the first version
+  // of the photo upload, which called `fetch` from the settings component.
+  const isForm = typeof FormData !== 'undefined' && body instanceof FormData
   const res = await fetch(path, {
     method,
     headers: {
       accept: 'application/json',
-      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...(body === undefined || isForm ? {} : { 'content-type': 'application/json' }),
     },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
   })
   if (!res.ok) {
     const parsed = (await res.json().catch(() => null)) as

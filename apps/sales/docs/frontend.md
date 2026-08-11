@@ -109,6 +109,15 @@ Errors carry the server's `{ error, code, suggestion }` through to the browser �
 the same body `bk` prints as a `hint:` line. A 400 an agent could act on should
 be one a human can act on too.
 
+**`apiSend` grew a `FormData` branch on 2026-08-11** for the profile photo, the
+app's first multipart write: a `FormData` body passes through unserialised and
+**without** a `content-type`, because the browser has to write that header itself
+to get the boundary parameter right. It went into the transport rather than into
+a second helper precisely because of the "exactly one `fetch(`" assertion above —
+which fired on the first version of the photo upload, where the settings
+component called `fetch` directly. That is the guard doing its job, and it is why
+this paragraph exists rather than a second request function.
+
 ### 3.2 Wire types are imported, never retyped
 
 `lib/hooks.ts` uses `import type` from `lib/db/queries/aggregates.ts` and
@@ -122,13 +131,23 @@ no drizzle client reaches the browser bundle — what survives is that a change 
 fetch renders the error, never the empty state: rendering "you have no prospects"
 when the API is down is the most reassuring wrong answer this app could give.
 
+**`ticks()` lives here too** (2026-08-11), and every `EmptyState hint` and
+`WriteGate note` passes through it: it turns `` `bk sales comm log` `` into a
+`<code>` chip. Thirteen strings printed literal backticks before it — beside
+`forms.tsx`'s `AgentOnly`, which builds the same sentence out of JSX and always
+got a chip, so the prospect page showed both treatments at once. It handles one
+delimiter and is deliberately not markdown; an unbalanced backtick renders as
+itself, which is the visible failure. Put a command in backticks and let the
+component render it, rather than hand-building a fragment at the call site.
+
 ## 4. The shell
 
 `components/sales-shell.tsx`. Fixed left rail, sticky `h-12` header, content
 right.
 
 - Nav: Today · Metrics · Prospects · Meetings · Communications · Activity, then
-  **Catalog**: Products · Templates · Documents, then Trash.
+  **Catalog**: Products · Templates · Documents, then **Members · Trash**.
+  Members arrived here on 2026-08-11 from `/dashboard/settings/members` — see §9.
 - **No workspace switcher and no create-workspace flow** (D-3). `/dashboard`
   resolves the single sales workspace and redirects to `/dashboard/{ws}`; more
   than one renders a picker rather than guessing, because landing somebody in the
@@ -136,10 +155,22 @@ right.
 - Header title defaults to the nav label for the page and is overridable with
   `usePageTitle()` — a prospect detail page's title is a company name and no
   static table can hold it.
-- Account footer: name, email, **Settings**, sign out. The Settings link went in
-  with the pages, which is the rule that kept it out; it points OUTSIDE the
-  workspace segment, at `/dashboard/settings/*`, because three of its four pages
-  are about the blackcode account rather than about this workspace.
+- Account footer: **photo**, name, email, **Settings**, sign out. The Settings
+  link went in with the pages, which is the rule that kept it out; it points
+  OUTSIDE the workspace segment, at `/dashboard/settings/*`, because all four of
+  its pages are about the blackcode account rather than about this workspace.
+- **The photo is `MemberAvatar` from `@blackcode/platform-ui`, fed by `useMe()`
+  and not by the session** (2026-08-11). The next-auth session is minted at
+  sign-in and this app's `jwt` callback only refreshes it then, so `session.user
+  .image` is the photo as it was when you last signed in — stale both when you
+  change it here and when you change it in another blackcode app. `GET /api/me`
+  is the live row. The session stays the source for *identity*; this is the
+  source for what to draw.
+- **The brand is `public/logo.png`**, the same file `apps/issues` uses, the same
+  file the sign-in screen and the landing page use, and the same file the emails
+  fetch as `${appUrl}/logo.png`. It was a `b/` drawn in text on an emerald square
+  until 2026-08-11, which put three different treatments of one mark in one app.
+  The wordmark beside it is just `sales` — the image already draws the `b/`.
 
 ## 5. The empty, and the one that was deleted
 
@@ -179,6 +210,16 @@ ANOMALY screen now rather than the normal state of an internal product nobody
 self-serves into. That is why the wording names the action that actually retries
 it, instead of naming somebody to ask.
 
+**And on 2026-08-11 it moved down a level, to `app/dashboard/page.tsx`, as
+`components/no-workspace.tsx`.** The layout rendered it INSTEAD of `children`,
+for every route under `/dashboard` — which swallowed `/dashboard/settings/*` too,
+so the one person who most needs their account pages could not reach them. A
+layout cannot tell the two apart: on the server it has no pathname and `children`
+is opaque. Nothing else became reachable, because `app/dashboard/[ws]/layout.tsx`
+404s a slug you are not a member of and with zero memberships that is every slug.
+The screen now links to Settings as well as Sign out, since with no workspace
+that is the only part of the app that works.
+
 ## 6. Auth, and the one thing that fails silently
 
 `lib/auth.ts` is this app's NextAuth config. What is app-local (providers,
@@ -186,10 +227,23 @@ it, instead of naming somebody to ask.
 `platform-db`) is argued in full in `packages/platform-auth/src/index.ts`; it is
 not repeated here. Two things are this app's own:
 
-- **A first sign-in does not create a workspace.** Issues calls
-  `ensureDefaultWorkspace`; sales does not, because D-3 leaves no way to see or
-  leave a workspace minted that way, and it would arrive with `sales` not enabled
-  on it. Pending invitations *are* still materialised.
+- **Every sign-in mints a workspace**, on both providers, in one transaction with
+  the owner's membership row (`lib/auth.ts` → `ensureWorkspaceForUser`). Keyed on
+  MEMBERSHIP rather than on account age, which is what makes it idempotent and
+  what makes the invitation flow correct — somebody who accepted an invitation
+  already belongs somewhere and must not be handed a second workspace of their
+  own. It never throws: a sign-in that failed because a workspace could not be
+  minted is a person locked out of an account that exists, and §5's screen is the
+  visible fallback. Pending invitations are materialised too.
+
+  > **This bullet said the opposite until 2026-08-11** — *"a first sign-in does
+  > not create a workspace; issues calls `ensureDefaultWorkspace`, sales does
+  > not, because D-3 leaves no way to see or leave a workspace minted that way,
+  > and it would arrive with `sales` not enabled on it."* Both of its reasons had
+  > expired: there is a members page now, and there is no per-app enablement left
+  > to be off. It also contradicted §5 of this same document, three screens up,
+  > which already described the mint as the normal path. Corrected against
+  > `lib/auth.ts`, not against the neighbouring paragraph.
 - **`middleware.ts` must pass `cookies` to `withAuth`.** `getToken` looks for
   `next-auth.session-token` unless told otherwise, and D-16 renamed the platform's
   session cookie to `blackcode.session-token`. Omitting it does not error: the
@@ -210,9 +264,13 @@ not repeated here. Two things are this app's own:
 | `/dashboard/{ws}/products` · `/templates` · `/documents` | the catalog |
 | `/dashboard/{ws}/activity` | what changed and who changed it — §7.7 |
 | `/dashboard/{ws}/search` | grouped, faceted full search — §7.8 |
+| `/dashboard/{ws}/members` | your team, and who has been invited — §9.1 (was `/dashboard/settings/members` until 2026-08-11) |
 | `/dashboard/{ws}/trash` | the bin, read-only in both modes |
-| `/dashboard/settings/{profile,members,account,tokens,preferences}` | §9 |
+| `/dashboard/settings/{profile,account,tokens,preferences}` | §9 — inside the shell since 2026-08-11 |
+| `/dashboard/settings/members` | a redirect to `/dashboard/{ws}/members`, kept for bookmarks |
 | `/invitations/{token}` | where an invitation link lands — accept or decline |
+| `/login` | sign in, create an account, reset a password. `?tab=signup` opens the create-account panel — the landing page's CTA depends on it |
+| `/` | **the landing page** (2026-08-11). Signed-in visitors are redirected to `/dashboard`; it was a bare redirect for everybody until self-signup gave it an audience. See `components/landing-page.tsx`, whose header sets out what may not be written on it |
 
 Three conventions they all share, each of which is a decision:
 
@@ -226,6 +284,13 @@ Three conventions they all share, each of which is a decision:
 - **Vocabulary values are never rendered raw.** `check_in` is a wire value;
   "Check-in" is what a human reads, and `lib/pipeline.ts` owns the mapping. This
   was got wrong once on the prospects table and caught in the browser.
+
+  **Nor are they rendered as PROSE.** The communications empty state read "Every
+  email, WhatsApp, call and internal note the agent records…" until 2026-08-11 —
+  four of the six `channels` values, spelled into a sentence. That vocabulary is
+  served live by `bk meta` and can gain a value without a deploy, at which point
+  the list quietly stops being "every". A page must not enumerate a vocabulary in
+  either direction: not as a label it looked up, and not as an English list.
 
 ### 7.1 Today
 
@@ -498,16 +563,55 @@ other to showing everything.
 
 ## 9. Settings
 
-`/dashboard/settings/{profile,members,account,tokens,preferences}`, outside the
-workspace segment because most of them are about the **blackcode account** rather
-than about this workspace — and the pages say so, because a Settings screen inside
-one app reads as that app's settings and this one is not.
+`/dashboard/settings/{profile,account,tokens,preferences}`, outside the workspace
+segment because they are about the **blackcode account** rather than about this
+workspace — and the pages say so, because a Settings screen inside one app reads
+as that app's settings and this one is not.
 
-**Members (2026-08-10) is the exception, and it is the screen the multi-app
-refactor exists for.** It is about THIS app's workspace: `sales.workspace_members`
-and `sales.invitations`. Before it, nobody could be put into b/sales from
-b/sales — membership was `platform.workspace_members` plus a per-app grant, so a
-sales user was somebody who had first been invited into an issues workspace.
+**It renders inside `SalesShell` as of 2026-08-11, and it did not before.** The
+shell is mounted by `app/dashboard/[ws]/layout.tsx`, and settings is a *sibling*
+of `[ws]`, not a child — so every settings page lost the sidebar, the header and
+⌘K, and the only way back into the app was a small text link. `apps/issues` never
+had the problem because it mounts its shell at `app/dashboard/layout.tsx`, a
+parent of both.
+
+Moving the URL under `{ws}` would have been the wrong fix: it would say the
+account belongs to a workspace. `app/dashboard/settings/layout.tsx` mounts the
+shell itself instead, resolving the first membership for the nav's hrefs.
+**Guessing is acceptable for CHROME and not for a DESTINATION** — every link
+points at a workspace this person is in, and the plural case costs one click
+through `/dashboard`'s picker rather than landing somebody silently in the wrong
+pipeline. With no membership at all the pages render **frameless**, which is the
+reason `app/dashboard/layout.tsx` stopped rendering its zero-membership screen
+over `children`: the person whose workspace bootstrap failed is exactly the one
+who needs their profile, their tokens and the account page.
+
+**Profile carries the photo** (2026-08-11). `PATCH /api/me` had always accepted
+`avatar_url` and this app had always mounted `POST /api/upload`; the page fetched
+both `avatar_url` and `avatar_editable` and rendered neither, so a b/sales user
+had to open b/issues to change a field on the account both apps share. The upload
+goes through `apiSend` — **not** a bare `fetch`, which `lib/read-only.test.ts`
+refuses; the transport grew a `FormData` branch instead, and that guard caught
+the first version of it.
+
+### 9.1 Members is NOT here any more (2026-08-11)
+
+It is `/dashboard/{ws}/members`, a sidebar entry above Trash. **Everything below
+about the page is unchanged — only where it lives moved.**
+
+It was the one workspace-scoped page filed beside four account pages, which made
+the workspace look like a property of the person. In the workspace segment the
+slug is in the URL instead of being resolved by the page, which is also how it
+sheds the "pick the one you have" branch it used to carry.
+
+`/dashboard/settings/members` **redirects** rather than 404ing — somebody has it
+bookmarked, and that file says to delete it once the redirect stops being taken.
+
+**It is the screen the multi-app refactor exists for.** It is about THIS app's
+workspace: `sales.workspace_members` and `sales.invitations`. Before it, nobody
+could be put into b/sales from b/sales — membership was
+`platform.workspace_members` plus a per-app grant, so a sales user was somebody
+who had first been invited into an issues workspace.
 
 It is **visible by default**, not behind a role check. An owner needs it to
 invite; a member needs it to see who else is here. The page hides the invite form

@@ -16,7 +16,7 @@ import { AGENT_MANIFEST as m } from '@/lib/agent-manifest'
 import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@blackcode/platform-agent'
 
 export const metadata: Metadata = {
-  title: 'The HTTP API is now CLI-only · Blackcode Issues',
+  title: 'The HTTP API is now CLI-only · b/issues',
   description:
     'blackcode issues is operated through the bk CLI. What changed, what to run, and where each piece of the old documentation went.',
 }

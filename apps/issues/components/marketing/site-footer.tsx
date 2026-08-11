@@ -40,7 +40,7 @@ export function SiteFooter() {
 
         {/* Bottom row: full copyright, centred */}
         <div className="mt-6 border-t border-border/60 pt-6 text-center text-xs text-muted-foreground">
-          © {YEAR} Blackcode Issues. All rights reserved.
+          © {YEAR} b/issues. All rights reserved.
         </div>
       </div>
     </footer>

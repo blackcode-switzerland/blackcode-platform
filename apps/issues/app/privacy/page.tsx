@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import { MarketingLayout } from '@/components/marketing/layout'
 
 export const metadata: Metadata = {
-  title: 'Privacy · Blackcode Issues',
-  description: 'How Blackcode Issues handles your data.',
+  title: 'Privacy · b/issues',
+  description: 'How b/issues handles your data.',
 }
 
 export default function PrivacyPage() {
@@ -29,7 +29,7 @@ export default function PrivacyPage() {
         <div className="prose space-y-6 text-sm leading-relaxed text-muted-foreground">
           <p>
             This page is a placeholder until a full privacy policy is published. It
-            outlines the broad strokes of how Blackcode Issues handles your
+            outlines the broad strokes of how b/issues handles your
             information.
           </p>
 

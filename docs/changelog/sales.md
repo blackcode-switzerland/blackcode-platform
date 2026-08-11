@@ -22,6 +22,45 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-11 — Members moved into the sidebar; settings keeps the app frame; b/sales has a front page
+
+**Not breaking for `bk`.** No route changed shape, no command changed spelling.
+Everything below is the web UI, except one corrected sentence that an agent could
+have been reading.
+
+**One command reference in the app was WRONG and is fixed.** The Documents page
+told you documents were "linked with `bk sales doc create --url`". There is no
+`doc create` — the verb is **`bk sales doc add`**, and it wants `--title` and
+`--kind` as well as `--url` or `--upload`. If you scripted from that sentence,
+that is why it exited with `unknown command`. Every other `bk …` spelling printed
+by this app's UI was checked against the binary the same day and is real.
+
+**`/dashboard/settings/members` moved to `/dashboard/{ws}/members`** and is now a
+sidebar entry, above Trash. Members is a property of the workspace, not of your
+blackcode account, and the four pages it used to sit beside are all account
+pages. **The old URL still works — it redirects**, so a bookmark is not a 404.
+The API is untouched: members are still `GET/POST /api/workspaces/{ws}/members`.
+
+**Settings renders inside the app frame.** It used to lose the sidebar entirely
+because it lives outside the `/dashboard/{ws}` segment. The URL is unchanged;
+only the chrome around it moved.
+
+**Your profile photo can be set here.** `PATCH /api/me` has always accepted
+`avatar_url` and this app has always mounted `POST /api/upload`; the settings
+page simply never rendered the control, so a b/sales user had to go to b/issues
+to change a field on the account both apps share. Photos now show in the sidebar
+and the members list, with initials on a derived colour when there is none.
+
+**`/` is a landing page rather than a redirect.** Signed-in visitors still go
+straight to `/dashboard`.
+
+**Cosmetic, but visible:** the app has a favicon; command names printed in empty
+states render as code rather than as literal backticks; and the `b/` mark is one
+image everywhere (sidebar, sign-in, landing page) instead of three different
+drawings of it.
+
+---
+
 ## 2026-08-11 — Sign up, reset a forgotten password, and change your password here
 
 **Not breaking**, with one changed response shape on a browser-only route.

@@ -26,6 +26,7 @@
 import { useState } from 'react'
 import { Pencil, Plus, Terminal, X } from 'lucide-react'
 import { useCanWrite } from '@/lib/ui-mode'
+import { ticks } from '@/components/states'
 import type { Option } from '@/lib/pipeline'
 
 // ---------------------------------------------------------------------------
@@ -51,7 +52,12 @@ export function WriteGate({
   if (canWrite) return <>{children}</>
   return (
     <CommandNote>
-      {note ?? 'Editing is hidden — this browser is in read-only mode (Settings → Preferences).'}
+      {/* `ticks` because every `note` this app passes names a command inside
+          backticks, and until 2026-08-11 they rendered as literal backticks —
+          directly beside `AgentOnly` below, which builds the same sentence in
+          JSX and gets a proper chip. Same screen, same sentence, two
+          treatments. */}
+      {ticks(note ?? 'Editing is hidden — this browser is in read-only mode (Settings → Preferences).')}
     </CommandNote>
   )
 }

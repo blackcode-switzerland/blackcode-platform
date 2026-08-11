@@ -39,6 +39,7 @@
 // readable from a client component.
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
@@ -55,7 +56,14 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
   const params = useSearchParams()
   const callbackUrl = params?.get('callbackUrl') ?? '/dashboard'
 
-  const [mode, setMode] = useState<Mode>('signin')
+  // `?tab=signup` opens the form on the create-account panel. The landing page's
+  // "Create an account" button is the only caller, and without this it landed
+  // people on the SIGN-IN panel — a CTA that appears not to have worked, on the
+  // one screen where a first-time visitor has no idea what they did wrong.
+  // Same spelling as `apps/issues`, which has had the parameter since its own
+  // landing page shipped; a second spelling for the same idea is a link that
+  // silently misbehaves when somebody copies it between the two.
+  const [mode, setMode] = useState<Mode>(params?.get('tab') === 'signup' ? 'signup' : 'signin')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -129,9 +137,20 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
     <main className="flex min-h-screen items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground">
-            b/
-          </div>
+          {/* The real mark. This was a `b/` drawn in text on an emerald square,
+              which made THREE treatments of one logo in one app once
+              `public/logo.png` arrived (2026-08-11): the sidebar's, the landing
+              page's, and this. The front door is the worst place to be the odd
+              one out — it is the first thing anybody sees of the product, and
+              the mail they arrived from carries this same file. */}
+          <Image
+            src="/logo.png"
+            alt="b/"
+            width={44}
+            height={44}
+            priority
+            className="mx-auto mb-4 rounded-xl"
+          />
           <h1 className="text-xl font-semibold tracking-tight text-foreground">b/sales</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             blackcode&rsquo;s business-development pipeline

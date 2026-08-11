@@ -20,6 +20,7 @@
 // and the row padding in every listing are the carriers.
 
 import { createContext, useContext, useEffect, useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
@@ -41,8 +42,11 @@ import {
   Sun,
   Sparkles,
   Trash2,
+  Users,
   type LucideIcon,
 } from 'lucide-react'
+import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
+import { useMe } from '@/lib/hooks'
 import { CommandPalette } from './command-palette'
 
 /** `seg` is the path under `/dashboard/{ws}`; '' is Today. */
@@ -72,10 +76,18 @@ const NAV_CATALOG: NavEntry[] = [
   { seg: '/documents', label: 'Documents', icon: FolderOpen },
 ]
 
-// Trash sits on its own: it is not a catalog, and it is not somewhere anybody
-// navigates daily. It IS linked, because a page reachable only by typing its URL
-// is a page nobody uses — the mirror of the nav-item-with-no-route problem above.
-const NAV_UTILITY: NavEntry[] = [{ seg: '/trash', label: 'Trash', icon: Trash2 }]
+// Neither of these is a catalog and neither is somewhere anybody navigates
+// daily, which is why they sit below the rule rather than in NAV_MAIN. Both ARE
+// linked, because a page reachable only by typing its URL is a page nobody uses
+// — the mirror of the nav-item-with-no-route problem above.
+//
+// Members arrived here on 2026-08-11 from `/dashboard/settings/members`, where
+// it was filed beside four ACCOUNT pages while being the only workspace-scoped
+// one of the five. Above Trash: it is the one of the two people actually open.
+const NAV_UTILITY: NavEntry[] = [
+  { seg: '/members', label: 'Members', icon: Users },
+  { seg: '/trash', label: 'Trash', icon: Trash2 },
+]
 
 /**
  * The header title.
@@ -94,6 +106,21 @@ export function usePageTitle(title: string | null) {
     set(title)
     return () => set(null)
   }, [set, title])
+}
+
+/**
+ * `usePageTitle` as a component, for a subtree whose pages are SERVER
+ * components and therefore cannot call a hook. `/dashboard/settings/*` is the
+ * case: its layout is a server component that mounts the shell, and without
+ * this the header would fall back to the nav lookup, find no entry for a path
+ * outside `/dashboard/{ws}`, and read `b/sales` on every settings page.
+ *
+ * Renders nothing. Safe outside a shell too — `PageTitleContext`'s default is a
+ * no-op, which is exactly the case where settings renders with no workspace.
+ */
+export function PageTitle({ title }: { title: string }) {
+  usePageTitle(title)
+  return null
 }
 
 export function SalesShell({ ws, children }: { ws: string; children: React.ReactNode }) {
@@ -131,9 +158,14 @@ export function SalesShell({ ws, children }: { ws: string; children: React.React
         href={base}
         className="flex h-12 shrink-0 items-center gap-2.5 border-b border-sidebar-border px-4"
       >
-        <span className="flex h-6 w-6 items-center justify-center rounded-md bg-sidebar-primary text-[11px] font-semibold text-sidebar-primary-foreground">
-          b/
-        </span>
+        {/* The real mark, not a text `b/` badge — see the matching note in
+            apps/issues' `dashboard-layout.tsx`. The badge was drawn in
+            `--sidebar-primary`, which is this app's emerald; the file
+            (`public/logo.png`, arrived 2026-08-11) is the blackcode mark both
+            apps carry, and the app word beside it is where the difference
+            belongs. The palette stays sales' everywhere else — D-4 is about the
+            product's colour, not about its logo. */}
+        <Image src="/logo.png" alt="b/" width={22} height={22} className="rounded-md" />
         <span className="text-[15px] font-semibold tracking-tight">sales</span>
       </Link>
 
@@ -260,16 +292,38 @@ function NavLink({ entry, base, pathname }: { entry: NavEntry; base: string; pat
 // The Settings link went in with the pages, which is the rule that kept it out.
 // It points at `/dashboard/settings/*` — outside the workspace segment, because
 // three of its four pages are about the blackcode ACCOUNT rather than about this
-// workspace, and the fourth says which workspace it is setting.
+// workspace, and the fourth (preferences) says which workspace it is setting.
+//
+// It was three of FIVE until 2026-08-11, when members moved into the sidebar
+// above: the odd one out was the workspace-scoped page, and it left.
 function AccountFooter() {
   const { data: session } = useSession()
-  const user = session?.user
+  const me = useMe()
+  // The live row wins; the session is the fallback for the moment before it
+  // arrives. The session's copy is minted at sign-in and never refreshed (see
+  // `useMe`), so drawing from it alone showed a photo — or an initial — that
+  // could be weeks old, including one set in another blackcode app.
+  const user = {
+    name: me.data?.name ?? session?.user?.name,
+    email: me.data?.email ?? session?.user?.email,
+    image: me.data?.avatar_url ?? session?.user?.image,
+  }
   return (
     <div className="shrink-0 border-t border-sidebar-border p-2.5">
       <div className="flex items-center gap-2.5 rounded-lg px-2.5 py-2">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[11px] font-medium">
-          {(user?.name ?? user?.email ?? '?').charAt(0).toUpperCase()}
-        </span>
+        {/* The signed-in person's PHOTO, since 2026-08-11. This was one grey
+            initial and no image — the account carries `avatar_url` (it is on the
+            session as `image`), and the sidebar simply never read it, so a
+            person who had uploaded a photo in either app saw a letter here.
+            `MemberAvatar` falls back to two initials on a colour derived from
+            the label, so the no-photo case is still distinguishable between two
+            teammates whose names start with the same letter. */}
+        <MemberAvatar
+          name={user?.name}
+          email={user?.email}
+          avatarUrl={user?.image}
+          size={28}
+        />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-medium">{user?.name ?? 'Signed in'}</span>
           <span className="block truncate text-[11px] text-muted-foreground">{user?.email}</span>

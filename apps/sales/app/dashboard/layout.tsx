@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
-import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
 
 /**
  * ── THE "NO ACCESS TO B/SALES" GATE IS GONE, AS OF 2026-08-10 ───────────────
@@ -19,51 +18,29 @@ import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
  * branch would have left a screen nobody can ever see, which reads to the next
  * reader as protection.
  *
- * The remaining empty also changed meaning, and it is worth saying why it is
- * kept rather than deleted. Every sign-in now mints a workspace
- * (`lib/auth.ts` → `ensureWorkspaceForUser`, one transaction), so reaching this
- * screen means that bootstrap failed. It is an ANOMALY screen now, not the
- * normal state of an internal product nobody self-serves into — hence the
- * "sign out and back in" wording, which is the action that actually retries it.
- *
  * `PLATFORM_ENFORCE_APP_ACCESS` is not consulted anywhere in this app any more.
- * The variable stays set in Vercel until Phase 5 removes it and the two tables
- * it gates.
+ *
+ * ── AND THE REMAINING EMPTY MOVED DOWN A LEVEL ON 2026-08-11 ────────────────
+ *
+ * The zero-membership screen used to render HERE, instead of `children`, for
+ * every route under `/dashboard`. That swallowed `/dashboard/settings/*` too —
+ * so the one person who most needs their account pages (their workspace
+ * bootstrap failed) was the one person who could not reach them.
+ *
+ * A layout cannot make the distinction: on the server it has no pathname, and
+ * `children` is opaque. So the branch is `app/dashboard/page.tsx`'s now, beside
+ * the redirect it already owned, and the screen itself is
+ * `components/no-workspace.tsx`. Nothing else became reachable —
+ * `app/dashboard/[ws]/layout.tsx` 404s a slug you are not a member of, and with
+ * zero memberships that is every slug.
+ *
+ * What is left here is the one thing that IS true of every route below:
+ * you must be signed in, with a session that survives `getValidatedSessionUser`
+ * (soft delete, password-reset invalidation).
  */
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getValidatedSessionUser()
   if (!user) redirect('/login')
 
-  const memberships = await listWorkspacesForUser(user.id)
-
-  if (memberships.length === 0) {
-    return (
-      <Empty title="No workspace yet">
-        <p>
-          Your account exists, but it has no b/sales workspace. One is normally
-          created the moment you sign in, so this means that step did not finish.
-        </p>
-        <p>
-          Sign out and back in with <strong>{user.email}</strong> — it retries.
-          If it keeps happening, tell an administrator.
-        </p>
-      </Empty>
-    )
-  }
-
   return <>{children}</>
-}
-
-function Empty({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="flex min-h-screen items-center justify-center p-8">
-      <div className="max-w-md space-y-4 text-center">
-        <h1 className="text-lg font-semibold text-foreground">{title}</h1>
-        <div className="space-y-3 text-sm text-muted-foreground">{children}</div>
-        <a href="/api/auth/signout" className="inline-block text-sm text-primary underline">
-          Sign out
-        </a>
-      </div>
-    </div>
-  )
 }
