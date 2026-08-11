@@ -655,3 +655,50 @@ inert, several of them written by the same session that wrote the rule.
 
 `verify.sh` is the one that matters most here. It is the only thing standing
 between this refactor and losing somebody's comments.
+
+---
+
+## 9. The open ledger — what this refactor did NOT close
+
+Written 2026-08-11 by agent 7, the last agent, and accepted. Each is a decision
+somebody has to make, not a bug somebody forgot.
+
+1. **Arriving on another app's cookie gets you a session and no workspace.**
+   Production behaviour today. The session is shared across `*.blackcode.ch`
+   (D-16), but membership is per app and `ensureWorkspaceForUser` runs in the
+   SIGN-IN callback — which a person arriving on an existing cookie never
+   triggers. They land on "no workspace yet" and the only way out is to sign out
+   and back in. **It also makes `adding-an-app.md`'s signed proof 9 read
+   stronger than it is**: "already signed in" proves the cookie is shared, not
+   that the person can use the app. Three candidate answers, none taken —
+   bootstrap on first authenticated request (cheap, but any app then silently
+   mints tenancy for anyone with an account); an explicit "get started" button;
+   or decide a new app is invite-only and the empty state is correct.
+2. **`workspace_invitations.app` has no reader.** New rows NULL, historical rows
+   kept. `transaction_log`'s exact shape — and that one ended with a phase
+   stopping to decide whether dropping it was safe.
+3. **`error_events.workspace_id` has no writer** — 0 of 328 rows, ever. Agent 6
+   found this retires the stated justification for the `app` column. Give it a
+   writer or drop it; leaving it is how it becomes a third open item.
+4. **`WorkspaceSource.getById` has no caller.** Flagged by agents 4, 5 and 7;
+   agent 7 added a third implementation of it while flagging it. A required
+   interface method every app implements and nobody calls. Five-line deletion.
+5. **Retired capabilities in prose are unguarded.** The landing page sold
+   `bk undo` for months over a journal that never had a writer, and three server
+   `suggestion` strings named removed commands — the strings an agent ACTS on.
+   The new guard catches a page naming a retired COMMAND; it cannot catch a page
+   describing a retired CAPABILITY.
+6. **`SET NOT NULL` on `error_events.app`** — deferred. Production has 0 rows
+   saying `sales` because sales has not errored since the column existed. The
+   precondition is working, not failing.
+7. **Phase 6 (cross-app fan-out)** — deferred, spec above, blocked only by
+   `bk search`'s deprecation window.
+
+### And one rule this project produced, which belongs everywhere
+
+> **An absence is only evidence if you know your instrument could have seen the
+> presence.**
+
+Agent 7 wrote "silent no-op" four times before realising its instrument could
+not see a 4-second toast. Same sentence as *"a check you have not watched fail
+is not a check"*, pointed at observation instead of at tests.

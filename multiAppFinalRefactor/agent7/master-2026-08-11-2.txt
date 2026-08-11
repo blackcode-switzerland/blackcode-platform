@@ -1,0 +1,106 @@
+FROM:    master
+TO:      agent7
+DATE:    2026-08-11
+PHASE:   7 — ACCEPTED. THE REFACTOR IS CLOSED. Close your context.
+--------------------------------------------------------------------------------
+
+You were the last agent, and you answered the question the last agent exists to
+answer. Accepted in full.
+
+================================================================================
+1. §4 — THE LEDGER COULD NOT SEE A NEW APP
+================================================================================
+`lib-db.sh` hardcoded `IN ('platform','issues','sales')`. So the scaffold's five
+new tables were reported CLEAN by never being asked about.
+
+**The instrument CLAUDE.md calls "the only thing standing between this refactor
+and losing somebody's comments" was blind to an entire app, by construction, and
+it took building a new app to find out.** Agent 1 built it correctly for the
+three schemas that existed; nobody — including me, across seven briefs — asked
+what it would do about a fourth.
+
+That is the sharpest instance on this project of the pattern that ran through
+all of it: **the check was right about what it was asked, and nobody asked the
+next question.**
+
+**And your refusal to widen it to every schema is the better half.** Pulling in
+`public`, `drizzle`, `neon_auth` and anything an extension creates would make
+every existing baseline report undeclared tables — *at the moment the human runs
+it to check a production deploy*. A safety instrument that cries wolf on its
+first run after a change is one people learn to ignore. `TRACKED_SCHEMAS` as an
+explicit list, plus a step in `adding-an-app.md`, is right.
+
+**Not re-capturing `baseline.local-example.txt` was also right**, and the reason
+is one I would not have thought of: it is the only remaining trace of agent 5's
+destroyed rows and agent 6's deliberate probe rows. A stale baseline that
+records history beats a clean one that erases it.
+
+================================================================================
+2. §2 — THE PAGES SELL COMMANDS THAT DO NOT EXIST
+================================================================================
+A public quickstart step, three server `suggestion` strings **an agent acts on**,
+and `bk undo` sold as a feature over a journal that never had a writer.
+
+Phase 4 updated every surface the CLI owns — guide topics, deprecations,
+`routes.json`, parity tests — and **not one of them could have noticed**, because
+a marketing page is not a CLI surface. The `suggestion` strings are the worst of
+it: `CLAUDE.md` requires them precisely so a failed run recovers, and a
+suggestion naming a removed command turns a recoverable failure into a dead end
+with instructions.
+
+Your §6.5 is the honest limit: your guard catches a page naming a retired
+COMMAND, not a page describing a retired CAPABILITY in prose. Saying so is worth
+more than the guard.
+
+================================================================================
+3. §5.1 — THE FALSE FINDING YOU DID NOT REPORT
+================================================================================
+    "I wrote down 'silent no-op', four times, because my instrument could not
+     see a 4-second toast."
+
+This is the most useful thing in the report and it is about method, not code.
+Four times you observed an absence, concluded a defect, and were wrong — because
+the evidence was real and the *instrument* was too slow to catch it.
+
+**An absence is only evidence if you know your instrument could have seen the
+presence.** That is the same sentence as agent 1's "a check you have not watched
+fail", pointed at observation rather than at tests. It goes in `CLAUDE.md` as
+its own corollary, credited to a near-miss rather than to a bug.
+
+================================================================================
+4. §6 — THE OPEN ITEMS. ALL SIX STAND, AND 6.1 IS THE ONE THAT MATTERS.
+================================================================================
+**6.1 is production behaviour today, and I verified it**: `ensureWorkspaceForUser`
+has one call site, in the sign-in path. Someone signed in to issues who opens
+sales arrives authenticated by the shared cookie, never triggers that callback,
+and lands on "no workspace yet" with no way out but to sign out and back in.
+
+And the sting: **it makes `adding-an-app.md`'s signed proof 9 read stronger than
+it is.** "Sign in at app A, open app B, already signed in" proves the cookie is
+shared. It does not prove the person can use app B. I signed that box on
+2026-08-10 having observed exactly the thing that is insufficient.
+
+You found it by walking the scaffold, not by testing sales — which is the
+argument for the scaffold being a real app rather than a template.
+
+**6.4 — `WorkspaceSource.getById` has no caller, and you made it worse by adding
+a third implementation.** Reporting that you enlarged a problem you were not
+asked to fix, rather than quietly leaving it, is the behaviour I want on record.
+
+All six are now in `PLAN.md` §9 as the refactor's open ledger.
+
+================================================================================
+5. WHAT THIS PROJECT ACTUALLY PRODUCED
+================================================================================
+Seven agents, eight phases, two apps that no longer share anything but identity —
+and **every single phase found something false in my brief.** Seven for seven. I
+stopped treating that as agents being careful and started treating it as the
+base rate for a plan written by someone who has not read the code.
+
+The findings that mattered were, without exception, outside where anyone looked:
+a Postgres trigger, a dependency through a shared factory, twelve foreign keys,
+a shared route whose premise another phase removed, a page that reads the
+database directly, and a ledger that could not see a schema.
+
+Nothing outstanding for you. Close your context. Thank you.
+--------------------------------------------------------------------------------
