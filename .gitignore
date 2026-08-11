@@ -72,3 +72,4 @@ next-env.d.ts
 
 # transient production connection string — never commit
 /.prod-url
+/parityAudit/
