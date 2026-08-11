@@ -66,3 +66,6 @@ next-env.d.ts
 /.google-new
 /multiAppFinalRefactor/.prod-url
 # (that folder is archived; keep the rule so a re-created one is never committed)
+
+# UI polish working plan — not part of the repo
+/salesPolish/
