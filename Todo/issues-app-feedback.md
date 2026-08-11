@@ -10,15 +10,21 @@ Collected 2026-08-10 from user/agent reports on `bc-issues` (issues.blackcode.ch
 >
 > | Item | Outcome |
 > |---|---|
-> | 1 | **Mixed.** The silent-`PATCH` half was real and is fixed (`e0e9458`). "Labeling is UI-only" was never true |
+> | 1 | **Mixed, now fully closed.** The silent-`PATCH` half was real and is fixed (`e0e9458`). "Labeling is UI-only" was never true. The `edit --label` gap is closed by `4d5f646` |
 > | 2 | **Already fixed** by `9d568c1`, before this triage. Verified: 162 probes, 0 dead ends |
 > | 3 | **Already fixed.** Every unknown command already names `bk skill sync` |
 > | 4 | **Never broken** — `/agent-updater` is a misspelling of `/agent-updator`. Both paths now 307 (`49a980d`) |
 > | 5 | **Half fixed** (`1431db6`). The Windows PowerShell half is **untested** — no Windows machine |
 >
-> **One thing here is still open and is a product decision, not a bug:**
-> whether `bk issues issue edit` should gain `--label`. Report 2 §3 recommends
-> yes, as a CLI-only change. Nothing was implemented for it.
+> **Nothing here is still open.** The one product decision — whether
+> `bk issues issue edit` should gain `--label` — was taken on 2026-08-11 and
+> implemented in `4d5f646`, along with the smaller version report 2 offered as
+> an alternative: `bk issues label attach|detach` now take a NAME too. Every way
+> of labelling an issue accepts a name, and unknown names are created.
+>
+> The one thing deliberately NOT done: `PATCH` still rejects only `labels` and
+> `label_ids`, not every unknown field. Rejecting all of them is breaking for
+> any client sending extras, and nothing has been reported against it.
 
 ---
 

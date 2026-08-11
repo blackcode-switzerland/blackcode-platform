@@ -150,6 +150,13 @@ and that the PATCH field is rejected rather than ignored.
 
 ### `bk issues issue edit --label` (item 1d) — recommend: add it
 
+> **DECIDED AND IMPLEMENTED 2026-08-11 in `4d5f646`. Both options were taken**,
+> not one: `issue edit --label` / `--label-remove` (names, repeatable) AND
+> `label attach|detach` accepting a name in the second position. No new HTTP
+> surface — `edit` fans out to the existing sub-resource, and PATCH still
+> rejects a `labels` field. `detach <issue> <name>` resolves against the
+> issue's own labels, so a miss is an error naming what it does carry.
+
 Not implemented; the plan says to stop and say so when an item is a decision.
 
 The asymmetry is real and it is what generates this report. `bk issues issue
@@ -173,7 +180,11 @@ A smaller version, if that is too much: let `bk issues label attach <issue> <lab
 accept a **name** in the second position. The route already handles `{"name": …}`
 and creates unknown labels; only the CLI insists on `strconv.Atoi`.
 
-### Should `PATCH` reject *every* unknown field?
+### Should `PATCH` reject *every* unknown field? — **DEFERRED 2026-08-11**
+
+> Decision: leave it narrow. Rejecting all unknown keys is breaking for any
+> client sending extras, and nothing has been reported against the wider
+> silence. Revisit when the apps' feature work starts.
 
 Today it rejects exactly `labels` and `label_ids`. The same silence applies to
 any typo'd field — `{"titel": "x"}` is a 200 that changes nothing. Rejecting all
