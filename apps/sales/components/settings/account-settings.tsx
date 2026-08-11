@@ -18,10 +18,18 @@
 // Wiring email into sales is real work with its own decisions (whose brand is on
 // the message, which from-address) and it belongs with Phase 12's provisioning.
 //
-// **Deleting your account.** Irreversible, and it reaches across every app:
-// soft-deletes the user, hard-deletes solely-owned workspaces, revokes every
-// token. None of that is a sales operation. `app/api/me/route.ts` does not
-// export DELETE.
+// **Deleting your ACCOUNT.** Irreversible, and it reaches across every app:
+// soft-deletes the user, hard-deletes solely-owned workspaces in every app,
+// revokes every token. None of that is a sales operation. `app/api/me/route.ts`
+// still does not export DELETE, and that decision is unchanged.
+//
+// **Deleting your b/sales DATA is a different act, and it is done HERE.**
+// Added 2026-08-11 (Phase 9). Nothing else can do it: no other deployment can
+// read or write `sales.*`. Until then, closing a blackcode account from
+// `apps/issues` left this app's workspace in place — prospects, meetings,
+// communications, documents — owned by an account that could no longer sign in.
+// Not lost: STRANDED, and unrecoverable by the person. So the two acts sit next
+// to each other on this page and say plainly which one keeps the account.
 //
 // **Platform administration.** Settled 2026-08-07: it lives in ONE app, and not
 // this one. D-28's test decides it — *would two deployments answer differently?*
@@ -36,12 +44,21 @@
 // (`platform.apps.base_url`, the D-18 mechanism). This app's code never spells
 // another app's slug.
 
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { signOut } from 'next-auth/react'
-import { KeyRound, LogOut, ShieldAlert, ShieldCheck } from 'lucide-react'
-import { apiGet } from '@/lib/client'
+import { toast } from 'sonner'
+import { KeyRound, LogOut, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react'
+import { apiGet, apiSend } from '@/lib/client'
 import { BlockSkeleton, ErrorState } from '@/components/states'
 import { Section } from './profile-settings'
+
+interface Footprint {
+  known: boolean
+  blocked_by: Array<{ workspace_id: number; name: string; member_count: number }>
+  will_delete: Array<{ workspace_id: number; name: string }>
+  holds: Array<{ label: string; count: number }>
+}
 
 interface Me {
   email: string
@@ -83,11 +100,16 @@ export function AccountSettings({ otherApps }: { otherApps: OtherApp[] }) {
         </Elsewhere>
       </Section>
 
-      <Section title="Deleting your account">
+      <Section title="Deleting your b/sales data">
+        <DeleteMyData />
+      </Section>
+
+      <Section title="Closing your account">
         <Elsewhere icon={<ShieldAlert size={15} />} apps={otherApps} where="Settings → Account">
           Closing a blackcode account is irreversible and reaches every app: it revokes all your API
-          tokens and permanently deletes workspaces you solely own. It is deliberately done in one
-          place, with a typed confirmation, rather than from each app that happens to be open.
+          tokens and permanently deletes workspaces you solely own, <strong>including the b/sales
+          data above</strong>. It is deliberately done in one place, with a typed confirmation,
+          rather than from each app that happens to be open.
         </Elsewhere>
       </Section>
 
@@ -165,5 +187,124 @@ function Elsewhere({
         )}
       </span>
     </p>
+  )
+}
+
+/**
+ * "Delete my b/sales data" — this app only, and the account survives.
+ *
+ * ── WHY THIS IS NOT `DELETE /api/me` WITH A FLAG ───────────────────────────
+ * It never touches `platform.users`. The account is the one thing every app
+ * shares, and an app that could close it from a button labelled "delete my
+ * b/sales data" would be doing considerably more than it said. The route is
+ * `DELETE /api/me/footprint`, which is scoped to this app by construction: it
+ * calls this deployment's own `FootprintSource`, which can only reach `sales.*`.
+ *
+ * ── AND WHY IT SIGNS YOU OUT ───────────────────────────────────────────────
+ * Because everything this session could reach here is gone. Leaving somebody in
+ * an empty dashboard reads as a failed delete. They can sign straight back in —
+ * that is the difference between this and closing the account, and the toast
+ * says so.
+ *
+ * `apiSend` rather than `useRecordMutation`: this is an ACCOUNT operation, not a
+ * sales record, so it is not behind `useCanWrite()`. A browser display
+ * preference that could stop somebody deleting their own data would have become
+ * a permission over their account, which is the misreading D-7 exists to
+ * prevent. Declared in `lib/read-only.test.ts`'s ACCOUNT_WRITERS with that
+ * reason.
+ */
+function DeleteMyData() {
+  const [confirming, setConfirming] = useState(false)
+  const [phrase, setPhrase] = useState('')
+
+  const footprint = useQuery({
+    queryKey: ['my-footprint'],
+    queryFn: () => apiGet<{ app: string; footprint: Footprint }>('/api/me/footprint'),
+  })
+
+  const remove = useMutation({
+    mutationFn: () => apiSend<{ deleted: true }>('DELETE', '/api/me/footprint'),
+    onSuccess: () => {
+      toast.success('Your b/sales data has been deleted — your account is still open')
+      signOut({ callbackUrl: '/login' })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  if (footprint.isPending) return <BlockSkeleton rows={2} />
+  if (footprint.error) return <ErrorState error={footprint.error} />
+
+  const f = footprint.data.footprint
+  const blocked = f.blocked_by.length > 0
+
+  return (
+    <div className="space-y-3 text-sm">
+      <p className="text-muted-foreground">
+        Deletes everything you have in b/sales — your workspace and all of its prospects, meetings,
+        communications and documents. <strong className="text-foreground">Your blackcode account
+        stays open</strong>, and so does anything you have in other apps. You will be signed out.
+      </p>
+
+      {f.will_delete.length === 0 && !blocked ? (
+        <p className="text-muted-foreground">You have nothing of your own here to delete.</p>
+      ) : (
+        <ul className="space-y-1 text-xs">
+          {f.will_delete.map((w) => (
+            <li key={w.workspace_id} className="text-destructive">
+              {w.name}
+            </li>
+          ))}
+          {f.holds.length > 0 ? (
+            <li className="text-muted-foreground">
+              {f.holds.map((h) => `${h.count} ${h.label}`).join(' \u00b7 ')}
+            </li>
+          ) : null}
+        </ul>
+      )}
+
+      {blocked ? (
+        <p className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-500">
+          Other people are in {f.blocked_by.map((w) => w.name).join(', ')}. Transfer ownership
+          first — deleting it would take their data with it.
+        </p>
+      ) : f.will_delete.length === 0 ? null : !confirming ? (
+        <button
+          onClick={() => setConfirming(true)}
+          className="flex items-center gap-2 rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
+        >
+          <Trash2 size={15} />
+          Delete my b/sales data
+        </button>
+      ) : (
+        <div className="space-y-2">
+          <label className="block text-xs font-medium">
+            Type <code>DELETE</code> to confirm
+          </label>
+          <input
+            value={phrase}
+            onChange={(e) => setPhrase(e.target.value)}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setConfirming(false)
+                setPhrase('')
+              }}
+              className="rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={phrase !== 'DELETE' || remove.isPending}
+              onClick={() => remove.mutate()}
+              className="rounded-lg bg-destructive px-3 py-2 text-sm font-medium text-destructive-foreground disabled:opacity-50"
+            >
+              Permanently delete my b/sales data
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

@@ -148,6 +148,20 @@ const ACCOUNT_WRITERS = new Map<string, AccountWriter>([
     { why: '`bk login` mints a platform token — POST /api/cli/authorize' },
   ],
   ['components/settings/profile-settings.tsx', { why: 'your blackcode profile — PATCH /api/me' }],
+  [
+    'components/settings/account-settings.tsx',
+    {
+      why:
+        'deleting your data IN THIS APP — DELETE /api/me/footprint, added 2026-08-11 ' +
+        'with app-aware account deletion. Not workspace-scoped and not gateable: ' +
+        'read-only is a browser display preference, and a preference that could stop ' +
+        'somebody deleting their own data would be a permission over their account ' +
+        '(D-7), which is the same reasoning accept-invitation.tsx carries. Note the ' +
+        'route is /api/me/*, not /api/workspaces/*, and that is not an accident of ' +
+        'naming: it deletes the caller\'s own tenancy in this app rather than a record ' +
+        'inside a workspace, so there is no workspace in its path to declare',
+    },
+  ],
   ['components/settings/token-settings.tsx', { why: 'platform API tokens — /api/tokens' }],
   [
     'components/accept-invitation.tsx',
