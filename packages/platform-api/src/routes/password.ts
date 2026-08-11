@@ -28,15 +28,33 @@
 // choosing its own OTP length, expiry and attempt cap against one shared
 // credential, with the weakest one setting the real floor.
 //
-// The LOGGED-OUT flow (`/api/auth/password-reset/*`) is not here. Everything
-// under `/api/auth` is per-app by design — it lives beside that app's NextAuth
-// handler and its sign-in pages — and it uses the same shared helpers.
+// ---------------------------------------------------------------------------
+// THE LOGGED-OUT PAIR IS HERE TOO, SINCE 2026-08-11, AND THAT IS A REVERSAL
+// ---------------------------------------------------------------------------
+// This header used to say `/api/auth/password-reset/*` was "not here —
+// everything under `/api/auth` is per-app by design". The ROUTES still are:
+// each app mounts them under its own `app/api/auth/`, beside its NextAuth
+// handler. What is no longer per-app is their BODIES.
+//
+// The reversal happened when b/sales needed the same pair. Writing them there
+// would have produced two copies of the OTP shape — which digits are accepted,
+// which failure maps to which code, which message a person reads when a code
+// expires — and `packages/platform-auth`'s own header is explicit that letting
+// each app choose its own OTP policy means the weakest app sets the real floor
+// for ONE shared credential. `docs/adding-an-app.md` open item 8 says the same
+// thing about the templates that occasioned this phase: the second copy goes
+// stale silently, because nothing renders both.
+//
+// So the same rule that put `requestPasswordOtp` in platform-auth applies one
+// layer up. What stays app-local is the two things that genuinely are an app's:
+// where the route file sits, and the sender it binds.
 
 import { NextRequest, NextResponse } from 'next/server'
 import {
   OTP_EXPIRES_IN_MINUTES,
   hashNewPassword,
   requestPasswordOtp,
+  validateEmail,
   validatePassword,
   verifyOtpAndResetPassword,
 } from '@blackcode/platform-auth'
@@ -156,6 +174,98 @@ export function passwordConfirmRoute(app: AppContext) {
       switch (result.reason) {
         case 'no_pending_otp':
           throw Errors.badRequest('no_pending_otp', 'No active code. Request a new one.')
+        case 'otp_expired':
+          throw Errors.badRequest('otp_expired', 'This code has expired. Request a new one.')
+        case 'too_many_attempts':
+          throw Errors.badRequest('too_many_attempts', 'Too many attempts. Request a new code.')
+        case 'invalid_otp':
+          throw Errors.badRequest('invalid_otp', 'That code is incorrect.')
+      }
+    }
+
+    return NextResponse.json({ ok: true })
+  })
+}
+
+
+/**
+ * `POST /api/auth/password-reset/request` — LOGGED-OUT step 1.
+ *
+ * Emails a code if an account exists. **Always returns `{ ok: true }`**
+ * otherwise, including for `no_account` and `rate_limited`, so the endpoint
+ * cannot be used to enumerate which addresses have accounts. That is why the
+ * result of `requestPasswordOtp` is deliberately not reflected in the response.
+ */
+export function publicPasswordResetRequestRoute(app: AppContext, contribution: PasswordOtpSender) {
+  const apiHandler = createApiHandler(app)
+
+  return apiHandler(async (req: NextRequest) => {
+    const body = await req.json().catch(() => null)
+    const email = typeof body?.email === 'string' ? body.email.trim() : ''
+    const emailErr = validateEmail(email)
+    if (emailErr) throw Errors.badRequest('invalid_email', emailErr)
+
+    // Honest degradation, BEFORE the account lookup. Deliberately before: this
+    // is a fact about the DEPLOYMENT, not about whether the address has an
+    // account, so it cannot be used to enumerate. After the lookup it would be
+    // an oracle.
+    if (!contribution.canDeliverEmail()) {
+      throw Errors.serviceUnavailable(
+        'email_not_configured',
+        'This deployment cannot send email, so it cannot deliver a reset code.',
+        'Ask an administrator to configure RESEND_API_KEY and RESEND_FROM_EMAIL for this app.'
+      )
+    }
+
+    const result = await requestPasswordOtp(app.db, email)
+
+    if (result.status === 'sent') {
+      const send = await contribution.sendPasswordResetEmail(email, {
+        otp: result.otp,
+        expiresInMinutes: OTP_EXPIRES_IN_MINUTES,
+        name: result.user.name,
+      })
+      // Dev affordance: outside production, an unconfigured deployment puts the
+      // code where the only person who could read that mailbox is already
+      // looking. This is the channel `canDeliverEmail()` carves out for.
+      if (!send.sent && process.env.NODE_ENV !== 'production') {
+        console.log(`[password-reset] OTP for ${email}: ${result.otp}`)
+      }
+    }
+
+    return NextResponse.json({ ok: true })
+  })
+}
+
+/**
+ * `POST /api/auth/password-reset/confirm` — LOGGED-OUT step 2.
+ *
+ * Verifies the code and sets the new password. Takes the email in the body
+ * (there is no session), and is safe to do so because a correct code is the
+ * proof of ownership; `verifyOtpAndResetPassword` consumes it atomically.
+ */
+export function publicPasswordResetConfirmRoute(app: AppContext) {
+  const apiHandler = createApiHandler(app)
+
+  return apiHandler(async (req: NextRequest) => {
+    const body = await req.json().catch(() => null)
+    const email = typeof body?.email === 'string' ? body.email.trim() : ''
+    const otp = typeof body?.otp === 'string' ? body.otp.trim() : ''
+    const newPassword = typeof body?.new_password === 'string' ? body.new_password : ''
+
+    const emailErr = validateEmail(email)
+    if (emailErr) throw Errors.badRequest('invalid_email', emailErr)
+    if (!/^\d{6}$/.test(otp)) throw Errors.badRequest('invalid_otp', 'Enter the 6-digit code')
+    const pwErr = validatePassword(newPassword)
+    if (pwErr) throw Errors.badRequest('weak_password', pwErr)
+
+    const hash = await hashNewPassword(newPassword)
+    const result = await verifyOtpAndResetPassword(app.db, email, otp, hash)
+
+    if (!result.ok) {
+      switch (result.reason) {
+        case 'no_pending_otp':
+          throw Errors.badRequest('no_pending_otp', 'No active reset code. Request a new one.')
         case 'otp_expired':
           throw Errors.badRequest('otp_expired', 'This code has expired. Request a new one.')
         case 'too_many_attempts':

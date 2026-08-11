@@ -1,10 +1,11 @@
 // POST /api/auth/password-reset/request — public "forgot password", step 1.
-// Mounted from the shared factory.
 //
-// The ROUTE is app-local — it sits beside this app's NextAuth handler and its
-// login page — but the BODY is not, since 2026-08-11. b/sales needed the same
-// pair, and two copies would have meant two OTP policies against one shared
-// credential. The reversal is argued in the factory's header.
+// This is the route the login page's "Forgot password?" link needs, and b/sales
+// could not have it until `packages/platform-email` existed: the step IS
+// sending a code, so an app that cannot send cannot serve it.
+//
+// Always answers `{ ok: true }` when it can deliver, whether or not the address
+// has an account — see the factory.
 
 import { publicPasswordResetRequestRoute } from '@blackcode/platform-api/routes'
 import { appContext } from '@/lib/api'

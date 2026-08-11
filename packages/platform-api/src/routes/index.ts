@@ -57,7 +57,12 @@ export { activityRoute, publicEventIds } from './activity'
 export type { ActivityContribution } from './activity'
 export { changelogRoute } from './changelog'
 export { cliAuthorizeRoute } from './cli-auth'
-export { passwordConfirmRoute, passwordRequestOtpRoute } from './password'
+export {
+  passwordConfirmRoute,
+  passwordRequestOtpRoute,
+  publicPasswordResetConfirmRoute,
+  publicPasswordResetRequestRoute,
+} from './password'
 export type { PasswordOtpSender } from './password'
 export { workspaceInvitationsRoute } from './invitations'
 export type { InvitationSender } from './invitations'

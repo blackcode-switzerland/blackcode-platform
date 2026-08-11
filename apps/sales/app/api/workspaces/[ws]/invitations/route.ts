@@ -18,14 +18,19 @@
 // `@blackcode/platform-auth` implementation. PLAN.md §6 decision 1.
 //
 // ---------------------------------------------------------------------------
-// NO EMAIL IS SENT, AND THAT IS UNCHANGED
+// IT SENDS EMAIL NOW (2026-08-11). `email_sent: false` USED TO BE A CONSTANT
 // ---------------------------------------------------------------------------
-// This deployment has no email provider and is not gaining one to mount a route.
-// `email_sent: false` is byte-for-byte what `apps/issues` returns whenever
-// RESEND_API_KEY is unset. The response carries `accept_url`, which is the
-// actual delivery mechanism for an agent: `bk invite send` prints a link you
-// hand over. That link now RESOLVES — `app/invitations/[token]/page.tsx` did not
-// exist before this phase, so every invitation sent from sales pointed at a 404.
+// This block used to read "no email is sent, and that is unchanged — this
+// deployment has no email provider and is not gaining one to mount a route".
+// That stopped being true when `packages/platform-email` landed and b/sales got
+// a `lib/email/send.ts` binding of its own.
+//
+// `email_sent` is now the real result rather than a hardcoded `false`, which
+// matters more than it sounds: a client that could not tell "sent" from "not
+// attempted" was the reason it was reported at all, and a literal `false` gave
+// it the same answer forever. `accept_url` is still returned either way — it is
+// the delivery mechanism `bk <app> invite send` prints, and it stays useful
+// when a send fails.
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors } from '@blackcode/platform-api'
 import {
@@ -42,6 +47,7 @@ import {
   listWorkspaceInvitations,
 } from '@/lib/db/queries/invitations'
 import { INVITE_EMAIL_MAX } from '@/lib/limits'
+import { sendInvitationEmail } from '@/lib/email/send'
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -116,15 +122,27 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       ttlDays: INVITE_TTL_DAYS,
     })
 
+    const acceptUrl = `${baseUrl(req)}/invitations/${result.invitation.token}`
+
+    // Best-effort by design: the invitation is already written and valid, and a
+    // bounce is not a reason to fail the request. The caller learns what
+    // happened from `email_sent` and still has `accept_url` to fall back on.
+    const emailResult = await sendInvitationEmail(email, {
+      workspaceName: ctx.workspace.name,
+      inviterName: ctx.user.name ?? ctx.user.email,
+      acceptUrl,
+      inviteeHasAccount: result.invitee_has_account,
+      expiresInDays: INVITE_TTL_DAYS,
+    })
+
     return NextResponse.json(
       {
         invitation: result.invitation,
         invitee_has_account: result.invitee_has_account,
-        // No provider on this deployment. Reported honestly rather than omitted:
-        // a client that cannot tell "sent" from "not attempted" will assume the
-        // first one.
-        email_sent: false,
-        accept_url: `${baseUrl(req)}/invitations/${result.invitation.token}`,
+        // The real result. Reported rather than omitted: a client that cannot
+        // tell "sent" from "not attempted" will assume the first one.
+        email_sent: emailResult.sent,
+        accept_url: acceptUrl,
       },
       { status: 201 }
     )
