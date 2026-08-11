@@ -30,6 +30,7 @@ import type { PlatformDatabase, User } from '@blackcode/platform-db'
 import type * as platformSchema from '@blackcode/platform-db/schema'
 import type { WorkspaceSource } from './workspace-source'
 import type { UploadLedger } from './upload-ledger'
+import type { FootprintSource } from './account-footprint'
 
 /**
  * A Drizzle client that knows the `platform.*` tables — and only those.
@@ -124,6 +125,28 @@ export interface AppContext {
    * pair of calls `routes/upload.ts` already made.
    */
   uploads: UploadLedger
+
+  /**
+   * WHAT THIS APP HOLDS FOR A PERSON, AND HOW TO REMOVE IT — see
+   * `./account-footprint.ts`.
+   *
+   * Added 2026-08-11 (multiAppFinalRefactor Phase 9), and REQUIRED for
+   * `workspaces`' and `uploads`' reason, which this field is the sharpest case
+   * of. Closing a blackcode account soft-deletes ONE row in `platform.users`
+   * and, before this, deleted workspaces from ONE app's table. Every other app's
+   * data survived, owned by an account that could no longer authenticate —
+   * stranded, not lost, and unrecoverable by the person.
+   *
+   * A default here would mean an app that never answered "what do I hold?"
+   * silently reports NOTHING and is silently skipped by the account close. That
+   * is the stranding bug reintroduced as a convenience. Required means a new app
+   * cannot be born with it.
+   *
+   * An app with genuinely nothing per-person to hold answers so explicitly —
+   * `read` returns `UNKNOWN_FOOTPRINT`, `purge` returns it too — rather than
+   * omitting the field. "I hold nothing" is an answer; silence is not.
+   */
+  footprint: FootprintSource
 
   /**
    * Who is calling, or null.

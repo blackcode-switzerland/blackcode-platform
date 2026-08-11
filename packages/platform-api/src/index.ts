@@ -27,6 +27,16 @@ export type {
 export { platformUploadLedger } from './upload-ledger'
 export type { UploadLedger, UploadAttribution, UploadRecord } from './upload-ledger'
 
+// WHAT AN APP HOLDS FOR A PERSON, AND HOW TO REMOVE IT (2026-08-11, Phase 9).
+// Required on AppContext, because an app that cannot answer is an app the
+// account close silently skips — which is how another app's data got STRANDED
+// behind an account that could no longer sign in. Read account-footprint.ts
+// before implementing one; `purge` must never touch `platform.users`.
+export { UNKNOWN_FOOTPRINT } from './account-footprint'
+export type { FootprintSource, AppFootprint } from './account-footprint'
+export { accountCensus, purgeRemoteApp, stillHolds } from './account-census'
+export type { AppCensusEntry } from './account-census'
+
 // WHERE AN APP'S ACTIVITY FEED IS READ FROM (2026-08-10, Phase 3). On the
 // activity route's CONTRIBUTION rather than on AppContext — one route reads it.
 export { platformEventSource } from './event-source'

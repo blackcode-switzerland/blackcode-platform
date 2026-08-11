@@ -21,6 +21,7 @@ import {
   type AppContext,
 } from '@blackcode/platform-api'
 import { db } from '@/lib/db/client'
+import { issuesFootprintSource } from '@/lib/db/queries/footprint'
 import { resolveUser } from '@/lib/auth/resolve'
 import { getValidatedSessionUser } from '@/lib/auth/session'
 import { APP_SLUG } from '@/lib/app'
@@ -78,6 +79,14 @@ export const appContext: AppContext = {
   // `apps/sales` supplies its own; the Blob store, the quota and
   // `platform.blob_references` are shared by both and untouched.
   uploads: platformUploadLedger(db, APP_SLUG),
+
+  // ── WHAT THIS APP HOLDS FOR A PERSON, AND HOW TO REMOVE IT ────────────────
+  // Added 2026-08-11 (Phase 9). This app is the one that ORCHESTRATES the
+  // whole-account close — it reads the address book and asks every other app —
+  // and it is also just another app answering for itself. Both halves go
+  // through this field, which is what stops the orchestrator from having a
+  // privileged path to its own tables that the others do not.
+  footprint: issuesFootprintSource,
 
   resolveUser,
   resolveSessionUser,

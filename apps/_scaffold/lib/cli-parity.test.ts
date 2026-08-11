@@ -33,6 +33,17 @@ const CLI_DIR = join(REPO_ROOT, 'cli')
  * decisions. An unexplained exclusion is how coverage quietly rots.
  */
 const EXCLUDED_PATHS = new Map<string, string>([
+  [
+    '/api/me/footprint',
+    'session-only by design, the same reason `/api/me/password/*` carries — and here it ' +
+      'is a capability decision as well as a technical one. GET is the census a ' +
+      'whole-account close fans out (it forwards a COOKIE, because a token is valid at ' +
+      'exactly one origin), and DELETE removes this app\'s data for the caller. Both ' +
+      'inherit `DELETE /api/me`\'s settled reasoning: an agent must never delete its ' +
+      'owner\'s data, and `Confirm()` is not a guard for agents — it auto-approves under ' +
+      'BK_NO_PROMPT=1 and on a non-TTY. `requireSessionResolver` makes the route ' +
+      'structurally unreachable from `bk` rather than merely unimplemented there',
+  ],
   // Both entries arrived on 2026-08-11 with this app's self-signup, and both are
   // the same entries — for the same reasons — that `apps/issues` and
   // `apps/sales` carry. Copy them with the routes.

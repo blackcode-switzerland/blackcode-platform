@@ -14,11 +14,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   deleteAccountReport,
   getUserById,
+  listAppRegistry,
   listPendingInvitationsForEmail,
   softDeleteUser,
   updateUserProfile,
 } from '@blackcode/platform-db'
 import { isSuperAdmin } from '@blackcode/platform-auth'
+import { accountCensus, purgeRemoteApp, stillHolds } from '../account-census'
 import type { AppContext } from '../app-context'
 import { Errors } from '../errors'
 import { createApiHandler } from '../handler'
@@ -138,21 +140,122 @@ export function meRoute(app: AppContext) {
     const user = await app.resolveUser(req)
     if (!user) throw Errors.unauthorized()
 
-    // Dry-run: report what would happen.
     const url = new URL(req.url)
     const report = await deleteAccountReport(app.db, user.id, app.appSlug)
+    const apps = await accountCensus(app, req, user.id)
+
+    // Dry-run: the census, plus this app's own report unchanged so the shape
+    // that shipped this morning keeps meaning what it meant.
     if (url.searchParams.get('dry_run') === 'true') {
-      return NextResponse.json(report)
+      return NextResponse.json({ ...report, apps })
     }
-    if (report.blocked_by.length > 0) {
+
+    // ── `scope` IS REQUIRED, AND THE BARE CALL IS NOW A 400 ──────────────────
+    // This route's meaning WIDENED: it used to close the account and delete one
+    // app's workspaces, and it now reaches every app in the suite. An
+    // irreversible operation that quietly starts doing strictly more to a caller
+    // who did not ask is the wrong direction to be silent in, so the caller has
+    // to name the scope. There is exactly one caller (this platform's own
+    // deletion screen — the route is deliberately unreachable from `bk`), so the
+    // break costs one line and buys an explicit intent.
+    //
+    // `scope=this_app` is deliberately NOT accepted here. It is
+    // `DELETE /api/me/footprint`, in the app whose data it removes: the
+    // destructive action for one app never leaves that app, and routing it
+    // through the account endpoint would put "delete some of my data" and "close
+    // my account" behind one URL.
+    if (url.searchParams.get('scope') !== 'all_apps') {
+      throw Errors.badRequest(
+        'scope_required',
+        'closing an account now reaches every app, so the scope must be explicit',
+        'call DELETE /api/me?scope=all_apps to close the account everywhere, or ' +
+          'DELETE /api/me/footprint on one app to delete just that app\'s data'
+      )
+    }
+
+    // ── AN IRREVERSIBLE OPERATION MAY NOT RUN ON A PARTIAL CENSUS ────────────
+    // If an app did not answer, we do not know what it holds — and "unknown"
+    // must never be spent as "nothing". This is the refusal the whole design
+    // exists for.
+    const unreachable = apps.filter((a) => !a.reachable)
+    if (unreachable.length > 0) {
+      throw Errors.conflict(
+        'incomplete_census',
+        `Cannot close your account: ${unreachable.map((a) => a.name).join(', ')} could not be ` +
+          'reached, so what you have there is unknown. Try again shortly.',
+        unreachable
+      )
+    }
+
+    const reachable = apps.filter((a): a is Extract<typeof a, { reachable: true }> => a.reachable)
+    const blocked = reachable.flatMap((a) =>
+      a.footprint.blocked_by.map((w) => ({ ...w, app: a.app, app_name: a.name }))
+    )
+    if (blocked.length > 0) {
       throw Errors.conflict(
         'owner_with_members',
         'You must transfer ownership of these workspaces before deleting your account',
-        report.blocked_by
+        blocked
       )
     }
+
+    // ── THE ORDER IS THE RECOVERY STORY. DO NOT REORDER THIS. ────────────────
+    // Every OTHER app is purged first, one at a time, and the account row is
+    // touched LAST. So the worst partial failure is "one app's data is gone, my
+    // account still works, and the error named the app that failed" — which the
+    // person can retry. The inverse order gives "my account is closed and an app
+    // I cannot sign in to still holds my data", which is the exact bug this
+    // phase exists to fix, reintroduced in the fix.
+    //
+    // Sequential rather than concurrent for the same reason: on a failure we
+    // want the smallest number of apps already emptied, not all of them started.
+    const registry = await listAppRegistry(app.db)
+    const baseUrls = new Map(registry.map((r) => [r.slug, r.base_url]))
+    const cookie = req.headers.get('cookie') ?? ''
+    const purged: string[] = []
+
+    for (const entry of reachable) {
+      if (entry.is_current) continue
+      const baseUrl = baseUrls.get(entry.app)
+      // Unreachable already refused above; a null base_url cannot be reachable.
+      if (!baseUrl) throw Errors.conflict('incomplete_census', `${entry.name} has no address`, [entry])
+
+      const result = await purgeRemoteApp(entry, baseUrl, cookie)
+      if (!result.ok) {
+        throw Errors.conflict(
+          'app_purge_failed',
+          `Your account was NOT closed: ${result.error}. ` +
+            (purged.length > 0 ? `Already deleted: ${purged.join(', ')}. ` : '') +
+            'You can still sign in — try again.',
+          { failed_app: entry.app, purged }
+        )
+      }
+      // ASSERT THE POSITIVE. A 200 says the request was handled; this says the
+      // app is empty. Without it, an app whose purge silently did nothing would
+      // be indistinguishable from one that worked — and the account would close
+      // over it, stranding the data exactly as before.
+      if (stillHolds(result.remaining)) {
+        throw Errors.conflict(
+          'app_purge_incomplete',
+          `Your account was NOT closed: ${entry.name} reported success but still holds data. ` +
+            'You can still sign in — nothing further was changed.',
+          { failed_app: entry.app, remaining: result.remaining, purged }
+        )
+      }
+      purged.push(entry.name)
+    }
+
+    // This app's own data, then the account. `softDeleteUser` also deletes
+    // sole-owner workspaces; after `purge` that statement matches nothing, which
+    // is why it is safe to leave it where it is rather than split the
+    // transaction it guarantees.
+    await app.footprint.purge(user.id)
     await softDeleteUser(app.db, user.id)
-    return NextResponse.json({ deleted: true, hard_deleted_workspaces: report.will_hard_delete })
+    return NextResponse.json({
+      deleted: true,
+      hard_deleted_workspaces: report.will_hard_delete,
+      purged_apps: apps.map((a) => a.app),
+    })
   })
 
   return { GET, PATCH, DELETE }

@@ -38,6 +38,7 @@ import {
   listWorkspaceMembers,
   listWorkspacesForUser,
 } from './db/queries/workspaces'
+import { scaffoldFootprintSource } from './db/queries/footprint'
 
 /**
  * The caller, from a `bk_live_…` bearer token **or** a browser session.
@@ -161,6 +162,14 @@ export const appContext: AppContext = {
   // Nowhere — it serves no upload route, and says so by throwing. See
   // `noUploadLedger` above before you assume this is a gap.
   uploads: noUploadLedger,
+
+  // ── WHAT THIS APP HOLDS FOR A PERSON, AND HOW TO REMOVE IT ────────────────
+  // REQUIRED, and the field your copy is most likely to under-think. An app
+  // that cannot answer is an app the whole-account close silently SKIPS —
+  // which is how another app's data ended up owned by an account that could no
+  // longer sign in. Read `./db/queries/footprint.ts`; it is written to be
+  // adapted, and the two rules in its header are load-bearing.
+  footprint: scaffoldFootprintSource,
 
   resolveUser,
 

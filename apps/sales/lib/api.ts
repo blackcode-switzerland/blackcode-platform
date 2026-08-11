@@ -20,6 +20,7 @@ import {
   listWorkspacesForUser,
 } from './db/queries/workspaces'
 import { salesUploadLedger } from './db/queries/uploads'
+import { salesFootprintSource } from './db/queries/footprint'
 
 /**
  * The caller, from a `bk_live_…` bearer token **or** a browser session.
@@ -113,6 +114,14 @@ export const appContext: AppContext = {
   appSlug: APP_SLUG,
   workspaces: salesWorkspaces,
   uploads: salesUploads,
+
+  // ── WHAT THIS APP HOLDS FOR A PERSON, AND HOW TO REMOVE IT ────────────────
+  // Added 2026-08-11 (Phase 9), and this app is the reason the field exists:
+  // until then, closing a blackcode account from `apps/issues` left this app's
+  // workspaces in place, owned by an account that could no longer sign in.
+  // `lib/db/queries/footprint.ts` explains why the `ON DELETE RESTRICT` on
+  // `sales.workspaces.owner_id` never fired.
+  footprint: salesFootprintSource,
   // A GETTER, not `db: getDb()`. Calling it here would open a connection at
   // module import time, and `next build` imports every route module to collect
   // page data — so an eager client makes the app unbuildable without a

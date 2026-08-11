@@ -61,6 +61,17 @@ const EXCLUDED_PATHS = new Map<string, string>([
   ['/api/auth/register', 'browser sign-up flow'],
   ['/api/auth/password-reset/request', 'browser password recovery'],
   ['/api/auth/password-reset/confirm', 'browser password recovery'],
+  [
+    '/api/me/footprint',
+    'session-only by design, the same reason `/api/me/password/*` carries — and here it ' +
+      'is a capability decision as well as a technical one. GET is the census a ' +
+      'whole-account close fans out (it forwards a COOKIE, because a token is valid at ' +
+      'exactly one origin), and DELETE removes this app\'s data for the caller. Both ' +
+      'inherit `DELETE /api/me`\'s settled reasoning: an agent must never delete its ' +
+      'owner\'s data, and `Confirm()` is not a guard for agents — it auto-approves under ' +
+      'BK_NO_PROMPT=1 and on a non-TTY. `requireSessionResolver` makes the route ' +
+      'structurally unreachable from `bk` rather than merely unimplemented there',
+  ],
   ['/api/me/password/request-otp', 'in-app password change; session-only by design'],
   ['/api/me/password/confirm', 'in-app password change; session-only by design'],
   ['/api/cli/authorize', 'the browser half of `bk login` — rendered for the user, not called by the binary'],

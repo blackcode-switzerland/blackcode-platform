@@ -97,6 +97,20 @@ const unusedUploads = new Proxy({} as AppContext['uploads'], {
   },
 })
 
+// Same shape, same reason: `footprint` is REQUIRED on AppContext (Phase 9), and
+// a fixture that supplied a plausible empty one would be a fixture quietly
+// asserting that the handler does not read it. A proxy that throws asserts the
+// same thing and fails loudly if it ever stops being true.
+const unusedFootprint = new Proxy({} as AppContext['footprint'], {
+  get(_t, prop) {
+    return () => {
+      throw new Error(
+        `AppContext.footprint.${String(prop)}() was called by a fixture that must never reach it`
+      )
+    }
+  },
+})
+
 const unusedWorkspaces = new Proxy({} as AppContext['workspaces'], {
   get(_t, prop) {
     return () => {
@@ -115,6 +129,7 @@ async function runFailingRequest(redactBody: boolean): Promise<string[]> {
     db: db as unknown as AppContext['db'],
     workspaces: unusedWorkspaces,
     uploads: unusedUploads,
+    footprint: unusedFootprint,
     async resolveUser() {
       return null
     },
