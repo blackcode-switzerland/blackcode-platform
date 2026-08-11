@@ -37,6 +37,41 @@ code, and it is untested on Windows.
 
 From `Todo/issues-app-feedback.md` item 5.
 
+## 2026-08-11 — a stale server address could not be cleared, and nothing said so
+
+**Not breaking. Fixes links that carried `bc-issues.vercel.app` instead of `issues.blackcode.ch`.**
+
+**If you see that hostname anywhere — in a link, in `bk app list`, in agent
+output — run `bk login --server https://issues.blackcode.ch` once.**
+
+Two things combined into a state no documented command could fix:
+
+1. `bk login`'s default server was `https://bc-issues.vercel.app` (Vercel's
+   generated hostname for the issues project). Anyone who logged in without
+   `--server` pinned it. Fixed separately, below.
+2. **The address book takes the host that answered over the one the platform
+   publishes.** That rule is correct and is unchanged — otherwise a preview
+   deployment or a self-hosted instance would redirect itself to production, a
+   host you never authenticated against.
+
+Together they made the stale address permanent and invisible: **`bk meta`, the
+command whose job is to refresh the address book, re-applied the reached host
+on every run** and discarded the published one without a word. The one command a
+user would reach for was the one re-applying the problem.
+
+It showed up as agents emitting links like
+`https://bc-issues.vercel.app/<workspace>/issue/18` — a base URL from the config
+glued to a URN tail. Nothing in the platform builds that string; an agent built
+it from the two things it had, and one of them was wrong.
+
+**`bk login` and `bk meta` now report the disagreement** and print the published
+address plus the command that switches to it. The notice fires on *every* run
+while the addresses differ, not only when something changed — a stale address is
+stable, so a change-triggered notice would never fire again. When the addresses
+agree there is no notice.
+
+Nothing about precedence changed, and no existing setup stops working.
+
 ## 2026-08-11 — a guessed verb now resolves, and every dead end names a command you can run
 
 **Not breaking.** Four changes to how `bk` answers a caller who typed something

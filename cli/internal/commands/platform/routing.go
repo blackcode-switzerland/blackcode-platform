@@ -34,19 +34,58 @@ import (
 // `bk <app> …` to a host the user never authenticated against, on the strength
 // of a database column. Other apps have nothing better than their declared
 // address, so they keep it.
-func applyAppRegistry(cfg *config.Config, meta *client.Meta, reachedURL string) {
+//
+// ---------------------------------------------------------------------------
+// …AND THE RULE MUST NOT BE SILENT, WHICH IT WAS UNTIL 2026-08-11
+// ---------------------------------------------------------------------------
+// "Reached wins" is right, but combined with a stale ADDRESS it is permanent and
+// invisible, and that combination shipped. `bk login`'s default server was
+// `https://bc-issues.vercel.app` — Vercel's generated hostname for the issues
+// project — so everyone who ran `bk login` without `--server` pinned it. And
+// then `bk meta`, THE COMMAND WHOSE JOB IS TO REFRESH THE REGISTRY, re-pinned it
+// on every run, discarding the registry's `https://issues.blackcode.ch` without
+// a word. There was no sequence of documented commands that fixed it, because
+// the one command a user would reach for was the one re-applying it.
+//
+// It surfaced as agents emitting links like
+// `https://bc-issues.vercel.app/<workspace>/issue/18` — the base URL out of the
+// config, glued to a URN tail. Nothing in this repo builds that string; an agent
+// built it out of the two things it had, and one of them was wrong.
+//
+// So the disagreement is now REPORTED. The reached host still wins — a preview
+// deployment or a self-hosted instance must keep working — but the caller is
+// told what the platform declares and given the one line that switches.
+type registryMismatch struct {
+	App      string
+	Reached  string
+	Declared string
+}
+
+// applyAppRegistry returns the mismatch for the CURRENT app, or nil. Only the
+// current app can have one: it is the only app whose address is taken from
+// anywhere other than the registry.
+func applyAppRegistry(cfg *config.Config, meta *client.Meta, reachedURL string) *registryMismatch {
 	servers := map[string]string{}
 	current := ""
+	declared := ""
 	for slug, app := range meta.Apps {
 		if app.IsCurrent {
 			current = slug
+			if app.BaseURL != nil {
+				declared = strings.TrimRight(strings.TrimSpace(*app.BaseURL), "/")
+			}
 		}
 		if app.BaseURL != nil {
 			servers[slug] = *app.BaseURL
 		}
 	}
 	reachedURL = strings.TrimRight(strings.TrimSpace(reachedURL), "/")
+
+	var mismatch *registryMismatch
 	if current != "" && reachedURL != "" {
+		if declared != "" && !strings.EqualFold(declared, reachedURL) {
+			mismatch = &registryMismatch{App: current, Reached: reachedURL, Declared: declared}
+		}
 		servers[current] = reachedURL
 	}
 	cfg.SetAppServers(servers)
@@ -56,6 +95,22 @@ func applyAppRegistry(cfg *config.Config, meta *client.Meta, reachedURL string) 
 	if reachedURL != "" {
 		cfg.HomeServer = reachedURL
 	}
+	return mismatch
+}
+
+// reportMismatch writes the notice to stderr. Stderr, not stdout, so it cannot
+// corrupt `--json`; and it names the exact command rather than describing the
+// situation, because "your address book disagrees with the platform" is not
+// something a caller can execute.
+func reportMismatch(w io.Writer, m *registryMismatch) {
+	if m == nil {
+		return
+	}
+	fmt.Fprintf(w,
+		"note: you are talking to %s, but the platform publishes %s for the %s app.\n"+
+			"      Both work; links you build from this address will carry the one you used.\n"+
+			"      To switch: bk login --server %s\n",
+		m.Reached, m.Declared, m.App, m.Declared)
 }
 
 // refreshRegistry re-learns the address book from a meta response and saves it,
@@ -66,7 +121,12 @@ func applyAppRegistry(cfg *config.Config, meta *client.Meta, reachedURL string) 
 // the user is trying to fix, so the error is printed.
 func refreshRegistry(cmd *cobra.Command, cfg *config.Config, meta *client.Meta, reachedURL string) {
 	before := fmt.Sprint(cfg.AppServers, cfg.HomeApp, cfg.HomeServer)
-	applyAppRegistry(cfg, meta, reachedURL)
+	mismatch := applyAppRegistry(cfg, meta, reachedURL)
+	// BEFORE the early return. A stale address is STABLE — nothing changes, so
+	// the unchanged-check below returns — and stable is exactly the state that
+	// needs saying out loud. Reporting only on change would have kept this
+	// invisible for every run after the first.
+	reportMismatch(cmd.ErrOrStderr(), mismatch)
 	if before == fmt.Sprint(cfg.AppServers, cfg.HomeApp, cfg.HomeServer) {
 		return
 	}

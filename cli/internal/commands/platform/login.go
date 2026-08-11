@@ -245,8 +245,9 @@ func finishLogin(server, token string) error {
 	// a missing address book would be the worse trade. It is reported, never
 	// swallowed: an empty registry is what makes `bk <app> …` fail later, and
 	// nobody should have to guess why.
+	var mismatch *registryMismatch
 	if meta, mErr := c.Meta(""); mErr == nil {
-		applyAppRegistry(cfg, meta, server)
+		mismatch = applyAppRegistry(cfg, meta, server)
 	} else {
 		fmt.Fprintf(os.Stderr,
 			"warning: logged in, but could not read the app registry from %s: %v\n"+
@@ -263,6 +264,10 @@ func finishLogin(server, token string) error {
 	for _, pair := range registryPairs(cfg) {
 		fmt.Fprintf(os.Stderr, "  %s\n", pair)
 	}
+	// Last, so it is the line still on screen. A login at a non-canonical host
+	// succeeds and must — but every link built from this session carries that
+	// host, and the moment to say so is while the user is still looking.
+	reportMismatch(os.Stderr, mismatch)
 	return nil
 }
 

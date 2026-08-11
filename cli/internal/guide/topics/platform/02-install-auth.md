@@ -53,6 +53,21 @@ from the platform itself. The app you logged into becomes your **home app**, and
 `bk app list` shows the rest. If a command later says it has no server for an
 app, `bk meta` re-learns the book; see `bk guide platform/apps`.
 
+**The host you reached WINS for the app you reached it at**, over the address
+the platform publishes. That is what keeps a preview deployment or a
+self-hosted instance from redirecting itself somewhere you never authenticated.
+The cost is that a non-canonical address is *sticky*: it is what every
+subsequent request uses, and it is what any link you build from your session
+carries. So when the two disagree, `bk login` and `bk meta` say so and print the
+published address. Switching is one command:
+
+```bash
+bk login --server <the address the notice printed>
+```
+
+Other apps are always taken from the registry — only the one you logged into
+can disagree.
+
 **Long-lived tokens** are minted in the web UI at Settings → API Tokens. They are
 shown **once** at creation — the server keeps only a hash. Token creation and
 revocation are **session-only**: you cannot mint or revoke a token using a token.
