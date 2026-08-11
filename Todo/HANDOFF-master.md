@@ -33,9 +33,14 @@ written so the next person does not pay for them again).
 **`Todo/` holds two plans, both unstarted.** The human hands each to a fresh
 agent and relays the reply.
 
-- `plan-1-cli-architecture-verification.md` — does the binary explain the new
-  architecture to a new user and to one who learned the old shape? I spot-checked
-  this and it is largely green; the plan is the thorough version.
+- ~~`plan-1-cli-architecture-verification.md`~~ — **DONE.** Report in
+  `report-1-cli-architecture.md`. Verdict: the binary teaches its tiers well; what
+  had rotted was three copies of an ACCESS claim the platform stopped making on
+  2026-08-10. Its five open items were closed in `9d568c1` — verb synonyms now
+  resolve (`view`/`show`/`get`, `create`/`add`, `delete`/`rm`), the generic hint
+  names a real command instead of a literal `<group>`, and the default server is
+  `issues.blackcode.ch`. **Item 4 (`bk __routes` dedupes) is deliberately still
+  open** — it touches what `cli-parity.test.ts` consumes.
 - `plan-2-issues-feedback-triage.md` — five user reports in
   `issues-app-feedback.md`, all from the rebuild window. **The central instruction
   is to establish which of four categories each falls into before proposing

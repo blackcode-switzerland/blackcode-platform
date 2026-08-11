@@ -162,31 +162,37 @@ Both directions need the generated tree.
 
 ## 3. What a new user still cannot work out from the binary alone
 
+> **CLOSED 2026-08-11 in `9d568c1`** — four of the five below are fixed; #4 is
+> deliberately still open. Status per item is inline. One item this section did
+> NOT report was also fixed: the generic hint printed a literal `bk <group>
+> --help`, with `<group>` never substituted — visible in §1c's own quoted output
+> above, where it sat unremarked beside the finding it was illustrating.
+
 Report-only; each needs a decision, a new command, or a behaviour change.
 
-1. **The verb vocabulary split is nowhere explained.** `view` vs `show`,
+1. **FIXED.** **The verb vocabulary split is nowhere explained.** `view` vs `show`,
    `delete` vs `rm`, `create` vs `add` across the two apps is now *recoverable*
    at the point of error, but no guide topic says it is deliberate or which app
    uses which. If it is not deliberate, the cheaper fix is aliases; that is a
    product decision.
-2. **`bk guide --list` orders `platform/apps` LAST of the thirteen platform
+2. **FIXED — now second.** **`bk guide --list` orders `platform/apps` LAST of the thirteen platform
    topics** — after `pitfalls`, `encoding` and a tombstone topic
    (`platform/cross-app`, whose summary is "There is no cross-app tier any
    more"). It is the topic `bk --help`, `bk issues --help`, `bk sales --help`
    and four deprecation hints all point at as *the* rule. A newcomer scanning
    the list top-down meets it thirteenth. Renumbering the file is trivial; the
    ordering is presumably someone's call.
-3. **`bk login` defaults to `https://bc-issues.vercel.app`**
+3. **FIXED — now `https://issues.blackcode.ch`, declared once.** **`bk login` defaulted to `https://bc-issues.vercel.app`**
    (`commands/platform/login.go:39`) while production is `issues.blackcode.ch`.
    A behaviour change, deliberately not touched.
-4. **`bk __routes` dedupes two commands claiming one route**, so
+4. **STILL OPEN, deliberately.** **`bk __routes` dedupes two commands claiming one route**, so
    `bk <app> workspace list` shows `—` in the "Routes it claims" column of
    `docs/cli-inventory.md` for all three apps, though it does annotate
    `GET /api/workspaces`. Parity is not affected (the route is still claimed by
    someone, so coverage holds), which is why this has survived. Fixing it means
    touching what `lib/cli-parity.test.ts` consumes — worth doing carefully, not
    as a drive-by.
-5. **`bk sales inbox list`'s hint is phrased for a spelling the caller did not
+5. **FIXED.** **`bk sales inbox list`'s hint was phrased for a spelling the caller did not
    type**: "`bk inbox …` is now `bk issues inbox …`". It names the right fix and
    the right reason, so it works; it is just off-key for the app-prefixed form.
 

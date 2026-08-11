@@ -73,7 +73,21 @@ header still claimed "every old spelling still RUNS" while
 `alias_removal_test.go` asserts the opposite. Do not restore it without reading
 both.
 
-So the question is live and undecided: **should `bk` accept synonyms?**
+**ANSWERED 2026-08-11 in `9d568c1` — read this before working item 2.** `bk` now
+accepts synonyms, via cobra `Aliases` attached by a tree walk
+(`cli/internal/commands/synonyms.go`): `view`/`show`/`get`, `list`/`ls`,
+`create`/`add`/`new`, `edit`/`update`, `delete`/`rm`/`remove`. The "middle"
+option below is what was taken. **`bk issues issue get` and `bk sales prospect
+view` now run.** The app tier is unaffected, and a spelling a sibling already
+owns is never reassigned.
+
+**What is left of item 2 is a verification job, not a design one:** confirm the
+reported spellings resolve against a built binary, and check whether anything
+still dead-ends. Do not re-litigate the decision.
+
+The original framing, kept for context:
+
+**should `bk` accept synonyms?**
 
 - **For:** an LLM guesses `get`/`show`/`view` and a wrong guess costs a round trip
 - **Against:** cobra prints "unknown command" plus suggestions already — check
