@@ -24,6 +24,30 @@
 > in [`adding-an-app.md`](adding-an-app.md), which also now carries what the real
 > deployment found that no plan predicted.
 >
+> ## ⚠️ AND THREE OF ITS DECISIONS ARE SUPERSEDED — 2026-08-11
+>
+> The `multiAppFinalRefactor` (2026-08-10 → 2026-08-11) separated the apps: each
+> owns its workspaces, members, invitations, labels, uploads ledger and event
+> feed, and `platform.*` is identity plus an address book. Three decisions below
+> described the world before that and are quotable enough that somebody will
+> re-derive them. **The decisions are kept — the record of why an alternative was
+> rejected is the point of this file — but do not implement them.**
+>
+> | Decision | What replaced it |
+> |---|---|
+> | **D-11** — the three CLI verb tiers (neutral / cross-app / app-owned) | **TWO tiers.** The middle one existed *because the apps shared a database*: `bk search` had one entity index, `bk storage` one upload ledger. Phases 2 and 3 ended that, so a bare data verb had no answer — only a default taken from whichever app the config was last homed on. D-11's TEST is unchanged and still right (*"would two deployments answer differently?"*); what changed is the facts it was applied to. Ten verbs moved behind the app name on 2026-08-10 and `bk link` was removed |
+> | **D-28** — `storage` is cross-app, "you upload INTO one app and list ACROSS all of them" | **Expired on its own terms.** It kept `storage` bare because "uploads are ONE LEDGER against one workspace quota, so every app returns the SAME ROWS" — and `AppContext.uploads` made the ledger per app. Two deployments now answer differently, which is the test D-28 itself specifies. The STORE, the QUOTA and `platform.blob_references` are still shared; that is a different fact and it does not make the verb bare. **The pairing no longer describes anything that exists** |
+> | **D-36** — a permanent platform-route subset is legitimate; an accidental one is a bug | **Still true, and now applied one level down.** `appverbs.Config` declares what an app serves VERB BY VERB, and as of 2026-08-11 subcommand by subcommand (`Invites` vs `InviteCandidates` / `InviteAccept`) — because `apps/_scaffold` serves the owner's half of invitations and not the invitee's |
+>
+> Two more sentences from this file that are now false, listed because they are
+> short enough to be quoted out of context: per-app access is not a concept
+> (`platform.workspace_apps`, `platform.app_access` and `requireAppAccess` were
+> dropped on 2026-08-10 — membership is the whole gate), and there is no
+> cross-app entity index for a second app to project into.
+>
+> The full record is `multiAppFinalRefactor/PLAN.md` and the seven agent reports
+> beside it.
+>
 > ## What this file is still good for
 >
 > **The 44 numbered decisions, D-1 to D-44, and only those.** They are the record

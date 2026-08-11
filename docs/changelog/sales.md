@@ -22,6 +22,30 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-11 — Settings → Members: editing is hidden in read-only mode, and every invitation link is copyable
+
+Two things, both found by opening the page rather than by calling its routes.
+
+**The Invite field and the Remove / Revoke buttons now respect `ui_mode`.** This
+was the one screen in the app that rendered record-write controls without asking
+— so in `read_only`, which is the DEFAULT, it showed a live-looking Invite field
+and enabled buttons while every other surface said "Editing is hidden — this
+browser is in read-only mode". Nothing was ever written and the refusal was loud
+(the click raised an error toast naming both recoveries), which is exactly why it
+survived: the safety net held and the affordance stayed wrong underneath it.
+
+Nothing changes for `bk sales invite send|revoke` or `bk sales member remove`:
+`ui_mode` is a display preference for one browser, never a permission.
+
+**A pending invitation's link is on its row.** The section says "b/sales does not
+send email — copy the link and send it yourself", and until now the link appeared
+only in the banner shown immediately after inviting. After a reload it was
+unrecoverable from the UI, even though the token was already in the row's
+payload; the owner's options were to revoke and re-invite, or read the token out
+of Postgres.
+
+---
+
 ## 2026-08-11 — The members page was blank; both of its lists were reading the wrong shape
 
 **Fixed. No action needed.** Settings → Members threw a client-side exception for

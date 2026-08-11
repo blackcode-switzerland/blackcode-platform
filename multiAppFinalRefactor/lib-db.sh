@@ -74,10 +74,35 @@ db_current_database() {
   printf '%s\n' "$out"
 }
 
-# Emits one line per base table in schemas platform/issues/sales:
+# ═══════════════════════════════════════════════════════════════════════════
+# THE SCHEMA LIST IS A LIST, AND ADDING AN APP MEANS ADDING TO IT
+# ═══════════════════════════════════════════════════════════════════════════
+# `TRACKED_SCHEMAS` below is what this whole ledger can see. A schema that is not
+# in it is not counted, not diffed, and not reported — **silently**, because
+# there is nothing to compare a table against when you never looked for it.
+#
+# Found on 2026-08-11 (Phase 7): `apps/_scaffold` had just been given its own
+# `scaffold.workspaces` / `workspace_members` / `invitations`, and verify.sh
+# reported a clean bill for every one of them by never asking. The instrument
+# CLAUDE.md calls "the only thing standing between this refactor and losing
+# somebody's comments" does not, by default, see a new app.
+#
+# It is a hardcoded list rather than "every schema" ON PURPOSE, and the reason is
+# worth keeping: widening it to everything would pull in `public`, `drizzle`,
+# `neon_auth` and anything a Postgres extension creates, and each of those would
+# then appear as "in the database but NOT in the baseline" against every existing
+# baseline file — including the production one, at the moment somebody is running
+# it to check a deploy. A safety instrument that cries wolf on its first run
+# after a change is one people learn to ignore.
+#
+# **So: when you add an app, add its schema here in the same commit, and
+# re-capture the baselines.** `docs/adding-an-app.md` says so as a step.
+#
+# Emits one line per base table in the tracked schemas:
 #   schema.table<TAB>count<TAB>min_id<TAB>max_id
 # min_id/max_id are the literal string NULL when the table is empty, or NOID
 # when the table has no integer `id` column (recorded, never silently skipped).
+TRACKED_SCHEMAS="'platform','issues','sales','scaffold'"
 db_capture_stats() {
   local url="$1"
   local tables id_tables sql t schema table has_id rc
@@ -86,7 +111,7 @@ db_capture_stats() {
   tables="$(printf '%s\n' "
     SELECT table_schema || '.' || table_name
     FROM information_schema.tables
-    WHERE table_schema IN ('platform','issues','sales') AND table_type = 'BASE TABLE'
+    WHERE table_schema IN ($TRACKED_SCHEMAS) AND table_type = 'BASE TABLE'
     ORDER BY 1;
   " | db_run "$url" 2>&1)"
   rc=$?
@@ -105,7 +130,7 @@ db_capture_stats() {
   id_tables="$(printf '%s\n' "
     SELECT table_schema || '.' || table_name
     FROM information_schema.columns
-    WHERE table_schema IN ('platform','issues','sales')
+    WHERE table_schema IN ($TRACKED_SCHEMAS)
       AND column_name = 'id'
       AND data_type IN ('integer','bigint','smallint')
     ORDER BY 1;

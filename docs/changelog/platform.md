@@ -30,6 +30,62 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-11 — the web copy caught up with the CLI's verb re-tiering
+
+**No route changed and no command changed.** This entry exists because the
+product's own pages were telling people to run commands the binary no longer has,
+four days after 2026-08-10's re-tiering, and one of them was step 3 of the
+public getting-started path.
+
+If you are scripting `bk`, nothing here affects you — but if you learned a
+spelling from a page rather than from `bk guide`, this is why it did not work:
+
+- `bk workspace use <slug>` → **`bk issues workspace use <slug>`** (the issues
+  quickstart and its FAQ)
+- `bk issue create …` → **`bk issues issue create …`** (the issues login page)
+- `bk activity`, `bk trash list` → **`bk issues activity`, `bk issues trash
+  list`** (the issues pagination FAQ)
+- `bk search` for cross-app search → **there is none.** Each app is searched on
+  its own (`bk sales search`, `bk issues search`). The sales search page promised
+  the cross-app version; PLAN.md §3 records that loss as deliberate
+- `bk activity --app sales` → **`bk sales activity`**. `--app` was removed in the
+  same release; the app is the command now
+
+Three server `suggestion` strings — the `hint:` line the CLI prints on an error —
+also named retired spellings, which matters more than the page copy because an
+agent acts on a hint: `bk workspace list --all` (a flag that was itself removed),
+`bk member list`, `bk invite revoke <id>`. All three now name the app.
+
+**`bk undo` was removed from the product's feature list.** It was advertised on
+the landing page as reversing your last few changes over a journal of
+before/after snapshots. There was never such a journal:
+`platform.transaction_log` had no writer, which is why the command went in CLI
+1.12.0 and `/api/undo` has been a 410 since — and the table was dropped on
+2026-08-10. Trash and restore is the real version of that promise and is
+unchanged.
+
+A guard now derives the retired spellings from `deprecations.go` and fails the
+build if a page names one
+(`packages/platform-testing/test/retired-cli-spellings.test.ts`).
+
+---
+
+## 2026-08-11 — `appverbs.Config` can declare half of `invite`
+
+For anyone adding an app. `bk <app> invite` used to be one flag mounting seven
+subcommands; it is now three flags:
+
+- `Invites` — the OWNER's half: `send`, `list`, `revoke`. Three workspace-scoped
+  routes, served by whichever app owns the workspace.
+- `InviteCandidates` — adds `candidates`.
+- `InviteAccept` — adds `accept`, `decline`, `pending`. The INVITEE's half, whose
+  three routes are deliberately not workspace-scoped: somebody redeeming a link
+  is not yet a member of anything.
+
+**`bk issues invite` and `bk sales invite` are unchanged** — both apps set all
+three flags. The split exists because `apps/_scaffold` serves the owner's half
+and not the invitee's, and a single flag claimed four routes it has no file for.
+
 ## 2026-08-10 — BREAKING: per-app access is gone; `bk app` becomes the address book
 
 Membership is now the whole gate. `platform.workspace_apps` and

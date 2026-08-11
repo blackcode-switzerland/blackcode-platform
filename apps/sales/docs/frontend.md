@@ -521,7 +521,24 @@ editable: no app on this platform has a change-role route, and inventing one her
 would have been a new platform capability landed inside a tenancy migration.
 
 Inviting and removing go through `lib/mutations.ts` behind `useCanWrite()` —
-they are sales RECORDS now. **Accepting an invitation does not**, and
+they are sales RECORDS now.
+
+> **And until 2026-08-11 the PAGE did not ask.** That sentence was true of the
+> mutation layer and false of the affordances: `member-settings.tsx` was the one
+> component in this app that rendered record-write controls without calling
+> `useCanWrite()`, so in `read_only` — the DEFAULT — it showed a live-looking
+> Invite field and enabled Remove / Revoke buttons, while the prospect page one
+> click away said "Editing is hidden".
+>
+> Nothing was ever written, and the refusal was loud: `useRecordMutation` throws
+> `ReadOnlyModeError` and the click raises a toast naming both recoveries. **That
+> is why it survived four phases** — the safety net held, so the wrong affordance
+> under it cost nothing visible until somebody opened the page.
+>
+> `lib/read-only.test.ts` now asserts the property its own header used to
+> disclaim: every component importing `@/lib/mutations` either consults the mode
+> or DECLARES the parent that does. An error toast is the fallback, not the
+> design. **Accepting an invitation does not**, and
 `components/accept-invitation.tsx` has an entry in `lib/read-only.test.ts`
 saying why: read-only is a browser display preference, and one that could stop
 somebody joining the app at all would be a permission over their account (D-7).

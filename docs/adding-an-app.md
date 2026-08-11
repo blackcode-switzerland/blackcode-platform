@@ -13,11 +13,51 @@ wrote them. What the second app actually cost, and which parts of that were
 platform debt rather than app work, is at the bottom — **read that section before
 estimating anything.**
 
-> **Copy `apps/_scaffold`.** It is a real app: one entity, one route, its own
-> migrations, the platform route factories, an entity projection and its
-> reconciler, a CLI command group, a guide topic and a page. It builds, lints and
-> passes every guardrail. Do not start from `apps/issues` — you will inherit
-> eleven tables and a dashboard you then have to delete.
+**Rewritten again on 2026-08-11.** Between 2026-08-10 and 2026-08-11 the
+`multiAppFinalRefactor` separated the two apps: an app now owns its workspaces,
+members, invitations, labels, uploads ledger and event feed, and `platform.*` is
+identity plus an address book. That invalidated a different half of this file
+from the one `apps/sales` invalidated. Where a paragraph below says what
+CHANGED, it is because somebody would otherwise re-derive the old design from a
+sentence that outlived it.
+
+> **Copy `apps/_scaffold`.** It is a real app: one entity, one route, **its own
+> workspaces / members / invitations**, self-signup behind the platform
+> whitelist, a members page, its own migrations, the platform route factories it
+> can safely mount, a CLI command group, a guide topic and a page. It builds,
+> lints and passes every guardrail. Do not start from `apps/issues` — you will
+> inherit eleven tables and a dashboard you then have to delete.
+
+---
+
+## The contract, in one table
+
+Everything else in this document follows from this. If you remember nothing else,
+remember which column a thing is in.
+
+| | |
+|---|---|
+| **Shared** | user accounts · passwords · API tokens · sign-in and the session cookie · the email whitelist · `platform.apps` (the address book, so the CLI knows where each app lives) · one Vercel Blob **store** (one bill, one quota) · `platform.blob_references` · `platform.error_events` |
+| **Yours** | workspaces · members · invitations · your entities · comments · labels · the uploads **ledger** · events / activity · trash · search · everything else |
+| **The connector** | the `bk` CLI, and the agent driving it. **Not the database.** |
+
+The requirement that produced this was *"an agent working in sales can create an
+issue in the issues app through the same CLI, without switching login"*. That was
+read for months as "the apps share their data". It actually means **"the agent is
+the thing that connects the apps"**, and the difference is the whole of the
+2026-08-10 refactor.
+
+Two consequences worth stating before you meet them as bugs:
+
+- **An app owns its tenancy, and membership is the whole access gate.** There is
+  no per-app grant to check any more. `platform.workspace_apps` and
+  `platform.app_access` were dropped on 2026-08-10 along with `requireAppAccess`:
+  a workspace belongs to exactly one app, so "is this person a member?" answers
+  "may they use this app?" completely.
+- **A shared factory is only shared if the table under it is.** This is the single
+  most expensive lesson in the repo and it has now cost four incidents. Read
+  `apps/_scaffold/app/api/README.md` before you mount anything from
+  `@blackcode/platform-api/routes`.
 
 Three rules before you start:
 
@@ -45,9 +85,9 @@ import each other.**
 
 | Package | What it gives you |
 |---|---|
-| `platform-db` | The Drizzle schema and client factory for the `platform.*` tables — users, workspaces, members, app access, uploads, comments, labels, events, entities, links, the blob-reference index. Plus the platform-owned WRITES you must not reimplement: `recordPlatformEvent` + the platform fan-out (D-23), `createInboxMessage`, and the four sign-in callbacks (`getUserByEmail`, `touchLastLogin`, `upsertUserFromOAuth`, `materializePendingInvitationsForUser`) |
-| `platform-api` | The HTTP plumbing: the shared `apiHandler` / `resolveWorkspace` behind an `AppContext`, **the platform route factories** (`@blackcode/platform-api/routes`), per-app access enforcement (`requireAppAccess` — the 403 with a hint), the `Errors` envelope (`{ error, code, suggestion? }`), `jsonList()` → `{ data, next_cursor }`, cursor pagination, log sanitisation, platform-wide limits |
-| `platform-auth` | Identity, and only identity: API tokens, password handling, the platform whitelist. No HTTP — `requireAppAccess` moved to `platform-api` on 2026-08-06, because its whole job is constructing a 403 |
+| `platform-db` | The Drizzle schema and client factory for the `platform.*` tables. **The ones that are still genuinely shared are identity**: `users`, `api_tokens`, `password_reset_otps`, `email_whitelist`, `apps`, `error_events`, `blob_references`. The rest (`workspaces`, `workspace_members`, `comments`, `labels`, `events`, `uploads`, `entities`, `links`, `inbox_messages`) are **`apps/issues`' data living under a shared name** — do not read or write them, and see the boundary rules below. Plus the four sign-in callbacks you must not reimplement: `getUserByEmail`, `touchLastLogin`, `upsertUserFromOAuth`, `materializePendingInvitationsForUser` |
+| `platform-api` | The HTTP plumbing: the shared `apiHandler` / `resolveWorkspace` behind an `AppContext`, **the platform route factories you can safely mount** (`@blackcode/platform-api/routes` — read `apps/_scaffold/app/api/README.md` first), the `Errors` envelope (`{ error, code, suggestion? }`), `jsonList()` → `{ data, next_cursor }`, cursor pagination, log sanitisation, platform-wide limits. **`AppContext.workspaces` is where you say whose workspaces you serve, and it is required** |
+| `platform-auth` | Identity, and only identity: API tokens, password handling, the platform whitelist (`isEmailAllowed`), `sessionCookieConfig()`. No HTTP |
 | `platform-ui` | The design system: `components/ui/` primitives, the TipTap rich-text editor and its media companions. **Two lines, not one:** `transpilePackages` in `next.config.js` makes it compile, and `@source "…/packages/platform-ui/src"` in your Tailwind stylesheet makes its CSS exist. Neither implies the other and only the first fails loudly — see step 1 |
 | `platform-storage` | The upload ledger, app-prefixed paths, the per-app reference-scanner registry, and the GC **that will not delete a file any app still references** |
 | `platform-agent` | The merged changelog feed and the advertised CLI version floor |
@@ -89,10 +129,9 @@ did by hand and `apps/sales` did not have to.
 | **The error log** | Wiring `platform.error_events` yourself. An app that forgot had no error log and nothing went red | the shared `apiHandler`. `bk super-admin errors` covers you from your first commit |
 | The agent breadcrumb and CLI-version headers | Remembering to set `X-BK-*` on every response | the shared `apiHandler` |
 | Cursor pagination, `jsonList()`, the `Errors` envelope | Re-deriving the `{ data, next_cursor }` shape and hoping it matched | `platform-api` |
-| Per-app access enforcement | Writing your own 403, without the hint | `requireAppAccess`, called by `resolveWorkspace` |
 | The four sign-in callbacks | A second copy of `materializePendingInvitationsForUser`, i.e. a second chance to swallow somebody's pending invitations | `platform-db` |
 | The platform event fan-out | Handling invitation/membership events yourself, and delivering every notification twice | `recordPlatformEvent` (D-23) |
-| The cross-app entity index, links and search | There was no cross-app anything | `platform.entities`, `platform.links`, the `searchRoute`/`linksRoute` factories |
+| **Your own tenancy** | An app could not be joined from inside itself: somebody had to be invited into an ISSUES workspace first, then granted your app inside it. That is what made the second app feel like an add-on rather than an app | copied from the scaffold: `<app>.workspaces` / `workspace_members` / `invitations`, self-signup behind the whitelist, and a workspace minted on first sign-in |
 | The two guards | Writing your own parity and isolation checks | copied from the scaffold; the harness is in `platform-testing` |
 | The shared-package schema guard | Registering your app somewhere | nothing — it derives app names from each `APP_SLUG` |
 | **The session cookie migration** | It signed everyone out once. It is done | `sessionCookieConfig()` (D-16) |
@@ -113,25 +152,55 @@ nothing to copy:
   when wrong.
 - Two migrations, including a blob-reference trigger with the ordering spelled
   out.
-- An entity projection wired **inside** the write transaction, and
-  `scripts/reproject.ts`, its per-app reconciler.
-- Nine platform route factories mounted, and the `UNSERVED_OPERATIONS` mechanism
-  in its parity test that you need the moment you mount the first one.
+- Platform route factories mounted, and the `UNSERVED_OPERATIONS` mechanism in
+  its parity test that you need the moment you mount the first one.
+- **Its own tenancy** (2026-08-11): `scaffold.workspaces` / `workspace_members` /
+  `invitations`, `AppContext.workspaces`, a `POST /api/auth/register` carrying
+  the whitelist gate, `lib/auth.ts` minting a workspace on first sign-in, and a
+  members page.
+
+**And what the scaffold deliberately does NOT carry, so you do not copy a table
+nothing writes:** no uploads ledger (it serves no upload route — `AppContext.
+uploads` is a value that THROWS, which is the honest answer for an app with no
+upload route, and the loud one if you mount one and forget), no labels, no event
+feed, and **no entity projection**. `platform.entities` has one writer since
+2026-08-10 and `bk link` is gone; a URN is built from your own slug and #number,
+so it never needed the index.
 
 ### The boundary rules
 
 Three, and the third is enforced by the database rather than by review.
 
-1. **`platform.*` is shared.** Your app may read, write and FK into it freely.
-2. **Your schema is yours.** `sales.*` is unconstrained — nobody else can see it,
+1. **`platform.*` is shared IN NAME, and only partly in fact.** FK into
+   `platform.users` freely — identity is the point. But `platform.workspaces`,
+   `workspace_members`, `comments`, `labels`, `events`, `uploads`, `entities`,
+   `links` and `inbox_messages` are **`apps/issues`' data**. They were not
+   renamed to `issues.*` because that would mean moving production rows for a
+   cosmetic gain; the name is history, not an invitation. **Your app reads and
+   writes none of them.**
+
+   The one thing that makes this bite quietly: your app CAN read them — it has
+   the grant, because they are in `platform`. The Postgres boundary does not
+   protect you here, so rule 3's guard does not either. That is why
+   `apps/sales/lib/app-isolation.test.ts` grew a third case that fails the build
+   if a file your app serves imports a platform TENANCY reader
+   (`listMyWorkspaces`, `getWorkspaceForUser`, `listWorkspaceMembers`, …). **Copy
+   that case.** It exists because `apps/sales` shipped one such import in a
+   layout file and the entire web UI 404'd for every sales-only user, for four
+   phases, while every API route returned 200.
+
+2. **Your schema is yours.** `<app>.*` is unconstrained — nobody else can see it,
    so its migrations need no coordination. Platform-schema changes are the
    opposite: expand → migrate → contract, because apps deploy independently and a
    breaking `platform.*` change breaks every other app for the length of the
    window.
+
 3. **You may not read another app's schema.** Not "should not" — *may not*. Each
    app connects as its own Postgres role, and `sales_app` has no `SELECT` on
-   `issues.*`. Cross-app reads go through that app's HTTP API, or through
-   `platform.links` / `platform.events`.
+   `issues.*`. **Cross-app reads go through that app's HTTP API, driven by the
+   CLI.** They no longer go through `platform.links` or `platform.events`: there
+   is no cross-app index any more, and no deployment can answer for another —
+   a server can answer for itself and for nobody else.
 
 Two guards back this up inside the repo, and both are copied into your app:
 `lib/app-isolation.test.ts` (no import resolving into another app, no query
@@ -167,28 +236,50 @@ Plus a conditional fourth: a guide topic, *only* if agent-visible behaviour
 changed. If only a value changed, edit its source — `bk meta` serves it live.
 
 **Commands are namespaced per app**: `bk sales deal create`, never `bk deal
-create`. Three tiers decide the spelling (D-11, `bk guide platform/apps`):
+create`. **TWO tiers decide the spelling** (`bk guide platform/apps`), and the
+tier is visible in the spelling:
 
 | Tier | Verbs | Spelling |
 |---|---|---|
-| Neutral — same answer from any app | `login` `logout` `meta` `guide` `changelog` `skill` `version` `app` `workspace` `member` `invite` `token` `profile` `inbox` `super-admin` | bare |
-| Cross-app — spans every app by design, results tagged | `search` `activity` `link` `storage` | bare |
-| App-owned — the answer depends on the app | your nouns, **plus** `upload` `trash` `label` | `bk <app> <verb>` |
+| Your ACCOUNT and this BINARY | `login` `logout` `whoami` `token` `profile` `meta` `app` `guide` `skill` `changelog` `version` `super-admin` | bare |
+| An app's DATA | your nouns, **plus** `workspace` `member` `invite` `user` `upload` `trash` `label` `search` `activity` `inbox` `storage` | `bk <app> <verb>` |
 
-The test is *"would two deployments answer differently?"*, never *"is it shared
-code?"* — `storage` is shared code AND cross-app, because uploads are one ledger
-against one workspace quota (D-28). You upload INTO one app and list ACROSS all
-of them.
+The test is unchanged and is still *"would two deployments answer
+differently?"*, never *"is it shared code?"*. **What changed is the facts.**
+There used to be a third, CROSS-APP tier (`search`, `activity`, `link`,
+`storage`) and it existed *because the apps shared a database*: `bk search` had
+one entity index to read, `bk storage` one upload ledger. Phases 2 and 3 ended
+all three, so a bare data verb had no correct answer — only a DEFAULT, taken
+from whichever app the config was last homed on, with nothing in the command
+saying which. That is how `bk trash purge` destroyed things in an app the caller
+never named.
 
-The app-owned platform verbs are shared code in `cli/internal/appverbs`. Your
-group mounts them in one line:
+Two sentences you will find quoted and should not re-derive from:
+
+- **D-28's pairing — "you upload INTO one app and list ACROSS all of them" — no
+  longer describes anything.** The ledger is per app now. The STORE, the QUOTA
+  and `platform.blob_references` are still shared, which is a different fact.
+- **`bk link` was removed, not moved.** A link joined two apps' records in one
+  shared index; there is no such index. Put the far end's URN in the record's own
+  text — `bk <app> search` finds a URN.
+
+The app-owned platform verbs are shared code in `cli/internal/appverbs`, and
+**`appverbs.Config` declares what your app SERVES, verb by verb**:
 
 ```go
-cmd.AddCommand(appverbs.New(appverbs.Config{App: Slug, TrashTypes: […]}).All()...)
+cmd.AddCommand(appverbs.New(appverbs.Config{
+    App:       Slug,
+    Workspace: true,   // GET /api/workspaces, GET /api/workspaces/{ws}
+    Members:   true,   // GET …/{ws}/members
+    Invites:   true,   // send | list | revoke
+}).All()...)
 ```
 
-Forget it and your own `lib/cli-parity.test.ts` fails: `POST /api/upload` is
-real in your tree and no `bk` command claims it.
+**A permanent subset is legitimate; an ACCIDENTAL one is a bug.** The scaffold
+declares three and serves three. Turn on `Uploads` without a `POST /api/upload`
+in your tree and your own `lib/cli-parity.test.ts` reports the claim immediately
+— which is the guard working, not an obstacle. The test to apply when deciding
+is *"does every bare verb have a host from this app's login?"*
 
 Registering the group in `root.go` is also what PINS its server: everything under
 `bk <app> …` resolves through `app_servers[<app>]`, learned from your
@@ -211,12 +302,10 @@ Then rename, in this order:
 |---|---|
 | `package.json` | `"name": "sales"` |
 | `lib/app.ts` | `APP_SLUG = 'sales'`, and delete the note about the scaffold's underscore |
-| `lib/db/schema.ts` | `pgSchema('sales')`, and rename `scaffoldSchema` |
-| `lib/db/queries/entities.ts` | your entity types, and `entityPath()` — **your app's URL scheme is the one thing the copy cannot know** |
+| `lib/db/schema.ts` | `pgSchema('sales')`, and rename `scaffoldSchema`. **Keep the tenancy tables PREFIXED** (`salesWorkspaces` → `sales.workspaces`): this file re-exports the platform schema, so a bare `export const workspaces` shadows `platform.workspaces` at every import site, silently |
 | `lib/db/migrations/*.sql` | your schema and your triggers; rename the schema in both |
 | `lib/db/migrations/meta/_journal.json` | the migration tags, to match |
 | `drizzle.config.ts` | `table: '__drizzle_migrations_<slug>'` — **a shared ledger silently skips your migrations (D-34)** |
-| `scripts/reproject.ts` | the `<SLUG>_REPROJECT` gate name |
 | `app/globals.css` | your palette. **Leave the `@source` line exactly as it is** |
 | `middleware.ts` | your authenticated path prefixes. **Leave the `cookies: sessionCookieConfig()` line exactly as it is** |
 | `vercel.json` | nothing |
@@ -318,6 +407,23 @@ full transcript of both outcomes side by side.
 > So: **run it by hand when you provision the role, and again whenever you change
 > a grant.** Check (2) reports `SKIPPED` loudly if yours is the only app schema —
 > that is correct, not a pass. See `platform-db.md`.
+
+### Add your schema to the row-count ledger
+
+`multiAppFinalRefactor/lib-db.sh` carries `TRACKED_SCHEMAS`, and it is the list of
+schemas the "nothing lost" ledger can see. **A schema not in it is not counted,
+not diffed and not reported — silently**, because there is nothing to compare a
+table against when you never looked for it.
+
+Add your slug there in the same commit as your first migration, then re-run
+`capture-baseline.sh` so your tables are declared. Found on 2026-08-11: the
+scaffold's brand-new tenancy tables got a clean bill from `verify.sh` by never
+being asked about.
+
+It is a hardcoded list rather than "every schema" on purpose — widening it would
+pull in `public`, `drizzle` and `neon_auth`, and each would then read as
+"undeclared" against every existing baseline, including the production one at the
+moment somebody is checking a deploy.
 
 ## 3. The row in `platform.apps`
 
@@ -453,6 +559,37 @@ routes attributed to `platform`, and its parity test will tell you so.
 > | Still unverified | **nothing** — but see 8(c) above, which is unobservable by design rather than passed |
 > | Closed by | Balathanusan Jeyarasan, `apps/sales`, 2026-08-10. Proofs seen: 8(a), 8(b), 8(d), 9. |
 
+> ### ⚠️ AND WHAT THE NEXT DAY CHANGED — added 2026-08-11, box left signed
+>
+> **The box above stays signed. Every proof in it was really observed** and none
+> of them has been invalidated: the deploy, the region, the shared cookie and the
+> changelog discovery all still hold.
+>
+> What changed underneath it is the SHAPE of the app being deployed, and two of
+> the proofs now mean less than they read:
+>
+> - **Proof 9 is weaker than it sounds, and it always was.** "Signed in at
+>   `issues.blackcode.ch`, opened `sales.blackcode.ch`, already signed in" proves
+>   the session cookie is shared. It does NOT prove the person can use the second
+>   app — and after 2026-08-10 they usually cannot, because an app's workspaces
+>   are its own and a shared cookie carries no membership. The visitor arrives
+>   authenticated and lands on "no workspace yet".
+>
+>   Worse, the sign-in bootstrap does not rescue them: `ensureWorkspaceForUser`
+>   runs in the sign-in callback, and **somebody arriving on a cookie minted by
+>   another app never signs in here**, so it never runs. Signing out and back in
+>   fixes it. Whether that is the right product answer is an open question and
+>   is recorded as one below, not decided here.
+>
+> - **Step 9's deeper point survives and is now load-bearing in a second way.**
+>   The two apps must hold the same `NEXTAUTH_SECRET`. On `localhost` they also
+>   share a cookie JAR (cookies ignore the port), so a third app running on
+>   another port with a different secret gets `JWEDecryptionFailed` from the
+>   FIRST app's cookie and no obvious cause. Set the same secret locally too.
+>
+> Nothing here needs re-signing. It needs reading before somebody concludes from
+> proof 9 that a new app is reachable the moment it is deployed.
+
 ## 7. `docs/changelog/sales.md`
 
 One file. It is discovered by reading the directory, so there is no registry to
@@ -462,8 +599,10 @@ update — `bk changelog` and `GET /api/changelog` pick it up automatically.
 
 - **Point it at the EXISTING Neon project and Blob store.** One database, one
   store, per-app schemas and per-app path prefixes. A second Neon project breaks
-  every cross-app query (`bk search`, `bk activity`, the blob index) and a second
-  Blob store breaks attribution.
+  `platform.blob_references` — which is what stops one app deleting a file
+  another still uses — and a second Blob store breaks attribution. (It used to
+  say "every cross-app query, `bk search`, `bk activity`"; those are per app now,
+  and the blob index is the reason that survives.)
 - **Root Directory:** `apps/sales`.
 - **Copy `apps/issues/vercel.json` into `apps/<app>/` and change nothing.** It is
   four settings the dashboard will not give you by default, and three of them are
@@ -546,23 +685,28 @@ a checklist is a thing an app can forget.
 What is left is what genuinely cannot be copied, because it needs a decision only
 you can make:
 
-- **The entity projection's URL scheme.** The scaffold ships the projection
-  wired into its write transaction, plus `scripts/reproject.ts`. What it cannot
-  give you is `entityPath()` — where one of your records lives in YOUR UI. That
-  one function is the reason the projection cannot live in a platform package.
+- **Your entities, and where they live in your UI.** The scaffold gives you one
+  (`note`) with its counter, its soft delete and its #number allocation — the
+  most-copied and most-easily-wrong piece of an app's schema. What it cannot give
+  you is what your records ARE.
 
-  **And you need the reconciler even though `bk super-admin entity-drift`
-  exists.** That command is bound to one deployment's app and cannot be
-  otherwise: an app's Postgres role has no grant on another app's schema. Run
-  against a database holding 51 unprojected sales rows, it reported no drift and
-  exited 0 — CLAUDE.md finding #14, and worse than a dead test, because a
-  reconciler is what you reach for when you already suspect something is wrong.
-- **A browser session.** The scaffold authenticates bearer tokens only, which is
-  the path agents use, and ships the `middleware.ts` that gates the browser half.
-  NextAuth config itself is genuinely app-specific — see the note in
-  `packages/platform-auth/src/index.ts`. Until you add one, do not mount
-  `/api/tokens`: it requires `AppContext.resolveSessionUser` and throws at import
-  time without it, on purpose.
+  There is **no entity projection to wire** any more, and if you find one in an
+  older copy of this file or of the scaffold, delete it: `platform.entities` has
+  a single writer since 2026-08-10, and `bk link` — the feature the shared index
+  existed for — is gone. Your URNs are unaffected, because a URN is built from
+  your own workspace slug and your own #number. The index was where a URN was
+  looked up; it was never what made one true.
+- **A browser session — but the scaffold now ships the SHAPE of one.** As of
+  2026-08-11 it carries `lib/auth.ts`, `lib/auth/session.ts`, the NextAuth
+  handler, `POST /api/auth/register` with the whitelist gate, a `/login` page and
+  a members page at `/dashboard`. NextAuth config is still genuinely
+  app-specific — which providers, whose credentials, which URLs — see the note in
+  `packages/platform-auth/src/index.ts`.
+
+  What the scaffold deliberately does NOT ship is a design: no theme, no query
+  client, no toast library, no nav. A scaffold that shipped one is a design every
+  copy has to undo. `@blackcode/platform-ui` and `docs/frontend.md` are where
+  that lives when you want it.
 
   **When you do add it, do not touch the `cookies:` line in `middleware.ts`.**
   `withAuth` defaults to looking for `next-auth.session-token`; D-16 renamed this
@@ -633,10 +777,13 @@ unmounted.
 > whether every bare verb has a host, from THIS app's login.** (D-36, as amended
 > 2026-08-07.)
 
-`apps/sales` has no reason ever to serve `bk inbox` (per-user, cross-workspace),
-`bk super-admin errors` (platform-wide data, any host answers) or `bk storage
-list` (D-28: one ledger, one quota, same rows from every deployment). Those are
-decisions. But the sales deployment also, accidentally, served 7 of 54 platform
+`apps/sales` has no reason ever to serve `bk issues inbox` (that app's
+notifications) or `bk super-admin errors` (platform-wide data, any host
+answers), and it serves no `storage` listing of its own. Those are decisions.
+(This paragraph used to cite D-28's "one ledger, one quota, same rows from every
+deployment" as the reason for `storage`. **That reason expired on 2026-08-10**:
+the ledger is per app now. The store and the quota are still shared, which is a
+different fact and does not make the verb bare.) But the sales deployment also, accidentally, served 7 of 54 platform
 routes — and the north-star run failed at its **second command**, because
 `bk workspace use` resolves through `GET /api/workspaces/{ws}`. Both states look
 identical from inside the app: everything the app itself does works.
@@ -686,7 +833,62 @@ Your app's own tests must include, copied from the scaffold:
 - `lib/cli-parity.test.ts` — every route reachable from `bk`, every claimed route
   real
 - `lib/app-isolation.test.ts` — no import into another app, no query of another
-  app's schema
+  app's schema, **and no import of a platform TENANCY reader** (copy the third
+  case from `apps/sales`; see the boundary rules in §0)
+- `lib/auth/register-gate.test.ts` — if you copied `POST /api/auth/register`,
+  and you almost certainly did. The account it creates is the shared platform
+  one, so an ungated register route on your app is an ungated register route on
+  every app. **Watch a non-whitelisted address be refused rather than reasoning
+  that it would be** — and note the test's shape: the POSITIVE case comes first,
+  because `isEmailAllowed` returns TRUE when nothing is configured, so "post a
+  random address, expect 403" passes for the wrong reason on any machine where
+  `SUPER_ADMINS` is unset.
+
+### AND OPEN EVERY PAGE IN A BROWSER. THIS IS NOT OPTIONAL.
+
+**A Next.js server component is not a route, and a React query's belief about a
+wire format is not a route either.** Neither is reachable by `curl`, by
+`bk`, or by the parity guard — all three of which only ever see
+`app/api/**`.
+
+Two bugs shipped to production in two days on 2026-08-10 and 2026-08-11, and
+**both lived where every route was correct**:
+
+- `apps/sales`' dashboard 404'd for every sales-only account, and had for four
+  phases. One layout file resolved membership through the shared
+  `listMyWorkspaces` against `platform.workspaces` after that app's workspaces
+  had moved. Every API route returned 200 throughout.
+- Settings → Members went blank for everyone. `apiGet<Member[]>` was a cast that
+  LIED: the route answers the `{ data, next_cursor }` envelope, `members.data`
+  was therefore the envelope rather than the array, the truthiness guard passed,
+  and `.map` threw. Its invitations list failed the same way one line down and
+  failed QUIETLY — `.length` on the envelope is `undefined`, so the list simply
+  never rendered.
+
+Three separate agents wrote *"the pages are still owed a look in a browser"* and
+nobody closed it. So, before you call an app done, sign in and OPEN:
+
+- every listing, and **at least one with data in it** — an empty state proves
+  nothing, and "renders nothing" is exactly what both bugs looked like
+- every detail page
+- every settings tab
+- the member list, and the invite flow end to end including the link
+- one create, one edit, one delete, one restore
+- one file upload, if you serve uploads
+
+**Report what you saw per page, not "everything works".** A summary would have
+hidden both of the bugs above.
+
+Two things that make this harder than it looks, learned on 2026-08-11:
+
+- **A toast is invisible to a slow driver.** A browser-automation tool whose
+  round-trip is a few seconds will miss a 4-second `sonner` toast every time, and
+  you will conclude a failure was silent when it was loud. Instrument the page
+  (poll the toaster in one `evaluate`) rather than sampling it between calls.
+- **Check the ROWS, not the status code**, for anything a route does
+  best-effort. `ensureWorkspaceForUser` deliberately never throws into a sign-in,
+  so a broken bootstrap returns `201` and writes nothing. `apps/sales` shipped
+  exactly that: every sign-up succeeded and landed without a workspace.
 
 **You do not need a third one for the shared packages.**
 `packages/platform-testing/test/package-isolation.test.ts` scans every
@@ -803,9 +1005,13 @@ cheaper than pretending otherwise.
    mounts neither has no app-owned verbs at all, and nothing complains. Copy
    `apps/sales/app/api/workspaces/[ws]/{trash,labels}/` and
    `cli/internal/commands/sales/appverbs.go`.
-2. **`bk issues issue view` does not show links back into your app.** The data is
-   right — `bk link list <urn>` returns both directions with resolved titles —
-   and what is missing is a display in the issues app. D-18's other half.
+2. ~~**`bk issues issue view` does not show links back into your app.**~~
+   **OBSOLETE, 2026-08-10.** `bk link` and `platform.links` are retired
+   (PLAN.md §3): a link joined two apps' records in one shared index and the apps
+   no longer share one. The replacement is deliberate and smaller — put the far
+   end's URN in the record's own text, and `bk <app> search` finds it. Kept
+   struck through rather than deleted because D-18 is quotable and somebody will
+   otherwise re-derive the feature from it.
 3. **`platform.events.actor_token_id` is NULL, everywhere, and always has been.**
    `AppContext.resolveUser` returns WHO, not BY WHAT MEANS, so no app can record
    which token a request arrived on. Sales works around it by matching
@@ -815,15 +1021,41 @@ cheaper than pretending otherwise.
    because the blob index is trigger-maintained, a file referenced only by an
    orphaned comment becomes **permanently undeletable**. It fails closed, which is
    why nobody will notice. Needs a design call, not a patch.
-5. **Seven platform routes still have no factory** — `bk inbox`, `bk storage`,
-   `bk workspace edit|delete|transfer`, `bk member leave`, `bk invite
-   accept|decline`. Their queries are still app-local to `apps/issues`. Your app
-   cannot serve them, and today that is correct rather than temporary; when one
-   of them needs a second host, the factory is the work.
-6. **A 409 has no branch in the CLI's `classify()`**, so `confirm_mismatch` exits
+5. **Several platform routes still have no factory** — `bk issues inbox`,
+   `bk issues storage`, `bk <app> workspace edit|delete|transfer`,
+   `bk <app> member leave`. Their queries are still app-local to `apps/issues`.
+   Your app cannot serve them, and today that is correct rather than temporary;
+   when one of them needs a second host, the factory is the work.
+
+   **`invite accept|decline|candidates` came OFF this list on 2026-08-11 and did
+   not become a factory** — read why before you reach for one. The shared
+   `workspaceInvitationsRoute` still writes `platform.workspace_invitations`,
+   which is one app's table now, so mounting it in a new app would file
+   invitations somewhere that app cannot see. `apps/_scaffold` serves its own
+   three (`send | list | revoke`) over `<app>.invitations` instead, and
+   `appverbs.Config` gained `InviteCandidates` / `InviteAccept` so an app can
+   serve the owner's half without claiming the invitee's three routes. **The
+   general shape: when a factory's TABLE stops being shared, the answer is
+   usually your own route, not a parameterised factory.**
+6. **Arriving on another app's cookie does not get you a workspace.** The
+   session is shared across `*.blackcode.ch` (D-16), so somebody signed in to one
+   app opens yours already authenticated — but membership is per app, and
+   `ensureWorkspaceForUser` runs in the SIGN-IN callback, which they never
+   triggered here. They land on your "no workspace yet" state and the only way
+   out is to sign out and back in.
+
+   Three candidate answers, none taken: mint on first authenticated request
+   rather than at sign-in (cheap, but it means any app silently creating tenancy
+   for anyone with an account); keep the empty state and add a "get started"
+   button that calls the bootstrap (explicit, one route); or decide that a new
+   app is invite-only and the empty state is correct. **Decide it deliberately
+   for your app** — the scaffold's empty state names the situation rather than
+   pretending it cannot happen. Found 2026-08-11 while walking the scaffold.
+
+7. **A 409 has no branch in the CLI's `classify()`**, so `confirm_mismatch` exits
    1 from the server and 2 from the binary. One condition, two exit codes, and an
    agent cannot write one recovery.
-7. **Email is app-local, and the first app that needs it twice will copy it.**
+8. **Email is app-local, and the first app that needs it twice will copy it.**
    `apps/issues/lib/email/` — a lazy Resend client, `fromAddress()`, and the
    templates — is the last significant piece of shared behaviour that never
    became a package, because `apps/issues` was the only sender and still is.

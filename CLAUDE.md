@@ -156,7 +156,7 @@ npm run lint       # eslint, all apps and packages
 > guardrail, test, assertion or probe works, break the thing it guards and watch
 > it go red. Then restore.
 
-This is not a style preference. **Nineteen guardrails in this repo have been
+This is not a style preference. **Twenty guardrails in this repo have been
 found green-but-inert** — eight during the migration, and the count is still growing.
 Every one looked like working protection:
 
@@ -183,10 +183,20 @@ Every one looked like working protection:
 | 18 | Four comments citing `*.test.ts` files that do not exist | Three named one file that has never been written, in headers describing invariants on the blob-deletion path; the fourth claimed a test asserted that `SURFACES` matches migration 0002's triggers, and none did. **A citation is a claim about what this repo protects,** and a reader deciding whether a change is safe takes it as one. Now guarded by `platform-testing/test/cited-tests-exist.test.ts`; the scanner⇄migration test is written |
 | 19 | The `packages/*` ESLint config | Banned app imports and **nothing else** — `const x: any = 1` in `platform-api` passed clean. Finding #1's neighbourhood: that was three packages with no config at all, and a config that exists and checks almost nothing reads as the same protection while giving less. Widened 2026-08-07 with six rules, each watched fail individually; adoption immediately surfaced a dead import in `platform-storage/src/references.ts` |
 
+| 20 | Migration `0003_scaffold_owns_its_tenancy.sql`'s foreign-key swap | The DROP was guarded on a constraint NAME — `notes_workspace_id_workspaces_id_fk`, Drizzle's spelling. Postgres had called it `notes_workspace_id_fkey`, because `0001` is hand-written SQL with an inline `REFERENCES` clause and the server names those itself. So the DROP matched nothing, the ADD succeeded, and the table ended up carrying **both** foreign keys: a row then had to satisfy `platform.workspaces` AND `scaffold.workspaces` at once — strictly worse than the coupling the migration existed to remove. **Every statement succeeded and psql exited 0.** Found by reading `pg_constraint` after running it, not by review. It matches on `confrelid` now, which is also what makes it correct for a copy whose `0001` was drizzle-generated. Fourth time on this project that the catalog contradicted the code (agent 1's trigger, agent 3's twelve FKs, agent 4's cascade ordering) |
+
 **Findings 10–14 all landed on 2026-08-07, in the phase whose entire job was to
 disbelieve the previous seven agents — and 11 and 12 are that phase's own new
 guards, found inert within minutes of being written.** The rate does not fall as
 the rule gets better known.
+
+**#20 landed on 2026-08-11 and is the first one in this table that is not a
+test.** It is a MIGRATION step: guarded, re-runnable, idempotent, and it did
+nothing while reporting success. The mechanism is finding #7's and #15's — SQL
+that exits 0 having skipped its own work — and the lesson is the one three
+agents have now independently written down: **check the catalog, not the repo.**
+A constraint name, a trigger, a cascade and a foreign key are all facts about the
+database that no grep of `apps/` can see.
 
 **15–19 landed later the same day, in the phase after that one**, whose job was
 to make the next app cheap. #17 is the sharpest: it was created by a correct
@@ -197,8 +207,20 @@ rather than by running the suite, **because the suite was green**.
 #4 and #9 were found by the wrap-up verification *after* the migration closed —
 assume the next one exists.
 
-Four corollaries worth stating separately, because they are different
+Five corollaries worth stating separately, because they are different
 mechanisms:
+
+- **A route is not a page.** Every check in this repo that verifies behaviour —
+  `cli-parity`, `bk`, `curl`, the integration suites — sees `app/api/**` and
+  nothing else. A Next.js server component reads the database directly, and a
+  React query's belief about a wire format is a third thing again. Two bugs
+  shipped to production in two days in 2026-08 and **both lived where every route
+  was correct**: `apps/sales`' dashboard 404'd for every sales-only account for
+  four phases while every API route returned 200, and its members page went blank
+  because a cast renamed the `{ data, next_cursor }` envelope instead of opening
+  it. **When a change moves where data lives, open the pages that read it
+  directly, in a browser, and report what you saw PER PAGE.** Three agents wrote
+  "the pages are still owed a look in a browser" and nobody closed it.
 
 - **A commented-out or skipped check reports success.** If a check cannot run
   yet, make it **skip loudly** (`RAISE NOTICE`, `t.Logf`, a non-empty assertion),
