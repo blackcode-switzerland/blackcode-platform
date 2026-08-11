@@ -22,6 +22,30 @@ echo "$MY_TOKEN" | bk login --token        # headless: read a token from stdin
 `bk login` stores the token in `~/.config/bk/config.json` (mode 0600) and sends
 it on every request. Check it with `bk whoami`; clear it with `bk logout`.
 
+**`--token` is a switch, not a value.** It reads the token from **stdin**, so
+the secret never enters your shell history, your process list or a CI log.
+`--token=<value>` and `--token <value>` both fail on purpose, and both print the
+piped form above.
+
+### Windows
+
+The npm shims are `bk.ps1` (PowerShell) and `bk.cmd` (cmd.exe). PowerShell's
+default execution policy blocks unsigned `.ps1` scripts, which stops both
+`npm install -g` and `bk` itself with *"cannot be loaded because running scripts
+is disabled on this system"*. Two ways through:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned    # allow the shims, once
+```
+
+```cmd
+cmd.exe /c npm install -g @blackcode_sa/bc-issues      # or bypass PowerShell
+cmd.exe /c bk whoami
+```
+
+If an install aborts partway, a second attempt can fail with `EBUSY` on the bin
+shim — the first attempt still holds it. Close the shell and retry.
+
 **One login covers every app.** `--server` may name ANY deployment — every app
 serves the browser authorize page — and the token works on all of them. Logging
 in also LEARNS the app address book: which server answers for which app, read

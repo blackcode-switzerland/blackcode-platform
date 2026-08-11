@@ -368,3 +368,57 @@ func writeTestConfig(t *testing.T, dir, body string) {
 		t.Fatalf("write config: %v", err)
 	}
 }
+
+// `bk login --token=<value>` — the one wrong guess that never reaches our code.
+//
+// The other two spellings of this mistake are caught by login's own Args hook
+// and asserted in internal/commands/login_token_test.go. This one is different
+// in kind: cobra rejects it inside `pflag`, while parsing, before Args or RunE
+// runs. Nothing in internal/commands can see it. hintFor() is the only place
+// left, which is why the assertion lives here.
+//
+// AND THE ERROR IS NOT HAND-WRITTEN. It comes from Execute() on the real
+// command tree via runBK, so the exact pflag wording — `invalid argument "…"
+// for "--token" flag: strconv.ParseBool: …` — is what the match is tested
+// against. CLAUDE.md finding #8 is a test in this same file that asserted a
+// hand-written cobra string and passed while the binary did something else.
+func TestTokenValueHintNamesTheStdinForm(t *testing.T) {
+	err := runBK(t, "login", "--token=bk_live_ABCDEF0123456789")
+	if err == nil {
+		t.Fatal("`bk login --token=<value>` succeeded — a bool flag must reject a value")
+	}
+	if got := classify(err); got != exitUsage {
+		t.Errorf("exit code = %d, want %d (usage) for %v", got, exitUsage, err)
+	}
+
+	hint := hintFor(err, "")
+	if hint == "" {
+		t.Fatalf("no hint — the caller is left with a strconv.ParseBool message: %v", err)
+	}
+	// The recovery has to be runnable, not a description of the flag.
+	if !strings.Contains(hint, "| bk login --token") {
+		t.Errorf("hint %q does not name the working invocation `echo <token> | bk login --token`", hint)
+	}
+	// And it must not repeat the secret back. The token is on argv here so it is
+	// already exposed, but our own output is not going to be the thing that
+	// copies it into a log the caller keeps.
+	if strings.Contains(hint, "bk_live_ABCDEF0123456789") {
+		t.Errorf("hint echoes the token back: %q", hint)
+	}
+}
+
+// The premise: hintFor must not answer this way for every boolean flag.
+//
+// The branch matches on the flag NAME, and a version that matched ParseBool
+// alone would hand `echo <token> | bk login --token` to someone who mistyped
+// `--json=maybe` — a recovery for a different command entirely, which is worse
+// than no hint. Without this case, that version passes the test above.
+func TestTokenHintDoesNotFireForOtherBooleanFlags(t *testing.T) {
+	err := runBK(t, "issues", "issue", "list", "--json=notabool")
+	if err == nil {
+		t.Fatal("`--json=notabool` succeeded; expected a parse error")
+	}
+	if hint := hintFor(err, ""); strings.Contains(hint, "bk login --token") {
+		t.Errorf("the --token recovery fired for --json: %q", hint)
+	}
+}

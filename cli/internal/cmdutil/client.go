@@ -265,3 +265,25 @@ func IntOr(p *int, fallback int) int {
 	}
 	return *p
 }
+
+// UsageError is "the caller typed this wrong", for the cases the binary detects
+// itself rather than letting cobra detect them.
+//
+// It exists for the exit code, not the text. cmd/bk/main.go's table promises 2
+// for every arg/flag mistake, and it derives that from the message — matching
+// "unknown flag", "arg(s)", a leading "invalid ". A hand-written Args or RunE
+// check that phrases its error as a sentence the caller can act on matches none
+// of those and silently exits 1, which claims a runtime fault. That is the same
+// defect as a hint naming a command that does not exist: the contract says one
+// thing and the binary does another, and nothing fails loudly.
+//
+// So a check that wants the usage code says so in the type, and the message
+// stays free to be readable.
+type UsageError struct{ Msg string }
+
+func (e *UsageError) Error() string { return e.Msg }
+
+// Usagef builds a UsageError with a formatted message.
+func Usagef(format string, a ...any) error {
+	return &UsageError{Msg: fmt.Sprintf(format, a...)}
+}

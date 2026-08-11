@@ -264,7 +264,9 @@ bk login --server https://issues.example.com
 6. The CLI validates the token by calling `GET /api/me` with `Authorization: Bearer …`.
 7. The token + user info land in the config file (mode `0600`).
 
-If `--server` is omitted, the default is `http://localhost:3000`.
+If `--server` is omitted, the default is `config.DefaultServer` — currently
+`https://issues.blackcode.ch`. (This line said `http://localhost:3000` until
+2026-08-11; it had been wrong since the app got a domain.)
 
 ### `bk login --token` — headless flow
 
@@ -273,6 +275,23 @@ For CI or environments without a browser. The CLI reads the token from stdin (hi
 ```bash
 echo "$MY_TOKEN" | bk login --token --server https://issues.example.com
 ```
+
+**`--token` is a bool, and that is a deliberate security property, not an
+oversight.** Passing the token as a flag value would put the secret in the shell
+history, the process list and any CI log of the command line; stdin puts it in
+none of them. The cost is that `--token=<v>` and `--token <v>` are both natural
+guesses and both wrong, which cost a real user two of the four failures in their
+first Windows login. All three failure paths now print the piped form:
+
+| Spelling | Where it is caught |
+|---|---|
+| `--token=<v>` | pflag, during parsing — before `Args`/`RunE`. Only `hintFor()` in `cmd/bk/main.go` can see it, matched on the flag name so the recovery cannot fire for other bools |
+| `--token <v>` | login's `Args` hook (the value arrives as a stray positional) |
+| `--token`, no pipe | `errNoTokenOnStdin` in `login.go`, replacing a `read token: EOF` that described the plumbing |
+
+Guarded by `internal/commands/login_token_test.go` and
+`TestTokenValueHintNamesTheStdinForm` / `TestTokenHintDoesNotFireForOtherBooleanFlags`
+in `cmd/bk/main_test.go`.
 
 ### `bk logout`
 
@@ -962,11 +981,18 @@ The main list commands (`bk issues issue list`, `bk issues project list`, `bk is
 
 Stable for scripting. The mapping happens in `cmd/bk/main.go` by inspecting the `APIError.Status` returned from the HTTP client (and a couple of message heuristics):
 
+> **A hand-written check that wants code 2 must say so in the TYPE.** The
+> heuristics below match `unknown flag`, `arg(s)`, a leading `invalid ` — cobra's
+> phrasings. A check in our own code that phrases its error as a readable
+> sentence matches none of them and silently exits **1**, claiming a runtime
+> fault for a typo. Return `cmdutil.Usagef(...)` instead; `exitCodeFor` checks
+> for it by type before it looks at any message.
+
 | Code | Meaning |
 |---|---|
 | 0 | Success |
 | 1 | Generic / runtime error |
-| 2 | Bad usage (missing required flag, invalid id, wrong argument count, unknown flag/command) |
+| 2 | Bad usage (missing required flag, invalid id, wrong argument count, unknown flag/command) — also anything returning a `cmdutil.UsageError` |
 | 3 | Not authenticated (401, or no config) |
 | 4 | Permission denied (403) |
 | 5 | Not found (404) |

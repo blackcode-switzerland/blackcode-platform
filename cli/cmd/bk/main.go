@@ -191,6 +191,28 @@ func hintFor(err error, commandPath string) string {
 	}
 
 	msg := err.Error()
+
+	// A BOOLEAN FLAG HANDED A VALUE. Cobra rejects this inside its own flag
+	// parser, before any RunE or Args hook this repo controls, so the only place
+	// to catch it is here — and what it says on its own is
+	// `invalid argument "bk_live_…" for "--token" flag: strconv.ParseBool: …`,
+	// which names a Go stdlib function and no way forward.
+	//
+	// `--token=<value>` is one of the two natural guesses at a flag that sounds
+	// like it takes one; the other (`--token <value>`) is caught by login's Args
+	// hook. Both were hit on a real first run, on Windows, before a successful
+	// login (Todo/issues-app-feedback.md item 5).
+	//
+	// Matched on the flag NAME rather than on ParseBool generally: the recovery
+	// line is specific to `bk login`, and a generic "that flag is a switch" hint
+	// would be wrong for every other boolean in the binary. The token itself is
+	// never echoed back — it is in `msg`, and keeping it out of our output is
+	// the whole reason the flag reads stdin.
+	if strings.Contains(msg, `for "--token" flag`) && strings.Contains(msg, "ParseBool") {
+		return "--token is a switch, not a value — it reads the token from stdin so it stays out of " +
+			"your shell history. Run: echo <token> | bk login --token"
+	}
+
 	if strings.Contains(msg, "unknown flag") ||
 		strings.Contains(msg, "unknown command") ||
 		strings.Contains(msg, "unknown shorthand") {
@@ -329,6 +351,14 @@ func classify(err error) int {
 		}
 		return exitGeneric
 	}
+	// A check inside the binary that has already decided this is bad usage.
+	// Typed rather than sniffed out of the message below, so the message can be
+	// a readable sentence without that costing it the documented exit code.
+	var use *cmdutil.UsageError
+	if errors.As(err, &use) {
+		return exitUsage
+	}
+
 	msg := err.Error()
 	switch {
 	case strings.HasPrefix(msg, "aborted"):

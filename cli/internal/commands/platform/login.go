@@ -39,11 +39,41 @@ address book, so `+"`bk <app> …`"+` routes without anyone typing a second URL.
 It does NOT grant anything: whether you have a workspace in an app is that app's
 own question, and `+"`bk <app> workspace list`"+` asks it.
 
-Use --token to paste a token manually instead (useful for headless/CI).`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if server == "" {
-				server = config.DefaultServer
+Use --token for headless/CI, where there is no browser. It is a SWITCH, not a
+value: the token is read from STDIN, so it never lands in your shell history,
+your process list, or a CI log of the command line.
+
+  echo <token> | bk login --token
+
+--token=<token> and --token <token> are therefore both errors, and both say
+this.`,
+		// WHY THIS IS NOT cobra.NoArgs.
+		//
+		// `bk login --token bk_live_…` is the natural guess for a flag that
+		// sounds like it takes a value, and it was reported from a real first
+		// run (Todo/issues-app-feedback.md item 5). Cobra does not attach the
+		// value to a boolean flag, so the token arrives here as a stray
+		// positional and the command went on to read an empty stdin and fail
+		// with `read token: EOF` — an error about the wrong thing entirely.
+		//
+		// cobra.NoArgs would fix the silence but not the confusion: its message
+		// names the extra argument without saying what to do instead. This one
+		// names the working invocation, and takes care never to echo the token
+		// back — printing it would defeat the reason it goes on stdin.
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return nil
 			}
+			if pasteToken || strings.HasPrefix(args[0], "bk_live_") {
+				return cmdutil.Usagef(
+					"--token takes no value — it reads the token from stdin, so it stays out of your "+
+						"shell history and process list.\n      Run: echo <token> | bk login --server %s --token",
+					serverOrDefault(server))
+			}
+			return cmdutil.Usagef("unexpected argument %q — `bk login` takes flags only", args[0])
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			server = serverOrDefault(server)
 
 			if pasteToken {
 				return runPasteLogin(server)
@@ -52,8 +82,26 @@ Use --token to paste a token manually instead (useful for headless/CI).`,
 		},
 	}
 	cmd.Flags().StringVar(&server, "server", "", "Server base URL of any Blackcode app (default: "+config.DefaultServer+")")
-	cmd.Flags().BoolVar(&pasteToken, "token", false, "Paste a pre-existing token from stdin instead of opening a browser")
+	cmd.Flags().BoolVar(&pasteToken, "token", false, "Read a pre-existing token from STDIN instead of opening a browser — a switch, not a value: `echo <token> | bk login --token`")
 	return cmd
+}
+
+func serverOrDefault(server string) string {
+	if server == "" {
+		return config.DefaultServer
+	}
+	return server
+}
+
+// errNoTokenOnStdin is the one message for "--token, but no token arrived".
+// Every route into it is the same user mistake, so they get the same runnable
+// line back rather than three descriptions of three internal causes.
+func errNoTokenOnStdin(server string) error {
+	return cmdutil.Usagef(
+		"no token on stdin — --token reads it from there, it does not take a value.\n"+
+			"      Run: echo <token> | bk login --server %s --token\n"+
+			"      No token yet? run `bk login` with no flags to mint one in a browser",
+		serverOrDefault(server))
 }
 
 func runPasteLogin(server string) error {
@@ -71,13 +119,17 @@ func runPasteLogin(server string) error {
 	} else {
 		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil && line == "" {
-			return fmt.Errorf("read token: %w", err)
+			// Nothing on stdin. In practice this is not an I/O fault, it is
+			// `bk login --token` typed with no pipe — including the two
+			// spellings that look like they pass a value. `read token: EOF`
+			// described the plumbing and left the caller nowhere to go.
+			return errNoTokenOnStdin(server)
 		}
 		raw = line
 	}
 	token := strings.TrimSpace(raw)
 	if token == "" {
-		return fmt.Errorf("empty token")
+		return errNoTokenOnStdin(server)
 	}
 	return finishLogin(server, token)
 }
