@@ -17,16 +17,15 @@ export default async function Layout({
 
   // Two different empties, and telling them apart is the whole point.
   //
-  // `reachable` is app-scoped (Phase 4): workspaces where this app is enabled and
-  // this user has been granted it. `memberships` is the raw list. If we only
-  // looked at the scoped list, a member with no app access would be shown
-  // "create your first workspace" — a screen that quietly works (they'd become
-  // owner of a brand-new workspace) while hiding the real problem and leaving
-  // them with a second workspace nobody asked for.
-  const [reachable, memberships] = await Promise.all([
-    listMyWorkspaces(user.id, { app: APP_SLUG }),
-    listMyWorkspaces(user.id),
-  ])
+  // ONE LIST since 2026-08-10 (refactor Phase 5). There were two: `reachable`
+  // (app-scoped through `platform.app_access`) and `memberships` (the raw list),
+  // compared so that a member with no app access was not shown "create your
+  // first workspace" — a screen that quietly works, by making them owner of a
+  // second workspace nobody asked for, while hiding the real problem.
+  //
+  // These are this app's workspaces now, so the two lists were the same list.
+  // The empty case below means what it says again: you belong to none.
+  const memberships = await listMyWorkspaces(user.id)
 
   // Invariant: a user always works inside a workspace. New accounts get one
   // auto-created at signup; this is the safety net if someone reaches zero
@@ -38,28 +37,16 @@ export default async function Layout({
     return <OnboardingCreateWorkspace defaultName={`${base}'s Workspace`} />
   }
 
-  // A member everywhere, granted nowhere. Name the workspaces and who can fix
-  // it — an empty dashboard would read as "nothing to show".
-  if (reachable.length === 0) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-8">
-        <div className="max-w-md space-y-4 text-center">
-          <h1 className="text-lg font-semibold">No access to {APP_NAME}</h1>
-          <p className="text-sm text-muted-foreground">
-            You are a member of{' '}
-            {memberships.map((w) => w.name).join(', ')}, but {APP_NAME} has not been
-            enabled for you there.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            A workspace owner can grant it from <strong>Workspace settings → Apps</strong>.
-          </p>
-          <a href="/api/auth/signout" className="inline-block text-sm underline">
-            Sign out
-          </a>
-        </div>
-      </div>
-    )
-  }
+  // ── THE "NO ACCESS TO <APP>" SCREEN WAS HERE, AND WENT ON 2026-08-10 ────────
+  // It rendered for somebody who was a member of workspaces but granted this app
+  // in none of them, named those workspaces, and pointed at Workspace settings →
+  // Apps. All three of its parts are gone: the grants, the panel it pointed at,
+  // and the state itself. A member of one of THIS app's workspaces is a user of
+  // this app, so the branch could never be taken again — and a screen nobody can
+  // reach reads to the next person as protection.
+  //
+  // `apps/sales` deleted its own copy of this screen in Phase 2 for the same
+  // reason; this is the other half of that change.
 
   return <DashboardLayout>{children}</DashboardLayout>
 }

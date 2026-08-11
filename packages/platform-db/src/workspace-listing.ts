@@ -13,7 +13,6 @@
 // owned piece of work.
 
 import { and, eq } from 'drizzle-orm'
-import { accessibleWorkspaceIds, isAppAccessEnforced } from './app-access'
 import type { PlatformDb } from './client'
 import { users, workspaceMembers, workspaces, type Workspace } from './schema'
 
@@ -22,27 +21,24 @@ export type WorkspaceWithMembership = Workspace & {
 }
 
 /**
- * The workspaces this user belongs to.
+ * The workspaces this user belongs to, in THIS app.
  *
- * Pass `{ app }` to get the ones they may actually USE that app in — visibility
- * follows access (docs/platform-architecture.md §4.5). That is what every
- * user-facing listing wants: logged into an app, you should not see a workspace
- * where that app is off or where you were never granted it.
+ * ── IT USED TO TAKE AN `{ app }` FILTER. THAT WENT IN PHASE 5 ────────────────
+ * Until 2026-08-10 this could narrow the membership list to the workspaces where
+ * the caller held an `app_access` grant, because one `platform.workspaces` was
+ * shared by every app and "which of these can I open?" was a real question. It
+ * is not one any more: this table is `apps/issues`' own, `apps/sales` has
+ * `sales.workspaces`, and a row here is by definition a workspace of the app
+ * asking. Membership IS the answer, and it is the only one available — the
+ * grants that used to narrow it were deleted with `platform.app_access`.
  *
- * Pass nothing for the raw membership list. Two callers genuinely need that and
- * filtering them would be a bug, not a feature:
- *   - `ensureDefaultWorkspace` — "do they belong to anything at all?" A filtered
- *     empty answer there would mint a SECOND workspace for someone who already
- *     has one they simply can't reach.
- *   - `--all` listings, which exist precisely to show what the filter hides.
- *
- * The filter is a no-op when enforcement is off, so the kill switch restores the
- * pre-Phase-4 behaviour here too, not just at the 403.
+ * So there is no longer a filtered/unfiltered pair, which is why the callers
+ * that deliberately asked for the RAW list (`ensureDefaultWorkspace`, the `--all`
+ * listings) no longer need to say so.
  */
 export async function listMyWorkspaces(
   db: PlatformDb,
-  userId: number,
-  opts: { app?: string } = {}
+  userId: number
 ): Promise<WorkspaceWithMembership[]> {
   const rows = await db
     .select({
@@ -54,11 +50,7 @@ export async function listMyWorkspaces(
     .where(eq(workspaceMembers.user_id, userId))
     .orderBy(workspaces.updated_at)
 
-  const all = rows.map((r) => ({ ...r.ws, member_role: r.role as 'owner' | 'member' }))
-  if (!opts.app || !isAppAccessEnforced()) return all
-
-  const reachable = await accessibleWorkspaceIds(db, opts.app, userId)
-  return all.filter((w) => reachable.has(w.id))
+  return rows.map((r) => ({ ...r.ws, member_role: r.role as 'owner' | 'member' }))
 }
 
 /**

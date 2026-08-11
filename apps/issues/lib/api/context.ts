@@ -61,13 +61,14 @@ export const appContext: AppContext = {
   // The multi-app refactor moves SALES onto its own tenancy tables; it moves not
   // one row of this app's. `platformWorkspaceSource` is a thin binding of the
   // five platform-db functions these routes already called, in the same order
-  // with the same arguments — including the `workspace_apps` / `app_access`
-  // gate, which is still enforced here and behind `PLATFORM_ENFORCE_APP_ACCESS`
-  // exactly as before. See packages/platform-api/src/workspace-source.ts.
+  // with the same arguments. The `workspace_apps` / `app_access` gate that used
+  // to run inside it went on 2026-08-10 with both tables: these ARE this app's
+  // workspaces, so a member of one is a user of this app.
+  // See packages/platform-api/src/workspace-source.ts.
   //
   // Renaming these tables to `issues.*` was considered and rejected: it would
   // mean moving production data for a cosmetic gain (PLAN.md §2).
-  workspaces: platformWorkspaceSource(db, APP_SLUG),
+  workspaces: platformWorkspaceSource(db),
 
   // ── AND SO IS THIS APP'S UPLOAD LEDGER ────────────────────────────────────
   // `platform.uploads`, unchanged. `platformUploadLedger` is a binding of the

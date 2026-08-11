@@ -79,20 +79,22 @@ func newInviteCandidatesCmd(acfg Config) *cobra.Command {
 	}
 }
 
+// `--app` was removed on 2026-08-10 (multiAppFinalRefactor Phase 5). It named an
+// app to also grant on accept, which is how you invited somebody into an app
+// whose access mode was invite_only — there the invitation WAS the grant. Both
+// the modes and the grants went with `platform.app_access`: this invitation is
+// into THIS app's workspace, and accepting it makes them a member of this app.
 func newInviteSendCmd(acfg Config) *cobra.Command {
-	var app string
 	cmd := &cobra.Command{
-		Use:         "send <email> [--app <app>]",
+		Use:         "send <email>",
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/invitations"},
 		Short:       "Invite a teammate to the active workspace by email",
-		Long: `Invite someone to the active workspace by email.
+		Long: `Invite someone to this app's active workspace by email.
 
-Without --app this is an org-level invite: on accept they are granted whichever
-apps the workspace hands out by default. With --app they are also granted that
-app specifically — which is how you invite someone into an app whose access mode
-is invite_only, since there the invitation IS the grant.
-
-Run ` + "`bk app list`" + ` to see which apps are enabled here and how each grants.`,
+On accept they become a member of that workspace, which is what using this app
+means. To give somebody access to a DIFFERENT app, invite them from that app:
+` + "`bk <other-app> invite send <email>`" + ` — each app has its own workspaces and
+its own members.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := cmdutil.NewClientAndConfig()
@@ -103,7 +105,7 @@ Run ` + "`bk app list`" + ` to see which apps are enabled here and how each gran
 			if err != nil {
 				return err
 			}
-			res, err := c.SendInvitation(ws, args[0], app)
+			res, err := c.SendInvitation(ws, args[0])
 			if err != nil {
 				return err
 			}
@@ -111,21 +113,24 @@ Run ` + "`bk app list`" + ` to see which apps are enabled here and how each gran
 			if res.InviteeHasAccount {
 				fmt.Fprintln(cmd.OutOrStdout(), "They'll see it in their inbox immediately.")
 			} else {
-				// The link a human clicks. Built from the HOME server because an
-				// invitation is platform-level — accepting it joins a workspace,
-				// not an app — and any deployment renders it.
+				// The link a human clicks. It must point at THIS app's server, not
+				// the home one: the invitation is into this app's workspace, and
+				// the accept page resolves the token against the deployment that
+				// holds it. Built from the home server until 2026-08-10, when an
+				// invitation stopped being platform-level.
+				server, err := cmdutil.ServerForApp(cfg, acfg.App)
+				if err != nil {
+					return err
+				}
 				inviteURL := fmt.Sprintf("%s/invitations/%s",
-					strings.TrimRight(cfg.HomeServer, "/"), res.Invitation.Token)
+					strings.TrimRight(server, "/"), res.Invitation.Token)
 				fmt.Fprintf(cmd.OutOrStdout(), "Share this link:\n  %s\n", inviteURL)
 			}
-			if app != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "On accept they will be granted the %s app.\n", app)
-			}
+			fmt.Fprintf(cmd.OutOrStdout(),
+				"On accept they become a member of this %s workspace.\n", acfg.App)
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&app, "app", "",
-		"Also grant this app on accept, even where its access mode is invite_only")
 	return cmd
 }
 

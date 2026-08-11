@@ -33,12 +33,7 @@
 // to remember — which is how they drift.
 
 import type { NextRequest } from 'next/server'
-import {
-  LINK_RELATIONS,
-  appsReachableByUser,
-  getAppRegistryEntry,
-  type User,
-} from '@blackcode/platform-db'
+import { listAppRegistry, type User } from '@blackcode/platform-db'
 import { isSuperAdmin } from '@blackcode/platform-auth'
 import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@blackcode/platform-agent'
 import type { AppContext } from './app-context'
@@ -94,44 +89,14 @@ export async function platformMetaBlock(
     ? await app.workspaces.getForUser(wsParam, user.id)
     : await app.workspaces.getDefaultForUser(user.id)
 
-  // Every workspace the caller belongs to AND can use THIS app in — the
-  // disambiguation list an agent needs to target the right tenant by
-  // (human-readable) name/slug. App-scoped: offering a workspace the caller
-  // cannot write to would be offering a guaranteed 403. `bk workspace list --all`
-  // is the escape hatch that shows the rest.
-  const myWorkspaces = await app.workspaces.listForUser(user.id, { scopedToApp: true })
-
-  // The apps this token can reach, anywhere. An agent working for a user with no
-  // sales access must not be able to discover that a sales app exists
-  // (docs/platform-architecture.md §4.5), so this is derived from grants, never
-  // from the registry. The unfiltered membership list is only used to turn the
-  // workspace ids those grants carry back into slugs.
-  const [granted, allMyWorkspaces, currentEntry] = await Promise.all([
-    appsReachableByUser(app.db, user.id),
-    app.workspaces.listForUser(user.id, { scopedToApp: false }),
-    getAppRegistryEntry(app.db, app.appSlug),
+  // Every workspace the caller belongs to in THIS app — the disambiguation list
+  // an agent needs to target the right tenant by (human-readable) name/slug.
+  // There is no narrower and wider list any more: a workspace this app's own
+  // source reports IS one the caller can write to here.
+  const [myWorkspaces, registry] = await Promise.all([
+    app.workspaces.listForUser(user.id),
+    listAppRegistry(app.db),
   ])
-
-  // ── THE CURRENT APP IS ALWAYS PRESENT ──────────────────────────────────────
-  // `appsReachableByUser` derives its list from `platform.app_access`, and an
-  // app that owns its own workspaces has no rows there at all — so from 2026-08-10
-  // a b/sales user saw `apps: {}`, with no entry and no `base_url` for the very
-  // deployment answering the request. That is not a discovery question: you are
-  // demonstrably able to reach the app you are talking to.
-  //
-  // Other apps stay grant-derived, which is the §4.5 rule this must not weaken:
-  // an agent working for somebody with no sales access must not learn that a
-  // sales app exists.
-  const reachableApps =
-    currentEntry && !granted.some((a) => a.slug === app.appSlug)
-      ? [
-          ...granted,
-          // Its workspaces are every workspace this app's own source reports —
-          // there are no grants to narrow them by, and an entry listing none
-          // would tell an agent it can reach the app but has nowhere to write.
-          { ...currentEntry, workspace_ids: allMyWorkspaces.map((w) => w.id) },
-        ]
-      : granted
 
   const members = workspace ? await app.workspaces.listMembers(workspace.id) : []
 
@@ -162,32 +127,63 @@ export async function platformMetaBlock(
       is_active: workspace ? w.id === workspace.id : false,
     })),
     current_app: app.appSlug,
+    // ── THE ADDRESS BOOK, NOT A GRANT LIST (changed 2026-08-10, Phase 5) ──────
+    // Every enabled row in `platform.apps`: which apps exist and where they are
+    // deployed, so the CLI can route `bk <app> …` without anyone typing a URL.
+    //
+    // It USED to be derived from `platform.app_access` — the apps this token
+    // holds a grant for — under docs/platform-architecture.md §4.5, "an agent
+    // must not discover an app its user cannot reach". Phase 5 retired that rule
+    // rather than weakening it, for two measured reasons:
+    //
+    //   1. IT CANNOT BE DERIVED ANY MORE. Reachability now lives in each app's
+    //      own membership table, and no deployment holds a Postgres grant on
+    //      another app's schema (§4.3). This server can answer for itself and
+    //      for nobody else.
+    //   2. IT WAS ALREADY ANSWERING FALSELY. The grants named `platform.workspaces`
+    //      ids for an app whose workspaces had moved to its own schema, so a
+    //      brand-new issues signup was told `apps.sales.workspaces` contained
+    //      their platform workspace — a workspace `apps/sales` itself 404s.
+    //
+    // So `workspaces` is listed ONLY for the app answering the request. An entry
+    // for another app carries its address and nothing else, because its address
+    // is genuinely all this server knows. Ask that app's own `/api/meta` — which
+    // is what `base_url` is for, and what a CLI fan-out does.
+    //
     // AN OBJECT, NOT AN ARRAY, on purpose: each app's vocabulary and limits live
     // INSIDE its entry here (§7.4). Keyed means adding one is additive; an array
     // would have to be replaced, and replacing a field agents already parse is
     // the breakage this whole sequence exists to avoid.
     apps: Object.fromEntries(
-      reachableApps.map((a) => [
-        a.slug,
-        {
-          slug: a.slug,
-          name: a.name,
-          base_url: a.base_url,
-          is_current: a.slug === app.appSlug,
-          workspaces: allMyWorkspaces
-            .filter((w) => a.workspace_ids.includes(w.id))
-            .map((w) => w.slug),
-          ...(a.slug === app.appSlug ? (opts.currentApp ?? {}) : {}),
-        },
-      ])
+      registry.map((a) => {
+        const isCurrent = a.slug === app.appSlug
+        return [
+          a.slug,
+          {
+            slug: a.slug,
+            name: a.name,
+            base_url: a.base_url,
+            is_current: isCurrent,
+            // Only ever this app's own. An empty array for another app means
+            // "not known here", NOT "you have none there" — the two were
+            // indistinguishable while this was grant-derived, and conflating
+            // them is what produced the false claim above.
+            workspaces: isCurrent ? myWorkspaces.map((w) => w.slug) : [],
+            ...(isCurrent ? (opts.currentApp ?? {}) : {}),
+          },
+        ]
+      })
     ),
-    // Cross-app links. PLATFORM-level, not per-app: a link connects two apps, so
-    // its relation vocabulary cannot belong to either of them. Served here rather
-    // than written into a guide topic because it is a VALUE — adding a relation
-    // must not require a CLI release, and `guide_test.go` fails the build if a
-    // topic hardcodes one.
+    // How to address an entity in any app. A URN is built from an app's OWN
+    // workspace slug and #number, so every app can print and resolve one — that
+    // survived the split untouched.
+    //
+    // `relations` went with `bk link` on 2026-08-10: the link table is no longer
+    // written by any app and `linksRoute` is unmounted everywhere, so a relation
+    // vocabulary described a command that does not exist. The URN format stays
+    // because putting the other end's URN in the record's own text is the
+    // documented replacement for a link.
     links: {
-      relations: LINK_RELATIONS,
       urn_format: 'bc:<app>:<workspace-slug>/<entity-type>/<number>',
       urn_example: `bc:${app.appSlug}:${workspace?.slug ?? '<workspace>'}/issue/1`,
     },

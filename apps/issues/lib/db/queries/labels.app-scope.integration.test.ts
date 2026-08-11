@@ -62,12 +62,14 @@ run('label reads honour platform.labels.app (integration)', () => {
     //
     // `enabled = false` MATTERS, and not for this suite. `platform.apps` is
     // global and vitest runs files in parallel, so while this row exists any
-    // workspace another suite creates picks it up: `enableAllAppsForWorkspace`
-    // selects every app with `enabled = true`. With `enabled = true` here,
-    // `app-access.integration.test.ts` failed on an assertion about invitation
-    // policy — `apps_granted` contained this fixture. An enabled app with no
-    // registered scanner would also re-arm the blob delete gate for the
-    // duration of the run.
+    // suite reading the registry picks it up. It used to be sharper: with
+    // `enabled = true` here, `enableAllAppsForWorkspace` granted this fixture to
+    // every workspace another suite created, and the app-access integration
+    // suite failed on an assertion about invitation policy because
+    // `apps_granted` contained it. That suite and that function were deleted
+    // with `platform.app_access` on 2026-08-10, but the exposure is not gone —
+    // `/api/meta` now lists every `enabled = true` row, and an enabled app with
+    // no registered scanner still re-arms the blob delete gate for the run.
     //
     // It is a RACE — it depends on whether this row exists at the instant the
     // other suite inserts its workspace, and it does not reproduce on demand.

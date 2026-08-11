@@ -1,8 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
-import { listMyWorkspaces } from '@blackcode/platform-db'
 import { getValidatedSessionUser } from '@/lib/auth/session'
-import { getDb } from '@/lib/db/client'
-import { APP_SLUG } from '@/lib/app'
+import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
 import { SalesShell } from '@/components/sales-shell'
 
 /**
@@ -15,8 +13,22 @@ import { SalesShell } from '@/components/sales-shell'
  * way (`getWorkspaceForUser` returns null for both cases and lets the caller
  * choose), so the two surfaces agree.
  *
- * Reachability is app-scoped: being a member of a workspace where `sales` is off
- * is not access to this page.
+ * ── IT READ `platform.workspaces` UNTIL 2026-08-10, AND 404'd EVERYONE ───────
+ * This was `listMyWorkspaces(getDb(), user.id, { app: APP_SLUG })` — the SHARED
+ * platform membership list, filtered by `platform.app_access`. Phase 2 moved
+ * this app's workspaces to `sales.workspaces` and the sibling
+ * `dashboard/layout.tsx` was repointed; this file, one directory down, was not.
+ *
+ * MEASURED, not reasoned about: a brand-new sales signup — the exact user Phase
+ * 2 exists to create — got **404 on their own dashboard**, because they have no
+ * `platform.workspaces` row at all. The whole sales web UI was unreachable for
+ * them while every API route worked, which is why four phases of route-level
+ * verification did not catch it.
+ *
+ * Dropping only the `{ app }` filter would have been WORSE than leaving it: the
+ * page would then match any PLATFORM workspace sharing this slug, and migration
+ * 0004 mirrored ids and slugs on purpose. That is a cross-tenant frame. It has
+ * to be this app's own source, which is what it is now.
  */
 export default async function WorkspaceLayout({
   children,
@@ -29,8 +41,8 @@ export default async function WorkspaceLayout({
   const user = await getValidatedSessionUser()
   if (!user) redirect('/login')
 
-  const reachable = await listMyWorkspaces(getDb(), user.id, { app: APP_SLUG })
-  if (!reachable.some((w) => w.slug === ws)) notFound()
+  const memberships = await listWorkspacesForUser(user.id)
+  if (!memberships.some((w) => w.slug === ws)) notFound()
 
   return <SalesShell ws={ws}>{children}</SalesShell>
 }

@@ -76,7 +76,7 @@ export const appContext: AppContext = {
   // over the client, so building it eagerly here would open a connection at
   // module import time and make the app unbuildable without a DATABASE_URL.
   get workspaces() {
-    return platformWorkspaceSource(getDb(), APP_SLUG)
+    return platformWorkspaceSource(getDb())
   },
 
   // ── WHERE THIS APP RECORDS ITS UPLOADS ────────────────────────────────────

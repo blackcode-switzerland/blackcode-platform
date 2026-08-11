@@ -7,9 +7,10 @@
 // STAYS THAT WAY
 // ===========================================================================
 // `read_only` means the web app renders no mutation affordances. It does NOT
-// mean the API refuses writes. Authorisation is `platform.app_access` and the
-// workspace role; anybody who can open this app can write through `bk` in either
-// mode, and the server never asks what this module thinks.
+// mean the API refuses writes. Authorisation is workspace MEMBERSHIP and the
+// workspace role (it was `platform.app_access` and the role until that table was
+// dropped on 2026-08-10); anybody who can open this app can write through `bk`
+// in either mode, and the server never asks what this module thinks.
 //
 // A toggle that LOOKS like a permission, is enforced only in React, and lives on
 // the user's own settings page is a control nobody has watched fail and that

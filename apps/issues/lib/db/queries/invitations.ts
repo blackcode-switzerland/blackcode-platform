@@ -35,7 +35,6 @@ import {
 } from '@blackcode/platform-db'
 import { APP_SLUG } from '@/lib/app'
 import { type WorkspaceInvitation, workspaceInvitations, workspaceMembers, workspaces } from '../schema'
-import { grantDefaultAppAccess } from '@blackcode/platform-db'
 import { recordEvent } from './events'
 
 // Moved to @blackcode/platform-db on 2026-08-06 with the invitations routes,
@@ -105,7 +104,7 @@ export function listPendingInvitationsForEmail(email: string) {
 }
 
 export type AcceptResult =
-  | { ok: true; workspace_id: number; already_member: boolean; apps_granted: string[] }
+  | { ok: true; workspace_id: number; already_member: boolean }
   | { ok: false; reason: 'not_found' | 'expired' | 'revoked' | 'accepted' | 'declined' | 'email_mismatch' }
 
 export async function acceptInvitation(
@@ -138,7 +137,6 @@ export async function acceptInvitation(
 
     // Idempotent membership insert.
     let alreadyMember = false
-    let grantedApps: string[] = []
     const existing = await tx
       .select({ id: workspaceMembers.id })
       .from(workspaceMembers)
@@ -160,21 +158,13 @@ export async function acceptInvitation(
 
       // MEMBERSHIP INSERT SITE 2 of 2 (the other is createWorkspace).
       //
-      // Same transaction as the insert above. Without this the invitee becomes a
-      // member of a workspace that renders empty for them — the quiet failure this
-      // phase is built to avoid.
-      //
-      // `alsoGrantApp: inv.app` is what makes an invitation INTO one app work: the
-      // default_access policy is honoured for every other app, but the app the
-      // person was invited to is granted even under 'invite_only', because the
-      // invitation IS the grant. NULL (an org-level invite) changes nothing.
-      grantedApps = await grantDefaultAppAccess(tx, {
-        workspaceId: inv.workspace_id,
-        userId: acceptingUserId,
-        role: 'member',
-        grantedBy: inv.invited_by,
-        alsoGrantApp: inv.app,
-      })
+      // A `grantDefaultAppAccess` call stood here, in this same transaction,
+      // because an invitee who became a member without their `app_access` row
+      // got a workspace that rendered empty — the quiet failure Phase 4 was
+      // built to avoid. Phase 5 (2026-08-10) removed the second row: this
+      // workspace belongs to this app, so the insert above is the whole of
+      // joining it. `inv.app` — the app the person was invited INTO, which drove
+      // `alsoGrantApp` — has no reader now; the column keeps its history.
 
       await recordEvent(tx, {
         workspaceId: inv.workspace_id,
@@ -187,7 +177,6 @@ export async function acceptInvitation(
           role: 'member',
           via: 'invitation',
           invitation_id: inv.id,
-          apps_granted: grantedApps,
         },
       })
     }
@@ -213,7 +202,6 @@ export async function acceptInvitation(
       ok: true,
       workspace_id: inv.workspace_id,
       already_member: alreadyMember,
-      apps_granted: grantedApps,
     }
   })
 }

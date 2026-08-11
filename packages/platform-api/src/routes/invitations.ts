@@ -3,9 +3,10 @@
 // ---------------------------------------------------------------------------
 // CLASS B, AND THE CONTRIBUTION IS THE EMAIL (D-22)
 // ---------------------------------------------------------------------------
-// An invitation is platform: it is to a WORKSPACE, not to an app, and accepting
-// one grants whatever each enabled app hands out by default. So the row, the
-// token, the whitelist gate and the event all belong here.
+// An invitation is to a WORKSPACE, and since 2026-08-10 a workspace belongs to
+// exactly one app — so accepting one makes you a member of THIS app, and there
+// is no per-app grant left to hand out. The row, the token, the whitelist gate
+// and the event are still shared, because the shape is identical everywhere.
 //
 // What does not is the message. It carries an app's name, its from-address and
 // its branding, and there is no such thing as a platform-branded email — a
@@ -33,7 +34,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   createInvitation,
-  getWorkspaceApp,
   listWorkspaceInvitations,
 } from '@blackcode/platform-db'
 import {
@@ -133,41 +133,37 @@ export function workspaceInvitationsRoute(app: AppContext, contribution: Invitat
       }
     }
 
-    // Optional: invite straight into one app (Phase 4). Omitted means an
-    // org-level invite, where accepting grants whatever the workspace's apps
-    // hand out by default. Naming an app also grants that app even where it is
-    // 'invite_only' — the invitation IS the grant, which is what makes
-    // invite_only usable.
-    let target: string | null = null
+    // ── `app` IN THE BODY WAS REMOVED ON 2026-08-10 (refactor Phase 5) ────────
+    // It named an app to grant on accept, even where that app was 'invite_only',
+    // because the invitation WAS the grant. There is nothing left to grant: an
+    // invitation is into ONE workspace, that workspace belongs to the app
+    // serving this request, and accepting it makes you a member of that app.
+    //
+    // A body that still carries `app` is REJECTED rather than ignored. Silently
+    // dropping it would tell an older client its invitation grants sales access
+    // when it grants none — and a 400 naming the change is something an agent
+    // can act on inside the same run.
     if (body?.app !== undefined && body?.app !== null) {
-      if (typeof body.app !== 'string' || !body.app.trim()) {
-        throw Errors.badRequest('invalid_app', 'app must be a non-empty string')
-      }
-      // A separate `const` rather than reusing `target`: `body` is `any`, so
-      // assigning through it does not narrow `string | null`.
-      const requested: string = body.app.trim()
-      target = requested
-      const known = await getWorkspaceApp(app.db, ctx.workspace.id, requested)
-      if (!known) {
-        throw Errors.badRequest(
-          'app_not_enabled',
-          `The ${target} app is not enabled for this workspace, so an invitation into it would grant nothing.`,
-          `Run \`bk app list --ws ${ctx.workspace.slug}\` to see which apps are on here.`
-        )
-      }
+      throw Errors.badRequest(
+        'app_not_accepted',
+        'Invitations are no longer scoped to an app — this invitation is into this workspace, in this app.',
+        `Drop the app field (and \`--app\` from \`bk ${app.appSlug} invite create\`). To give somebody access to another app, invite them from that app.`
+      )
     }
 
     try {
       const result = await createInvitation(
-        // `app.appSlug` is the PRODUCING app on the event row. `app: target` is
-        // where the invitee is being invited TO. Two different questions.
+        // `app.appSlug` is the PRODUCING app on the event row. The invitation's
+        // own `app` column — where the invitee was being invited TO — is written
+        // NULL from 2026-08-10: it existed only to drive `alsoGrantApp`, and the
+        // grants are gone. Its historical rows are kept; see Phase 5's report.
         { db: app.db, app: app.appSlug },
         {
           workspaceId: ctx.workspace.id,
           email,
           invitedBy: ctx.user.id,
           ttlDays: INVITE_TTL_DAYS,
-          app: target,
+          app: null,
         }
       )
 

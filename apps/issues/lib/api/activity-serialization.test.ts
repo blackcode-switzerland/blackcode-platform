@@ -84,6 +84,11 @@ const PAGE: Row[] = [
   event({ id: 9, entity_type: 'workspace', entity_id: 3, action: 'updated' }),
   event({ id: 10, entity_type: 'workspace_member', entity_id: 9, action: 'member_added' }),
   event({ id: 11, entity_type: 'invitation', entity_id: 4, action: 'invitation_created' }),
+  // HISTORICAL, and deliberately kept. Nothing writes `workspace_app` events any
+  // more — the routes that did went with `platform.app_access` on 2026-08-10 —
+  // but `platform.events` still HOLDS them, and an activity feed that cannot
+  // render a row it is going to be handed is the bug. Do not delete this case
+  // with the writer; it outlives it by exactly the retention of the table.
   event({
     id: 12,
     entity_type: 'workspace_app',

@@ -5,11 +5,9 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { AlertTriangle, ArrowLeft, Crown, HardDrive, LayoutGrid, Loader2, Save, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Crown, HardDrive, Loader2, Save, Trash2, Upload } from 'lucide-react'
 import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 import { avatarColor } from '@blackcode/platform-ui/ui/member-avatar'
-import { WorkspaceAppsPanel } from '@/components/workspace-apps-panel'
-import { APP_SLUG } from '@/lib/app'
 
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 const MAX_BYTES = 5 * 1024 * 1024
@@ -277,18 +275,6 @@ export function WorkspaceSettingsView({ slug, backHref }: { slug?: string; backH
             </div>
           ) : null}
         </div>
-      </section>
-
-      <section className="mb-8 border-t border-border pt-8">
-        <h2 className="mb-1 flex items-center gap-2 text-base font-semibold">
-          <LayoutGrid size={15} />
-          Apps
-        </h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          Which Blackcode apps this workspace runs, and who may use them. Membership puts
-          someone in the workspace; access lets them open an app inside it.
-        </p>
-        <WorkspaceAppsPanel slug={ws.slug} isOwner={isOwner} currentApp={APP_SLUG} />
       </section>
 
       {isOwner ? (

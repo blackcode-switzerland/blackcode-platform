@@ -88,7 +88,6 @@ function sourceWith(opts: { mine: typeof WS | null; byName?: typeof WS | null })
       throw new Error('getById must not be reached: it takes an id from the SHARED user record')
     },
     listMembers: async () => [],
-    assertAppAccess: async () => {},
     setDefaultForUser: async () => {},
   } as unknown as WorkspaceSource
 }

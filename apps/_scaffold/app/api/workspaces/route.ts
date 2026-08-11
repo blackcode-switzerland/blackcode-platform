@@ -1,8 +1,8 @@
-// GET /api/workspaces — the workspaces this caller can use IN THIS APP.
+// GET /api/workspaces — the workspaces this caller belongs to IN THIS APP.
 //
-// App-scoped: the listing filters on `platform.app_access` when
-// PLATFORM_ENFORCE_APP_ACCESS is on. Membership of a workspace is not permission
-// to use every app in it.
+// Membership IS the answer. It used to be narrowed by `platform.app_access`,
+// which gated an app inside a shared workspace; both that table and the idea
+// went on 2026-08-10, because a workspace now belongs to exactly one app.
 import { workspacesRoute } from '@blackcode/platform-api/routes'
 import { appContext } from '@/lib/api'
 

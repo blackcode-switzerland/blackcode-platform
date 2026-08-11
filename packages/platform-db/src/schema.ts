@@ -115,34 +115,38 @@ export const workspaceMembers = platformSchema.table(
 
 // ---- the app registry (Phase 4) ----
 //
-// Three levels of identity, of which only the last two are per-app:
+// Two levels of identity, and only one of them is shared:
 //
 //   users              your account          global — one login, every app
-//   workspace_members  you are in this org   per workspace
-//   workspace_apps     this app is on here   per workspace, per app
-//   app_access         you may use it here   per workspace, per app, per user
+//   workspace_members  you are in this org   per workspace, and PER APP since
+//                                            2026-08-10: this is issues' table,
+//                                            sales has `sales.workspace_members`
 //
-// See docs/platform-architecture.md §4.5. `apps` is the registry itself: one row per
-// app in the suite, which is what lets `bk meta` report the apps a token can
-// reach without any app hardcoding the list.
-
-/** Valid `workspace_apps.default_access` values. */
-export const DEFAULT_ACCESS_MODES = ['all_members', 'invite_only'] as const
-export type DefaultAccessMode = (typeof DEFAULT_ACCESS_MODES)[number]
+// `apps` is the ADDRESS BOOK: one row per app in the suite, carrying where it is
+// deployed. That is what lets `bk meta` tell the CLI how to reach each app
+// without any app hardcoding a URL.
+//
+// ── `workspace_apps` AND `app_access` ARE GONE (2026-08-10, refactor Phase 5) ──
+// They gated an app INSIDE a shared workspace, and apps do not share workspaces
+// any more. By the end they were not merely redundant, they were WRONG: a grant
+// row named a `platform.workspaces` id for an app whose workspaces had moved to
+// its own schema, so `/api/meta` reported a sales workspace that sales itself
+// 404s. Reachability is no longer derivable centrally — it lives in each app's
+// own membership table, and no deployment holds a grant on another's schema
+// (§4.3). An app answers for itself; the CLI is what spans them.
 
 export const apps = platformSchema.table('apps', {
   // The slug is the primary key on purpose: it is the identifier that appears in
-  // URNs (`bc:issues:…`), in `workspace_apps.app`, in guide topic folders and in
-  // the CLI namespace. A surrogate id would mean every one of those carried a
-  // number nobody could read.
+  // URNs (`bc:issues:…`), in guide topic folders and in the CLI namespace. A
+  // surrogate id would mean every one of those carried a number nobody could read.
   slug: varchar('slug', { length: 40 }).primaryKey(),
   name: varchar('name', { length: 80 }).notNull(),
   description: text('description'),
   // Where this app is deployed (e.g. https://issues.blackcode.ch). Nullable so a
   // registry row can exist before the deployment does.
   base_url: text('base_url'),
-  // Global kill switch for the app across every workspace. Distinct from
-  // workspace_apps, which is per-organisation.
+  // Global kill switch. Since Phase 5 this is the ONLY switch: a disabled app
+  // disappears from every registry answer and is unroutable by the CLI.
   enabled: boolean('enabled').default(true).notNull(),
   // Does this app's schema carry the `platform.blob_references` triggers?
   //
@@ -158,67 +162,6 @@ export const apps = platformSchema.table('apps', {
   maintains_blob_index: boolean('maintains_blob_index').default(false).notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
-
-export const workspaceApps = platformSchema.table(
-  'workspace_apps',
-  {
-    workspace_id: integer('workspace_id')
-      .notNull()
-      .references(() => workspaces.id, { onDelete: 'cascade' }),
-    app: varchar('app', { length: 40 })
-      .notNull()
-      .references(() => apps.slug, { onDelete: 'cascade' }),
-    enabled_at: timestamp('enabled_at', { withTimezone: true }).defaultNow().notNull(),
-    enabled_by: integer('enabled_by').references(() => users.id, { onDelete: 'set null' }),
-    // 'all_members' — joining the workspace grants access automatically.
-    // 'invite_only' — access is granted one person at a time.
-    default_access: varchar('default_access', { length: 20 })
-      .default('all_members')
-      .notNull(),
-  },
-  (t) => ({
-    pk: primaryKey({ columns: [t.workspace_id, t.app] }),
-    appIdx: index('idx_workspace_apps_app').on(t.app),
-    defaultAccessCheck: check(
-      'workspace_apps_default_access_check',
-      sql`${t.default_access} IN ('all_members', 'invite_only')`
-    ),
-  })
-)
-
-// app_access — "this user may use this app in this workspace".
-//
-// The composite FK to workspace_members is the point of this table's shape: it
-// makes "access without membership" unrepresentable, and it makes removing a
-// member remove their access by cascade rather than by remembering to. Deleting a
-// workspace cascades workspaces → workspace_members → app_access, so no direct FK
-// to workspaces is needed (and a second cascade path would just be noise).
-export const appAccess = platformSchema.table(
-  'app_access',
-  {
-    workspace_id: integer('workspace_id').notNull(),
-    app: varchar('app', { length: 40 })
-      .notNull()
-      .references(() => apps.slug, { onDelete: 'cascade' }),
-    user_id: integer('user_id').notNull(),
-    // Mirrors workspace_members.role today. Kept per-app so an app can eventually
-    // have its own roles without touching the platform membership row.
-    role: varchar('role', { length: 20 }).default('member').notNull(),
-    granted_at: timestamp('granted_at', { withTimezone: true }).defaultNow().notNull(),
-    // NULL = granted by the system (backfill, or the default_access policy).
-    granted_by: integer('granted_by').references(() => users.id, { onDelete: 'set null' }),
-  },
-  (t) => ({
-    pk: primaryKey({ columns: [t.workspace_id, t.app, t.user_id] }),
-    userAppIdx: index('idx_app_access_user_app').on(t.user_id, t.app),
-    membershipFk: foreignKey({
-      name: 'app_access_membership_fk',
-      columns: [t.workspace_id, t.user_id],
-      foreignColumns: [workspaceMembers.workspace_id, workspaceMembers.user_id],
-    }).onDelete('cascade'),
-    roleCheck: check('app_access_role_check', sql`${t.role} IN ('owner', 'member')`),
-  })
-)
 
 // ---- cross-app primitives (Phase 6) ----
 //
@@ -894,10 +837,6 @@ export type WorkspaceMember = typeof workspaceMembers.$inferSelect
 export type NewWorkspaceMember = typeof workspaceMembers.$inferInsert
 export type App = typeof apps.$inferSelect
 export type NewApp = typeof apps.$inferInsert
-export type WorkspaceApp = typeof workspaceApps.$inferSelect
-export type NewWorkspaceApp = typeof workspaceApps.$inferInsert
-export type AppAccess = typeof appAccess.$inferSelect
-export type NewAppAccess = typeof appAccess.$inferInsert
 export type WorkspaceInvitation = typeof workspaceInvitations.$inferSelect
 export type NewWorkspaceInvitation = typeof workspaceInvitations.$inferInsert
 export type Event = typeof events.$inferSelect

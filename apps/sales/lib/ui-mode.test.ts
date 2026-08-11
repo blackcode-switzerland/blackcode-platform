@@ -5,7 +5,7 @@
 // ===========================================================================
 // `ui_mode` is an affordance switch. `read_only` means the WEB APP renders no
 // editing; it does not mean the API refuses writes. Authorisation is
-// `platform.app_access` and the workspace role.
+// workspace membership and the workspace role.
 //
 // The failure this file exists to prevent is one line: a route handler that
 // reads the preference and refuses. It would look like a security improvement,
@@ -280,7 +280,7 @@ describe('D-7: ui_mode is an affordance switch, not a permission', () => {
         'This is the check that catches the mistake the "no server module imports ' +
         'ui-mode" one does not: the value can be read straight out of the query ' +
         'layer without ui-mode appearing anywhere.\n\n' +
-        'If a route genuinely must refuse a write, that is `platform.app_access` ' +
+        'If a route genuinely must refuse a write, that is workspace membership ' +
         'and the workspace role — a viewer role (B-4), not a preference.\n\nChains:\n'
     ).toEqual([])
   })
@@ -305,9 +305,9 @@ describe('D-7: ui_mode is an affordance switch, not a permission', () => {
         'write because of it would be a permission the user can turn off from ' +
         'their own Settings page, and it would make the toggle look like a ' +
         'control while protecting nothing.\n\n' +
-        'What to do instead: authorisation is `platform.app_access` and the ' +
+        'What to do instead: authorisation is workspace membership and the ' +
         'workspace role. If somebody must genuinely be unable to write, that is a ' +
-        'viewer role in app_access (B-4), not a preference.\n\nChains found:\n'
+        'workspace role (B-4), not a preference.\n\nChains found:\n'
     ).toEqual([])
   })
 })

@@ -1,17 +1,18 @@
-// The workspace-scoped reads every app needs unchanged: the workspace list, its
-// members, who can be invited into it, and which apps it runs.
+// The workspace-scoped reads every app needs unchanged: the workspace list, one
+// workspace, its members, and who can be invited into it.
 //
-// One module because they are four small factories over the same three platform
+// One module because they are four small factories over the same two platform
 // tables; splitting them into four files would be four headers saying the same
 // thing. The write halves of these resources are NOT here — see the note on
 // `workspacesRoute` for why `POST /api/workspaces` is deliberately absent.
+//
+// A fifth factory, `workspaceAppsRoute` (`GET /api/workspaces/{ws}/apps`), was
+// removed on 2026-08-10 with `platform.workspace_apps` — "which apps does this
+// workspace run" is not a question a workspace answers any more, because a
+// workspace belongs to exactly one app. The address book is `bk app list`.
 
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  appsReachableByUser,
-  listInviteCandidates,
-  listWorkspaceApps,
-} from '@blackcode/platform-db'
+import { listInviteCandidates } from '@blackcode/platform-db'
 import { isSuperAdmin } from '@blackcode/platform-auth'
 import type { AppContext } from '../app-context'
 import { Errors } from '../errors'
@@ -23,13 +24,20 @@ interface WsParams {
 }
 
 /**
- * GET /api/workspaces — by default, the workspaces you can use THIS app in.
+ * GET /api/workspaces — the workspaces you are a member of in THIS app.
  *
- * `?all=1` widens it to every workspace you are a member of, and adds an `apps`
- * array per row: which apps you can reach there. That is what
- * `bk workspace list --all` renders as per-app badges, and it is the only way to
- * see a workspace this app is not enabled in — without it, "where did my
- * workspace go?" has no answer from inside the app that hid it.
+ * ── `?all=1` WAS REMOVED ON 2026-08-10 (refactor Phase 5) ───────────────────
+ * It widened the list to every workspace you belonged to regardless of app, and
+ * tagged each row with the apps you could reach there, so that a workspace this
+ * app was not enabled in still had somewhere to show up — "where did my
+ * workspace go?" needed an answer from inside the app that hid it.
+ *
+ * Nothing hides a workspace any more. This table is the calling app's own, the
+ * grants that used to narrow it are dropped, and the per-row `apps` array was
+ * derived from those grants. `?all=1` and the default returned the same rows,
+ * and the extra field was the false one — it named workspace ids in apps that
+ * had since moved their workspaces elsewhere. An unknown `?all=` is ignored
+ * rather than rejected, so an older CLI keeps working and simply gets the list.
  *
  * ── WHY THERE IS NO POST HERE, AND WHY THAT IS A DECISION ───────────────────
  * Creating a workspace goes through `createWorkspace`, which records events
@@ -47,25 +55,7 @@ export function workspacesRoute(app: AppContext) {
     const user = await app.resolveUser(req)
     if (!user) throw Errors.unauthorized()
 
-    const all = ['1', 'true', 'yes'].includes(
-      (req.nextUrl.searchParams.get('all') ?? '').toLowerCase()
-    )
-
-    if (!all) {
-      return jsonList(await app.workspaces.listForUser(user.id, { scopedToApp: true }))
-    }
-
-    const [workspaces, reachable] = await Promise.all([
-      app.workspaces.listForUser(user.id, { scopedToApp: false }),
-      appsReachableByUser(app.db, user.id),
-    ])
-    const appsByWorkspace = new Map<number, string[]>()
-    for (const reachableApp of reachable) {
-      for (const wsId of reachableApp.workspace_ids) {
-        appsByWorkspace.set(wsId, [...(appsByWorkspace.get(wsId) ?? []), reachableApp.slug])
-      }
-    }
-    return jsonList(workspaces.map((w) => ({ ...w, apps: appsByWorkspace.get(w.id) ?? [] })))
+    return jsonList(await app.workspaces.listForUser(user.id))
   })
 }
 
@@ -151,20 +141,3 @@ export function inviteCandidatesRoute(app: AppContext) {
   })
 }
 
-/**
- * GET /api/workspaces/{ws}/apps — which apps this workspace runs, and how each
- * hands out access.
- *
- * Readable by any member: you should be able to see why a colleague can reach
- * something you cannot. Changing any of it is owner-only and lives elsewhere.
- */
-export function workspaceAppsRoute(app: AppContext) {
-  const apiHandler = createApiHandler(app)
-  const resolveWorkspace = createResolveWorkspace(app)
-
-  return apiHandler(async (req: NextRequest, { params }: WsParams) => {
-    const { ws } = await params
-    const ctx = await resolveWorkspace(req, ws)
-    return jsonList(await listWorkspaceApps(app.db, ctx.workspace.id))
-  })
-}

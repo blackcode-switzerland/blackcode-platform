@@ -340,15 +340,16 @@ export function createResolveWorkspace(app: AppContext) {
 
     if (!slugOrId) throw Errors.notFound('workspace')
 
+    // MEMBERSHIP IS THE WHOLE GATE, since 2026-08-10 (refactor Phase 5).
+    //
+    // A second check ran here — `assertAppAccess`, behind
+    // PLATFORM_ENFORCE_APP_ACCESS — asking whether this member could open THIS
+    // app in this workspace. It went with `platform.app_access`. It removes no
+    // protection: the table it queried is the calling app's own, so a member of
+    // this workspace is by definition a user of this app. That equivalence is
+    // what the gate was approximating while one workspace table was shared.
     const ws = await app.workspaces.getForUser(slugOrId, user.id)
     if (!ws) throw Errors.notFound('workspace')
-
-    // Membership gets you into the organisation; this gets you into THIS app.
-    // Behind PLATFORM_ENFORCE_APP_ACCESS for a platform-backed source — and a
-    // documented no-op for an app that owns its workspaces, where membership IS
-    // the answer. The source decides, because the source is what holds the rows
-    // the gate would have queried.
-    await app.workspaces.assertAppAccess({ workspace: ws, user })
 
     return {
       user,

@@ -17,6 +17,7 @@ import { drizzle as drizzleNeon, NeonDatabase } from 'drizzle-orm/neon-serverles
 import { drizzle as drizzlePg, NodePgDatabase } from 'drizzle-orm/node-postgres'
 import { Pool as NeonPool } from '@neondatabase/serverless'
 import { Pool as PgPool } from 'pg'
+import type { SQL } from 'drizzle-orm'
 
 export type PlatformDatabase<TSchema extends Record<string, unknown>> =
   | NeonDatabase<TSchema>
@@ -105,7 +106,7 @@ export type PlatformDb = PlatformDatabase<typeof import('./schema')>
  * | Type | Accepts a `tx` | Query builder | Use for |
  * |---|---|---|---|
  * | `PlatformDb` | no | yes | a top-level read or a helper that opens its own transaction |
- * | `Executor` | yes | no — `execute(sql)` only | raw-SQL helpers (`app-access.ts`, `entities.ts`) |
+ * | `Executor` | yes | no — `execute(sql)` only | raw-SQL helpers (`entities.ts`, `links.ts`) |
  * | `PlatformTx` | yes | yes | this |
  *
  * `Executor` exists because Drizzle's two builders do not share a type and raw
@@ -121,3 +122,19 @@ export type PlatformDb = PlatformDatabase<typeof import('./schema')>
  * platform tables, so it assigns to this.
  */
 export type PlatformTx = Pick<PlatformDb, 'insert' | 'select' | 'update' | 'delete' | 'execute'>
+
+/**
+ * The narrow slice of a Drizzle client the raw-SQL helpers need.
+ *
+ * Both `db` and the `tx` handle inside `db.transaction()` satisfy it, for either
+ * driver, which is what lets one helper run standalone or inside a caller's
+ * transaction.
+ *
+ * Declared here since 2026-08-10. It lived in `app-access.ts`, which Phase 5
+ * deleted with the two gate tables — and `entities.ts` and `links.ts` were
+ * importing a shared type from a module that was about the gate, which is how a
+ * type outlives the file that happened to introduce it.
+ */
+export interface Executor {
+  execute(query: SQL): Promise<{ rows: Record<string, unknown>[] }>
+}

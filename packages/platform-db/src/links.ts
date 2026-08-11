@@ -13,7 +13,7 @@
 
 import { sql } from 'drizzle-orm'
 import { entities, links, users } from './schema'
-import type { Executor } from './app-access'
+import type { Executor } from './client'
 
 export interface LinkTarget {
   fromUrn: string

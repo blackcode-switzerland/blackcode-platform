@@ -56,35 +56,28 @@ async function resolveUser(req: NextRequest) {
  * `platform.workspace_apps` — which is why this app's own files never named
  * `workspace_members` while depending on it completely.
  *
- * ── THE TWO NO-OPS BELOW ARE THE INTERESTING PART ──────────────────────────
- * `assertAppAccess` and `setDefaultForUser` do nothing here, and neither is an
- * omission. Read them before deciding one of them is a gap.
+ * ── THE NO-OP BELOW IS THE INTERESTING PART ────────────────────────────────
+ * `setDefaultForUser` does nothing here, and that is not an omission. Read it
+ * before deciding it is a gap.
+ *
+ * There were TWO no-ops until 2026-08-10. `assertAppAccess` is gone from the
+ * interface entirely: Phase 5 dropped `platform.app_access`, so the platform
+ * implementation it was defined against no longer exists either, and a method
+ * every app implements as an empty function is not a seam.
  */
 const salesWorkspaces: WorkspaceSource = {
   getForUser: (slugOrId, userId) => getWorkspaceForUser(slugOrId, userId),
 
-  // Both answers are the same list, because there is no app-inside-a-workspace
-  // to scope to: a `sales.workspaces` row is this app's, entirely. The platform
-  // implementation filters by `platform.app_access`; here that filter would have
-  // nothing to read, and a filter over rows that cannot be foreign is a no-op
-  // that reads as protection.
+  // This took a `{ scopedToApp }` argument until 2026-08-10 and answered both
+  // ways identically, because there is no app-inside-a-workspace to scope to: a
+  // `sales.workspaces` row is this app's, entirely. Phase 5 removed the argument
+  // from the interface — the platform implementation stopped being able to
+  // narrow too, so every app now answers the one question.
   listForUser: (userId) => listWorkspacesForUser(userId),
 
   getById: (id) => getWorkspaceById(id),
 
   listMembers: (workspaceId) => listWorkspaceMembers(workspaceId),
-
-  // ── §3e: THIS APP NO LONGER CONSULTS `PLATFORM_ENFORCE_APP_ACCESS` ─────────
-  // A MEMBER OF A SALES WORKSPACE IS A SALES USER, full stop. The per-app gate
-  // (`platform.workspace_apps` + `platform.app_access`) exists to switch one app
-  // on and off INSIDE a workspace two apps share. Nothing shares a
-  // `sales.workspaces` row, so there is no row for the gate to read and no
-  // question for it to answer — asking it would be asking about another app's
-  // tenancy and getting a denial for a workspace id that means something else.
-  //
-  // Both tables are DROPPED in Phase 5. The env var stays set in Vercel until
-  // then; what changed today is that this app stops consulting it.
-  assertAppAccess: async () => {},
 
   // ── DELIBERATELY NOT `setActiveWorkspace` ─────────────────────────────────
   // `platform.users.active_workspace_id` is ONE column shared by every app, and

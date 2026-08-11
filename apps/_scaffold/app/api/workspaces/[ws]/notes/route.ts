@@ -6,9 +6,9 @@
 //
 //   - workspace-scoped path      `/api/workspaces/{ws}/…`, never an implicit
 //                                "active workspace" resolved server-side
-//   - auth + app access          one `resolveWorkspace` call, which also checks
-//                                platform.app_access — membership is not
-//                                permission to use THIS app
+//   - auth + tenancy             one `resolveWorkspace` call, which resolves the
+//                                workspace through THIS app's own source and
+//                                404s anything the caller is not a member of
 //   - lists return an envelope   `{ data, next_cursor }`, so pagination can be
 //                                added later without breaking a client
 //   - create returns 201         and the bare entity, not an envelope

@@ -1,5 +1,5 @@
-// The account page resolves the OTHER apps this person can reach, and their
-// registered `base_url`s.
+// The account page resolves the OTHER apps in the suite, and their registered
+// `base_url`s.
 //
 // Three things on that page live somewhere else — changing a password, closing
 // an account, and platform administration — and a page that says so without
@@ -13,11 +13,14 @@
 // the day a third app arrives. The list is "every app I can reach that is not
 // this one", which is a question the platform can answer and this app cannot.
 //
-// A person who can reach only b/sales gets the same sentence with no link. That
-// is the honest answer: those controls exist, and they are not here.
+// Until 2026-08-10 the list was grant-derived, so somebody who could reach only
+// b/sales got the same sentence with no link. It is the address book now (Phase
+// 5 — reachability is not derivable centrally any more), so the link appears for
+// everyone. Following it and finding no workspace there is a normal, legible
+// outcome; being unable to find the app that holds your password was not.
 
 import { redirect } from 'next/navigation'
-import { appsReachableByUser } from '@blackcode/platform-db'
+import { listAppRegistry } from '@blackcode/platform-db'
 import { getValidatedSessionUser } from '@/lib/auth/session'
 import { getDb } from '@/lib/db/client'
 import { APP_SLUG } from '@/lib/app'
@@ -29,8 +32,17 @@ export default async function Page() {
   const user = await getValidatedSessionUser()
   if (!user) redirect('/login')
 
-  const reachable = await appsReachableByUser(getDb(), user.id)
-  const otherApps = reachable
+  // The ADDRESS BOOK, not a grant list — `appsReachableByUser` went with
+  // `platform.app_access` on 2026-08-10. This is now "every app in the suite
+  // except this one", not "every app you can reach": whether the account can get
+  // in is answered by the app at that address, and this deployment cannot know
+  // it (each app's membership lives in its own schema).
+  //
+  // For this link that is the same behaviour it already had in practice and a
+  // more honest description of it. Following one and having no workspace there
+  // is a normal outcome, and that app says so in its own words.
+  const registry = await listAppRegistry(getDb())
+  const otherApps = registry
     .filter((a) => a.slug !== APP_SLUG && a.base_url)
     .map((a) => ({ name: a.name, url: a.base_url as string }))
 

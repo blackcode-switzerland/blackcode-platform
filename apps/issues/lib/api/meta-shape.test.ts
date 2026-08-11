@@ -57,23 +57,24 @@ vi.mock('@/lib/db/queries/users', () => ({
 vi.mock('@blackcode/platform-db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@blackcode/platform-db')>()),
   getUserById: async () => USER,
-  // Added the same day as `getUserById` above, and for a related reason:
-  // `platformMetaBlock` now guarantees an entry for the app SERVING the request,
-  // because `appsReachableByUser` derives its list from grants and an app that
-  // owns its own tenancy has none. `appsReachableByUser` below already returns
-  // an `issues` entry, so this stub does not change the assertions — it just
-  // keeps the extra lookup off the database.
-  getAppRegistryEntry: async () => ({
-    slug: 'issues',
-    name: 'Blackcode Issues',
-    base_url: null,
-  }),
+  // The APP REGISTRY. This replaced two stubs on 2026-08-10 —
+  // `getAppRegistryEntry` (the current app's own row) and `appsReachableByUser`
+  // (the grant-derived list of every other app). Phase 5 dropped
+  // `platform.app_access`, so `/api/meta` reads the address book instead and
+  // there is one lookup where there were two.
+  //
+  // It returns TWO apps deliberately, and only one of them is this one: the
+  // registry is no longer filtered by what the caller can reach, and the shape
+  // assertions below have to see a foreign entry to be checking the real
+  // document. An unstubbed call made this whole file 500 — visibly, because
+  // `metaBody` asserts a real 200 first.
+  listAppRegistry: async () => [
+    { slug: 'issues', name: 'Blackcode Issues', base_url: null },
+    { slug: 'sales', name: 'Sales', base_url: 'https://sales.blackcode.test' },
+  ],
   getWorkspaceForUser: async () => null,
   listMyWorkspaces: async () => [],
   listWorkspaceMembers: async () => [],
-  appsReachableByUser: async () => [
-    { slug: 'issues', name: 'Blackcode Issues', base_url: null, workspace_ids: [] },
-  ],
 }))
 
 /**

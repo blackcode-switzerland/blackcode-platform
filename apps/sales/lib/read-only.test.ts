@@ -32,9 +32,10 @@
 // AND IT IS NOT A SECURITY CONTROL (D-7)
 // ===========================================================================
 // The gate is client-side, the user owns the client, and they can flip the
-// preference themselves. Authorisation is `platform.app_access` and the
-// workspace role, on the server, and it refuses a write the UI allowed exactly
-// as readily as one it did not. `lib/ui-mode.test.ts` is the file that keeps
+// preference themselves. Authorisation is workspace MEMBERSHIP and the workspace
+// role, on the server (it was `platform.app_access` and the role until that
+// table was dropped on 2026-08-10), and it refuses a write the UI allowed
+// exactly as readily as one it did not. `lib/ui-mode.test.ts` is the file that keeps
 // that true from the other direction.
 //
 // Watched fail 2026-08-07, five ways, each restored:

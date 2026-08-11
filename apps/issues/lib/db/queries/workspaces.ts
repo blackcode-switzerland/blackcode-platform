@@ -8,9 +8,10 @@
 //   - transferOwnership moves the 'owner' role to another existing member.
 //   - deleteWorkspace cascades (FKs handle it) — caller verifies role first.
 //
-// Phase 4 added a second axis: a workspace can be visible to you as a member and
-// still not be a workspace you may use THIS app in. listMyWorkspaces takes an
-// optional `app` for that; see the note on it before changing a call site.
+// Phase 4 added a second axis — a workspace could be visible to you as a member
+// and still not be one you may use THIS app in — and multiAppFinalRefactor Phase 5
+// removed it again on 2026-08-10. These are `apps/issues`' workspaces now, so
+// membership is the whole of the answer and `listMyWorkspaces` takes no `app`.
 
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '../client'
@@ -23,7 +24,6 @@ import {
   type WorkspaceMember,
 } from '../schema'
 import {
-  accessibleWorkspaceIds,
   getMembership as platformGetMembership,
   getWorkspaceById as platformGetWorkspaceById,
   getWorkspaceForUser as platformGetWorkspaceForUser,
@@ -32,11 +32,8 @@ import {
   removeMember as platformRemoveMember,
   setActiveWorkspace as platformSetActiveWorkspace,
   type WorkspaceWithMembership as PlatformWorkspaceWithMembership,
-  enableAllAppsForWorkspace,
   renameWorkspaceEntities,
-  syncAppAccessRole,
 } from '@blackcode/platform-db'
-import { isAppAccessEnforced } from '@blackcode/platform-api'
 import { APP_SLUG } from '@/lib/app'
 import { recordEvent } from './events'
 
@@ -46,14 +43,11 @@ import { recordEvent } from './events'
 export type WorkspaceWithMembership = PlatformWorkspaceWithMembership
 
 // Moved to @blackcode/platform-db on 2026-08-06 with GET /api/workspaces, now a
-// shared route factory (docs/sales-app-plan.md Phase 1b). The doc comment went
-// with it — in particular WHY two callers must pass no `app`. Bound to this
-// app's `db` here so every existing call site is unchanged.
-export function listMyWorkspaces(
-  userId: number,
-  opts: { app?: string } = {}
-): Promise<WorkspaceWithMembership[]> {
-  return platformListMyWorkspaces(db, userId, opts)
+// shared route factory (docs/sales-app-plan.md Phase 1b). Bound to this app's
+// `db` here so every existing call site is unchanged. It took an optional `app`
+// to narrow by `platform.app_access` until Phase 5 dropped that table.
+export function listMyWorkspaces(userId: number): Promise<WorkspaceWithMembership[]> {
+  return platformListMyWorkspaces(db, userId)
 }
 
 // Moved to @blackcode/platform-db on 2026-08-06 with the shared
@@ -175,20 +169,14 @@ export async function createWorkspace(input: CreateWorkspaceInput): Promise<Work
 
     // MEMBERSHIP INSERT SITE 1 of 2 (the other is acceptInvitation).
     //
-    // Same transaction as the workspace_members insert above, and that is not
-    // stylistic: a membership row that commits without its app_access row is a
-    // person who is a member of a workspace they cannot open. This path serves
-    // three entry points — explicit workspace create, POST /api/auth/register,
-    // and OAuth first login via lib/auth.ts → ensureDefaultWorkspace — so getting
-    // it wrong here locks out every new account, not just one.
-    //
-    // Every globally-enabled app is turned on, not just this one: a workspace is
-    // the company, and the company is the same company in the next app.
-    await enableAllAppsForWorkspace(tx, {
-      workspaceId: ws.id,
-      ownerId: input.ownerId,
-      enabledBy: input.ownerId,
-    })
+    // `enableAllAppsForWorkspace` ran here until 2026-08-10, in this same
+    // transaction, and the reason it had to was that a membership row committing
+    // without its `app_access` row was a person who is a member of a workspace
+    // they cannot open. Phase 5 removed the second row entirely: the membership
+    // insert above IS the grant, so there is nothing left that can commit
+    // half-done. This path still serves three entry points — explicit workspace
+    // create, POST /api/auth/register, and OAuth first login via lib/auth.ts →
+    // ensureDefaultWorkspace — and now none of them can lock anybody out.
 
     await recordEvent(tx, {
       workspaceId: ws.id,
@@ -362,12 +350,10 @@ export async function transferOwnership(
       .set({ owner_id: newOwnerUserId, updated_at: new Date() })
       .where(eq(workspaces.id, workspaceId))
 
-    // Keep app_access.role in step. Nothing enforces on that column yet, but a
-    // row claiming 'owner' for a demoted member is a trap for whoever reads it
-    // first — and the backfill deliberately mirrored the roles, so leaving them
-    // to drift would make the mirror a lie after one transfer.
-    await syncAppAccessRole(tx, workspaceId, previousOwner, 'member')
-    await syncAppAccessRole(tx, workspaceId, newOwnerUserId, 'owner')
+    // Two `syncAppAccessRole` calls stood here, keeping `app_access.role` in step
+    // with the membership role so the mirror did not become a lie after a
+    // transfer. The mirror is gone with the table (2026-08-10) and
+    // `workspace_members.role`, updated above, is the only role there is.
 
     await recordEvent(tx, {
       workspaceId,

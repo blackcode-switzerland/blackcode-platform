@@ -19,7 +19,7 @@
 
 import { sql } from 'drizzle-orm'
 import { apps, entities, workspaces } from './schema'
-import type { Executor } from './app-access'
+import type { Executor } from './client'
 import { formatUrn } from './urn'
 
 /** The natural key — the stable identity of a projected entity. */

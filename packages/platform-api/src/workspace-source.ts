@@ -28,12 +28,12 @@
 // a wider blast radius.
 //
 // Required means an app that has not answered "where do my workspaces live?"
-// does not compile. `apps/issues` answers `platformWorkspaceSource(db, slug)` —
-// the same functions it always called, with the same arguments — so its
-// behaviour is unchanged by construction rather than by review.
+// does not compile. `apps/issues` answers `platformWorkspaceSource(db)` — the
+// same functions it always called, with the same arguments — so its behaviour is
+// unchanged by construction rather than by review.
 //
 // ---------------------------------------------------------------------------
-// WHY SEVEN METHODS AND NOT ONE RESOLVER
+// WHY SIX METHODS AND NOT ONE RESOLVER
 // ---------------------------------------------------------------------------
 // The obvious shape was `resolveWorkspace`, and it is not enough: several
 // shared entry points read an app's tenancy tables, not one. `/api/meta`
@@ -42,7 +42,7 @@
 // every one of those still naming `platform.*` — a seam that looks finished and
 // is not.
 //
-// Seven methods over ONE subject — this app's workspaces and this caller's
+// Six methods over ONE subject — this app's workspaces and this caller's
 // place in them — is a port, not a bag. The bar from `app-context.ts` still
 // applies to each: a shared route cannot be written without it, and no app
 // could supply a sensible default.
@@ -62,7 +62,6 @@ import {
   type PlatformDb,
   type User,
 } from '@blackcode/platform-db'
-import { requireAppAccess } from './require-app-access'
 
 /**
  * The columns every app's workspace table must have, because shared code reads
@@ -117,15 +116,17 @@ export interface WorkspaceSource {
   getForUser(slugOrId: string, userId: number): Promise<WorkspaceMembershipRef | null>
 
   /**
-   * The workspaces this user belongs to.
+   * The workspaces this user belongs to, in this app.
    *
-   * `scopedToApp` is REQUIRED rather than defaulted because the two answers are
-   * different questions and one of them is a listing a user is shown. True means
-   * "the ones they can actually use this app in"; false means the raw
-   * membership list, which `bk workspace list --all` exists to show. An app
-   * whose workspaces are its own answers both identically, and should say so.
+   * ── IT TOOK A `{ scopedToApp }` ARGUMENT UNTIL 2026-08-10 ──────────────────
+   * True meant "the ones they can actually USE this app in" (narrowed by
+   * `platform.app_access`), false the raw membership list that
+   * `bk workspace list --all` existed to show. Phase 5 dropped the grants, so
+   * the two answers became the same one for every app — `apps/sales` already
+   * answered both identically, which was the early sign that the distinction
+   * belonged to a shared workspace table rather than to this interface.
    */
-  listForUser(userId: number, opts: { scopedToApp: boolean }): Promise<WorkspaceMembershipRef[]>
+  listForUser(userId: number): Promise<WorkspaceMembershipRef[]>
 
   /**
    * One workspace by id with NO membership check.
@@ -138,21 +139,6 @@ export interface WorkspaceSource {
 
   /** Everyone in one workspace. */
   listMembers(workspaceId: number): Promise<WorkspaceMemberRef[]>
-
-  /**
-   * The gate that runs AFTER membership: may this person use this app here?
-   *
-   * Only a source backed by `platform.workspaces` has anywhere for that question
-   * to live — `platform.workspace_apps` / `platform.app_access` gate an app
-   * INSIDE a shared workspace, which stops being a concept the moment an app
-   * owns its own. An app whose workspaces are its own implements this as an
-   * explicit no-op and says why; membership IS the answer there.
-   *
-   * A method rather than a boolean flag on purpose: a flag is a fact the caller
-   * has to interpret correctly, and the interpretation would then live one file
-   * away from the store it describes.
-   */
-  assertAppAccess(args: { workspace: WorkspaceRef; user: User }): Promise<void>
 
   /**
    * Which workspace to assume when the caller named none — what `/api/meta`
@@ -188,29 +174,22 @@ export interface WorkspaceSource {
  * unchanged by construction, not by review. If you find yourself adding logic
  * here, it belongs in platform-db beside the tables.
  *
- * `appSlug` is a constructor argument rather than a per-call one because it is
- * fixed for the life of a deployment, and because it makes the app-scoped
- * listing impossible to call with another app's slug by accident.
+ * It TOOK an `appSlug` until 2026-08-10, to scope the listing and the access
+ * gate to the calling app. Both went with `platform.app_access` in Phase 5, and
+ * nothing here is per-app any more — this table is `apps/issues`' own, so the
+ * app is implied by the source you chose. The argument is dropped rather than
+ * kept-and-ignored: a parameter every caller must supply and nobody reads is
+ * the friendly shape of the problem CLAUDE.md is about.
  */
-export function platformWorkspaceSource(db: PlatformDb, appSlug: string): WorkspaceSource {
+export function platformWorkspaceSource(db: PlatformDb): WorkspaceSource {
   return {
     getForUser: (slugOrId, userId) => getWorkspaceForUser(db, slugOrId, userId),
 
-    listForUser: (userId, { scopedToApp }) =>
-      listMyWorkspaces(db, userId, scopedToApp ? { app: appSlug } : {}),
+    listForUser: (userId) => listMyWorkspaces(db, userId),
 
     getById: (id) => getWorkspaceById(db, id),
 
     listMembers: (workspaceId) => listWorkspaceMembers(db, workspaceId),
-
-    assertAppAccess: ({ workspace, user }) =>
-      requireAppAccess(db, {
-        app: appSlug,
-        workspaceId: workspace.id,
-        userId: user.id,
-        userEmail: user.email,
-        workspaceSlug: workspace.slug,
-      }),
 
     // Two lookups, deliberately: the caller's `User` may have been resolved from
     // a token minted before their last `bk workspace use`, and a stale default

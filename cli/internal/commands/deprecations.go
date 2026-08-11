@@ -140,6 +140,38 @@ var deprecations = map[string]string{
 	// missing one: an agent that believes it can undo takes risks it would not
 	// otherwise take. Trash is the working undo and always was.
 	"undo": "`bk undo` was removed in 1.12.0 — it never recorded anything and could not undo. Deletes are restorable: use `bk issues trash list` then `bk issues trash restore <type>:<#number>` (the recycle bin is per-app since 3.0.0).",
+
+	// --- 4.1.0 (2026-08-10): the per-app access gate is gone ---
+	//
+	// multiAppFinalRefactor Phase 5. `platform.workspace_apps` and
+	// `platform.app_access` answered "is this app switched on inside this
+	// workspace, and may this person open it?" — a question that needs one
+	// workspace shared by several apps. Phase 2 gave each app its own, so a
+	// workspace belongs to exactly one app and MEMBERSHIP IS THE WHOLE ANSWER.
+	//
+	// These are REMOVALS with no replacement command, like `link` above, so each
+	// row has to say what to do instead rather than name a new spelling. The
+	// thing to do is almost always a membership command in the app you mean.
+	//
+	// Keyed on the SUBCOMMAND, not `app`: `bk app` still exists (it is the
+	// address book), so cobra reports `unknown command "enable" for "bk app"`
+	// and the lookup finds `app enable`. A bare `app` row would be wrong — it
+	// would fire on a mistyped `bk app lst` and claim the group was removed.
+	"app enable":         "`bk app enable` was removed on 2026-08-10 — an app is no longer switched on and off inside a workspace, because a workspace belongs to exactly one app. To let somebody use an app, invite them to a workspace in it: `bk <app> invite send <email>`.",
+	"app disable":        "`bk app disable` was removed on 2026-08-10 — an app is no longer switched on and off inside a workspace. To remove somebody's access, remove them from that app's workspace: `bk <app> member remove <user>`.",
+	"app default-access": "`bk app default-access` was removed on 2026-08-10 — `all_members` and `invite_only` described how a workspace handed out access to an app inside it, and there is no app inside a workspace any more. Membership is the grant: `bk <app> member list`.",
+	"app access":         "`bk app access …` was removed on 2026-08-10 — per-app grants (`platform.app_access`) are gone, because a workspace now belongs to exactly one app and its members are that app's users. Use `bk <app> member list`, `bk <app> invite send <email>` and `bk <app> member remove <user>`.",
+
+	// `bk app list` still exists but answers a NARROWER question, and an agent
+	// parsing its columns needs to know before it reads a missing field as false.
+	// Keyed `app list` so it can only fire on a genuine usage error there.
+	"app list": "`bk app list` still exists but no longer reports ENABLED, DEFAULT ACCESS or ACCESS — those described `platform.workspace_apps`, dropped on 2026-08-10. It is the address book now: APP, SERVER, REACHABLE. It also no longer needs an active workspace.",
+
+	// `--all` on `bk <app> workspace list`. Keyed bare, like `--app` above: this
+	// only fires on an `unknown flag` error, and the commands that still take
+	// `--all` (`bk <app> invite list`, `bk issues inbox mark-read`) accept it, so
+	// they never produce one.
+	"--all": "`--all` was removed from `bk <app> workspace list` on 2026-08-10 — it showed workspaces this app was switched off in, plus the apps reachable in each, and neither exists now: these are this app's own workspaces, so the plain listing is the whole answer. It is unchanged on `bk <app> invite list --all`.",
 }
 
 // flagRe pulls the offending token out of a cobra usage error, e.g.

@@ -70,15 +70,8 @@ export { uploadRoute, uploadBlobRoute } from './upload'
 export { usersRoute } from './users'
 export {
   inviteCandidatesRoute,
-  workspaceAppsRoute,
   workspaceShowRoute,
   workspaceMembersRoute,
   workspacesRoute,
 } from './workspace-reads'
-export {
-  workspaceAppAccessMemberRoute,
-  workspaceAppAccessRoute,
-  workspaceAppRoute,
-  workspaceInvitationRoute,
-  workspaceMemberRoute,
-} from './workspace-writes'
+export { workspaceInvitationRoute, workspaceMemberRoute } from './workspace-writes'

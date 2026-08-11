@@ -148,11 +148,11 @@ type CreateInvitationResponse struct {
 // an org-level invite (accepting grants whatever the workspace's apps hand out by
 // default); set, it also grants that one app on accept, even where the app is
 // invite_only — that is what makes invite_only workable.
-func (c *Client) SendInvitation(slugOrID, email, app string) (*CreateInvitationResponse, error) {
+// The `app` argument went on 2026-08-10: the server REJECTS a body carrying it
+// (an invitation is into one app's workspace now), so sending it would be an
+// error rather than a no-op.
+func (c *Client) SendInvitation(slugOrID, email string) (*CreateInvitationResponse, error) {
 	body := map[string]string{"email": email}
-	if app != "" {
-		body["app"] = app
-	}
 	var resp CreateInvitationResponse
 	if err := c.postJSON(
 		fmt.Sprintf("/api/workspaces/%s/invitations", slugOrID),

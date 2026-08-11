@@ -52,22 +52,25 @@ means something against the app it was resolved in.`, cfg.App, cfg.App),
 	return cmd
 }
 
-// newWorkspaceListCmd lists the workspaces you can use THIS app in.
+// newWorkspaceListCmd lists the workspaces you are a member of IN THIS APP.
 //
-// The default is app-scoped: a workspace where this app is switched off, or
-// where you were never granted it, is not a workspace you can write to, and
-// offering it would offer a guaranteed 403.
+// ── `--all` WAS REMOVED ON 2026-08-10 (multiAppFinalRefactor Phase 5) ────────
+// The default used to be app-scoped — a workspace where this app was switched
+// off, or where you were never granted it, was not one you could write to, and
+// offering it would offer a guaranteed 403. `--all` was the escape hatch: it
+// showed every membership plus the apps reachable in each, so that a workspace
+// this app hid still had an answer to "where did my workspace go?".
 //
-// --all is the escape hatch, and it is not optional politeness. Without it, a
-// workspace that this app is not enabled in simply vanishes, and "where did my
-// workspace go?" would have no answer from inside the app that hid it. --all
-// shows every membership plus the apps you can reach in each.
+// Nothing hides a workspace any more. These are this app's own workspaces, the
+// grants that narrowed the default are dropped, and the APPS column was derived
+// from those grants — it was the part that had gone false, naming workspaces in
+// apps that had since moved their tenancy elsewhere. The two listings became one
+// listing, so the flag is gone rather than kept as a synonym.
 func newWorkspaceListCmd(acfg Config) *cobra.Command {
-	var all bool
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces"},
-		Short:       "List workspaces you can use this app in (--all for every membership)",
+		Short:       "List the workspaces you are a member of in this app",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -78,40 +81,6 @@ func newWorkspaceListCmd(acfg Config) *cobra.Command {
 				return err
 			}
 			activeID := cfg.ActiveWorkspaceFor(acfg.App).ID
-
-			if all {
-				workspaces, err := c.ListAllMyWorkspaces()
-				if err != nil {
-					return err
-				}
-				return output.Render(format, workspaces, func(w io.Writer) error {
-					tw := output.Tabwriter(w)
-					fmt.Fprintln(tw, "\tID\tNAME\tSLUG\tROLE\tAPPS")
-					for _, ws := range workspaces {
-						mark := " "
-						if ws.ID == activeID {
-							mark = "*"
-						}
-						apps := "—"
-						if len(ws.Apps) > 0 {
-							apps = strings.Join(ws.Apps, ",")
-						}
-						fmt.Fprintf(tw, "%s\t%d\t%s\t%s\t%s\t%s\n",
-							mark, ws.ID, ws.Name, ws.Slug, ws.MemberRole, apps)
-					}
-					if err := tw.Flush(); err != nil {
-						return err
-					}
-					if len(workspaces) == 0 {
-						fmt.Fprintln(cmd.ErrOrStderr(), "(no workspaces)")
-					} else {
-						fmt.Fprintln(cmd.ErrOrStderr(),
-							"\nAPPS is what YOU can open there. An empty column means you are a member "+
-								"but have no app access — ask an owner, or see `bk app access list`.")
-					}
-					return nil
-				})
-			}
 
 			workspaces, err := c.ListMyWorkspaces()
 			if err != nil {
@@ -133,16 +102,13 @@ func newWorkspaceListCmd(acfg Config) *cobra.Command {
 					return err
 				}
 				if len(workspaces) == 0 {
-					fmt.Fprintln(cmd.ErrOrStderr(),
-						fmt.Sprintf("(no workspaces you can use this app in — try `bk %s workspace list --all`)", acfg.App))
+					fmt.Fprintf(cmd.ErrOrStderr(),
+						"(you are a member of no %s workspace — each app has its own)\n", acfg.App)
 				}
 				return nil
 			})
 		},
 	}
-	cmd.Flags().BoolVar(&all, "all", false,
-		"Show every workspace you are a member of, with the apps you can reach in each")
-	return cmd
 }
 
 func newWorkspaceShowCmd(acfg Config) *cobra.Command {
