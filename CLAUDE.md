@@ -207,8 +207,26 @@ rather than by running the suite, **because the suite was green**.
 #4 and #9 were found by the wrap-up verification *after* the migration closed —
 assume the next one exists.
 
-Five corollaries worth stating separately, because they are different
+Six corollaries worth stating separately, because they are different
 mechanisms:
+
+- **An absence is only evidence if you know your instrument could have seen the
+  presence.** This is the standing rule pointed at OBSERVATION rather than at
+  tests, and it is on record because of a near-miss rather than a bug. On
+  2026-08-11 an agent recorded, four times, that clicking a button produced a
+  *silent* no-op — no toast, no request, no change — from two full-page
+  screenshots and a five-second wait. It was not silent: the click raised a
+  four-second `sonner` toast naming both recoveries, and every sample landed
+  after it had gone. A browser driver whose round-trip is measured in seconds
+  cannot see it. The false finding was caught by instrumenting the page (click
+  and poll the toaster inside ONE `evaluate`) instead of sampling it between
+  calls.
+
+  It generalises past browsers: a log you tailed too late, a row you counted
+  before the transaction committed, a `grep` over a file the build had not
+  written yet. **Before reporting "it did not happen", establish that your
+  instrument could have caught it happening** — the same way you would break a
+  check to confirm it can go red.
 
 - **A route is not a page.** Every check in this repo that verifies behaviour —
   `cli-parity`, `bk`, `curl`, the integration suites — sees `app/api/**` and
