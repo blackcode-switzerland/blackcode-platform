@@ -221,6 +221,27 @@ rather than by running the suite, **because the suite was green**.
 #4 and #9 were found by the wrap-up verification *after* the migration closed —
 assume the next one exists.
 
+> ### AND THE SAME DEFECT HAPPENS TO PEOPLE, NOT ONLY TO GUARDS
+>
+> The master of the 2026-08 multi-app refactor made this mistake **four times in
+> four days**, each time in the same shape:
+>
+> | Claimed | What the command actually asked |
+> |---|---|
+> | "neither app has a signup screen" | *is there a PAGE whose path contains "signup"* — it was a tab on `/login` |
+> | "`ensureWorkspaceForUser` has one call site" | one file, after the wide grep timed out |
+> | "`verify.sh` is clean" | three schemas, while a fourth app existed |
+> | "this edit landed" (×3) | the commit succeeded; the `assert` before it had failed and written nothing |
+>
+> **Every one: the check was correct, and the claim made from it was larger than
+> the check.** That is a green-but-inert guard on the human side of the keyboard,
+> and writing this table does not exempt you — #21 below was written *to satisfy*
+> #16 and carried #16's own disease.
+>
+> Before reporting a negative — "there is no X", "nothing reads Y", "that is
+> done" — say what question your command actually asked, and check that it is the
+> question you are answering.
+
 Six corollaries worth stating separately, because they are different
 mechanisms:
 
