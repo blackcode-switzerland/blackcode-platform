@@ -69,3 +69,6 @@ next-env.d.ts
 
 # UI polish working plan — not part of the repo
 /salesPolish/
+
+# transient production connection string — never commit
+/.prod-url
