@@ -7,6 +7,9 @@
 
 import { passwordRequestOtpRoute } from '@blackcode/platform-api/routes'
 import { appContext } from '@/lib/api'
-import { sendPasswordResetEmail } from '@/lib/email/send'
+import { canDeliverEmail, sendPasswordResetEmail } from '@/lib/email/send'
 
-export const POST = passwordRequestOtpRoute(appContext, { sendPasswordResetEmail })
+export const POST = passwordRequestOtpRoute(appContext, {
+  canDeliverEmail,
+  sendPasswordResetEmail,
+})

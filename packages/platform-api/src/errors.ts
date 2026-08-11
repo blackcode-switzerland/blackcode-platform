@@ -65,6 +65,15 @@ export const Errors = {
 
   internal: (message = 'Internal server error', details?: unknown) =>
     new ApiError(500, 'internal_error', message, details),
+
+  // 503 — the request is fine, this DEPLOYMENT cannot serve it. Added
+  // 2026-08-11 (Phase 10) for `email_not_configured`: an app with no
+  // `RESEND_API_KEY` must refuse a password reset rather than accept it and
+  // deliver nothing, because "no email arrived" and "the email is slow" look
+  // identical to the person waiting. Carries a `suggestion` like every other
+  // recoverable class.
+  serviceUnavailable: (code: string, message: string, suggestion?: string) =>
+    new ApiError(503, code, message, suggestion),
 }
 
 /**

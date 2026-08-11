@@ -20,6 +20,7 @@
     "@blackcode/platform-api": "*",
     "@blackcode/platform-auth": "*",
     "@blackcode/platform-db": "*",
+    "@blackcode/platform-email": "*",
     "@blackcode/platform-storage": "*",
     "@blackcode/platform-ui": "*",
     "@tanstack/react-query": "^5.56.2",

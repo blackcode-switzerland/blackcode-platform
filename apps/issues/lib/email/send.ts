@@ -1,110 +1,42 @@
-// Email sending — best-effort. Sending must never break the operation that
-// triggered it (e.g. an invitation is still valid even if its email bounces).
-// On failure we log a warn-level error_event and return { sent: false }.
+// THIS APP'S EMAIL BINDING. Import from here, never from
+// `@blackcode/platform-email` directly — the same rule `@/lib/storage` follows.
 //
-// Transactional email is kept to a minimum: workspace invitations, password
-// resets, and the one-off CLI-only migration notice. Everything else stays in
-// the in-app inbox.
+// The package holds the client, the templates and the failure logging. What
+// lives here is the three facts it cannot know: which app this is (for
+// `platform.error_events.app`), which database to log to, and who the mail is
+// from.
+//
+// Until 2026-08-11 this directory held the whole module — `client.ts`,
+// `send.ts` and a 260-line `templates.ts` opening with
+// `const BRAND = 'Blackcode Issues'`. It moved to `packages/platform-email` in
+// Phase 10 so `apps/sales` could send its own password-reset codes instead of
+// pointing people at this app for one. `docs/adding-an-app.md` open item 8.
 
-import { emailEnabled, fromAddress, getResend } from './client'
-import {
-  invitationEmail,
-  passwordResetEmail,
-  type InvitationEmailInput,
-  type PasswordResetEmailInput,
-} from './templates'
-import { insertErrorEvent } from '@/lib/db/queries/error-events'
+import { createEmailSender } from '@blackcode/platform-email'
+import { db } from '@/lib/db/client'
+import { APP_NAME, APP_SLUG } from '@/lib/app'
 
-export interface SendResult {
-  sent: boolean
-  skipped?: 'not_configured'
-  error?: string
-}
+export type { SendResult } from '@blackcode/platform-email'
 
-export async function sendInvitationEmail(
-  to: string,
-  input: InvitationEmailInput
-): Promise<SendResult> {
-  if (!emailEnabled()) {
-    return { sent: false, skipped: 'not_configured' }
-  }
-  const resend = getResend()
-  if (!resend) return { sent: false, skipped: 'not_configured' }
-
-  const { subject, html, text } = invitationEmail(input)
-
-  try {
-    const { error } = await resend.emails.send({
-      from: fromAddress(),
-      to,
-      subject,
-      html,
-      text,
-    })
-    if (error) {
-      await logEmailFailure(to, error.message ?? String(error))
-      return { sent: false, error: error.message ?? 'send failed' }
-    }
-    return { sent: true }
-  } catch (err) {
-    const message = (err as Error)?.message ?? 'unknown'
-    await logEmailFailure(to, message)
-    return { sent: false, error: message }
-  }
-}
-
-export async function sendPasswordResetEmail(
-  to: string,
-  input: PasswordResetEmailInput
-): Promise<SendResult> {
-  if (!emailEnabled()) {
-    return { sent: false, skipped: 'not_configured' }
-  }
-  const resend = getResend()
-  if (!resend) return { sent: false, skipped: 'not_configured' }
-
-  const { subject, html, text } = passwordResetEmail(input)
-
-  try {
-    const { error } = await resend.emails.send({
-      from: fromAddress(),
-      to,
-      subject,
-      html,
-      text,
-    })
-    if (error) {
-      await logEmailFailure(to, error.message ?? String(error), 'password_reset')
-      return { sent: false, error: error.message ?? 'send failed' }
-    }
-    return { sent: true }
-  } catch (err) {
-    const message = (err as Error)?.message ?? 'unknown'
-    await logEmailFailure(to, message, 'password_reset')
-    return { sent: false, error: message }
-  }
-}
-
-async function logEmailFailure(
-  to: string,
-  message: string,
-  kind: 'invitation' | 'password_reset' = 'invitation'
-): Promise<void> {
-  try {
-    await insertErrorEvent({
-      level: 'warn',
-      code: 'email_send_failed',
-      message: `${kind} email failed: ${message}`,
-      stack: null,
-      route: kind === 'invitation' ? '/api/workspaces/[ws]/invitations' : '/api/*/password*',
-      method: 'POST',
-      status_code: null,
-      user_id: null,
-      // Domain only — never store the full recipient address.
-      context: { recipient_domain: to.split('@')[1] ?? null, kind },
-    })
-  } catch {
-    // Logging is itself best-effort.
-  }
-}
-
+export const {
+  canDeliverEmail,
+  emailEnabled,
+  sendInvitationEmail,
+  sendPasswordResetEmail,
+} =
+  createEmailSender({
+    app: APP_SLUG,
+    getDb: () => db,
+    identity: {
+      // `APP_NAME`, so the From line and the UI cannot drift apart.
+      name: APP_NAME,
+      // The logo's origin. Empty in a deployment without it, which drops the
+      // image and leaves the text wordmark — the brand survives either way.
+      appUrl: (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, ''),
+      // This app's `--primary` is #007bd3; the email button has kept its own
+      // blue since the templates were written, and changing it is a design
+      // decision rather than a refactor, so the move preserves it byte-for-byte.
+      accent: '#2563eb',
+      contactEmail: 'contact@blackcode.ch',
+    },
+  })

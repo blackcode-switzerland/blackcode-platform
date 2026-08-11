@@ -1,0 +1,29 @@
+{
+  "name": "@blackcode/platform-email",
+  "version": "0.0.0",
+  "description": "Transactional email: the Resend client, the shared templates, and the sender factory each app binds to its own identity.",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./identity": "./src/identity.ts",
+    "./templates": "./src/templates.ts",
+    "./send": "./src/send.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "@blackcode/platform-db": "*",
+    "resend": "^6.12.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.2",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "eslint": "^8.57.0"
+  }
+}

@@ -10,14 +10,21 @@
 // Supporting detail — the raw link, expiry/disclaimer notes, and the footer —
 // stays left-aligned, which reads more naturally as fine print.
 //
-// Brand logo: referenced by absolute URL (NEXTAUTH_URL + /logo.png) so it
+// Brand logo: referenced by absolute URL (`identity.appUrl` + /logo.png) so it
 // renders in Gmail/Outlook/Apple Mail. (Base64 data-URIs are blocked by Gmail
 // and a 77KB logo would also exceed Gmail's ~102KB clipping limit, so a hosted
-// URL is the professional choice.) The "Blackcode Issues" wordmark always
-// shows as text, so the brand is clear even if images are blocked.
+// URL is the professional choice.) The wordmark always shows as text, so the
+// brand is clear even if images are blocked.
+//
+// ---------------------------------------------------------------------------
+// EVERY APP-SPECIFIC FACT ARRIVES AS `identity`. THERE IS NO `BRAND` CONSTANT.
+// ---------------------------------------------------------------------------
+// Until 2026-08-11 this file opened with `const BRAND = 'Blackcode Issues'` and
+// read `process.env.NEXTAUTH_URL` directly, which is what made it one app's
+// module rather than a package. Both are parameters now. `identity.ts` argues
+// why the parameter stops at four fields.
 
-const BRAND = 'Blackcode Issues'
-const CONTACT_EMAIL = 'contact@blackcode.ch'
+import type { EmailIdentity } from './identity'
 
 function escapeHtml(s: string): string {
   return s
@@ -27,11 +34,10 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
-function appUrl(): string {
-  return (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '')
-}
-
-// Light-theme palette
+// Light-theme palette. NOT an app input — see identity.ts note 4: these are
+// contrast-tuned against each other and nothing in this repo renders an email
+// to catch an app that broke them. `accent` is the one exception, and it is
+// an app input, because it only ever carries white text on a solid fill.
 const C = {
   page: '#f4f5f7',
   card: '#ffffff',
@@ -40,16 +46,19 @@ const C = {
   body: '#3f3f46',
   muted: '#71717a',
   faint: '#a1a1aa',
-  accent: '#2563eb',
   codeBg: '#f4f4f6',
 }
 
 // Wraps content in the shared shell: centered brand header, white card,
 // left-aligned footer. `contentHtml` decides its own internal alignment.
-function renderEmail(opts: { previewText: string; contentHtml: string }): string {
-  const base = appUrl()
+function renderEmail(
+  identity: EmailIdentity,
+  opts: { previewText: string; contentHtml: string }
+): string {
+  const brand = escapeHtml(identity.name)
+  const base = identity.appUrl.replace(/\/$/, '')
   const logo = base
-    ? `<img src="${base}/logo.png" width="28" height="28" alt="${BRAND}"
+    ? `<img src="${base}/logo.png" width="28" height="28" alt="${brand}"
          style="display:inline-block;vertical-align:middle;border-radius:6px;border:0;" />`
     : ''
 
@@ -82,7 +91,7 @@ function renderEmail(opts: { previewText: string; contentHtml: string }): string
               <td align="center" style="padding:0 4px 20px;text-align:center;">
                 <span style="vertical-align:middle;">${logo}</span>
                 <span style="vertical-align:middle;margin-left:${logo ? '8px' : '0'};color:${C.heading};font-size:16px;font-weight:600;letter-spacing:-0.01em;">
-                  ${BRAND}
+                  ${brand}
                 </span>
               </td>
             </tr>
@@ -96,11 +105,13 @@ function renderEmail(opts: { previewText: string; contentHtml: string }): string
             <tr>
               <td align="left" style="padding:20px 4px 0;text-align:left;">
                 <p style="margin:0 0 4px;color:${C.faint};font-size:12px;line-height:1.5;">
-                  This is an automated message from ${BRAND}.
+                  This is an automated message from ${brand}.
                 </p>
                 <p style="margin:0;color:${C.faint};font-size:12px;line-height:1.5;">
                   Need help or want to reply? Contact us at
-                  <a href="mailto:${CONTACT_EMAIL}" style="color:${C.muted};">${CONTACT_EMAIL}</a>.
+                  <a href="mailto:${identity.contactEmail}" style="color:${C.muted};">${escapeHtml(
+                    identity.contactEmail
+                  )}</a>.
                 </p>
               </td>
             </tr>
@@ -114,13 +125,13 @@ function renderEmail(opts: { previewText: string; contentHtml: string }): string
 
 // Centered, full-width-on-mobile call-to-action button. Uses the
 // table > td[align=center] technique so Outlook's Word engine centers it too.
-function buttonHtml(url: string, label: string): string {
+function buttonHtml(identity: EmailIdentity, url: string, label: string): string {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:22px 0;">
     <tr>
       <td align="center">
         <table role="presentation" cellpadding="0" cellspacing="0">
           <tr>
-            <td style="border-radius:10px;background:${C.accent};">
+            <td style="border-radius:10px;background:${identity.accent};">
               <a href="${url}" class="bc-button-link"
                 style="display:inline-block;padding:11px 26px;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:10px;text-align:center;">
                 ${label}
@@ -133,6 +144,12 @@ function buttonHtml(url: string, label: string): string {
   </table>`
 }
 
+export interface RenderedEmail {
+  subject: string
+  html: string
+  text: string
+}
+
 // ---------- invitation ----------
 
 export interface InvitationEmailInput {
@@ -143,11 +160,11 @@ export interface InvitationEmailInput {
   expiresInDays: number
 }
 
-export function invitationEmail(input: InvitationEmailInput): {
-  subject: string
-  html: string
-  text: string
-} {
+export function invitationEmail(
+  identity: EmailIdentity,
+  input: InvitationEmailInput
+): RenderedEmail {
+  const brand = escapeHtml(identity.name)
   const ws = escapeHtml(input.workspaceName)
   const inviter = escapeHtml(input.inviterName)
   const url = input.acceptUrl
@@ -163,29 +180,29 @@ export function invitationEmail(input: InvitationEmailInput): {
       </h1>
       <p style="margin:0 0 8px;color:${C.body};font-size:14px;line-height:1.6;">
         <strong style="color:${C.heading};">${inviter}</strong> invited you to collaborate in
-        <strong style="color:${C.heading};">${ws}</strong> on ${BRAND}.
+        <strong style="color:${C.heading};">${ws}</strong> on ${brand}.
       </p>
       <p style="margin:0;color:${C.muted};font-size:14px;line-height:1.6;">
         ${accountLine}
       </p>
-      ${buttonHtml(url, 'Accept invitation')}
+      ${buttonHtml(identity, url, 'Accept invitation')}
     </div>
     <p style="margin:8px 0 0;color:${C.faint};font-size:12px;line-height:1.6;text-align:left;">
       This invitation expires in ${input.expiresInDays} days. If the button doesn't work,
       copy and paste this link into your browser:<br/>
-      <a href="${url}" style="color:${C.accent};word-break:break-all;">${url}</a>
+      <a href="${url}" style="color:${identity.accent};word-break:break-all;">${url}</a>
     </p>
     <p style="margin:14px 0 0;color:${C.faint};font-size:12px;line-height:1.6;text-align:left;">
       If you weren't expecting this, you can safely ignore this email.
     </p>`
 
-  const html = renderEmail({
-    previewText: `${input.inviterName} invited you to join ${input.workspaceName} on ${BRAND}.`,
+  const html = renderEmail(identity, {
+    previewText: `${input.inviterName} invited you to join ${input.workspaceName} on ${identity.name}.`,
     contentHtml: content,
   })
 
   const text = [
-    `${input.inviterName} invited you to join ${input.workspaceName} on ${BRAND}.`,
+    `${input.inviterName} invited you to join ${input.workspaceName} on ${identity.name}.`,
     ``,
     input.inviteeHasAccount
       ? 'Sign in and accept to start collaborating.'
@@ -197,7 +214,7 @@ export function invitationEmail(input: InvitationEmailInput): {
     `This invitation expires in ${input.expiresInDays} days.`,
     `If you weren't expecting this, you can ignore this email.`,
     ``,
-    `Need help or want to reply? Contact us at ${CONTACT_EMAIL}.`,
+    `Need help or want to reply? Contact us at ${identity.contactEmail}.`,
   ].join('\n')
 
   return { subject, html, text }
@@ -211,13 +228,12 @@ export interface PasswordResetEmailInput {
   name?: string | null
 }
 
-export function passwordResetEmail(input: PasswordResetEmailInput): {
-  subject: string
-  html: string
-  text: string
-} {
+export function passwordResetEmail(
+  identity: EmailIdentity,
+  input: PasswordResetEmailInput
+): RenderedEmail {
   const greeting = input.name ? `Hi ${escapeHtml(input.name)},` : 'Hi,'
-  const subject = `Your ${BRAND} password reset code`
+  const subject = `Your ${identity.name} password reset code`
   const code = escapeHtml(input.otp)
 
   const content = `
@@ -238,22 +254,22 @@ export function passwordResetEmail(input: PasswordResetEmailInput): {
       won't change. Never share this code with anyone.
     </p>`
 
-  const html = renderEmail({
-    previewText: `Your ${BRAND} password reset code is ${input.otp}.`,
+  const html = renderEmail(identity, {
+    previewText: `Your ${identity.name} password reset code is ${input.otp}.`,
     contentHtml: content,
   })
 
   const text = [
     `${input.name ? `Hi ${input.name},` : 'Hi,'}`,
     ``,
-    `Use this code to reset your ${BRAND} password:`,
+    `Use this code to reset your ${identity.name} password:`,
     ``,
     `    ${input.otp}`,
     ``,
     `It expires in ${input.expiresInMinutes} minutes. If you didn't request this, ignore`,
     `this email — your password won't change. Never share this code with anyone.`,
     ``,
-    `Need help or want to reply? Contact us at ${CONTACT_EMAIL}.`,
+    `Need help or want to reply? Contact us at ${identity.contactEmail}.`,
   ].join('\n')
 
   return { subject, html, text }

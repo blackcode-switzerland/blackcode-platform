@@ -9,13 +9,31 @@ import {
   OTP_EXPIRES_IN_MINUTES,
   requestPasswordOtp,
 } from '@/lib/db/queries/password-reset'
-import { sendPasswordResetEmail } from '@/lib/email/send'
+import { canDeliverEmail, sendPasswordResetEmail } from '@/lib/email/send'
 
 export const POST = apiHandler(async (req: NextRequest) => {
   const body = await req.json().catch(() => null)
   const email = typeof body?.email === 'string' ? body.email.trim() : ''
   const emailErr = validateEmail(email)
   if (emailErr) throw Errors.badRequest('invalid_email', emailErr)
+
+  // Honest degradation (Phase 10). A deployment that cannot deliver a code must
+  // say so; the generic `{ ok: true }` below would otherwise leave the person
+  // waiting for mail that was never sent. `canDeliverEmail` is not
+  // `emailEnabled` — outside production the OTP goes to the server log instead,
+  // which is why the block below still exists.
+  //
+  // Safe to answer before the account lookup, and deliberately BEFORE it: this
+  // says something about the DEPLOYMENT, not about whether the address has an
+  // account, so it cannot be used to enumerate. Putting it after the lookup is
+  // what would make it an oracle.
+  if (!canDeliverEmail()) {
+    throw Errors.serviceUnavailable(
+      'email_not_configured',
+      'This deployment cannot send email, so it cannot deliver a reset code.',
+      'Ask an administrator to configure RESEND_API_KEY and RESEND_FROM_EMAIL for this app.'
+    )
+  }
 
   const result = await requestPasswordOtp(email)
 

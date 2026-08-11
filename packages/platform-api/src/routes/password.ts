@@ -15,6 +15,7 @@
 // AppContext, which no other route would read.
 //
 //     export const POST = passwordRequestOtpRoute(appContext, {
+//       canDeliverEmail,
 //       sendPasswordResetEmail,
 //     })
 //
@@ -45,6 +46,22 @@ import { createApiHandler } from '../handler'
 
 /** What only the app can do: put a code in front of a person. */
 export interface PasswordOtpSender {
+  /**
+   * Can a code this deployment mints actually reach a person.
+   *
+   * Checked FIRST, before the OTP is minted, because an app that cannot
+   * deliver must degrade honestly (Phase 10). Accepting the request, burning a
+   * rate-limit slot and returning `{ ok: true }` while nothing is delivered
+   * leaves the person watching an inbox for a code that was never sent — and
+   * they cannot tell that from a slow one.
+   *
+   * **Not `emailEnabled()`.** Outside production an unconfigured deployment
+   * still delivers, to the server log; the carve-out is argued in
+   * `@blackcode/platform-email`'s client.ts, and `canDeliverEmail` from that
+   * package satisfies this field. The app's binding re-exports it.
+   */
+  canDeliverEmail(): boolean
+
   /**
    * Send the code. MUST NOT throw — a delivery failure is not a reason to
    * refuse a password change, and the caller has already spent the rate-limit
@@ -80,6 +97,15 @@ export function passwordRequestOtpRoute(app: AppContext, contribution: PasswordO
   return apiHandler(async (req: NextRequest) => {
     const user = await app.resolveUser(req)
     if (!user) throw Errors.unauthorized()
+
+    // Honest degradation, before anything is written. See PasswordOtpSender.
+    if (!contribution.canDeliverEmail()) {
+      throw Errors.serviceUnavailable(
+        'email_not_configured',
+        'This deployment cannot send email, so it cannot deliver a reset code.',
+        'Ask an administrator to configure RESEND_API_KEY and RESEND_FROM_EMAIL for this app.'
+      )
+    }
 
     const result = await requestPasswordOtp(app.db, user.email)
 
