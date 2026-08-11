@@ -142,7 +142,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       throw Errors.conflict(
         'already_invited',
         'There is already a pending invitation for this email',
-        'Revoke it first with `bk invite revoke <id>` if you need to issue a fresh link.'
+        'Revoke it first with `bk sales invite revoke <id>` if you need to issue a fresh link.'
       )
     }
     throw err

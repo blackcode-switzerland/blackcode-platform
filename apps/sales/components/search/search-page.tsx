@@ -236,11 +236,19 @@ export function SearchPage({ ws }: { ws: string }) {
         and a reader who cannot tell which one they are looking at is the failure
         the decision is written to prevent.
       */}
+      {/* THIS PARAGRAPH PROMISED A CROSS-APP SEARCH UNTIL 2026-08-11, and there
+          has not been one since Phase 3 stopped this app projecting into the
+          shared index. It named `bk search`, which Phase 4 then removed as a
+          bare verb — so the sentence pointed at a command that answers
+          `unknown command` about a capability that no longer exists.
+          PLAN.md §3 records the loss as deliberate; the honest replacement says
+          each app is searched on its own. */}
       <p className="text-xs text-muted-foreground">
         Searching <strong className="font-medium text-foreground">inside b/sales records</strong> —
-        call summaries, meeting outcomes, contact details, template copy. To find something by name
-        across every blackcode app, that is{' '}
-        <code className="rounded bg-muted px-1 py-0.5">bk search</code>, which returns URNs.
+        call summaries, meeting outcomes, contact details, template copy. Each app is searched on
+        its own:{' '}
+        <code className="rounded bg-muted px-1 py-0.5">bk sales search</code> here,{' '}
+        <code className="rounded bg-muted px-1 py-0.5">bk issues search</code> there.
       </p>
 
       {!q.trim() ? (
@@ -478,9 +486,10 @@ function NoResults({
         This searched the text of prospects, contacts, meetings, communications, objections and the
         catalog. Two things worth trying: a shorter term — matching is by whole word with a prefix
         on the last one, so <code className="rounded bg-muted px-1 py-0.5">roch</code> finds Roches
-        but <code className="rounded bg-muted px-1 py-0.5">oches</code> does not — or{' '}
-        <code className="rounded bg-muted px-1 py-0.5">bk search {q}</code>, which looks across
-        every blackcode app instead of inside this one.
+        but <code className="rounded bg-muted px-1 py-0.5">oches</code> does not — or, if the
+        record you want lives in another app,{' '}
+        <code className="rounded bg-muted px-1 py-0.5">bk issues search {q}</code>. There is no
+        one command that searches both.
       </p>
     </div>
   )

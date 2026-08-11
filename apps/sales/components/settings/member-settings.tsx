@@ -41,6 +41,7 @@ import { toast } from 'sonner'
 import { Copy, Trash2, UserPlus, X } from 'lucide-react'
 import { apiGet, wsPath } from '@/lib/client'
 import { useInviteMember, useRemoveMember, useRevokeInvitation } from '@/lib/mutations'
+import { useCanWrite, READ_ONLY_NOTE } from '@/lib/ui-mode'
 import { BlockSkeleton, ErrorState } from '@/components/states'
 import { Section } from './profile-settings'
 
@@ -76,6 +77,23 @@ interface SentInvitation {
 export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boolean; meId: number }) {
   const [email, setEmail] = useState('')
   const [lastSent, setLastSent] = useState<SentInvitation | null>(null)
+
+  // ── THIS PAGE DID NOT ASK UNTIL 2026-08-11, AND IT WAS THE ONLY ONE ────────
+  // Found by the Phase 7 browser pass. `read_only` is the DEFAULT `ui_mode`
+  // (D-7), so out of the box this page rendered a live-looking Invite field and
+  // an enabled Remove/Revoke on every row — while the prospect page one click
+  // away said "Editing is hidden — this browser is in read-only mode".
+  //
+  // Nothing was ever written: `useRecordMutation` refuses, and the refusal is
+  // loud — measured, the click raises the `ReadOnlyModeError` toast naming both
+  // recoveries. So this is the safety net doing exactly the job
+  // `lib/read-only.test.ts`'s header describes ("a button that was not hidden
+  // fails loudly instead of writing"), which is also why nobody had noticed:
+  // the net held, and the affordance stayed wrong underneath it.
+  //
+  // An error toast is the fallback, not the design. The design is that a mode
+  // which hides editing hides it here too.
+  const canWrite = useCanWrite(ws)
 
   // BOTH list routes answer with the `{ data, next_cursor }` envelope
   // (`jsonList`), so both queryFns must UNWRAP it. Typing the call as a bare
@@ -143,7 +161,7 @@ export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boo
                 <span className="shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
                   {m.role}
                 </span>
-                {isOwner && m.role !== 'owner' && (
+                {isOwner && canWrite && m.role !== 'owner' && (
                   <button
                     type="button"
                     aria-label={`Remove ${m.email}`}
@@ -165,6 +183,14 @@ export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boo
           title="Invite somebody"
           note="They need a blackcode account, or an address a super admin has approved. b/sales does not send email — copy the link and send it yourself."
         >
+          {/* The note, not silence. `ui-mode.ts`'s READ_ONLY_NOTE exists because
+              a control that is simply absent teaches nothing: the reader
+              concludes the feature does not exist, or that they are not allowed
+              — and here the second reading would be actively wrong, since an
+              owner in read-only mode can still invite through `bk sales`. */}
+          {!canWrite && <p className="text-xs text-muted-foreground">{READ_ONLY_NOTE}</p>}
+
+          {canWrite && (
           <form
             className="flex gap-2"
             onSubmit={(e) => {
@@ -198,6 +224,7 @@ export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boo
               Invite
             </button>
           </form>
+          )}
 
           {/* The link IS the delivery mechanism here, so it is shown rather than
               mentioned. An invitation whose link the owner cannot copy is an
@@ -247,15 +274,45 @@ export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boo
                       invited by {inv.invited_by_name ?? inv.invited_by_email}
                     </div>
                   </div>
+                  {/* ── THE LINK, ON EVERY PENDING ROW AND NOT ONLY THE FRESH ONE ──
+                      This section's own note says "b/sales does not send email —
+                      copy the link and send it yourself", and until 2026-08-11
+                      the only place the link appeared was the `lastSent` banner
+                      above: it survived until the next reload and then the
+                      invitation became unsendable from the UI. The owner's
+                      remaining options were to revoke and re-invite, or to read
+                      the token out of Postgres.
+
+                      Nothing new is exposed — `token` is already in this row's
+                      payload, which is what made the gap invisible: the data was
+                      there and only the affordance was missing. Reconstructed
+                      from `window.location.origin` because this app serves the
+                      accept page itself (`app/invitations/[token]`), so its own
+                      origin is the right one by construction. */}
                   <button
                     type="button"
-                    aria-label={`Revoke invitation for ${inv.email}`}
-                    disabled={revoke.isPending}
-                    onClick={() => revoke.mutate({ id: inv.id })}
-                    className="shrink-0 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                    aria-label={`Copy invitation link for ${inv.email}`}
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        `${window.location.origin}/invitations/${inv.token}`
+                      )
+                      toast.success('Link copied')
+                    }}
+                    className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   >
-                    Revoke
+                    <Copy size={14} />
                   </button>
+                  {canWrite && (
+                    <button
+                      type="button"
+                      aria-label={`Revoke invitation for ${inv.email}`}
+                      disabled={revoke.isPending}
+                      onClick={() => revoke.mutate({ id: inv.id })}
+                      className="shrink-0 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                    >
+                      Revoke
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

@@ -631,7 +631,7 @@ function LoginPageInner() {
                 → token saved to ~/.config/bk/config.json
               </div>
               <div className="mt-1.5">
-                <span className="text-primary">$</span> bk issue create --title
+                <span className="text-primary">$</span> bk issues issue create --title
                 &quot;Ship landing&quot; --priority 2
               </div>
               <div className="pl-2 text-muted-foreground/70">✓ created issue #152</div>

@@ -39,7 +39,7 @@ async function run(req: NextRequest, repair: boolean) {
       throw Errors.notFound(
         'workspace_not_found',
         `no workspace with slug ${wsRef}`,
-        'run `bk workspace list --all` to see every workspace'
+        'run `bk issues workspace list` to see every workspace'
       )
     }
     workspaceId = ws.id

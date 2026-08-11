@@ -15,7 +15,6 @@ import {
   Tag,
   Terminal,
   Trash2,
-  Undo2,
   Users,
   Workflow,
   Zap,
@@ -137,13 +136,17 @@ const FEATURES: Feature[] = [
       'Token-driven theming with next-themes. Dark out of the box; flip the entire app’s accent by changing one CSS variable.',
     status: 'live',
   },
-  {
-    icon: Undo2,
-    title: 'Reversible edits',
-    description:
-      'Issue updates are journaled with full before/after snapshots. `bk undo` reverses your last few changes, and `bk undo --log` shows what it would touch first. Coverage today is issue updates — broader undo is planned.',
-    status: 'preview',
-  },
+  // ── THE "Reversible edits" CARD WAS REMOVED ON 2026-08-11 ─────────────────
+  // It advertised `bk undo` over a journal of before/after snapshots. There was
+  // never such a journal: `platform.transaction_log` had no writer, which is why
+  // `bk undo` was removed in CLI 1.12.0 and `/api/undo` is a 410 — read that
+  // route's header. multiAppFinalRefactor Phase 5 then DROPPED the table.
+  //
+  // So this card described a capability that did not exist, on a public page,
+  // under a `preview` pill that made "not working yet" the reading. Trash and
+  // restore is the real version of the promise and has its own card above.
+  //
+  // Do not reinstate it without a writer for the journal.
 ]
 
 function StatusPill({ status, className }: { status: FeatureStatus; className?: string }) {
@@ -387,8 +390,8 @@ $ npm install -g @blackcode_sa/bc-issues
 # 2. authenticate — opens your browser, done in seconds
 $ bk login --server https://your-deployment.app
 
-# 3. pick a workspace
-$ bk workspace use my-team
+# 3. pick a workspace — each app has its own, so the app names itself
+$ bk issues workspace use my-team
 
 # 4. work
 $ bk issues issue list --status todo
@@ -438,7 +441,7 @@ function HowItWorks() {
     {
       title: 'Reversible by design',
       copy:
-        'Issue updates are journaled with full old and new snapshots, and deletes soft-delete to a recoverable Trash. `bk undo` rolls back your last writes for real — it is not a UI trick.',
+        'Deletes soft-delete to a recoverable Trash rather than vanishing, and items removed together come back together. Purging is a second, separate decision — so a wrong delete is something you notice and undo, not something you discover later.',
     },
     {
       title: 'Predictable failures',
@@ -599,7 +602,7 @@ function FAQ() {
     },
     {
       q: 'How do I install and use the CLI?',
-      a: 'npm install -g @blackcode_sa/bc-issues, then bk login (it opens a browser and stores a token in ~/.config/bk/config.json), bk workspace use <slug>, and you’re working: bk issues issue list, bk issues issue create --project 1 --title "…". Run bk --help for the full command tree.',
+      a: 'npm install -g @blackcode_sa/bc-issues, then bk login (it opens a browser and stores a token in ~/.config/bk/config.json), bk issues workspace use <slug>, and you’re working: bk issues issue list, bk issues issue create --project 1 --title "…". Run bk --help for the full command tree.',
     },
     {
       q: 'How do agents and scripts authenticate?',
@@ -611,11 +614,11 @@ function FAQ() {
     },
     {
       q: 'How does pagination work?',
-      a: 'Most lists return everything in one response. Only the keyset feeds paginate — bk activity, bk trash list and bk super-admin errors list — via --limit / --cursor, following next_cursor until it is null. Run `bk guide output` for the details.',
+      a: 'Most lists return everything in one response. Only the keyset feeds paginate — bk issues activity, bk issues trash list and bk super-admin errors list — via --limit / --cursor, following next_cursor until it is null. Run `bk guide output` for the details.',
     },
     {
       q: 'What happens when I delete something?',
-      a: 'Issues, projects and tasks soft-delete into a recoverable Trash rather than vanishing. Items deleted together restore as a group; workspace owners can purge selected items or empty the bin. Issue edits are separately reversible with bk undo (POST /api/undo), up to 10 at a time.',
+      a: 'Issues, projects and tasks soft-delete into a recoverable Trash rather than vanishing. Items deleted together restore as a group; workspace owners can purge selected items or empty the bin. Purging is deliberately a second decision — run bk issues trash list to see what is in there.',
     },
     {
       q: 'Can a team and its agents share a workspace?',

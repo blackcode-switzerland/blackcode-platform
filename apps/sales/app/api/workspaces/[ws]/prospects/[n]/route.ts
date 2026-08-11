@@ -102,7 +102,7 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
       throw Errors.badRequest(
         'unknown_owner',
         `no user with email ${owner}`,
-        'run `bk member list` for the people in this workspace, or use --owner me'
+        'run `bk sales member list` for the people in this workspace, or use --owner me'
       )
     }
   }

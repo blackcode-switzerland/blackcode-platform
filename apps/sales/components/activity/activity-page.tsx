@@ -237,12 +237,17 @@ export function ActivityPage({ ws }: { ws: string }) {
 
       {feed.data?.next_cursor != null && (
         // Said, not paged over. A feed that quietly stops at 100 rows looks like
-        // a workspace with 100 events. Paging is `bk activity --cursor`, which
-        // is the surface an agent walking history should be using anyway.
+        // a workspace with 100 events. Paging is `bk sales activity --cursor`,
+        // which is the surface an agent walking history should be using anyway.
+        //
+        // This named `bk activity --app sales` until 2026-08-11, which was wrong
+        // twice over after Phase 4: the verb moved behind the app name, and
+        // `--app` was removed in the same release — it selected among the apps
+        // writing one shared feed, and each app keeps its own now.
         <p className="text-xs text-muted-foreground">
           Showing the most recent 100 events. Run{' '}
-          <code className="rounded bg-muted px-1 py-0.5">bk activity --app sales</code> to page
-          through the rest.
+          <code className="rounded bg-muted px-1 py-0.5">bk sales activity</code> to page through
+          the rest.
         </p>
       )}
     </div>

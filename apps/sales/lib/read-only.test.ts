@@ -297,6 +297,99 @@ describe('read-only is a property of the tree', () => {
     ).toEqual([])
   })
 
+  // ===========================================================================
+  // ADDED 2026-08-11, AFTER THE BROWSER PASS FOUND WHAT THIS FILE DISCLAIMED
+  // ===========================================================================
+  // This file's header used to say, in as many words: "What this does NOT claim:
+  // that every button is correctly hidden." That disclaimer was honest and it
+  // was also the hole — `components/settings/member-settings.tsx` shipped
+  // rendering a live-looking Invite field and enabled Remove/Revoke buttons in
+  // `read_only`, which is the DEFAULT mode, while every other surface in the app
+  // hid its controls and said why.
+  //
+  // Nothing was ever written and the refusal was loud (measured: the click
+  // raises the `ReadOnlyModeError` toast). That is precisely why it survived —
+  // the safety net held, so the wrong affordance underneath it cost nothing
+  // visible until somebody opened the page in a browser.
+  //
+  // "Every button is correctly hidden" is not checkable by grep. **"Every
+  // component that can start a record write has consulted the mode" is**, and it
+  // is the property that makes the first one somebody's deliberate decision
+  // rather than an oversight.
+  //
+  // WHAT IT STILL PASSES ON, stated rather than discovered later:
+  //   * A component that calls `useCanWrite()` and ignores the answer.
+  //   * A gate on the wrong branch — hiding Remove and not Invite.
+  //   * A parent that gates the wrong child. `gatedBy` is checked to consult the
+  //     mode, not to render this particular component.
+  it('every component that can start a record write has consulted the mode', () => {
+    // Components that import a mutation hook but do NOT ask themselves, because
+    // a parent has already asked and renders them only when it may. Each entry
+    // names the parent, and the case below verifies that parent still asks.
+    const GATED_BY_PARENT = new Map<string, string>([
+      [
+        'components/ledgers/ledger-forms.tsx',
+        // The forms are only ever mounted from the ledger pages' `canWrite`
+        // branch; they are the editing surface itself, not a page.
+        'components/ledgers/ledger-pages.tsx',
+      ],
+      [
+        'components/prospects/prospect-forms.tsx',
+        // Same shape. Worth a note: this module's HEADER says it composes "the
+        // one `useMutation` that reads `useCanWrite()`", and a scan of the raw
+        // source is satisfied by that sentence — the module never calls it. That
+        // is the check passing on its own documentation (finding #4), and it is
+        // the reason this case reads `codeOf(...)` rather than the file.
+        'components/prospects/prospect-detail.tsx',
+      ],
+    ])
+
+    const ungated: string[] = []
+    for (const file of SOURCES) {
+      const name = rel(file)
+      if (!name.startsWith('components/') && !name.startsWith('app/')) continue
+      const src = codeOf(readFileSync(file, 'utf8'))
+      // Importing the module is the trigger, not calling a particular hook: a
+      // new hook added to lib/mutations.ts is covered without anyone updating a
+      // list here.
+      if (!/from '@\/lib\/mutations'/.test(src)) continue
+      if (/\buseCanWrite\s*\(/.test(src)) continue
+
+      const parent = GATED_BY_PARENT.get(name)
+      if (!parent) {
+        ungated.push(
+          `${name} — imports @/lib/mutations and never calls useCanWrite(). Either ` +
+            'gate its affordances (and show READ_ONLY_NOTE where you hide one), or ' +
+            'declare the parent that gates it in GATED_BY_PARENT with a reason.'
+        )
+        continue
+      }
+      const parentSrc = codeOf(readFileSync(join(APP_ROOT, parent), 'utf8'))
+      if (!/\buseCanWrite\s*\(/.test(parentSrc)) {
+        ungated.push(
+          `${name} — declares it is gated by ${parent}, and ${parent} no longer ` +
+            'calls useCanWrite(). The declaration is now false, so BOTH are ungated.'
+        )
+      }
+    }
+
+    // Assert the input. A rename of `lib/mutations.ts`, or an import spelling
+    // this regex does not know, would empty the loop and pass silently — which
+    // is the shape of thing this whole file exists to catch.
+    const importers = SOURCES.filter(
+      (f) =>
+        (rel(f).startsWith('components/') || rel(f).startsWith('app/')) &&
+        /from '@\/lib\/mutations'/.test(codeOf(readFileSync(f, 'utf8')))
+    )
+    expect(
+      importers.length,
+      'no component imports @/lib/mutations. Either the module moved or the ' +
+        'import spelling changed — and either way the check above scanned nothing.'
+    ).toBeGreaterThan(0)
+
+    expect(ungated, ungated.join('\n')).toEqual([])
+  })
+
   it('lib/mutations.ts has exactly one useMutation, and it is the gated one', () => {
     const src = codeOf(readFileSync(join(APP_ROOT, RECORD_WRITES), 'utf8'))
     const count = (src.match(/\buseMutation\s*\(/g) ?? []).length
