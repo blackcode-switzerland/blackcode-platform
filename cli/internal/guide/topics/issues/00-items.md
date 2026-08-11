@@ -67,6 +67,31 @@ bk issues issue edit 42 --task none --due-date 2026-06-30
 
 Applies to `--assignee`, `--task`, `--start-date`, `--due-date`.
 
+## Labels on an issue that already exists
+
+Labels are a **sub-resource**, not a field on the issue, so they are not on
+`issue edit`. Attaching one after the fact is its own verb, and takes two
+POSITIONAL arguments — the issue and the label, no flags:
+
+```bash
+bk issues label list                  # find the label id
+bk issues label attach 189 58         # <issue_id> <label_id>
+bk issues label detach 189 58
+bk issues issue view 189              # confirm — the Labels line is always shown
+```
+
+At creation time the flag form exists, and takes a NAME rather than an id
+(unknown names are created):
+
+```bash
+bk issues issue create --title "…" --label urgent --label client-facing
+```
+
+`bk issues issue edit --label` does not exist, and neither does a `labels` or
+`label_ids` field on the PATCH route — that field is **rejected** with a
+suggestion rather than accepted and ignored, so a caller who guesses it gets
+told where to go instead of a 200 that changed nothing.
+
 ## User references
 
 Anywhere a user is expected (`--assignee`, `bk issues issue assign`,

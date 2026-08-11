@@ -139,7 +139,12 @@ GET    /api/workspaces/{ws}/issues              list (filters) / POST create
                                                 create accepts project_id/task_id as #numbers; label_ids
                                                 (existing) and labels: string[] — names matched
                                                 case-insensitively, unknown ones created on the fly)
-GET    /api/workspaces/{ws}/issues/{id}         detail / PATCH
+GET    /api/workspaces/{ws}/issues/{id}         detail / PATCH — PATCH REJECTS labels/label_ids
+                                                (400 labels_not_patchable, since 2026-08-11). They are a
+                                                sub-resource, not a column; it used to accept and silently
+                                                drop them, and two reporters read the 200 as "labeling is
+                                                UI-only". Use the /labels routes below. `labels` IS in the
+                                                response of both GET and PATCH.
 DELETE /api/workspaces/{ws}/issues/{id}         move to Trash
 GET    /api/workspaces/{ws}/issues/{id}/comments     list / POST
 GET    /api/workspaces/{ws}/issues/{id}/labels       list / POST attach ({label_id} or {name} — name created on the fly)

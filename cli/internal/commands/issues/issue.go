@@ -221,9 +221,15 @@ func newIssueViewCmd() *cobra.Command {
 				fmt.Fprintf(w, "Status:      %s\n", iss.Status)
 				fmt.Fprintf(w, "Priority:    P%d\n", iss.Priority)
 				fmt.Fprintf(w, "Assignees:   %s\n", issueAssigneeLabel(iss.Assignees))
-				if len(iss.Labels) > 0 {
-					fmt.Fprintf(w, "Labels:      %s\n", issueLabelLabel(iss.Labels))
-				}
+				// ALWAYS printed, empty or not. It used to be hidden when the
+				// list was empty, and a reporter who could not find a Labels
+				// line concluded the response had no such field and that
+				// labeling was UI-only (Todo/issues-app-feedback.md item 1).
+				// The route has always returned `labels`; only this line was
+				// conditional. An absent row and an empty row look identical,
+				// and only one of them is true — so a caller checking whether
+				// an attach stuck now gets an answer either way.
+				fmt.Fprintf(w, "Labels:      %s\n", issueLabelLabel(iss.Labels))
 				if iss.TaskName != nil {
 					fmt.Fprintf(w, "Task:   %s\n", *iss.TaskName)
 				}

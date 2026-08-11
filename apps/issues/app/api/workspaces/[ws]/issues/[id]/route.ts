@@ -27,6 +27,35 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
   if (!body || typeof body !== 'object') {
     throw Errors.badRequest('invalid_body', 'expected JSON object')
   }
+
+  // LABELS ARE NOT PATCHABLE HERE, AND SAYING SO IS THE POINT.
+  //
+  // `updateIssue` copies a fixed whitelist of fields out of the patch, so
+  // `labels` / `label_ids` used to arrive, be dropped on the floor, and come
+  // back inside a 200 with the issue unchanged. Two independent reporters
+  // concluded from that silence that labeling was a UI-only feature and gave
+  // up (Todo/issues-app-feedback.md item 1) — the label sub-resource below was
+  // one request away the whole time.
+  //
+  // Labels live at POST/DELETE …/issues/{id}/labels because they are a
+  // many-to-many edge with its own create-on-the-fly-by-name behaviour, not a
+  // column on the issue. That stays the one write path; this route's job is to
+  // stop pretending it is a second one. A rejection an agent can act on beats
+  // a success it cannot verify.
+  //
+  // Deliberately narrow: only these two keys. A blanket unknown-field rejection
+  // would break any client sending anything extra, which is a different and
+  // breaking decision — see Todo/report-2-issues-feedback.md.
+  for (const key of ['labels', 'label_ids'] as const) {
+    if (key in body) {
+      throw Errors.badRequest(
+        'labels_not_patchable',
+        `\`${key}\` cannot be set here — labels are a sub-resource, not a field on the issue`,
+        'attach with `bk issues label attach <issue_id> <label_id>` (or POST /api/workspaces/{ws}/issues/{id}/labels), detach with `bk issues label detach`; `bk issues issue view <id>` shows the current labels'
+      )
+    }
+  }
+
   // project_id / task_id are workspace #numbers (seq) → translate to internal ids.
   if ('project_id' in body && body.project_id != null) {
     body.project_id = await resolveEntityId(ctx.workspace.id, 'project', String(body.project_id))
