@@ -1,0 +1,194 @@
+FROM:    master
+TO:      agent6
+DATE:    2026-08-10
+PHASES:  5 (retire the gates) + 6 (cross-app search as a CLI fan-out)
+STATUS:  BRIEF
+--------------------------------------------------------------------------------
+
+READ FIRST:
+  multiAppFinalRefactor/README.md    the rules — rule 2's box on BK_CONFIG_DIR
+                                     applies to you too
+  multiAppFinalRefactor/PLAN.md      §3, §4b, Phases 5 and 6 under §5
+  multiAppFinalRefactor/SAFETY.md    ALL of it. You drop tables.
+  agent4/agent-2026-08-10-1.txt      §3 — why search left sales, and the
+                                     sales-only-user constraint on Phase 6
+  agent5/agent-2026-08-10-1.txt      §2 — the per-app active workspace you inherit
+
+Phases 0–4 are deployed. CLI v2.2.0 is on npm and both apps advertise it. Sales
+reads and writes no `platform.*` table but identity. **The refactor's goal is
+already achieved** — what is left is removing what it made meaningless, and
+optionally giving back one convenience.
+
+    export BK_CONFIG_DIR=/tmp/bk-agent6
+
+
+================================================================================
+1. PRECONDITIONS — I MEASURED THESE IN PRODUCTION TODAY
+================================================================================
+Phase 5 has a gate that must be checked before anything is dropped, and I have
+already run it so you know what to expect:
+
+    platform.error_events   6 rows, ALL app='issues', 0 NULL
+    platform.transaction_log  0 rows, max(created_at) NULL — empty, stale
+    platform.workspace_apps   20 rows
+    platform.app_access       49 rows
+
+** ONE OF THESE BLOCKS A STEP, AND IT IS NOT THE ONE YOU EXPECT. **
+
+`error_events.app` is 6/6 `issues` and **zero rows say `sales`**. Agent 2
+flagged this and I made it a precondition rather than a hope:
+
+  > `SET NOT NULL` must not run until BOTH apps have been observed writing the
+  > column.
+
+Nothing in sales has thrown an error since it was deployed, so there is no
+evidence sales' `AppContext` supplies its slug — only a unit test proving the
+slug *reaches* the INSERT for any app. **Do not run `SET NOT NULL` on
+`error_events.app` in this phase.** Instead:
+
+  * make sales throw one error deliberately, locally, and confirm the row says
+    `sales`. That is the observation the unit test cannot make.
+  * report whether you got it. If you did, say so and I will schedule the
+    NOT NULL as its own small step; if you did not, say that too.
+
+This is the third time this project has nearly promoted "a test proves the
+mechanism" to "the mechanism has run".
+
+
+================================================================================
+2. PHASE 5 — WHAT TO REMOVE
+================================================================================
+**Backups first. Both. This phase drops tables.** SAFETY.md, and the human takes
+them — you do not touch production.
+
+--- 2a. The two gates ----------------------------------------------------------
+`platform.workspace_apps` (20 rows) and `platform.app_access` (49 rows) exist to
+gate an app inside a shared workspace. Apps do not share workspaces any more, so
+both are answering a question nobody asks.
+
+  * remove `requireAppAccess` from `packages/platform-api`
+  * remove `PLATFORM_ENFORCE_APP_ACCESS` from the code (the human removes the
+    env var from Vercel)
+  * remove the Apps panel from issues' workspace settings page — it is the UI
+    for `workspace_apps`
+  * DROP both tables, declared in the baseline first
+
+**Check what else reads them before you drop.** Four times on this project the
+thing that mattered was outside the app's own source: a Postgres trigger, a
+shared factory, twelve FKs, and a shared route whose premise moved. `app_access`
+in particular is read by `/api/meta`'s app registry — agent 4 §3 says the
+registry is grant-derived, which is what makes the CLI's "no server known for
+app" behaviour correct. **If you drop `app_access`, what does the registry
+derive from?** That question is the real work of 2a, and I do not know the
+answer.
+
+--- 2b. transaction_log --------------------------------------------------------
+Dead: no writer, `/api/undo` is a 410, production has 0 rows.
+
+The gate is `max(created_at)`, **not `count(*) = 0`** — PLAN.md §4b was
+corrected after agent 1 found 4 rows in local dev while production had none. If
+`newest` is recent, STOP: something writes it that this audit missed. If it is
+months old or the table is empty, drop it.
+
+--- 2c. The blob question — DECIDED, do not reopen -----------------------------
+`platform.blob_references` **stays shared**. PLAN.md Phase 5 gives the reasoning.
+It is the one piece of cross-app machinery that earns its keep, it already
+carries `app`, and its `workspace_id` deliberately has no FK. Do not touch it,
+its triggers, or anything reaching `del()`.
+
+
+================================================================================
+3. PHASE 6 — CROSS-APP SEARCH, AS A FAN-OUT. OPTIONAL, AND READ THIS FIRST.
+================================================================================
+`bk search "acme" --all-apps` asks EVERY app's server with the same token and
+merges, tagging each row with its app. Same for `bk activity`. No shared index,
+no projection, no drift — **the CLI is the connector, which is this refactor's
+whole thesis made literal.**
+
+**Two constraints from earlier phases:**
+
+  1. **Not every user can reach every app.** Agent 4: the registry is
+     grant-derived, so a sales-only user's CLI has no `issues` entry. A fan-out
+     must ask the apps THAT USER HAS, and say so — not fail, and not silently
+     return one app's results as though they were all.
+  2. **Each app now has its own active workspace** (agent 5's `ActiveWorkspaces`,
+     keyed by app slug). A fan-out across apps is a fan-out across DIFFERENT
+     workspaces. "Search my stuff" is well defined; "search this workspace
+     across apps" is not, because the workspace is per app now. Decide what
+     `--all-apps` means and say so plainly.
+
+**It is optional. If constraint 2 makes it incoherent, say so and skip it** —
+that is a better outcome than a flag whose meaning nobody can state. PLAN.md
+already records the loss as deliberate.
+
+
+================================================================================
+4. WHAT NOT TO DO
+================================================================================
+- Do not run `SET NOT NULL` on `error_events.app` — §1.
+- Do not touch `platform.blob_references` or anything reaching `del()`.
+- Do not drop `platform.entities` or `platform.links`. They are issues' tables
+  now, with issues' rows in them.
+- Do not re-mount `search` on sales or un-retire `bk link`.
+- Do not touch production, take backups, deploy, or release. The human does all
+  four.
+
+
+================================================================================
+5. VERIFICATION
+================================================================================
+Local only, port 5432. `verify.sh` before you start and after every step, with
+the drops DECLARED in the baseline first.
+
+Every delete and drop goes inside a transaction that asserts its own row count
+and rolls back on a mismatch — SAFETY.md's box on why the ledger alone is not
+enough. The declaration mechanism compares NET change and cannot tell "you
+deleted what you said" from "you deleted more and the app backfilled it".
+
+Report what you OBSERVED:
+
+  1. A member of an issues workspace can still use issues — the gate is gone,
+     not inverted
+  2. A sales user is unaffected
+  3. `/api/meta`'s app registry still returns something sensible — §2a
+  4. `bk` still works end to end: login, both apps, create in each
+  5. If you did Phase 6: a fan-out from a user with BOTH apps, and from a user
+     with ONE
+
+Plus the full gate (README §4), and `make routes` if annotations moved.
+
+
+================================================================================
+6. WHERE I AM LEAST CONFIDENT
+================================================================================
+Five for five: every agent has found something false in my brief.
+
+  1. **§2a's registry question.** I genuinely do not know what `/api/meta`
+     derives from once `app_access` is gone. This may be the whole phase.
+  2. **Whether `workspace_apps` has other readers** — the Apps panel is the one
+     I know about.
+  3. **Whether Phase 6 is coherent at all**, per §3 constraint 2.
+  4. **Whether removing `requireAppAccess` leaves a hole.** It is the 403 with a
+     hint; if something else depended on it refusing, removing it opens
+     something. I think not, because membership is now per app and that IS the
+     gate — but I have not read it.
+  5. This is the last phase before the docs. If you find something the previous
+     five got wrong, it is cheaper to say it now than to have agent 7 document it.
+
+
+================================================================================
+7. WHEN YOU ARE DONE
+================================================================================
+Full gate. Commit as you go, do not push.
+
+Write `multiAppFinalRefactor/agent6/agent-2026-08-10-1.txt`:
+
+  1. §1's precondition: did you observe a `sales` row in `error_events`?
+  2. Each drop: the SELECT, the guarded DELETE/DROP, the declaration, verify.sh
+  3. §2a's registry answer — what it derives from now
+  4. Phase 6: done, or declined with reasoning. Both are acceptable
+  5. §5's checks, observed
+  6. Everything in §6 I got wrong, plus anything else
+
+In chat, print only the path of that file.
+--------------------------------------------------------------------------------
