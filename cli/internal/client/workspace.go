@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 )
 
 // Workspace-aware client methods. Companion to client.go; the legacy methods
@@ -654,3 +655,35 @@ func (c *Client) UpdateProfile(req UpdateProfileRequest) (*Me, error) {
 // are for. What parity guarantees is precisely: every route an agent can reach
 // is reachable, and every route a *command* claims exists. Anything the
 // commands do not claim is outside its stated scope.
+
+// InvitationPreview is what `bk <app> invite show <token>` prints: the facts the
+// web's `/invitations/{token}` page renders before you commit to accepting.
+//
+// The server only returns this to the person the invitation was ISSUED to — a
+// token alone is not enough, and a token for somebody else is refused with a
+// message naming the CALLER rather than the invitee. See the route's header:
+// whose invitation a token is for is not something the holder gets to learn.
+type InvitationPreview struct {
+	Token     string `json:"token"`
+	Email     string `json:"email"`
+	Status    string `json:"status"`
+	ExpiresAt string `json:"expires_at"`
+	Workspace struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+		Slug string `json:"slug"`
+	} `json:"workspace"`
+	InvitedBy struct {
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	} `json:"invited_by"`
+}
+
+// ShowInvitation previews an invitation without accepting it.
+func (c *Client) ShowInvitation(token string) (*InvitationPreview, error) {
+	var out InvitationPreview
+	if err := c.get("/api/invitations/"+url.PathEscape(token), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

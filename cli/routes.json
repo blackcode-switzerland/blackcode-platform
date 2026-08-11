@@ -93,6 +93,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/invitations/{token}",
+      "command": "bk issues invite show",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
       "path": "/api/me/inbox",
       "command": "bk issues inbox list",
       "app": "issues"
@@ -689,6 +695,12 @@
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/trash/purge",
       "command": "bk sales trash purge",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/invitations/{token}",
+      "command": "bk sales invite show",
       "app": "sales"
     },
     {

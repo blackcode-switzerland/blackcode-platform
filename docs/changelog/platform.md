@@ -30,6 +30,33 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-11 — `bk <app> invite show <token>`: preview an invitation before accepting
+
+**New, additive. Nothing changes for existing commands.**
+
+The web has always rendered who invited you and to which workspace before you
+commit, at `/invitations/{token}`. From the CLI you could only accept blind. A
+web⇄CLI parity audit found this and nothing else — it was the only real
+capability gap in either direction.
+
+```bash
+bk issues invite show <token>
+bk sales  invite show <token>
+```
+
+Prints the workspace, who invited you, the address it was sent to, and when it
+expires — then the exact `invite accept` line to run.
+
+**You must be signed in as the address the invitation was sent to.** Holding the
+token is not enough, and a token issued to somebody else is refused *without
+naming them* — whose invitation a token is for is not something the holder gets
+to learn.
+
+`GET /api/invitations/{token}` on both apps. Plain text only: the token verbs
+disable flag parsing so a token beginning with `-` is not read as a flag, which
+means the output flags cannot parse either. Use `bk <app> invite pending -o json`
+for the structured form.
+
 ## 2026-08-11 — `--help` stopped printing examples that exit 2
 
 **Not breaking. No route, command, flag or payload changed** — only the text

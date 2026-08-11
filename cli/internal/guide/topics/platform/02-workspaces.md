@@ -79,6 +79,19 @@ be in one app's workspace and in none of another's. If a workspace you expected
 is missing from one app, you are not a member of it THERE — ask an owner of that
 app's workspace to invite you: `bk <app> invite send <email>`.
 
+### Redeeming an invitation
+
+```bash
+bk <app> invite pending           # invitations addressed to YOUR email
+bk <app> invite show <token>      # preview one: who invited you, and where
+bk <app> invite accept <token>
+```
+
+`show` is for a token you were handed rather than one addressed to you — a link
+pasted into a message, say. It answers only if you are signed in AS the address
+the invitation was sent to; holding the token is not enough, and a token for
+somebody else is refused without naming who it is for.
+
 `bk <app> workspace list` used to take `--all`, which showed workspaces the app
 was switched off in plus the apps reachable in each. Both of those described the
 gate, so the flag went with it and the plain listing is the whole answer.
@@ -141,4 +154,4 @@ Three things to know before you call it:
 If you delete that app's active workspace, its active selection is cleared — run
 `bk <app> workspace use <slug>` before the next scoped command in that app.
 
-Related commands: `bk meta`, `bk issues workspace list|show|create|use|edit|transfer|delete`, `bk sales workspace list|show|use`, `bk app list|use`, `bk issues member list|remove|leave`, `bk issues invite send|list|revoke|pending`
+Related commands: `bk meta`, `bk issues workspace list|show|create|use|edit|transfer|delete`, `bk sales workspace list|show|use`, `bk app list|use`, `bk issues member list|remove|leave`, `bk issues invite send|list|revoke|pending|show|accept`

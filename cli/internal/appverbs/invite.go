@@ -32,6 +32,7 @@ func newInviteCmd(acfg Config) *cobra.Command {
 	// member of anything.
 	if acfg.InviteAccept {
 		cmd.AddCommand(
+			newInviteShowCmd(acfg),
 			newInviteAcceptCmd(acfg),
 			newInviteDeclineCmd(acfg),
 			newInvitePendingCmd(acfg),
@@ -337,6 +338,62 @@ func newInvitePendingCmd(acfg Config) *cobra.Command {
 				}
 				return nil
 			})
+		},
+	}
+}
+
+// `show` exists because the WEB could preview an invitation and the CLI could
+// not: `/invitations/{token}` renders who invited you and to which workspace
+// before you commit, while an agent handed a raw token could only accept it
+// blind. The 2026-08-11 web⇄CLI parity audit found this and nothing else — it
+// was the only real capability gap in either direction.
+//
+// `pending` answers the same question for the normal path, where the invitation
+// was issued to your own address. `show` is for a token pasted in from
+// elsewhere, and it refuses unless you are the person it was issued to.
+func newInviteShowCmd(acfg Config) *cobra.Command {
+	return &cobra.Command{
+		Use:         "show <token>",
+		Annotations: map[string]string{"routes": "GET /api/invitations/{token}"},
+		Short:       "Preview an invitation without accepting it",
+		Long: "Preview an invitation without accepting it.\n\n" +
+			"Shows who invited you and to which workspace. You must be signed in as the\n" +
+			"address the invitation was sent to; a token alone is not enough.\n\n" +
+			"Prints plain text only — see the note in the source on why `--json` is not\n" +
+			"available on the token verbs; `invite pending -o json` is the structured form.\n\n" + inviteTokenLong,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			token, err := tokenArg(cmd, args)
+			if err != nil || token == "" {
+				return err
+			}
+			c, _, err := cmdutil.NewClientAndConfig()
+			if err != nil {
+				return err
+			}
+			inv, err := c.ShowInvitation(token)
+			if err != nil {
+				return err
+			}
+			// No `--json` here, and that is inherited rather than chosen:
+			// `accept`, `decline` and `show` all set DisableFlagParsing so a
+			// token beginning with `-` is not read as a flag, which means the
+			// output flags cannot parse either. For machine-readable output use
+			// `invite pending -o json`, which covers the normal path (an
+			// invitation issued to your own address).
+			out := cmd.OutOrStdout()
+			by := inv.InvitedBy.Name
+			if by == "" {
+				by = inv.InvitedBy.Email
+			} else {
+				by = fmt.Sprintf("%s <%s>", by, inv.InvitedBy.Email)
+			}
+			fmt.Fprintf(out, "workspace:  %s (%s)\n", inv.Workspace.Name, inv.Workspace.Slug)
+			fmt.Fprintf(out, "invited by: %s\n", by)
+			fmt.Fprintf(out, "sent to:    %s\n", inv.Email)
+			fmt.Fprintf(out, "expires:    %s\n", inv.ExpiresAt)
+			fmt.Fprintf(out, "\naccept with: bk %s invite accept %s\n", acfg.App, inv.Token)
+			return nil
 		},
 	}
 }
