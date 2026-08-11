@@ -772,6 +772,25 @@ somebody has to make, not a bug somebody forgot.
    itself in its reply and both the census and the purge reject an answer from an
    app they did not address.
 
+9. **A config error can make one app answer AS another, and every guard stays
+   green.** Found in Phase 9 by asking *what would this still pass on?* — not by
+   review, not by any test. Point one app's `base_url` at another app in the
+   suite and the census reports BOTH as `reachable: true`, with the same data,
+   under two names. `all_apps` then purges one origin twice, reads its "I am
+   empty" as the other app's answer, asserts the census satisfied, and closes
+   the account over untouched data.
+
+   **The reachable/unreachable TYPE could not catch it** — the safety property
+   the whole design rested on. It distinguishes "no answer" from "no data"; it
+   cannot distinguish "the wrong app's answer" from "this app's answer", because
+   both are answers.
+
+   Fixed by rejecting a reply whose `app` is not the app addressed, on the
+   census AND the purge — the purge matters more, because by the time it answers
+   it has already deleted something. **The information needed was already on the
+   wire and nobody had read it**, which is `error_events.workspace_id`'s shape:
+   a value present, carried, and unexamined.
+
 ### And one rule this project produced, which belongs everywhere
 
 > **An absence is only evidence if you know your instrument could have seen the
