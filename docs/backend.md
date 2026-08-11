@@ -346,7 +346,7 @@ for exact column types, indexes, and check constraints.
 | `workspaces` | `name`, `slug` (unique), `owner_id`, `logo_url`, `deleted_at` |
 | `workspace_members` | `(workspace_id, user_id)` unique; `role` ∈ `owner` \| `member` |
 | `workspace_counters` | per-workspace sequence allocators: `last_issue_seq`, `last_project_seq`, `last_task_seq` (allocated in-transaction by `allocateNext*Seq`) |
-| `workspace_invitations` | `email`, `token` (unique), `role`, `status` ∈ `pending`/`accepted`/`revoked`/`expired`/`declined`, `expires_at`, `app` (**no reader since 2026-08-10** — it named the app to also grant on accept; new rows are NULL, historical rows kept) |
+| `workspace_invitations` | `email`, `token` (unique), `role`, `status` ∈ `pending`/`accepted`/`revoked`/`expired`/`declined`, `expires_at`. ~~`app`~~ **DROPPED 2026-08-11** (migration `0046`) — it named the app to also grant on accept, and Phase 5 removed per-app grants |
 | `apps` | the app ADDRESS BOOK (migration `0034`). `slug` PK — the same slug used in the CLI namespace and guide folders, so a surrogate id would just make every one of those unreadable. `name`, `description`, `base_url`, `enabled` (platform-wide kill switch), `maintains_blob_index`. This is what `/api/meta`'s `apps` block and `bk app list` report |
 | ~~`workspace_apps`~~, ~~`app_access`~~ | **DROPPED 2026-08-10** (migration `0045`). The per-app gate — see "Per-app access — REMOVED" below |
 | ~~`transaction_log`~~ | **DROPPED 2026-08-10** (migration `0045`). No writer since before the monorepo; `/api/undo` has been a 410 since 2026-08-05 |
@@ -563,11 +563,25 @@ gone; one moved down a layer and got stronger.
   no longer derivable centrally, and why `/api/meta`'s `apps` block became the
   address book rather than a grant list.
 
-**`workspace_invitations.app` has no reader.** It named the app an invitee was
-being invited INTO, and drove `alsoGrantApp`. The column and its historical rows
-are kept — dropping a column on a live table for tidiness is what PLAN.md §2
-warns against — but nothing writes it (new rows are NULL) and nothing reads it.
-Worth a decision in a later phase, not a silent removal here.
+**`workspace_invitations.app` was DROPPED on 2026-08-11** (migration `0046`).
+It named the app an invitee was being invited INTO, and drove `alsoGrantApp`.
+Phase 5 removed per-app grants, after which the one writer passed a hardcoded
+NULL and nothing read it — `transaction_log`'s shape, and it survived that phase
+because *a column written as NULL looks maintained*.
+
+The decision it was left for is made: an invitation is into ONE workspace, that
+workspace belongs to exactly one app, and accepting it makes you a member of
+that app. To give somebody access to another app, invite them from that app.
+`POST .../invitations` still refuses an `app` in the body with a 400 naming the
+change (`app_not_accepted`), which is what an older client meets — that is
+unchanged, and it is the part that was ever a contract.
+
+**`error_events.workspace_id` went in the same migration**, for a different
+reason: it had never been written, by anything — 0 of 328 production rows. Its
+justification (that after the app split a bare `workspace_id` is ambiguous, so
+the `app` column disambiguates it) was sound about a column that did not hold
+data. `error_events.app` stays and is unaffected: it answers "what has app X
+been throwing lately?", which is a real reader.
 
 ## The event spine
 

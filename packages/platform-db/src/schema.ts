@@ -318,10 +318,20 @@ export const workspaceInvitations = platformSchema.table(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: varchar('role', { length: 20 }).default('member').notNull(),
-    // NULL = an org-level invite: on accept the invitee gets whatever the
-    // workspace's enabled apps grant by default. Set = invited straight into one
-    // app, and accepting grants that app explicitly even under 'invite_only'.
-    app: varchar('app', { length: 40 }).references(() => apps.slug, { onDelete: 'set null' }),
+    // ── `app` WAS HERE. DROPPED 2026-08-11 BY MIGRATION 0046. ─────────────────
+    // "NULL = an org-level invite; set = invited straight into one app, and
+    // accepting grants that app explicitly even under 'invite_only'."
+    //
+    // It existed to drive `alsoGrantApp`, and Phase 5 dropped the grants
+    // (`platform.app_access`, `platform.workspace_apps`) because a workspace
+    // belongs to exactly one app now and membership is the whole gate. From
+    // 2026-08-10 the one writer passed a hardcoded NULL and nothing read it.
+    //
+    // **It survived that phase because a column that is written-as-NULL looks
+    // maintained.** `transaction_log`'s shape exactly: dead, and not obviously
+    // dead. Agent 6 flagged it, agent 7 left it open as PLAN.md §9.2, Phase 8
+    // dropped it. There is nothing to grant per-app any more — to give somebody
+    // access to another app, invite them FROM that app.
     token: varchar('token', { length: 64 }).notNull(),
     status: varchar('status', { length: 20 }).default('pending').notNull(),
     expires_at: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -699,11 +709,26 @@ export const errorEvents = platformSchema.table(
   'error_events',
   {
     id: serial('id').primaryKey(),
-    // `workspace_id` has NO foreign key, and after the app split it is not
-    // self-describing either: each app keeps its OWN workspaces, so
-    // `workspace_id = 1` names a different row depending on who wrote it. This
-    // column is what disambiguates it, and reading one without the other is the
-    // bug it exists to prevent.
+    // ── WHICH APP THREW IT. ───────────────────────────────────────────────────
+    //
+    // ** THE JUSTIFICATION WRITTEN HERE UNTIL 2026-08-11 WAS WRONG, AND THE WAY
+    //    IT WAS WRONG IS WORTH KEEPING. **
+    //
+    // It said: `workspace_id` has no foreign key, and after the split
+    // `workspace_id = 1` names a different row depending on who wrote it — so
+    // this column is what disambiguates it. Sound reasoning about a column that
+    // had never been written. Agent 6 measured it: 0 of 328 rows, ever. Both
+    // `safeLog` call sites in platform-api's handler omit it and the client
+    // error beacon passes an explicit null. Migration 0046 dropped it.
+    //
+    // So the ambiguity this column was introduced to resolve did not exist.
+    // **A justification can be internally correct and still describe nothing** —
+    // the check is whether the thing it reasons about is actually there, which
+    // is the same question `WorkspaceSource.getById` failed in the same phase.
+    //
+    // `app` stays, on its own merit: "what has app X been throwing lately?" is
+    // the question the super-admin Errors tab asks, and what
+    // `idx_error_events_app_occurred` is built for. That is a REAL reader.
     //
     // NULLABLE, and it is expand → migrate → contract rather than timidity —
     // the same sequence `events.app` and `uploads.app` went through, for the
@@ -716,8 +741,14 @@ export const errorEvents = platformSchema.table(
     //
     // Migration 0044 backfills every existing row to 'issues': every row
     // predates the split and issues is the only app whose workspace ids they
-    // can mean. NOT NULL is deferred to the refactor's Phase 5, once both apps
-    // have been deployed writing it — see multiAppFinalRefactor/PLAN.md §4b.
+    // can mean.
+    //
+    // NOT NULL is STILL DEFERRED, and the precondition is working rather than
+    // failing. Phase 5 was where PLAN.md §4b scheduled it; production had 0 rows
+    // saying `sales` then, and had 0 as of Phase 8, because sales has not
+    // errored since the column existed. Tightening on that would assert an
+    // absence nobody has observed the presence of. It stays PLAN.md §9.6: do it
+    // when production shows rows for BOTH apps, not on a date.
     //
     // No FK to `apps.slug`, unlike `events.app` and `uploads.app`. Those tables
     // hold an app's data; this one holds the record of an app FAILING, and that
@@ -730,7 +761,6 @@ export const errorEvents = platformSchema.table(
     // and `insertErrorEvent` requires it in its parameter type so an app-level
     // caller cannot omit it. See `packages/platform-db/src/error-events.ts`.
     app: varchar('app', { length: 40 }),
-    workspace_id: integer('workspace_id'),
     user_id: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
     level: varchar('level', { length: 10 }).notNull().default('error'),
     code: varchar('code', { length: 50 }),

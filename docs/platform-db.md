@@ -261,14 +261,21 @@ default-workspace picker and `platform-storage`'s upload attribution all read it
 So an app that owns its workspaces **must not write its ids into that column and
 must not read its own default out of it**; it answers "which workspace by
 default" from its own tenancy (`WorkspaceSource.getDefaultForUser`). This is
-`error_events.workspace_id`'s ambiguity in the identity table, and the fix is the
-same shape: keep the column, stop asking it a question it cannot answer.
+`error_events.workspace_id`'s ambiguity in the identity table — except that
+`active_workspace_id` has real readers and `error_events.workspace_id` never had
+one. **The two took different fixes for that reason.** Here: keep the column,
+stop asking it a question it cannot answer. There: migration `0046` dropped it
+on 2026-08-11, having measured 0 non-NULL values in 328 production rows. The
+choice between the two is *does anything actually depend on it*, not how the
+ambiguity reads.
 
 Two things about that which generalise beyond this refactor:
 
 **A per-app copy is not a copy.** Each of those tables drops the columns that
 only existed because the platform table was shared — `app` everywhere, the
-`app IS NULL OR app = <serving app>` scope on labels, `workspace_invitations.app`.
+`app IS NULL OR app = <serving app>` scope on labels, `workspace_invitations.app`
+(which the PLATFORM table then dropped too, in `0046`: a column no per-app copy
+wanted was a column the shared original had stopped needing).
 A scope helper left behind over a table that cannot hold a foreign row reads as
 protection and is a no-op, which is what `CLAUDE.md`'s standing rule is about.
 It also drops what has never had a writer (`workspaces.deleted_at`, still

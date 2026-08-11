@@ -63,7 +63,6 @@ export function clientErrorsRoute(app: AppContext) {
       method: null,
       status_code: null,
       user_id: user.id,
-      workspace_id: null,
       context: context as Record<string, unknown> | null,
     })
 

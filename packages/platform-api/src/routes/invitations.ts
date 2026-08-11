@@ -153,17 +153,19 @@ export function workspaceInvitationsRoute(app: AppContext, contribution: Invitat
 
     try {
       const result = await createInvitation(
-        // `app.appSlug` is the PRODUCING app on the event row. The invitation's
-        // own `app` column — where the invitee was being invited TO — is written
-        // NULL from 2026-08-10: it existed only to drive `alsoGrantApp`, and the
-        // grants are gone. Its historical rows are kept; see Phase 5's report.
+        // `app.appSlug` is the PRODUCING app on the event row — who is writing.
+        //
+        // The invitation's OWN `app` column — where the invitee was being
+        // invited TO — was written NULL from 2026-08-10 and was dropped
+        // altogether by migration 0046 (2026-08-11), along with the parameter
+        // that fed it. The 400 above, which refuses an `app` in the body, is
+        // what an older client meets and is unaffected.
         { db: app.db, app: app.appSlug },
         {
           workspaceId: ctx.workspace.id,
           email,
           invitedBy: ctx.user.id,
           ttlDays: INVITE_TTL_DAYS,
-          app: null,
         }
       )
 

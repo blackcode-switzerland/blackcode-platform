@@ -233,7 +233,11 @@ interface ErrorEventRow {
   method: string | null
   status_code: number | null
   user_id?: number | null
-  workspace_id?: number | null
+  // `workspace_id` was here and is gone (migration 0046). It was optional, and
+  // NEITHER of the two `safeLog` call sites below ever passed it — 0 of 328 rows
+  // in production, ever. An optional field nobody fills is indistinguishable
+  // from a field somebody forgot, which is how it survived to be documented in
+  // the schema as load-bearing.
   context: Record<string, unknown> | null
 }
 
@@ -248,7 +252,7 @@ async function safeLog(app: AppContext, row: ErrorEventRow): Promise<void> {
     // holds the context, so there is nothing to thread.
     await app.db.execute(sql`
       INSERT INTO ${errorEvents}
-        (app, level, code, message, stack, route, method, status_code, user_id, workspace_id, context)
+        (app, level, code, message, stack, route, method, status_code, user_id, context)
       VALUES (
         ${truncate(app.appSlug, 40)},
         ${row.level},
@@ -259,7 +263,6 @@ async function safeLog(app: AppContext, row: ErrorEventRow): Promise<void> {
         ${truncate(row.method ?? null, 10)},
         ${row.status_code ?? null},
         ${row.user_id ?? null},
-        ${row.workspace_id ?? null},
         ${context}::jsonb
       )
     `)

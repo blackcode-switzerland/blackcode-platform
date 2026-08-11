@@ -30,6 +30,36 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-11 — two dead columns dropped from `platform.*`
+
+**Not breaking.** Neither column had a reader, and both writers wrote a
+constant. Nothing you can observe through `bk` or through a route changes.
+
+- **`platform.workspace_invitations.app`** — the app an invitee was invited
+  *into*. It existed to drive a per-app grant, and 2026-08-10's Phase 5 removed
+  per-app grants entirely (`app_access`, `workspace_apps`): an invitation is
+  into one workspace, that workspace belongs to exactly one app, and accepting
+  it makes you a member of that app. Since that day the only writer passed a
+  hardcoded NULL.
+- **`platform.error_events.workspace_id`** — never written, by anything, ever:
+  0 of 328 production rows. Its stated purpose was to be disambiguated by the
+  `app` column added beside it in Phase 1; the ambiguity was hypothetical
+  because the column was always NULL.
+
+**`error_events.app` stays and is unaffected** — it answers "what has app X been
+throwing lately?", which is what the super-admin Errors tab asks.
+
+**What to adapt:** nothing, unless you read `platform.*` directly, which is not
+a supported interface. `bk <app> invite send` has refused an `--app` flag with a
+naming error since 2026-08-10 and still does; that refusal is unchanged.
+
+Migration `0046_drop_dead_platform_columns` (issues ledger — `platform.*` is
+always migrated from there). Rollback: `docs/sql/0046-drop-dead-columns-rollback.sql`,
+which restores the **structure**; the invitation column's historical values are
+not recoverable from it.
+
+---
+
 ## 2026-08-11 — the web copy caught up with the CLI's verb re-tiering
 
 **No route changed and no command changed.** This entry exists because the

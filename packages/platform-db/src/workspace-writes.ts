@@ -150,16 +150,22 @@ export interface CreateInvitationInput {
   invitedBy: number
   role?: 'member'
   ttlDays?: number
-  /**
-   * Invite this person straight into one app (Phase 4). Omit / null for an
-   * org-level invite, where accepting grants whatever the workspace's apps hand
-   * out by default. Set, it also grants that app even if the app is
-   * 'invite_only' there — the invitation is the grant.
-   *
-   * NOT the same `app` as `WriteContext.app`. This one is the destination; that
-   * one is who is writing.
-   */
-  app?: string | null
+  // ── `app` (the DESTINATION app) WAS HERE. GONE 2026-08-11, migration 0046. ──
+  // "Invite this person straight into one app; set, it also grants that app even
+  // if the app is 'invite_only' there — the invitation is the grant."
+  //
+  // There is nothing to grant. Phase 5 dropped `platform.app_access` and
+  // `platform.workspace_apps`: an invitation is into ONE workspace, that
+  // workspace belongs to exactly one app, and accepting it makes you a member of
+  // that app. To give somebody access to another app, invite them from that app.
+  //
+  // The route has REJECTED an `app` in the request body since 2026-08-10 with a
+  // 400 that names the change (`app_not_accepted`) — that stays, and it is the
+  // part an older client meets. What goes is the parameter behind it, which
+  // every caller was already passing as a hardcoded null.
+  //
+  // Note the header above still distinguishes this from `WriteContext.app` (who
+  // is WRITING, which remains). That ambiguity is why the two were never merged.
 }
 
 export interface CreateInvitationResult {
@@ -238,7 +244,6 @@ export async function createInvitation(
         email,
         invited_by: input.invitedBy,
         role: input.role ?? 'member',
-        app: input.app ?? null,
         token,
         status: 'pending',
         expires_at: expiresAt,

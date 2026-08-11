@@ -100,7 +100,6 @@ async function logEmailFailure(
       method: 'POST',
       status_code: null,
       user_id: null,
-      workspace_id: null,
       // Domain only — never store the full recipient address.
       context: { recipient_domain: to.split('@')[1] ?? null, kind },
     })
