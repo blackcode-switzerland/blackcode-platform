@@ -665,9 +665,10 @@ somebody has to make, not a bug somebody forgot.
 
 1. **Arriving on another app's cookie gets you a session and no workspace.**
    Production behaviour today. The session is shared across `*.blackcode.ch`
-   (D-16), but membership is per app and `ensureWorkspaceForUser` runs in the
-   SIGN-IN callback — which a person arriving on an existing cookie never
-   triggers. They land on "no workspace yet" and the only way out is to sign out
+   (D-16), but membership is per app and `ensureWorkspaceForUser` has exactly two
+   call sites — the **sign-in callback** and **`POST /api/auth/register`**.
+   Somebody arriving on an existing cookie from another app takes neither path:
+   they did not register here, and they did not sign in here. They land on "no workspace yet" and the only way out is to sign out
    and back in. **It also makes `adding-an-app.md`'s signed proof 9 read
    stronger than it is**: "already signed in" proves the cookie is shared, not
    that the person can use the app. Three candidate answers, none taken —
