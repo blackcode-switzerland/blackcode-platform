@@ -85,7 +85,8 @@ platform/apps" for the rule and the reasoning.
        bk <app> workspace  list, show, use (+ create/edit/transfer/delete
                            where the app serves them)
        bk <app> member     list, remove, leave
-       bk <app> invite     send, list, accept, decline, revoke, pending
+       bk <app> invite     send, list, revoke, candidates; show, accept, decline,
+                           pending (redeeming one addressed to you)
        bk <app> upload     store a file against that app
        bk <app> trash      that app's recycle bin: list, restore, purge, empty
        bk <app> label      list, view, create, edit, delete, attach, detach
