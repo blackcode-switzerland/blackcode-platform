@@ -663,6 +663,13 @@ between this refactor and losing somebody's comments.
 Written 2026-08-11 by agent 7, the last agent, and accepted. Each is a decision
 somebody has to make, not a bug somebody forgot.
 
+> **STATUS 2026-08-11, after Phase 8 (agent 8).** Items **2, 3 and 4 are
+> CLOSED** — annotated in place below rather than deleted, because the ledger is
+> a dated record of what was owed. **6 stays open and its precondition is still
+> unmet.** 1, 5 and 7 are untouched. Item 8 is NEW: Phase 8 found that
+> `deleteAccountReport` has been enumerating only `platform.workspaces` since
+> Phase 2 and therefore cannot see any app but issues.
+
 1. **Arriving on another app's cookie gets you a session and no workspace.**
    Production behaviour today. The session is shared across `*.blackcode.ch`
    (D-16), but membership is per app and `ensureWorkspaceForUser` has exactly two
@@ -675,15 +682,22 @@ somebody has to make, not a bug somebody forgot.
    bootstrap on first authenticated request (cheap, but any app then silently
    mints tenancy for anyone with an account); an explicit "get started" button;
    or decide a new app is invite-only and the empty state is correct.
-2. **`workspace_invitations.app` has no reader.** New rows NULL, historical rows
-   kept. `transaction_log`'s exact shape — and that one ended with a phase
-   stopping to decide whether dropping it was safe.
-3. **`error_events.workspace_id` has no writer** — 0 of 328 rows, ever. Agent 6
-   found this retires the stated justification for the `app` column. Give it a
-   writer or drop it; leaving it is how it becomes a third open item.
-4. **`WorkspaceSource.getById` has no caller.** Flagged by agents 4, 5 and 7;
-   agent 7 added a third implementation of it while flagging it. A required
-   interface method every app implements and nobody calls. Five-line deletion.
+2. ~~**`workspace_invitations.app` has no reader.**~~ **CLOSED 2026-08-11** —
+   dropped by migration `0046`. New rows were NULL, historical rows kept; it was
+   `transaction_log`'s exact shape. The gate could not be "is it all NULL?",
+   because the historical rows legitimately carry values — it is "has anything
+   written one SINCE Phase 5 changed the writer", and that distinction was
+   watched to hold in both directions.
+3. ~~**`error_events.workspace_id` has no writer**~~ **CLOSED 2026-08-11** —
+   dropped by migration `0046`. `app` stays: it has a real reader (the
+   super-admin Errors tab, and the index built for it). Note for the record that
+   `tsc`, not grep, found the third caller passing this column — an app-local
+   email module nobody had thought to look in.
+4. ~~**`WorkspaceSource.getById` has no caller.**~~ **CLOSED 2026-08-11** —
+   deleted from the interface, three implementations and two fakes. Its
+   justification was written into the interface header ("upload attribution
+   reads one by id") and Phase 3 moved upload attribution to `UploadLedger`
+   without noticing the sentence had outlived the caller.
 5. **Retired capabilities in prose are unguarded.** The landing page sold
    `bk undo` for months over a journal that never had a writer, and three server
    `suggestion` strings named removed commands — the strings an agent ACTS on.
@@ -692,8 +706,27 @@ somebody has to make, not a bug somebody forgot.
 6. **`SET NOT NULL` on `error_events.app`** — deferred. Production has 0 rows
    saying `sales` because sales has not errored since the column existed. The
    precondition is working, not failing.
+
+   **STILL OPEN after Phase 8, and agent 8 could not check it.** The condition is
+   a fact about PRODUCTION, and README rule 2 forbids an agent reaching it. Local
+   dev cannot stand in: it has never run sales against this column either, so a
+   local "0 sales rows" measures the local database, not the precondition. **This
+   item needs the human, not the next agent** — one query, run once both apps
+   have errored:
+   `SELECT app, count(*) FROM platform.error_events GROUP BY app;`
 7. **Phase 6 (cross-app fan-out)** — deferred, spec above, blocked only by
    `bk search`'s deprecation window.
+
+8. **`deleteAccountReport` enumerates `platform.workspaces` only** — so
+   "what would closing my account do?" answers for `apps/issues` and is silent
+   about every other app. Found and OBSERVED in Phase 8, not yet fixed: a person
+   owning one issues workspace and one sales workspace gets a report naming the
+   issues one alone. Closing the account then soft-deletes the user
+   (`deleted_at`, `password_hash = NULL`) — an UPDATE, so
+   `sales.workspaces.owner_id`'s `ON DELETE RESTRICT` never fires — and the sales
+   workspace survives, owned by an account that can no longer authenticate,
+   unmentioned. **This is the whole subject of the next phase**; see agent 8's
+   reply for the mechanism and why the alternatives lose.
 
 ### And one rule this project produced, which belongs everywhere
 
