@@ -32,7 +32,27 @@ const CLI_DIR = join(REPO_ROOT, 'cli')
  * holes, and in `apps/issues` only two entries turned out to be genuine product
  * decisions. An unexplained exclusion is how coverage quietly rots.
  */
-const EXCLUDED_PATHS = new Map<string, string>()
+const EXCLUDED_PATHS = new Map<string, string>([
+  // Both entries arrived on 2026-08-11 with this app's self-signup, and both are
+  // the same entries — for the same reasons — that `apps/issues` and
+  // `apps/sales` carry. Copy them with the routes.
+  [
+    '/api/auth/{nextauth}',
+    'NextAuth handler — browser session machinery, never called by the binary. It ' +
+      'also exports via a list (`export { handler as GET, handler as POST }`), ' +
+      'which the export-shape guard cannot read; excluding the PATH is what takes ' +
+      'it out of that scan too',
+  ],
+  [
+    '/api/auth/register',
+    'browser sign-up. An agent authenticates with a `bk_live_…` token, which it can ' +
+      'only hold because a human already created the account, so there is nothing ' +
+      'here for `bk` to call. A command that created platform ACCOUNTS would be a ' +
+      'much larger decision than a missing one — the account is shared across every ' +
+      'deployment. The property that matters on this route is the whitelist gate, ' +
+      'and it is asserted by lib/auth/register-gate.test.ts rather than by this file',
+  ],
+])
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════

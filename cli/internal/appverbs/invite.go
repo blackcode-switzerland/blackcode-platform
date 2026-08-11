@@ -17,15 +17,26 @@ func newInviteCmd(acfg Config) *cobra.Command {
 		Use:   "invite",
 		Short: "Manage workspace invitations",
 	}
+	// The owner's half — always present when Invites is set. Three routes, all
+	// workspace-scoped and all served by whichever app owns the workspace.
 	cmd.AddCommand(
 		newInviteSendCmd(acfg),
 		newInviteListCmd(acfg),
 		newInviteRevokeCmd(acfg),
-		newInviteAcceptCmd(acfg),
-		newInviteDeclineCmd(acfg),
-		newInvitePendingCmd(acfg),
-		newInviteCandidatesCmd(acfg),
 	)
+	if acfg.InviteCandidates {
+		cmd.AddCommand(newInviteCandidatesCmd(acfg))
+	}
+	// The invitee's half. Separate because it is a different capability and its
+	// routes are not workspace-scoped: somebody redeeming a link is not yet a
+	// member of anything.
+	if acfg.InviteAccept {
+		cmd.AddCommand(
+			newInviteAcceptCmd(acfg),
+			newInviteDeclineCmd(acfg),
+			newInvitePendingCmd(acfg),
+		)
+	}
 	return cmd
 }
 

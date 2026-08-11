@@ -15,6 +15,13 @@
       "when": 1786060860000,
       "tag": "0002_blob_reference_index",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786492800000,
+      "tag": "0003_scaffold_owns_its_tenancy",
+      "breakpoints": true
     }
   ]
 }

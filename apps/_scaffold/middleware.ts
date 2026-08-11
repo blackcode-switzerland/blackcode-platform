@@ -38,10 +38,10 @@ export default withAuth({
   },
 })
 
-// ── This scaffold has no `/dashboard`, so this matcher currently guards nothing.
-// That is deliberate and it is stated rather than left to be discovered: the
-// file is here to be COPIED WITH ITS SHAPE INTACT, not to protect a page that
-// does not exist. When you add authenticated pages, add their prefixes here.
+// ── `/dashboard` is real since 2026-08-11, so this matcher now guards something.
+// Until then it protected nothing and said so, because the file existed to be
+// COPIED WITH ITS SHAPE INTACT — which is the whole reason the cookie note above
+// is here. When you add more authenticated pages, add their prefixes here.
 //
 // The matcher must NOT cover `/api/*`: API routes authenticate per request
 // through `apiHandler`, which accepts a bearer token as well as a session, and

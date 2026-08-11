@@ -48,14 +48,20 @@ against. Copy apps/_scaffold and cli/internal/commands/scaffold/ to start a real
 one; see docs/adding-an-app.md.`,
 	}
 	cmd.AddCommand(newNoteCmd())
-	// The app-owned platform verbs this scaffold actually serves (Phase 4).
+	// The app-owned platform verbs this scaffold actually serves (Phase 4,
+	// extended in Phase 7 when this app got tenancy of its own).
 	//
-	// Two, not eleven, and the shortness is the lesson: `appverbs.Config` is a
-	// DECLARATION OF WHAT `app/api/**` HAS, never a wish list. This app mounts
-	// `GET /api/workspaces`, `GET /api/workspaces/{ws}` and
-	// `GET …/{ws}/members`, so it declares `Workspace` and `Members` and nothing
-	// else. Turn on `Uploads` here and `lib/cli-parity.test.ts` immediately
-	// reports a claim on `POST /api/upload`, which this app has no file for.
+	// Three, not eleven, and the shortness is still the lesson: `appverbs.Config`
+	// is a DECLARATION OF WHAT `app/api/**` HAS, never a wish list. Turn on
+	// `Uploads` here and `lib/cli-parity.test.ts` immediately reports a claim on
+	// `POST /api/upload`, which this app has no file for.
+	//
+	// `Invites` is the owner's half only — send, list, revoke — because that is
+	// what this app serves. `InviteCandidates` and `InviteAccept` are OFF, and
+	// the three routes behind them are the honest reason: this app has no
+	// `/invite-candidates`, no `/api/invitations/accept` and no
+	// `/api/me/pending-invitations`. Add the routes and flip the flags together;
+	// flipping a flag alone claims a route that can only 404.
 	//
 	// `WorkspaceAdmin` is off because this app serves GET on /api/workspaces and
 	// no other method; `MemberLeave` because there is no /leave route.
@@ -63,6 +69,7 @@ one; see docs/adding-an-app.md.`,
 		App:       Slug,
 		Workspace: true,
 		Members:   true,
+		Invites:   true,
 	}).All()...)
 	return cmd
 }

@@ -1,8 +1,18 @@
 # What this scaffold mounts, and what it deliberately does not
 
-Three routes were REMOVED on 2026-08-10 (multiAppFinalRefactor Phase 4). Each was
-a shared factory whose premise stopped being true, and each would have taught the
-next app a bug:
+## The rule these entries share
+
+**A shared factory is only shared if the table under it is.** Before mounting
+one, read what it QUERIES. Four of them have now been found serving another
+app's data from a premise that stopped being true underneath them, and every one
+looked like a free capability.
+
+`docs/adding-an-app.md` is the authoritative checklist.
+
+## Removed on 2026-08-10 (multiAppFinalRefactor Phase 4)
+
+Three routes, each a shared factory whose premise had expired, and each of which
+would have taught the next app a bug:
 
 - **`workspaces/[ws]/links/`** — `bk link` was removed. A link joined two apps'
   records in one shared index that every app wrote into; with each app owning its
@@ -20,7 +30,28 @@ next app a bug:
   other deployment it lists the wrong people, and for a user of only that app it
   lists nobody. `bk <app> member list` is the question an app actually has.
 
-The rule these three share: **a shared factory is only shared if the table under
-it is.** Before mounting one, read what it queries.
+## NOT mounted on 2026-08-11 (Phase 7) — the fourth one
 
-`docs/adding-an-app.md` is the authoritative checklist; agent 7 rewrites it.
+- **`workspaceInvitationsRoute` / `workspaceInvitationRoute`.** This app serves
+  its own `workspaces/[ws]/invitations/` instead, over `scaffold.invitations`.
+  The shared factories call platform-db's `createInvitation` /
+  `listWorkspaceInvitations`, which read and write
+  `platform.workspace_invitations` — one app's table since 2026-08-10.
+
+  This is the quietest of the four, because **nothing is currently wrong**: only
+  `apps/issues` still mounts them. Which is exactly why it is written down. The
+  failure would have arrived with app #3, months later, as invitations into a
+  workspace this app cannot see — and by then nobody would connect it to a line
+  they copied from a scaffold.
+
+## What IS safe to mount, and why
+
+`workspaceMembersRoute`, `workspacesRoute`, `workspaceShowRoute`,
+`activeWorkspaceRoute` — all four resolve tenancy through
+`AppContext.workspaces`, which is THIS app's source (`lib/api.ts`). They read no
+platform table on your behalf. That is the property to check: not "is it in
+platform-api?" but "whose rows does it end up reading?"
+
+`apiHandler` and `resolveWorkspace` are shared for the same reason and are not
+optional — they carry the error log, the version headers and the 401/404/403
+reasoning, none of which an app should reimplement.

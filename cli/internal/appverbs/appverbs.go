@@ -153,9 +153,27 @@ type Config struct {
 	// Ignored unless Members is set.
 	MemberLeave bool
 
-	// Invites mounts `bk <app> invite` — candidates, send, list, revoke,
-	// pending, accept, decline.
+	// Invites mounts `bk <app> invite` — send, list, revoke. The OWNER's half:
+	// three routes, all workspace-scoped, all served by the app that owns the
+	// workspace.
 	Invites bool
+
+	// InviteCandidates adds `invite candidates`, which needs
+	// GET /api/workspaces/{ws}/invite-candidates. Ignored unless Invites is set.
+	//
+	// Split for the reason Members/MemberRemove/MemberLeave are split, and the
+	// scaffold is again what forces it (D-36 one level down): "an app serves a
+	// SUBSET" is true of a verb's SUBCOMMANDS too, and a single flag claimed
+	// seven routes for an app that has files for three. A command that could
+	// only ever 404 is not a command; it is a dead end with a help page.
+	InviteCandidates bool
+
+	// InviteAccept adds `invite accept|decline|pending` — the INVITEE's half,
+	// which is a different capability from the owner's and needs three routes
+	// that are NOT workspace-scoped (`/api/invitations/*`, `/api/me/*`): the
+	// person redeeming a link is by definition not yet a member of anything.
+	// Ignored unless Invites is set.
+	InviteAccept bool
 
 	// Users mounts `bk <app> user` — the directory of people you share a
 	// workspace with IN THIS APP. App-owned since Phase 4 and not merely

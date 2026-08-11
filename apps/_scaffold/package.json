@@ -11,8 +11,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:reproject": "tsx scripts/reproject.ts"
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "@blackcode/platform-agent": "*",

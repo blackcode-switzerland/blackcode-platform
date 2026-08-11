@@ -1088,6 +1088,12 @@
       "app": "sales"
     },
     {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/invitations/{id}",
+      "command": "bk scaffold invite revoke",
+      "app": "scaffold"
+    },
+    {
       "method": "GET",
       "path": "/api/workspaces",
       "command": "bk scaffold workspace use",
@@ -1097,6 +1103,12 @@
       "method": "GET",
       "path": "/api/workspaces/{ws}",
       "command": "bk scaffold workspace show",
+      "app": "scaffold"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk scaffold invite list",
       "app": "scaffold"
     },
     {
@@ -1115,6 +1127,12 @@
       "method": "POST",
       "path": "/api/me/active-workspace",
       "command": "bk scaffold workspace use",
+      "app": "scaffold"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk scaffold invite send",
       "app": "scaffold"
     },
     {

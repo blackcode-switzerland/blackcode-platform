@@ -6,7 +6,6 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { getDb } from '../client'
 import { noteCounters, notes, type Note } from '../schema'
-import { markEntityDeleted, projectEntity } from './entities'
 
 export async function listNotes(workspaceId: number, limit = 50): Promise<Note[]> {
   return getDb()
@@ -34,17 +33,22 @@ export async function getNoteByNumber(workspaceId: number, number: number): Prom
  * collide on the unique index. This is the single most-copied piece of an app's
  * schema and the easiest to get subtly wrong.
  *
- * ── AND `projectEntity` IS IN THE SAME TRANSACTION. THAT IS THE POINT. ──────
- * It used to be left out of this scaffold with a note saying a real app adds it,
- * which is precisely how it became "the single most forgettable operational step
- * in the app". It is here now, wired, so that copying this file copies the
- * ordering too.
+ * ── THERE IS NO CROSS-APP PROJECTION HERE ANY MORE (Phase 7, 2026-08-11) ────
+ * This transaction used to end with `projectEntity(tx, …)`, writing the note
+ * into `platform.entities` so a shared index could resolve its URN. That index
+ * has ONE writer now: multiAppFinalRefactor Phase 3 stopped `apps/sales`
+ * projecting, and `bk link` — the feature the index existed for — was removed in
+ * Phase 4. A new app projecting into it would be joining an index nothing reads
+ * on its behalf and that its own Postgres role has no business writing.
  *
- * Written AFTER the insert and INSIDE the same `tx`. Move it outside and the
- * projection commits even when the source write rolls back, leaving an
- * `entities` row for a note that does not exist — a URN that resolves to a 404
- * that nobody discovers for weeks. `lib/db/queries/entities.ts` has the full
- * argument; this call site is the one that has to be right.
+ * **The URN did not go away and does not need the index.** It is built from this
+ * app's OWN slug and the `seq` allocated above —
+ * `bc:scaffold:<workspace-slug>/note/<seq>` — so every app can still print and
+ * resolve one. `platform.entities` was where a URN was LOOKED UP; it was never
+ * what made one true.
+ *
+ * If your app wants cross-app search, the settled design is a CLI fan-out over
+ * each app's own server (PLAN.md Phase 6), never a shared table.
  */
 export async function createNote(
   workspaceId: number,
@@ -71,13 +75,6 @@ export async function createNote(
       })
       .returning()
 
-    await projectEntity(tx, {
-      workspaceId,
-      entityType: 'note',
-      number: seq,
-      title: data.title,
-    })
-
     return row
   })
 }
@@ -85,9 +82,11 @@ export async function createNote(
 /**
  * Soft delete — into `bk <app> trash`, not gone.
  *
- * The projection is MARKED deleted, not removed: a link pointing at something in
- * the recycle bin still has to resolve, and restoring the note has to bring its
- * links back with it. Only a purge calls `purgeProjectedEntity`.
+ * `deleted_at` and nothing else, since Phase 7 removed the cross-app projection
+ * (see `createNote`). What makes soft-delete load-bearing rather than polite is
+ * `platform.blob_references`: a hard DELETE fires this table's trigger and drops
+ * the row's references, so a file referenced only here becomes deletable the
+ * instant somebody presses delete. Two steps, two decisions.
  */
 export async function softDeleteNote(workspaceId: number, number: number): Promise<Note | null> {
   return getDb().transaction(async (tx) => {
@@ -104,12 +103,6 @@ export async function softDeleteNote(workspaceId: number, number: number): Promi
       )
       .returning()
     if (!row) return null
-    await markEntityDeleted(tx, {
-      workspaceId,
-      entityType: 'note',
-      number,
-      deletedAt: now,
-    })
     return row
   })
 }

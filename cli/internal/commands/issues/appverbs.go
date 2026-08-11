@@ -41,17 +41,19 @@ func appOwnedVerbs() []*cobra.Command {
 		// has /workspaces (all four methods), /transfer, /leave, /invitations,
 		// /users, /search, /me/inbox and /storage. Its own
 		// lib/cli-parity.test.ts checks that claim against the filesystem.
-		Workspace:      true,
-		WorkspaceAdmin: true,
-		Members:        true,
-		MemberRemove:   true,
-		MemberLeave:    true,
-		Invites:        true,
-		Users:          true,
-		Search:         true,
-		Activity:       true,
-		Inbox:          true,
-		Storage:        true,
+		Workspace:        true,
+		WorkspaceAdmin:   true,
+		Members:          true,
+		MemberRemove:     true,
+		MemberLeave:      true,
+		Invites:          true,
+		InviteCandidates: true,
+		InviteAccept:     true,
+		Users:            true,
+		Search:           true,
+		Activity:         true,
+		Inbox:            true,
+		Storage:          true,
 	})
 	set.Label.AddCommand(newLabelAttachCmd(), newLabelDetachCmd())
 	return set.All()

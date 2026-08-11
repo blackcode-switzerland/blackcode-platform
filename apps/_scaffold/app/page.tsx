@@ -18,6 +18,14 @@ export default function Home() {
         (<code>bk scaffold note</code>) and one guide topic — enough for every
         guardrail in the repo to have something real to check.
       </p>
+      <p>
+        It also owns its <strong>tenancy</strong>: <code>scaffold.workspaces</code>,{' '}
+        <code>workspace_members</code> and <code>invitations</code>, self-signup behind the
+        platform whitelist, and a workspace minted on first sign-in. Sign in at{' '}
+        <a href="/login">/login</a> and <a href="/dashboard">/dashboard</a> is the members page.
+        Identity is the only thing shared with the other apps — one account, one password, one
+        token.
+      </p>
     </main>
   )
 }

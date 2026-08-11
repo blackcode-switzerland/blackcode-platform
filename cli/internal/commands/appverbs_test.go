@@ -45,20 +45,22 @@ import (
 // nothing" from reading as "nothing wrong".
 func everyVerb() appverbs.Config {
 	return appverbs.Config{
-		App:            "probe",
-		Uploads:        true,
-		Trash:          true,
-		Labels:         true,
-		Workspace:      true,
-		WorkspaceAdmin: true,
-		Members:        true,
-		MemberLeave:    true,
-		Invites:        true,
-		Users:          true,
-		Search:         true,
-		Activity:       true,
-		Inbox:          true,
-		Storage:        true,
+		App:              "probe",
+		Uploads:          true,
+		Trash:            true,
+		Labels:           true,
+		Workspace:        true,
+		WorkspaceAdmin:   true,
+		Members:          true,
+		MemberLeave:      true,
+		Invites:          true,
+		InviteCandidates: true,
+		InviteAccept:     true,
+		Users:            true,
+		Search:           true,
+		Activity:         true,
+		Inbox:            true,
+		Storage:          true,
 	}
 }
 
