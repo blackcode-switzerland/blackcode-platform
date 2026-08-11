@@ -60,7 +60,6 @@ import {
   listWorkspaceMembers,
   setActiveWorkspace,
   type PlatformDb,
-  type User,
 } from '@blackcode/platform-db'
 
 /**

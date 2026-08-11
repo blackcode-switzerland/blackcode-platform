@@ -114,16 +114,19 @@ var deprecations = map[string]string{
 	"search":    "`bk search …` is now `bk <app> search …` — there is no cross-app index any more. Try `bk issues search <query>` for issues, tasks and projects, or `bk sales search <query>`, which searches INSIDE sales' records.",
 	"activity":  "`bk activity …` is now `bk <app> activity …` — each app keeps its own event feed. Try `bk issues activity --since 24h` or `bk sales activity`.",
 
-	// `--app` is gone from `search`, `activity` and `storage list`. It selected
-	// among the apps writing one shared index, so with one app per index its only
-	// legal value is the app already named on the command — and its only OTHER
-	// value returns an empty result that reads as "nothing here".
+	// `--app` is gone from `search`, `activity` and `storage list` (4.0.0) and from
+	// `invite send` (4.1.0). On the first three it selected among the apps writing
+	// one shared index; on `invite send` it named an app to also grant on accept.
+	// Both premises died with the same two tables.
 	//
 	// Keyed bare, like every flag row. That is safe rather than lucky: this hint
 	// only fires on an `unknown flag` error, and the commands that still take
-	// `--app` (`bk changelog`, `bk guide`, `bk <app> invite send`) accept it, so
-	// they never produce one.
-	"--app": "`--app` was removed from `search`, `activity` and `storage list` on 2026-08-10 — each app now has its own index, feed and upload ledger, so the app is the command: `bk issues search …`, `bk sales activity`. It is unchanged on `bk changelog --app` and `bk guide --app`.",
+	// `--app` (`bk changelog`, `bk guide`) accept it, so they never produce one.
+	//
+	// ONE ROW, TWO REMOVALS, and the text has to cover both — a caller who typed
+	// `bk issues invite send x@y --app sales` gets this hint, and a version that
+	// only mentioned search/activity/storage would read as "not about you".
+	"--app": "`--app` was removed from `search`, `activity` and `storage list` on 2026-08-10 — each app now has its own index, feed and upload ledger, so the app is the command: `bk issues search …`, `bk sales activity`. It was also removed from `bk <app> invite send`: an invitation is into ONE app's workspace now, so invite from the app you mean. It is unchanged on `bk changelog --app` and `bk guide --app`.",
 
 	// `bk link` is REMOVED, not moved, and this row is the only thing an agent
 	// on stale context has left. PLAN.md §3: a link's two ends could live in two
@@ -162,10 +165,14 @@ var deprecations = map[string]string{
 	"app default-access": "`bk app default-access` was removed on 2026-08-10 — `all_members` and `invite_only` described how a workspace handed out access to an app inside it, and there is no app inside a workspace any more. Membership is the grant: `bk <app> member list`.",
 	"app access":         "`bk app access …` was removed on 2026-08-10 — per-app grants (`platform.app_access`) are gone, because a workspace now belongs to exactly one app and its members are that app's users. Use `bk <app> member list`, `bk <app> invite send <email>` and `bk <app> member remove <user>`.",
 
-	// `bk app list` still exists but answers a NARROWER question, and an agent
-	// parsing its columns needs to know before it reads a missing field as false.
-	// Keyed `app list` so it can only fire on a genuine usage error there.
-	"app list": "`bk app list` still exists but no longer reports ENABLED, DEFAULT ACCESS or ACCESS — those described `platform.workspace_apps`, dropped on 2026-08-10. It is the address book now: APP, SERVER, REACHABLE. It also no longer needs an active workspace.",
+	// NOTE: there is deliberately NO row for `bk app list`, and the first draft of
+	// this batch had one — saying its columns had narrowed to APP/SERVER/REACHABLE.
+	// **It could never fire.** Command keys are matched against cobra's
+	// `unknown command "<sub>" for "<parent>"`, and `list` still EXISTS under
+	// `bk app`, so cobra never produces that error; `bk app list --bogus` reports
+	// an unknown FLAG and matches nothing here. Verified rather than reasoned
+	// about. A command whose OUTPUT changed while its spelling did not has no
+	// vehicle in this table — that is what the changelog and `--help` are for.
 
 	// `--all` on `bk <app> workspace list`. Keyed bare, like `--app` above: this
 	// only fires on an `unknown flag` error, and the commands that still take

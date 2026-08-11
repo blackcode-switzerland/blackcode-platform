@@ -115,7 +115,19 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 						if a.IsCurrent {
 							mark = "*"
 						}
-						workspaces := "—"
+						// "not asked" for another app, NOT "—".
+						//
+						// Since 2026-08-10 the server populates `workspaces` only
+						// for the app answering the request: each app's membership
+						// lives in its own schema and no deployment can read
+						// another's. An em dash reads as "you have none there",
+						// which is a different claim and one this output cannot
+						// make. An agent that believes it would skip an app it can
+						// actually use.
+						workspaces := "not asked"
+						if a.IsCurrent {
+							workspaces = "—"
+						}
 						if len(a.Workspaces) > 0 {
 							workspaces = strings.Join(a.Workspaces, ",")
 						}
@@ -123,6 +135,11 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 					}
 					if err := at.Flush(); err != nil {
 						return err
+					}
+					if len(meta.Apps) > 1 {
+						fmt.Fprintln(cmd.ErrOrStderr(),
+							"\n\"not asked\" = this server does not know that app's workspaces, which is not the "+
+								"same as you having none. Ask it: `bk <app> workspace list`.")
 					}
 
 					// Where the vocabulary lives now. The table cannot usefully

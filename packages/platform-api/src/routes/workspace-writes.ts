@@ -29,11 +29,12 @@
 // worth re-reading in the git history first.
 
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  recordPlatformEvent,
-  removeMember,
-  revokeInvitation,
-} from '@blackcode/platform-db'
+// `recordPlatformEvent` was imported here until 2026-08-10 and is not any more:
+// the three app-gate routes were its only direct callers. The two routes left
+// still record their events — inside `removeMember` and `revokeInvitation`,
+// which take the `{ db, app }` write context and do it in the same transaction
+// as the mutation, which is where it belongs.
+import { removeMember, revokeInvitation } from '@blackcode/platform-db'
 import type { AppContext } from '../app-context'
 import { Errors } from '../errors'
 import { createApiHandler, createResolveWorkspace, requireOwner } from '../handler'

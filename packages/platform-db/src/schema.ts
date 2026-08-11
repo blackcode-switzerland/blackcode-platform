@@ -26,7 +26,6 @@ import {
   boolean,
   jsonb,
   primaryKey,
-  foreignKey,
   index,
   uniqueIndex,
   check,
