@@ -165,7 +165,7 @@ export function SalesShell({ ws, children }: { ws: string; children: React.React
             apps carry, and the app word beside it is where the difference
             belongs. The palette stays sales' everywhere else — D-4 is about the
             product's colour, not about its logo. */}
-        <Image src="/logo.png" alt="b/" width={22} height={22} className="rounded-md" />
+        <Image src="/logo.png" alt="b/" width={22} height={22} className="rounded-[14%]" />
         <span className="text-[15px] font-semibold tracking-tight">sales</span>
       </Link>
 

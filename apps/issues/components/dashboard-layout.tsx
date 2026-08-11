@@ -123,7 +123,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             reads `b/issues` and `b/sales`, which is what `APP_NAME` says and
             what the emails now say. Changing one of these without the other is
             worse than what was here. */}
-        <Image src="/logo.png" alt="b/" width={22} height={22} className="rounded-md" />
+        <Image src="/logo.png" alt="b/" width={22} height={22} className="rounded-[14%]" />
         <span className="text-[15px] font-semibold tracking-tight">issues</span>
       </Link>
 
@@ -245,11 +245,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         >
           <Menu size={18} />
         </button>
-        {/* rounded-md, like every other render of this mark in both apps. The
+        {/* rounded-[14%], like every other render of this mark in both apps. The
             radius on the blackcode logo is a constant 6px at every size it is
             drawn at, not a proportion — this was `rounded` (4px) and the row
-            above it is `rounded-md`. */}
-        <Image src="/logo.png" alt="b/" width={18} height={18} className="rounded-md" />
+            above it is `rounded-[14%]`. */}
+        <Image src="/logo.png" alt="b/" width={18} height={18} className="rounded-[14%]" />
         <span className="text-sm font-semibold">issues</span>
       </header>
 

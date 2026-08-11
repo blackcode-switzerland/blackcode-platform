@@ -25,7 +25,7 @@ export function Brand({ href = '/', className, size = 'md' }: BrandProps) {
         alt=""
         width={dim}
         height={dim}
-        className="rounded-[6px]"
+        className="rounded-[14%]"
         priority
       />
       {/* Lowercase, and no `blackcode` — the mark to its left already draws the

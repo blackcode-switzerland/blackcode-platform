@@ -184,7 +184,13 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
               one out — it is the first thing anybody sees of the product, and
               the mail they arrived from carries this same file.
 
-              `rounded-md`, not `rounded-xl`, since 2026-08-11. The radius on
+              `rounded-[14%]` — a PERCENTAGE, deliberately. A fixed
+              radius is a different shape at every size: 6px on this 44px mark
+              is 14% and reads as a squircle; the same 6px on the 22px sidebar
+              mark is 27% and reads as a circle. That was the 2026-08-11 defect,
+              fixed once and then re-reported for the small renders. The mark is
+              always square, so a percentage is exactly proportional and no
+              future size can get it wrong. The radius on
               this mark is a CONSTANT 6px everywhere else it is drawn — 18, 22,
               24 and 28px in the two apps, all 6 — not a proportion of the size,
               so scaling it with the box at 44px made the front door the one
@@ -195,7 +201,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
             width={44}
             height={44}
             priority
-            className="mx-auto mb-4 rounded-md"
+            className="mx-auto mb-4 rounded-[14%]"
           />
           <h1 className="text-xl font-semibold tracking-tight text-foreground">b/sales</h1>
           <p className="mt-1 text-sm text-muted-foreground">

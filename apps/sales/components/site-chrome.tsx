@@ -52,7 +52,7 @@ export function SiteHeader({ children }: { children?: React.ReactNode }) {
             it pointed at the page you were reading, so nothing was lost; on the
             auth pages it is the only way back out. */}
         <Link href="/" aria-label="b/sales home" className="flex items-center gap-2.5">
-          <Image src="/logo.png" alt="b/" width={22} height={22} className="rounded-md" />
+          <Image src="/logo.png" alt="b/" width={22} height={22} className="rounded-[14%]" />
           <span className="text-[15px] font-semibold tracking-tight">sales</span>
         </Link>
         {children ? <nav className="ml-auto flex items-center gap-2">{children}</nav> : null}
