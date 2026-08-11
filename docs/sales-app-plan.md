@@ -45,7 +45,7 @@
 > dropped on 2026-08-10 — membership is the whole gate), and there is no
 > cross-app entity index for a second app to project into.
 >
-> The full record is `multiAppFinalRefactor/PLAN.md` and the seven agent reports
+> The full record is `docs/2026-08-multi-app-refactor.md` and the seven agent reports
 > beside it.
 >
 > ## What this file is still good for

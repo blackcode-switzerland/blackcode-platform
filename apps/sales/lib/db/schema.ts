@@ -1016,7 +1016,7 @@ export const userPreferences = salesSchema.table(
 // ===========================================================================
 //
 // Added 2026-08-10 by the multi-app refactor's Phase 1
-// (multiAppFinalRefactor/PLAN.md §5). **Nothing reads or writes them yet** —
+// (docs/2026-08-multi-app-refactor.md §5). **Nothing reads or writes them yet** —
 // that is Phase 2 (bootstrap) and Phase 3 (the switch-over), deliberately, so
 // that the phase which creates the shapes cannot break either app.
 //
@@ -1100,7 +1100,7 @@ export const salesWorkspaces = salesSchema.table(
      * 2026-08-11 the workspace survived — owned by an account that could no
      * longer authenticate by password or by Google and whose tokens had been
      * revoked. Data stranded rather than lost, and unrecoverable by the person.
-     * (Measured in Phase 8; multiAppFinalRefactor/PLAN.md §9 item 8.)
+     * (Measured in Phase 8; docs/2026-08-multi-app-refactor.md §9 item 8.)
      *
      * **What actually protects this data is `lib/db/queries/footprint.ts`**:
      * `DELETE /api/me?scope=all_apps` asks this app what it holds, purges it

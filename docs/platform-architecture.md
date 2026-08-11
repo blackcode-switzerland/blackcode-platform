@@ -328,7 +328,7 @@ exposed.
 > ### REWRITTEN 2026-08-10 — the shared index has one writer, and links retire
 >
 > This section described a federated index every app wrote to. It was the design
-> and it was reversed, deliberately: `multiAppFinalRefactor/PLAN.md` §1. The
+> and it was reversed, deliberately: `docs/2026-08-multi-app-refactor.md` §1. The
 > requirement was *"an agent working in sales can create an issue through the
 > same CLI without switching login"*, and that was read as "the apps share their
 > data" when it means "**the agent is the thing that connects the apps**". The

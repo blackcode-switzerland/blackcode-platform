@@ -34,7 +34,7 @@
 -- The counts ARE reported, before the drop, so the deploy log says what was
 -- destroyed rather than only how the statement went ("irreversible commands
 -- report WHAT they did", CLAUDE.md). They are also declared in
--- multiAppFinalRefactor/baseline.txt so `verify.sh` expects the tables to go.
+-- devops/db-ledger/baseline.txt so `verify.sh` expects the tables to go.
 --
 -- ===========================================================================
 -- transaction_log IS GATED, AND THE GATE IS `max(created_at)`, NOT `count(*)`

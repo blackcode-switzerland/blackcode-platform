@@ -2,7 +2,7 @@
 # verify.sh — the "nothing lost" ledger. Re-measures platform/issues/sales and
 # diffs against a baseline written by capture-baseline.sh. Exits non-zero on
 # any unexplained decrease. This is the single check standing between this
-# refactor and losing somebody's comments — see multiAppFinalRefactor/SAFETY.md.
+# refactor and losing somebody's comments — see docs/db-safety.md.
 #
 # Usage:
 #   ./verify.sh <connection-url> <baseline-file>

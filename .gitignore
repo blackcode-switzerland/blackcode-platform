@@ -65,3 +65,4 @@ next-env.d.ts
 /RUN-NOW.txt
 /.google-new
 /multiAppFinalRefactor/.prod-url
+# (that folder is archived; keep the rule so a re-created one is never committed)

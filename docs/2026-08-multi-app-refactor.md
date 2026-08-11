@@ -204,8 +204,8 @@ start a phase before the previous one is deployed and verified.**
    - a Neon branch (instant, point-in-time, free)
    - a `pg_dump` file stored outside the repo
 2. Capture a row-count baseline for every `platform.*` table plus every
-   `issues.*` table, into `multiAppFinalRefactor/baseline.txt`.
-3. Write `multiAppFinalRefactor/verify.sh` — re-runs those counts and **diffs
+   `issues.*` table, into `devops/db-ledger/baseline.txt`.
+3. Write `devops/db-ledger/verify.sh` — re-runs those counts and **diffs
    them against the baseline**. It must print a per-table PASS/FAIL, and exit
    non-zero on any unexplained decrease.
 4. **Watch it fail.** Delete one row in a scratch copy, run the script, see it go

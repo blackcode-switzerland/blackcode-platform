@@ -7,7 +7,7 @@
 // Of the three writers of this column, two are held by `tsc`:
 // `insertErrorEvent` requires `app` in its parameter type, so the telemetry
 // beacon and this app's wrapper cannot omit it (both watched to fail — see
-// multiAppFinalRefactor/agent2/agent-2026-08-10-1.txt §4).
+// ~/Documents/BAK/blackcode-platform-backups/multiAppFinalRefactor-correspondence/agent2/agent-2026-08-10-1.txt §4).
 //
 // The third writer is `safeLog` in `packages/platform-api/src/handler.ts`, and
 // it is BOTH the one that writes almost every row and the one with no

@@ -1,6 +1,6 @@
 -- platform.error_events gains `app` — the EXPAND half of expand → migrate →
 -- contract. Written for the multi-app refactor's Phase 1
--- (multiAppFinalRefactor/PLAN.md §4b).
+-- (docs/2026-08-multi-app-refactor.md §4b).
 --
 -- ---------------------------------------------------------------------------
 -- WHY THIS LIVES IN THE ISSUES LEDGER AND NOT THE SALES ONE

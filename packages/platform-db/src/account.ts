@@ -65,7 +65,7 @@ export interface DeleteAccountReport {
    *
    * **The report was not empty — it was confidently incomplete, which is worse.**
    * An empty report invites suspicion; a partial one reads as authoritative.
-   * (Measured in Phase 8; multiAppFinalRefactor/PLAN.md §9 item 8.)
+   * (Measured in Phase 8; docs/2026-08-multi-app-refactor.md §9 item 8.)
    *
    * Putting the scope in the RETURN TYPE means no caller can render this report
    * without having been handed the answer to "of what?". A comment could be

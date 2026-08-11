@@ -221,7 +221,7 @@ gate. What split is the LEDGER — which of an app's files exist —
 `packages/platform-api/src/upload-ledger.ts`, and `platform.blob_references` was
 deliberately not touched.
 
-See `multiAppFinalRefactor/PLAN.md`.
+See `docs/2026-08-multi-app-refactor.md`.
 
 ### `0004` mirrored ids rather than remapping them, and that has two consequences
 

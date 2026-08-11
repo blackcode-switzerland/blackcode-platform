@@ -9,7 +9,7 @@
 -- rather than assumed: with the line removed, `DROP INDEX platform.no_such_index`
 -- gave `ERROR: index "no_such_index" does not exist` and `PSQL EXIT=0`; with it
 -- restored, the same statement exited 3. See
--- multiAppFinalRefactor/agent2/agent-2026-08-10-1.txt §4.
+-- ~/Documents/BAK/blackcode-platform-backups/multiAppFinalRefactor-correspondence/agent2/agent-2026-08-10-1.txt §4.
 \set ON_ERROR_STOP on
 
 -- ---------------------------------------------------------------------------
@@ -56,6 +56,6 @@ DROP INDEX IF EXISTS platform.idx_error_events_app_occurred;
 -- swallowed and printed to stderr: the table simply stops gaining rows and
 -- nothing says so.
 --
--- Take a backup first (multiAppFinalRefactor/SAFETY.md), then uncomment:
+-- Take a backup first (docs/db-safety.md), then uncomment:
 --
 -- ALTER TABLE platform.error_events DROP COLUMN IF EXISTS app;

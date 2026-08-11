@@ -109,7 +109,7 @@ uploads            workspace_id, url, pathname, filename, size, mime_type, uploa
 events             workspace_id, actor_user_id, actor_token_id, entity_type, entity_id, action, …
 ```
 
-They are the multi-app refactor's Phase 1 (`multiAppFinalRefactor/PLAN.md`):
+They are the multi-app refactor's Phase 1 (`docs/2026-08-multi-app-refactor.md`):
 this app stops borrowing the platform's workspaces, membership, labels, upload
 ledger and activity, and keeps only **identity** shared. Phase 2 points sign-up
 and first sign-in at them; Phase 3 moves the query layer over one table at a

@@ -1243,7 +1243,7 @@ writer this audit did not find, and that is more interesting than the table.
 > against the catalog rather than by grep — the only trigger in the whole
 > `platform` schema is `trg_blob_refs` on `comments`, and **a Postgres trigger
 > is not code any grep of `apps/` would find.** See
-> `multiAppFinalRefactor/PLAN.md` §4b.
+> `docs/2026-08-multi-app-refactor.md` §4b.
 
 ### File uploads (`app/api/upload/route.ts`, `app/api/upload/blob/route.ts`)
 

@@ -1,7 +1,7 @@
 -- b/sales, migration 0004 — this app's domain tables stop pointing at
 -- `platform.workspaces` and point at `sales.workspaces` instead.
 --
--- The multi-app refactor's Phase 2 (multiAppFinalRefactor/PLAN.md §5).
+-- The multi-app refactor's Phase 2 (docs/2026-08-multi-app-refactor.md §5).
 --
 -- ===========================================================================
 -- THIS MIGRATION DELETES NOTHING. NOT ONE ROW.

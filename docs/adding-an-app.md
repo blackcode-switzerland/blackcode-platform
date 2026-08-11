@@ -411,7 +411,7 @@ full transcript of both outcomes side by side.
 
 ### Add your schema to the row-count ledger
 
-`multiAppFinalRefactor/lib-db.sh` carries `TRACKED_SCHEMAS`, and it is the list of
+`devops/db-ledger/lib-db.sh` carries `TRACKED_SCHEMAS`, and it is the list of
 schemas the "nothing lost" ledger can see. **A schema not in it is not counted,
 not diffed and not reported — silently**, because there is nothing to compare a
 table against when you never looked for it.

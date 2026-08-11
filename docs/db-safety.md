@@ -49,7 +49,7 @@ docker cp blackcode-postgres:/tmp/pre-phase-N.dump \
 
 ## The "nothing lost" ledger
 
-Built in Phase 0: `multiAppFinalRefactor/lib-db.sh` (shared psql plumbing —
+Built in Phase 0: `devops/db-ledger/lib-db.sh` (shared psql plumbing —
 runs `psql` natively if present, else falls back to
 `docker exec blackcode-postgres psql`, so the same scripts work against a
 Neon URL from a machine with `psql` installed and against local dev, which has
@@ -66,7 +66,7 @@ number of tables found; it refuses to write a baseline at all if it finds
 zero tables, so an empty baseline can never look like a valid one.
 
 ```bash
-./multiAppFinalRefactor/capture-baseline.sh "<connection-url>" multiAppFinalRefactor/baseline.txt
+./devops/db-ledger/capture-baseline.sh "<connection-url>" devops/db-ledger/baseline.txt
 ```
 
 **What `verify.sh` does.** Re-measures the same three schemas and diffs
@@ -78,7 +78,7 @@ connection/query failure. Increases are INFO, never a failure — people are
 using issues throughout this refactor.
 
 ```bash
-./multiAppFinalRefactor/verify.sh "<connection-url>" multiAppFinalRefactor/baseline.txt
+./devops/db-ledger/verify.sh "<connection-url>" devops/db-ledger/baseline.txt
 ```
 
 > **Locally the URL is port 5432, not 5434.** 5434 is the port on the HOST side;
@@ -176,7 +176,7 @@ below).
 **Taking a backup:**
 
 ```bash
-./multiAppFinalRefactor/backup.sh "<neondb_owner url>" ~/Documents/BAK/blackcode-platform-backups/pre-phase-N.dump
+./devops/db-ledger/backup.sh "<neondb_owner url>" ~/Documents/BAK/blackcode-platform-backups/pre-phase-N.dump
 ```
 
 > ### `backup.sh` cannot dump production as written — version mismatch
@@ -199,7 +199,7 @@ below).
 > `pg_dump` from a throwaway container:
 >
 > ```bash
-> URL=$(tr -d '\n\r' < multiAppFinalRefactor/.prod-url)
+> URL=$(tr -d '\n\r' < <your-prod-url-file>)   # never commit this
 > OUT=~/Documents/BAK/blackcode-platform-backups/pre-phase-N.dump
 > docker run --rm -i postgres:17 pg_dump "$URL" --format=custom --no-owner --no-acl > "$OUT"
 > docker run --rm -i postgres:17 pg_restore --list < "$OUT" | grep -c "TABLE DATA"
@@ -225,12 +225,12 @@ restored, and the real `baseline.local-example.txt` was re-verified clean
 afterward. Full detail, including two bugs this exercise found and fixed
 (`verify.sh` crashing silently on a connection failure, and a file-role
 mix-up in the awk diff engine when the declarations file is empty), is in
-`multiAppFinalRefactor/agent1/agent-2026-08-10-1.txt`.
+`~/Documents/BAK/blackcode-platform-backups/multiAppFinalRefactor-correspondence/agent1/agent-2026-08-10-1.txt`.
 
 ```bash
 docker exec -i blackcode-postgres psql "<local url>" \
   -c "DELETE FROM platform.password_reset_otps WHERE id = 6"
-./multiAppFinalRefactor/verify.sh "<local url>" multiAppFinalRefactor/baseline.local-example.txt
+./devops/db-ledger/verify.sh "<local url>" devops/db-ledger/baseline.local-example.txt
 # must go RED and name platform.password_reset_otps — then restore the row.
 ```
 

@@ -30,7 +30,7 @@
 // it is CLAUDE.md finding #14 exactly, the reconciler that could only ever see
 // one deployment's data and reported a clean run over 51 unprojected rows.
 //
-// The alternatives were argued and lost; see multiAppFinalRefactor/agent8's
+// The alternatives were argued and lost; see ~/Documents/BAK/blackcode-platform-backups/multiAppFinalRefactor-correspondence/agent8's
 // reply §2.5. The short version: a shared `platform.account_footprint` table is
 // `platform.entities` again (a projection that drifts, needing a reconciler that
 // cannot be written); a browser-side fan-out puts the census in the least

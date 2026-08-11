@@ -1,7 +1,7 @@
 -- b/sales, migration 0003 — this app's own workspaces, membership, invitations,
 -- labels, upload ledger and activity.
 --
--- The multi-app refactor's Phase 1 (multiAppFinalRefactor/PLAN.md §5).
+-- The multi-app refactor's Phase 1 (docs/2026-08-multi-app-refactor.md §5).
 --
 -- ===========================================================================
 -- ADDITIVE, AND NOTHING READS THESE TABLES WHEN THIS LANDS
@@ -50,7 +50,7 @@
 -- was not assumed: a bounded probe role was created locally with exactly that
 -- provisioning, this migration was applied, and the role's DML on all six new
 -- tables and their sequences was confirmed without any further GRANT. See
--- multiAppFinalRefactor/agent2/agent-2026-08-10-1.txt §4.
+-- ~/Documents/BAK/blackcode-platform-backups/multiAppFinalRefactor-correspondence/agent2/agent-2026-08-10-1.txt §4.
 --
 -- If `ALTER DEFAULT PRIVILEGES` was ever skipped in an environment, the failure
 -- is `permission denied for table workspaces` at runtime in Phase 2, not here —
