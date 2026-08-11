@@ -61,6 +61,26 @@ type registryMismatch struct {
 	Declared string
 }
 
+// effectiveReached is the origin that ANSWERED, which is not always the one we
+// asked for.
+//
+// THIS IS THE HALF THAT HEALS ITSELF. If the host we asked redirected us, it
+// named its own canonical address, and adopting that needs no notice and no
+// command from the user — it is the deployment's own answer, arriving on the
+// same connection that served the token. A vanity domain placed over a project
+// hostname produces exactly this; a preview deployment and a self-hosted
+// instance produce nothing, and keep the address they were reached at.
+//
+// So a stale address book repairs on the next `bk login` or `bk meta`, and the
+// notice below is the fallback for the case nothing can repair automatically:
+// two hosts that both answer, neither pointing at the other.
+func effectiveReached(configured string) string {
+	if o := strings.TrimSpace(client.RedirectedOrigin); o != "" {
+		return o
+	}
+	return configured
+}
+
 // applyAppRegistry returns the mismatch for the CURRENT app, or nil. Only the
 // current app can have one: it is the only app whose address is taken from
 // anywhere other than the registry.
@@ -79,7 +99,7 @@ func applyAppRegistry(cfg *config.Config, meta *client.Meta, reachedURL string) 
 			servers[slug] = *app.BaseURL
 		}
 	}
-	reachedURL = strings.TrimRight(strings.TrimSpace(reachedURL), "/")
+	reachedURL = strings.TrimRight(strings.TrimSpace(effectiveReached(reachedURL)), "/")
 
 	var mismatch *registryMismatch
 	if current != "" && reachedURL != "" {

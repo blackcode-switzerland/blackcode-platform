@@ -25,7 +25,22 @@ import (
 var (
 	LatestSeen string
 	MinSeen    string
+	// RedirectedOrigin is the origin that ANSWERED, when redirects moved the
+	// request off the origin we asked for — e.g. asking
+	// `https://bc-issues.vercel.app` and being served by
+	// `https://issues.blackcode.ch`. Empty when nothing redirected, which is the
+	// normal case. See the comment in do() for why this, and not the registry,
+	// is the signal safe to act on without asking.
+	RedirectedOrigin string
 )
+
+// originOf reduces a URL to scheme://host, the unit an address book stores.
+func originOf(u *url.URL) string {
+	if u == nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
 
 // Verbose, when true (set by the root --verbose flag or BK_DEBUG=1), makes every
 // request log its method, URL, status, and response body to stderr. Useful when
@@ -210,6 +225,27 @@ func (c *Client) do(req *http.Request, out any) error {
 	}
 	if v := resp.Header.Get("X-BK-CLI-Min"); v != "" {
 		MinSeen = v
+	}
+	// A REDIRECT IS THE DEPLOYMENT NAMING ITS OWN CANONICAL ADDRESS.
+	//
+	// Go follows redirects transparently, so `resp.Request` is the request that
+	// actually got answered. When its origin differs from the one we asked for,
+	// the host we asked has told us where it really lives — and unlike the
+	// registry's `base_url`, which is a database column about somebody else,
+	// this came from the host that just served this token.
+	//
+	// That distinction is what makes it safe to adopt automatically:
+	//   - a vanity domain aliased over a project hostname REDIRECTS, so the
+	//     canonical address is learned without anyone typing it
+	//   - a preview deployment or a self-hosted instance does NOT redirect, so
+	//     it keeps the address the user authenticated against
+	//
+	// Recorded, not acted on here: `bk login` and `bk meta` are where the
+	// address book is written. See applyAppRegistry.
+	if resp.Request != nil && resp.Request.URL != nil && req.URL != nil {
+		if got, asked := originOf(resp.Request.URL), originOf(req.URL); got != "" && !strings.EqualFold(got, asked) {
+			RedirectedOrigin = got
+		}
 	}
 	// Hard floor: if we're below the minimum supported version, refuse the
 	// request outcome so every command fails fast and the user must upgrade.

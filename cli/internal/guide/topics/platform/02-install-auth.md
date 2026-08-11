@@ -58,8 +58,16 @@ the platform publishes. That is what keeps a preview deployment or a
 self-hosted instance from redirecting itself somewhere you never authenticated.
 The cost is that a non-canonical address is *sticky*: it is what every
 subsequent request uses, and it is what any link you build from your session
-carries. So when the two disagree, `bk login` and `bk meta` say so and print the
-published address. Switching is one command:
+carries.
+
+**A redirect settles it automatically.** If the host you asked redirects
+somewhere else, that host has named its own canonical address, and `bk login`
+and `bk meta` adopt it — nothing to type, no notice. That is why the rule is
+safe: a preview deployment does not redirect, so it keeps the address you
+authenticated against.
+
+When the two disagree and nothing redirects, `bk login` and `bk meta` say so and
+print the published address. Switching is one command:
 
 ```bash
 bk login --server <the address the notice printed>

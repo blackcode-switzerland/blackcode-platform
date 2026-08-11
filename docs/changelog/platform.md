@@ -64,8 +64,18 @@ It showed up as agents emitting links like
 glued to a URN tail. Nothing in the platform builds that string; an agent built
 it from the two things it had, and one of them was wrong.
 
-**`bk login` and `bk meta` now report the disagreement** and print the published
-address plus the command that switches to it. The notice fires on *every* run
+**It now repairs itself where it can.** If the host you asked REDIRECTS, that is
+the deployment naming its own canonical address — arriving on the same
+connection that served your token — and `bk login` / `bk meta` adopt it with no
+notice and nothing to type. A preview deployment or a self-hosted instance does
+not redirect, so it keeps the address you authenticated against; adopting the
+registry's value instead would move a preview to production.
+
+So: **put a redirect on the old hostname and every client heals on its next
+`bk meta`.**
+
+**Where nothing redirects, the disagreement is reported** — `bk login` and
+`bk meta` print the published address plus the command that switches to it. The notice fires on *every* run
 while the addresses differ, not only when something changed — a stale address is
 stable, so a change-triggered notice would never fire again. When the addresses
 agree there is no notice.
