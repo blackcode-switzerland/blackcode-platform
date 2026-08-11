@@ -14,6 +14,7 @@ import { and, desc, eq, gt, sql } from 'drizzle-orm'
 import type { PlatformDb } from './client'
 import {
   apiTokens,
+  apps,
   inboxMessages,
   users,
   workspaceInvitations,
@@ -53,20 +54,43 @@ export async function updateUserProfile(
 // ---------------------------------------------------------------------------
 
 export interface DeleteAccountReport {
+  /**
+   * WHICH APP THIS REPORT COVERS. Not optional, and not cosmetic.
+   *
+   * ── WHY IT IS ON THE TYPE AND NOT IN A SENTENCE IN THE UI ──────────────────
+   * This function enumerates `platform.workspaces`, which has been `apps/issues`'
+   * own table since multiAppFinalRefactor Phase 2. It therefore CANNOT see a
+   * person's `sales.workspaces` row, and until 2026-08-11 it did not say so: the
+   * dry-run named one workspace and was silent about the other app entirely.
+   *
+   * **The report was not empty — it was confidently incomplete, which is worse.**
+   * An empty report invites suspicion; a partial one reads as authoritative.
+   * (Measured in Phase 8; multiAppFinalRefactor/PLAN.md §9 item 8.)
+   *
+   * Putting the scope in the RETURN TYPE means no caller can render this report
+   * without having been handed the answer to "of what?". A comment could be
+   * ignored; a required field has to be spent.
+   */
+  app: { slug: string; name: string }
   blocked_by: Array<{ workspace_id: number; name: string; member_count: number }>
   will_hard_delete: Array<{ workspace_id: number; name: string }>
 }
 
 /**
- * What closing this account would do, without doing it.
+ * What closing this account would do **in one app**, without doing it.
  *
  * A workspace they own with other people in it BLOCKS the deletion — deleting it
  * would take those people's data with it, so ownership has to be transferred
  * first. A workspace they own alone is theirs to destroy.
+ *
+ * `appSlug` is required rather than defaulted for the reason on
+ * `DeleteAccountReport['app']`: the scope of this answer is a fact the caller
+ * knows and this function cannot derive, and a default would let it be forgotten.
  */
 export async function deleteAccountReport(
   db: PlatformDb,
-  userId: number
+  userId: number,
+  appSlug: string
 ): Promise<DeleteAccountReport> {
   const rows = await db.execute<{
     workspace_id: number
@@ -85,7 +109,21 @@ export async function deleteAccountReport(
     if (r.member_count > 1) blocked.push(r)
     else willHardDelete.push({ workspace_id: r.workspace_id, name: r.name })
   }
-  return { blocked_by: blocked, will_hard_delete: willHardDelete }
+  return { app: await appLabel(db, appSlug), blocked_by: blocked, will_hard_delete: willHardDelete }
+}
+
+/**
+ * An app's human name from the address book, falling back to its slug.
+ *
+ * The fallback is deliberate and one-directional: a missing `platform.apps` row
+ * must not turn a deletion report into an error. A person is entitled to be told
+ * what closing their account would do even if the registry is behind.
+ */
+async function appLabel(db: PlatformDb, slug: string): Promise<{ slug: string; name: string }> {
+  const res = await db.execute<{ name: string }>(
+    sql`SELECT name FROM ${apps} WHERE slug = ${slug} LIMIT 1`
+  )
+  return { slug, name: res.rows[0]?.name ?? slug }
 }
 
 /**

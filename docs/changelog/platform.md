@@ -30,6 +30,33 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-11 — the account-deletion preview now states which app it covers
+
+**Not breaking for `bk`** (the route is deliberately unreachable from the CLI),
+**shape change for the web UI.**
+
+`DELETE /api/me?dry_run=true` — "what would closing my account do?" — enumerates
+`platform.workspaces`, which has been `apps/issues`' own table since 2026-08-10.
+It therefore cannot see any other app's workspaces, and until today it did not
+say so: the preview named one app's workspaces and presented them as the whole
+picture. **The report was not empty, it was confidently incomplete** — an empty
+report invites suspicion, a partial one reads as authoritative.
+
+The response now carries the app it covers, and the deletion screen renders it:
+
+```json
+{ "app": { "slug": "issues", "name": "Blackcode Issues" },
+  "blocked_by": [], "will_hard_delete": [ … ] }
+```
+
+**This is honesty about scope, not the fix.** Closing an account still leaves
+another app's data in place — owned by an account that can no longer sign in —
+because the account close is an `UPDATE` and the other app's
+`owner_id … ON DELETE RESTRICT` never fires. Until that lands, **do not close an
+account that has data in more than one app.**
+
+---
+
 ## 2026-08-11 — two dead columns dropped from `platform.*`
 
 **Not breaking.** Neither column had a reader, and both writers wrote a

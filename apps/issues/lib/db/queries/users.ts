@@ -1,14 +1,11 @@
 import { db } from '../client'
 import {
-  deleteAccountReport as platformDeleteAccountReport,
   getUserByEmail as platformGetUserByEmail,
   getUserById as platformGetUserById,
   getVisibleUsers as platformGetVisibleUsers,
-  softDeleteUser as platformSoftDeleteUser,
   touchLastLogin as platformTouchLastLogin,
   updateUserProfile as platformUpdateUserProfile,
   upsertUserFromOAuth as platformUpsertUserFromOAuth,
-  type DeleteAccountReport,
   type UpdateUserProfileInput,
   type UpsertUserFromOAuthInput,
 } from '@blackcode/platform-db'
@@ -87,23 +84,21 @@ export function touchLastLogin(id: number): Promise<void> {
   return platformTouchLastLogin(db, id)
 }
 
-// Soft-deletes the user: marks deleted_at, clears auth, revokes tokens.
-// Returns the workspaces that *would* be hard-deleted (sole-owner with no
-// other members) and the workspaces that block deletion (owner with members).
-// If `confirm` is false, this is a dry run.
 // Account closure and profile edits moved to @blackcode/platform-db on
 // 2026-08-06 with /api/me. Both touch only platform.* (users, api_tokens,
 // inbox_messages, workspaces, workspace_members), and `softDeleteUser` keeps its
 // single-transaction guarantee there.
-export type { DeleteAccountReport, UpdateUserProfileInput }
-
-export function deleteAccountReport(userId: number): Promise<DeleteAccountReport> {
-  return platformDeleteAccountReport(db, userId)
-}
-
-export function softDeleteUser(userId: number): Promise<void> {
-  return platformSoftDeleteUser(db, userId)
-}
+//
+// ── `deleteAccountReport` AND `softDeleteUser` WERE RE-EXPORTED HERE ────────
+// Deleted 2026-08-11 (Phase 9). The 2026-08-06 move said "the app files
+// re-export these bound to their own `db`, so every existing call site is
+// unchanged" — and for these two there were no call sites left to keep
+// unchanged, because the ROUTE moved to `packages/platform-api` in the same
+// change and calls platform-db directly. Two years of this repo's lesson in
+// four lines: `WorkspaceSource.getById`'s bar is "is the caller still there",
+// and Phase 9 found the answer by trying to thread a new required `appSlug`
+// argument through a wrapper nobody calls.
+export type { UpdateUserProfileInput }
 
 export function updateUserProfile(
   id: number,

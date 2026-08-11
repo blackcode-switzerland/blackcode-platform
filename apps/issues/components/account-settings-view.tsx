@@ -8,6 +8,11 @@ import { AlertTriangle, KeyRound, Trash2 } from 'lucide-react'
 import { PasswordResetFlow } from './password-reset-flow'
 
 interface DeleteReport {
+  // WHICH APP THIS REPORT COVERS. Required, and rendered — see the note in
+  // `DeleteAccountReport` (packages/platform-db/src/account.ts). A report that
+  // can only see one app's workspaces and presents them as a total reads as
+  // authoritative, which is worse than reading as empty.
+  app: { slug: string; name: string }
   blocked_by: Array<{ workspace_id: number; name: string; member_count: number }>
   will_hard_delete: Array<{ workspace_id: number; name: string }>
 }
@@ -114,6 +119,16 @@ export function AccountSettingsView() {
           ) : null}
           {report.data ? (
             <>
+              {/*
+                THE SCOPE LINE. Rendered first and unconditionally, including
+                when both lists are empty — "nothing here" and "nothing
+                anywhere" are the two answers this screen must not blur.
+              */}
+              <p className="rounded-md border border-border bg-secondary/40 p-3 text-xs text-muted-foreground">
+                This covers your <strong className="text-foreground">{report.data.app.name}</strong>{' '}
+                data. Blackcode apps keep their own workspaces and records, so anything you have in
+                another app is not listed here and closing your account does not remove it.
+              </p>
               {report.data.blocked_by.length > 0 ? (
                 <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs">
                   <p className="mb-2 font-medium text-amber-400">

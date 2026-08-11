@@ -126,6 +126,13 @@ export function meRoute(app: AppContext) {
    * Deliberately NOT reachable from `bk` (it is in every app's
    * EXCLUDED_OPERATIONS): an agent must never be able to delete its owner's
    * account. It stays a route because the web UI needs it, behind a confirmation.
+   *
+   * ── THE DRY RUN ANSWERS FOR ONE APP, AND SAYS SO SINCE 2026-08-11 ──────────
+   * `deleteAccountReport` enumerates `platform.workspaces`, which is
+   * `apps/issues`' own table. It cannot see `sales.workspaces` and no query from
+   * this deployment can — an app's Postgres role has no grant on another app's
+   * schema. So the report carries the app it covers, and the UI renders it.
+   * That is honesty about scope, not the fix: see PLAN.md §9 item 8.
    */
   const DELETE = apiHandler(async (req: NextRequest) => {
     const user = await app.resolveUser(req)
@@ -133,7 +140,7 @@ export function meRoute(app: AppContext) {
 
     // Dry-run: report what would happen.
     const url = new URL(req.url)
-    const report = await deleteAccountReport(app.db, user.id)
+    const report = await deleteAccountReport(app.db, user.id, app.appSlug)
     if (url.searchParams.get('dry_run') === 'true') {
       return NextResponse.json(report)
     }
