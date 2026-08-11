@@ -728,6 +728,28 @@ somebody has to make, not a bug somebody forgot.
    unmentioned. **This is the whole subject of the next phase**; see agent 8's
    reply for the mechanism and why the alternatives lose.
 
+8. **Closing an account STRANDS another app's data — live today.** Measured by
+   agent 8 on 2026-08-11, and it is not the reporting bug it first looked like.
+   `deleteAccountReport` reads `platform.workspaces`, which is issues-only since
+   Phase 2, so the dry-run names one workspace and never mentions the person's
+   sales workspace. **The report is not empty — it is confidently incomplete,
+   which is worse: an empty report invites suspicion and a partial one reads as
+   authoritative.**
+
+   Then the delete does not delete it. `sales.workspaces.owner_id` is
+   `ON DELETE RESTRICT`, but `softDeleteUser` **UPDATEs** the user row rather
+   than deleting it — so the rule never fires, nothing refuses, and the sales
+   workspace survives owned by an account that can no longer authenticate. Not
+   data lost: data **stranded**, and unrecoverable by the person, because there
+   is no sign-in left to recover with.
+
+   > **Until this is fixed, do not close an account that has data in more than
+   > one app.**
+
+   **Phase 9 opens with an honesty fix before any redesign**: a report that
+   covers one app must say so rather than presenting a total. Small, not the
+   fix, and it makes the wrong thing visible while the right thing is built.
+
 ### And one rule this project produced, which belongs everywhere
 
 > **An absence is only evidence if you know your instrument could have seen the
