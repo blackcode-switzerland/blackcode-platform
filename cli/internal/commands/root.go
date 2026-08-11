@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
@@ -75,7 +76,7 @@ platform/apps" for the rule and the reasoning.
        meta        who am I + every app + where each command will go
        app         the address book: which apps exist and where they live
        guide       the embedded usage guide (--list, <topic>, --json)
-       skill       install / check / sync the agent skill file
+       skill       install, check, sync, path, uninstall the agent skill file
        changelog   the dated record of what changed
        version     print the version of this binary
        super-admin users, whitelist, errors (super admins only; platform-wide)
@@ -92,6 +93,9 @@ platform/apps" for the rule and the reasoning.
        bk <app> label      list, view, create, edit, delete, attach, detach
        bk <app> search     find things in that app
        bk <app> activity   that app's history (--since)
+       bk <app> user       the people you share a workspace with, in that app
+       bk <app> inbox      your notifications from that app
+       bk <app> storage    that app's uploaded files, and the workspace's usage
        …plus that app's own nouns.
 
      EACH APP REMEMBERS ITS OWN ACTIVE WORKSPACE. "bk sales workspace use x"
@@ -241,10 +245,39 @@ func rejectUnknownSubcommands(cmd *cobra.Command) {
 	}
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		if len(args) > 0 {
+			// NAME THE VALID ONES IN THE SAME LINE. This error is constructed
+			// here rather than by cobra, which means cobra's "Did you mean…"
+			// never runs for a subcommand — and it would not help if it did:
+			// the misses that actually happen between these two apps are
+			// SYNONYMS, not typos. `bk issues issue view` vs `bk sales prospect
+			// show`; `delete` vs `rm`; `create` vs `add`. Levenshtein scores
+			// view→show at 4 and suggests nothing.
+			//
+			// The generic hint says "run `bk <group> --help`", which costs a
+			// second round trip and prints a literal `<group>`. An agent that
+			// guessed a synonym can retry immediately from this list instead.
+			if names := availableSubcommands(c); names != "" {
+				return fmt.Errorf("unknown command %q for %q (have: %s)",
+					args[0], c.CommandPath(), names)
+			}
 			return fmt.Errorf("unknown command %q for %q", args[0], c.CommandPath())
 		}
 		// No args: `bk workspace` on its own is a legitimate way to ask what a
 		// group can do. Print help and succeed.
 		return c.Help()
 	}
+}
+
+// availableSubcommands lists a group's visible subcommands, comma-separated, for
+// the error above. `help` and `completion` are dropped: they are cobra's, they
+// are on every group, and neither is ever what the caller meant.
+func availableSubcommands(c *cobra.Command) string {
+	var names []string
+	for _, sub := range c.Commands() {
+		if !sub.IsAvailableCommand() || sub.Name() == "help" || sub.Name() == "completion" {
+			continue
+		}
+		names = append(names, sub.Name())
+	}
+	return strings.Join(names, ", ")
 }

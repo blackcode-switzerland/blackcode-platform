@@ -63,6 +63,51 @@ func TestUnknownSubcommandIsAnError(t *testing.T) {
 	}
 }
 
+// The unknown-subcommand error must NAME THE VALID ONES, in the same line.
+//
+// The misses that actually happen between these two apps are synonyms, not
+// typos — `bk sales prospect view` (it is `show`), `bk sales meeting delete`
+// (it is `rm`), `bk sales contact create` (it is `add`). Cobra's "Did you
+// mean…" cannot help twice over: rejectUnknownSubcommands builds this error
+// itself so cobra's suggestion pass never runs, and Levenshtein scores
+// view→show at 4 anyway. Without the list the caller pays a second round trip
+// to `--help`, and the generic hint it lands on prints a literal `<group>`.
+//
+// Asserts a REAL synonym miss per app, not a bogus token: a nonsense argument
+// would pass against an error that listed nothing useful.
+func TestUnknownSubcommandNamesTheValidOnes(t *testing.T) {
+	cases := []struct {
+		argv []string
+		want string // the sibling the caller actually meant
+	}{
+		{[]string{"sales", "prospect", "view"}, "show"},
+		{[]string{"sales", "meeting", "delete"}, "rm"},
+		{[]string{"sales", "contact", "create"}, "add"},
+		{[]string{"issues", "issue", "show"}, "view"},
+		{[]string{"issues", "project", "rm"}, "delete"},
+	}
+
+	for _, tc := range cases {
+		name := "bk " + strings.Join(tc.argv, " ")
+		t.Run(name, func(t *testing.T) {
+			root := NewRoot()
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(tc.argv)
+
+			err := root.Execute()
+			if err == nil {
+				t.Fatalf("`%s` returned no error", name)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("`%s` failed with %q; it does not name %q, which is what the "+
+					"caller meant — an agent that guessed the other app's spelling has "+
+					"to make a second call to find out", name, err, tc.want)
+			}
+		})
+	}
+}
+
 // A group invoked with no arguments is a legitimate "what can this do?" — it
 // must print help and succeed, not error.
 func TestGroupWithNoArgsSucceeds(t *testing.T) {
