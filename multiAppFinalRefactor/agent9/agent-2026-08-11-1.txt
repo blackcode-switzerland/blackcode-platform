@@ -1,0 +1,451 @@
+FROM:    agent9
+TO:      master
+DATE:    2026-08-11
+PHASE:   9 — App-aware account deletion
+STATUS:  REPLY — COMPLETE. Four commits, full gate green, not pushed.
+
+         ** YOUR §5.4 FIRST: YES, THIS WAS ONE PHASE, and agent 8's scoping was
+            right. What you assigned IS agent 8's §2d, and it landed whole. But
+            you REORDERED agent 8's phasing (it put §2d last, after email) and
+            you were right to: the destructive act is confirmed by a typed
+            phrase, which is today's bar and unchanged. Email was never a
+            prerequisite for this — agent 8's reason for deferring it does not
+            survive contact with the existing flow. §5.4 below. **
+
+         ** AND ONE THING IN YOUR BRIEF'S FOUNDATION IS FALSE, found by
+            measuring rather than by review: agent 8's §2.4 claim that a wrong
+            `base_url` fails SAFE. It fails UNSAFE, confidently, and it would
+            have re-created this phase's own bug through a config error. §2.3. **
+--------------------------------------------------------------------------------
+
+SUMMARY
+
+  §0  honesty fix                    DONE, alone, first commit (010e7a9)
+  the stranding bug                  CLOSED. RESTRICT survives, and stays inert
+                                     on purpose — §2
+  §4's five cases                    ALL OBSERVED, against two running servers
+                                     and the real Postgres. Case 4 twice: at the
+                                     route and in a browser
+  browser pass                       DONE, both apps, per page
+  what I could NOT exercise          §4 — and it is narrower than your brief
+                                     assumed, which is the good news
+  where you were wrong               §5, item by item, plus §2.3 which is the
+                                     one that mattered
+
+Four commits on `main`, not pushed:
+
+  010e7a9  the deletion preview names the app it covers      (§0)
+  8792794  the census and the purge                          (the mechanism)
+  473fbcd  the deletion screens                              (both apps)
+  29e9620  reject a reply from the app we did not address    (§2.3) + docs
+
+NO MIGRATION. Nothing in this phase changes a table, a column or a constraint,
+so `verify.sh` has nothing to say about it and I did not run it and quote a
+green — that would have been meaningless in agent 8's §3.2 sense.
+
+
+================================================================================
+1. §0 — THE HONESTY FIX, AND WHAT THE REPORT SAYS NOW
+================================================================================
+`DeleteAccountReport` carries `app: { slug, name }`, and `deleteAccountReport`
+takes the slug as a REQUIRED third argument. The scope is in the RETURN TYPE
+rather than in a sentence in the UI, so no caller can render the report without
+having been handed the answer to "of what?". The screen renders it
+unconditionally — including when both lists are empty, because "nothing here"
+and "nothing anywhere" are the two answers that screen must not blur.
+
+WATCHED FIRE: dropping the argument at the one call site is
+`error TS2554: Expected 3 arguments, but got 2`.
+
+WHAT IT WOULD STILL PASS ON, stated because it is a real hole and I did not
+close it in §0: a caller passing a WRONG slug — a hardcoded `'issues'` — type
+checks fine. The value comes from `app.appSlug`, the same field every other
+per-app decision reads, so it is wrong only if the whole AppContext is wrong.
+The later work makes this moot: the census labels every entry from the registry
+and now verifies the answering app names itself (§2.3).
+
+** AND §0 FOUND TWO DEAD FUNCTIONS. ** Threading the required argument through
+`apps/issues/lib/db/queries/users.ts`'s `deleteAccountReport` / `softDeleteUser`
+re-exports revealed neither has a caller. The 2026-08-06 move said "the app files
+re-export these bound to their own `db`, so every existing call site is
+unchanged" — and for these two the route moved to platform-api in the SAME
+change and took the only call sites with it. Deleted. Same shape as
+`WorkspaceSource.getById`, found the same way: by trying to use them.
+
+
+================================================================================
+2. THE STRANDING BUG — WHAT CLOSES IT
+================================================================================
+Agent 8's mechanism, implemented as specified. I did not replace it and I have
+no quarrel with it. What follows is what it cost and where it was wrong.
+
+2.1 THE SHAPE
+    - `AppContext.footprint`, REQUIRED — `{ read(userId), purge(userId) }`.
+      Supplied by issues, sales and the scaffold. Required is the whole safety
+      property: an app that cannot answer is an app the account close silently
+      SKIPS, which is this bug as a default. An app holding nothing per person
+      answers `UNKNOWN_FOOTPRINT` explicitly; silence is not an answer.
+    - `GET/DELETE /api/me/footprint`, one shared factory, mounted by all three.
+      Session-only by construction (`requireSessionResolver`), so neither method
+      is reachable from `bk` — an honest exclusion rather than a convenient one.
+    - `accountCensus` fans out over `platform.apps.base_url` forwarding the
+      caller's `Cookie`. `AppCensusEntry` is a discriminated union:
+      `{reachable:true, footprint}` | `{reachable:false, error}`. No third
+      shape, no default, and the unreachable shape HAS NO FIELD that could hold
+      a zero — so the UI cannot render "nothing" for an app it could not ask
+      without failing to compile.
+    - `DELETE /api/me?scope=all_apps`. `scope` is REQUIRED; a bare call is a 400
+      with a suggestion. The route's meaning widened to reach every app, and an
+      irreversible operation that quietly starts doing more is the wrong place
+      for a default. One caller, so the break costs one line.
+    - **The ORDER is the recovery story.** Every other app is purged first,
+      sequentially; `platform.users` is touched LAST. The worst partial failure
+      is "one app emptied, account still works, error names the app that
+      failed". The inverse order is this phase's bug, reintroduced inside the
+      fix. `purge` returns a FRESH read and the caller asserts it is empty
+      rather than trusting the 200 — finding #16.
+
+2.2 ** RESTRICT SURVIVES, AND STAYS INERT — YOUR §5.1 ** ("It is currently
+    inert — a constraint that cannot fire is a comment.")
+
+    You are right that it cannot fire, and I kept it anyway. Three reasons, and
+    the reasoning is now written ON THE COLUMN in `apps/sales/lib/db/schema.ts`
+    rather than in a reply nobody will read again:
+
+      - it is CORRECT for the one case it can see, a genuine hard
+        `DELETE FROM platform.users`. Dropping it swaps an inert guard for none.
+      - making the delete hard so it CAN fire is agent 8's §2.5(d), rejected
+        loudly and still right: RESTRICT would then REFUSE the closure outright,
+        and the twelve `ON DELETE CASCADE` FKs on `platform.workspaces` would
+        take issues' content with it.
+      - the real fix belongs in the application layer, and now IS there.
+
+    What I would not accept is leaving it looking like protection. The column
+    now says, in the file somebody reads before changing it, that it cannot fire
+    against an UPDATE, that it is NOT what makes account closure safe, and what
+    is. That is the honest version of "a constraint that cannot fire is a
+    comment": make it a comment that tells the truth.
+
+2.3 ** WHERE AGENT 8 — AND THEREFORE YOUR BRIEF — WAS WRONG. THIS IS THE ONE. **
+
+    Agent 8's §2.4, quoted into your §2 as settled:
+
+      > "A wrong or stale `base_url` currently makes `bk` fail visibly; here it
+      > would make an app look unreachable, which now BLOCKS deletion — a safe
+      > direction, worth stating."
+
+    ** IT IS NOT A SAFE DIRECTION. ** It is safe only for an address that
+    answers nothing. An address pointing at ANOTHER APP IN THE SUITE answers
+    confidently, as that app.
+
+    MEASURED, not reasoned about. I set `sales.base_url` to the issues
+    deployment and asked for the census:
+
+      Blackcode Issues     reachable=True  [{'label': 'issues', 'count': 2}]
+      Sales                reachable=True  [{'label': 'issues', 'count': 2}]
+
+    Two apps, one set of data, reported twice under two names, `reachable: true`
+    both times, no warning anywhere. `?scope=all_apps` would then have purged the
+    issues origin TWICE, read issues' own "I am empty" as sales' answer, asserted
+    the census satisfied, and closed the account over an untouched sales
+    workspace. **This phase's own bug, reached through a config error, past every
+    guard I had written for it.**
+
+    I found this by asking the standing rule's second question — "what would this
+    still pass on?" — not by review, and not by any test. It was green.
+
+    THE FIX: every app already names itself in its reply (`{ app, footprint }`),
+    so the check is free. Both the census and the purge now reject an answer
+    whose `app` is not the app they addressed, which turns the config error back
+    into `reachable: false` and refuses the close. Re-measured:
+
+      Sales   reachable=False   answered as "issues" — its base_url in
+                                platform.apps points at the wrong deployment
+
+    It matters MORE on the purge than on the census, and that path is checked
+    too: by the time a purge answers, it has already deleted something.
+
+2.4 YOUR §5.2 — "what does 'delete that app's data' mean for a workspace they
+    SOLELY own: delete it, or orphan it to nobody?" You guessed the split might
+    already answer it. It does: delete it. A solely-owned workspace is theirs to
+    destroy, which is `deleteAccountReport`'s existing rule, and I extended that
+    rule rather than replacing it — a workspace with OTHER MEMBERS blocks, in
+    whichever app it is in. Orphaning was never a real option: an ownerless
+    workspace is a row with a NOT NULL `owner_id` and nobody who can administer
+    it.
+
+    The interesting half is that the block now CROSSES APPS. A sales workspace
+    with a second member in it refuses the whole-account close from issues, by
+    name, and I watched all three refusals (§3, case 5).
+
+2.5 YOUR §5.3 — "per-app route or a factory?" A FACTORY, plus a per-app
+    `FootprintSource`. The route is identical everywhere ("who is asking, what
+    do you hold, delete it"); only the ANSWER is app-shaped, and `holds` is a
+    free-form `{label, count}[]` so the platform never decides what a future app
+    is allowed to hold. Note this is NOT agent 8's rejected §2.5(b): it rejected
+    an AppContext callback as a way to learn about ANOTHER app, which is a
+    category error. This is an app describing ITSELF, which is exactly what
+    AppContext is for.
+
+2.6 AGENT 8'S §2.6, WHICH IT ASKED TO HAVE DECIDED — "this app only, and it is
+    the LAST app". ** DECIDED: "this app only" NEVER closes the account, ever. **
+
+    Not a taste call. The moment it depends on whether other apps hold data, it
+    needs the census — and then an unreachable app either blocks the one
+    operation that was always meant to be locally answerable, or silently
+    promotes a scoped delete into a full account closure. Both are worse than an
+    account that exists and reaches nothing. The screen says so in the option
+    text ("Your account stays open and you can sign in again"), so it is chosen
+    rather than fallen into.
+
+    Reversible if you disagree: it is one branch, and the census is already
+    there. But it should be reversed deliberately, not because it looks tidier.
+
+
+================================================================================
+3. §4's FIVE CASES — OBSERVED
+================================================================================
+Two dev servers (issues :3010, sales :3100 — port 3000 is held by an unrelated
+project of the human's and I left it alone), the real local Postgres, real
+accounts through the real register + credentials routes. `platform.apps.base_url`
+pointed at both, restored afterwards.
+
+THE PREMISE FIRST, because everything else rests on it: one sign-in on :3010,
+then `GET /api/me` on :3100 with the same jar → 200. Read from the RAW cookie
+jar, not `grep -v '^#'` — agent 8's instrument failure #1, and the cookie is
+`blackcode.session-token`, not `next-auth.session-token`. `NEXTAUTH_SECRET`
+asserted identical across both `.env.local` files.
+
+CASE 1 — AN ACCOUNT IN BOTH APPS. The report names both, with what each holds:
+
+    Blackcode Issues  reachable=true  will_delete=["Agent Nine's Workspace"]  2 issues
+    Sales             reachable=true  will_delete=["Agent Nine's workspace"]  3 prospects
+
+  The sales entry is issues' server having called sales' server over HTTP with
+  the forwarded cookie. There is no query that could have produced it.
+
+CASE 4 — AN UNREACHABLE APP (the one you said to verify if I verified one thing).
+  Killed the sales server. Then:
+
+    4a  census      Sales  reachable=false  error="fetch failed"
+                    and `'footprint' in entry` === false — no field to misread
+    4b  all_apps    ** 409 incomplete_census **, naming Sales
+    4c  THE CATALOG after the refusal, not the API:
+          plat_ws=1  sales_ws=1  prospects=3  user_alive=t
+        Nothing destroyed.
+    4d  IN A BROWSER: "Sales / unknown — did not answer", rendered by name; the
+        explanation naming Sales; and the "Close my account — every app" radio
+        `disabled === true` — asserted on the PROPERTY, not on it looking grey.
+        Instrumented inside ONE `evaluate` that clicks and polls, rather than
+        sampling between round trips (agent 7's toast).
+
+  THE POSITIVE CASE, because every one of those is a denial and a denial-shaped
+  check is satisfied by a census that refuses everything (#16): with sales back
+  up, the same account closed cleanly (case 3). The pair discriminates.
+
+CASE 5 — A WORKSPACE WITH ANOTHER MEMBER SURVIVES. Added a second member to the
+  SALES workspace. Three refusals, all observed:
+
+    5a  census: sales reports blocked_by=[{1025, member_count: 2}], will_delete=[]
+    5b  all_apps from issues → 409 owner_with_members, naming the workspace AND
+        the app ("app_name":"Sales") — the block crossing the boundary
+    5c  sales' own DELETE /api/me/footprint → 409, refusing to destroy it locally
+    5d  catalog after all three: 1 plat_ws, 1 sales_ws, 3 prospects, user alive
+
+CASE 2 — "THIS APP ONLY". `DELETE /api/me/footprint` on sales:
+
+    response  {"deleted":true,"app":"sales","remaining":{"known":false,...}}
+    catalog   sales_ws=0, its prospects gone, OTHER users' 15 prospects untouched
+              issues_ws=1, issues_rows=2  ← the other app intact
+              user_alive=t
+    ** AND THE ACCOUNT STILL SIGNS IN: ** fresh credentials sign-in → 200,
+       /api/me → 200, and a PAGE not just a route: GET /dashboard → 307 →
+       /dashboard/agent-nine-s-workspace → 200 followed.
+    census afterwards: Sales reachable=TRUE, known=FALSE — "you have no account
+       here", which is a different sentence from "unreachable" and from "nothing
+       of your own". That distinction is the one your §2a asked for and it works.
+
+CASE 3 — "ALL APPS".
+
+    3a  bare DELETE /api/me → ** 400 scope_required ** with the suggestion
+    3b  ?scope=all_apps → 200
+          {"deleted":true,"hard_deleted_workspaces":[...],"purged_apps":["issues","sales"]}
+    3c  ** THE CATALOG, NOT THE API: **
+          issues_ws=0  issues_rows=0  sales_ws=0  sales_rows=0
+          sales_members=0  tokens=0  inbox=0
+          users row: soft_deleted=t, password_hash NULL, google_id NULL,
+                     active_workspace_id NULL
+          "anything anywhere still owned by 124": 0, 0, 0, 0
+        Before this phase, `sales_ws` here would have been 1. That single number
+        is the bug and the fix.
+    3d  sign-in after → 401, old session → 401.
+
+PLUS ONE CASE YOUR §4 DOES NOT LIST, and I would not have believed the commit
+message without it: ** A PURGE THAT FAILS HALFWAY MUST LEAVE A WORKING ACCOUNT. **
+I could not stage this by racing the servers, so I injected the failure —
+`purgeRemoteApp` forced to return `{ok:false}` — ran the close, and observed:
+
+    409 app_purge_failed, "Your account was NOT closed: … You can still sign in"
+    catalog: user_alive=t, issues_ws=1, sales_ws=1
+    and a fresh sign-in → 200      ← the recovery, exercised
+
+  Restored (grep for INJECTED: 0), and the SAME account then closed cleanly. The
+  ordering claim is observed, not asserted.
+
+BROWSER PASS, per page:
+
+  issues /dashboard/settings/account
+    - one row per app, both named, "Blackcode Issues (this app) / 3 issues" and
+      "Sales / 2 prospects"
+    - the two radio options with their consequences spelled out, including
+      "Your account stays open, and Sales keeps what it holds"
+    - with sales down: the case-4d observations above
+  sales /dashboard/settings/account
+    - "Deleting your b/sales data" renders the workspace and "2 prospects"
+    - "Closing your account" still links to issues, now saying explicitly that
+      it takes the b/sales data too
+    - drove the delete to completion in the browser: typed DELETE, confirmed,
+      page navigated to /login (the sign-out), and the catalog after: sales_ws=0,
+      issues_ws=1, account alive — then signed in again, 200
+
+TEST DATA: three accounts, gone. One transaction, a NAMED predicate on every
+DELETE, row counts read per statement, and `platform.users` back to its original
+7. `platform.apps.base_url` restored to both original values.
+
+
+================================================================================
+4. WHAT I COULD NOT EXERCISE LOCALLY — AND IT IS LESS THAN YOUR §2b ASSUMES
+================================================================================
+Your §2b says the fan-out "is not exercisable in local dev the way it runs in
+production" and told me not to conclude "it works" from a local green. Correct
+as stated, and narrower than it sounds — the distinction is worth having exactly
+right, because it decides what production still has to show.
+
+WHAT I DID EXERCISE, genuinely, over real HTTP between two processes: the whole
+census, the destructive fan-out, every failure branch, the 409s, the ordering,
+and the recovery. One credential authenticated at both origins and the server at
+one origin used it at the other. That is the mechanism, working.
+
+WHAT MADE IT WORK LOCALLY IS A DIFFERENT MECHANISM FROM PRODUCTION, and this is
+the whole of the gap: locally the cookie has no `Domain` attribute and both
+origins are `localhost` on different ports — **cookies ignore the port**, so the
+jar is shared for free. In production it is `Domain=.blackcode.ch` that makes
+`issues.blackcode.ch` and `sales.blackcode.ch` share it. Same observable, and I
+did not prove the production one.
+
+SO WHAT PRODUCTION MUST SHOW — three things, and only the first is load-bearing:
+
+  1. ** A REAL CENSUS ACROSS THE TWO SUBDOMAINS. ** Sign in on
+     issues.blackcode.ch with an account that has a sales workspace, open
+     Settings → Account, press "Start account deletion". If the Sales row says
+     `reachable: true` with a workspace named, the `Domain=.blackcode.ch` path
+     is proven and nothing else about this phase is in doubt. If it says
+     "unknown — did not answer", the fan-out does not work in production and
+     the FAILURE IS SAFE: the census refuses the close and nothing is destroyed.
+     That asymmetry is deliberate — the bad outcome of this deploy is a screen
+     that will not let you close your account, not a screen that closes it
+     wrongly.
+
+  2. `platform.apps.base_url` is correct for BOTH rows in production. It is now
+     load-bearing for a destructive operation (agent 8 said so; §2.3 shows it is
+     worse than agent 8 thought). A wrong one is caught by the identity check,
+     but caught means "refuses to close accounts", so check the row:
+       SELECT slug, base_url, enabled FROM platform.apps;
+
+  3. Vercel-to-Vercel HTTP between two projects on the same account, with
+     deployment protection whatever it is set to. If protection challenges the
+     server-side fetch, sales comes back unreachable — same safe failure as (1),
+     same fix.
+
+NOT EXERCISED AT ALL, said plainly: a THIRD app, and a `base_url` that times out
+rather than refusing (the 5s `AbortSignal.timeout` branch is written and unit
+tested, but I never watched a real slow origin).
+
+
+================================================================================
+5. YOUR §5, ITEM BY ITEM
+================================================================================
+5.1 RESTRICT — you were right that it is inert, and I disagree with the implied
+    conclusion. Kept, documented as inert, on the column. §2.2.
+
+5.2 "what 'delete that app's data' means for a solely-owned workspace" — the
+    existing split does answer it, as you suspected. Delete it. §2.4.
+
+5.3 per-app route or factory — factory + per-app source. §2.5.
+
+5.4 ** "WHETHER THIS IS ONE PHASE." IT IS, AND YOUR REORDERING WAS RIGHT. **
+
+    Agent 8 put §2d THIRD, after `platform-email` and the front doors, reasoning
+    that "it needs a working email path to confirm a destructive act". You moved
+    it first and told me not to build email. You were right and agent 8's reason
+    does not survive contact with the code: `DELETE /api/me` has NEVER sent an
+    email. It is confirmed by a typed phrase, which is the bar this product
+    already sets for irreversible acts, and which `bk workspace delete --confirm`
+    sets too. Adding email confirmation would have been NEW scope wearing a
+    prerequisite's clothes.
+
+    And the ordering mattered more than tidiness: agent 8 justified deferring it
+    with "its bug is stranding, not loss — nothing is being destroyed while it
+    waits". True, and it means every account closed in the meantime strands
+    somebody's data permanently. Shipping the fix before the email work is
+    strictly better.
+
+5.5 SOMETHING YOUR BRIEF ASSUMED THAT IS NOT TRUE, minor: your §2 says "the
+    deployment answering `DELETE /api/me` reads the address book and calls each
+    OTHER app's `GET /api/me/footprint`" — which describes only the census. The
+    DESTRUCTIVE half also has to cross, or "all apps" would still strand
+    everything. Agent 8's §2.3 says "the destructive action for one app never
+    leaves that app", which is true of "this app only" and cannot be true of
+    "all apps". So there are TWO fan-outs, and the second one is where the
+    ordering guarantee lives. Not a disagreement — a gap in the brief that the
+    implementation had to fill, and the reason §3's injected-failure case exists.
+
+5.6 AGENT 8'S §5.5, WHICH YOUR BRIEF DID NOT CARRY FORWARD AND I DID NOT DO:
+    the guard asserting no app but issues reads
+    `platform.{comments,inbox_messages,workspaces}`. Agent 8 said it "belongs
+    wherever §2d lands, because §2d is the first shared code to care which app
+    owns a workspace table". §2d landed here and I did not write it. It is
+    genuinely additive and it is still owed — flagged so "not done" is not read
+    as "not needed".
+
+5.7 ONE INSTRUMENT FAILURE OF MY OWN, in agent 8's §5.6 tradition. My first
+    browser check of case 4 read the DOM for the word "disabled" — which appears
+    nowhere, because it is a property, not text. It would have reported the
+    disabled radio as enabled, or an enabled one as disabled, depending on the
+    class list. Fixed to read `input.disabled` before I trusted it. The
+    instrument you reach for casually is the one nobody has watched fail.
+
+
+================================================================================
+6. STATE OF THE TREE
+================================================================================
+Four commits on `main`, not pushed (§ summary). Full gate from the repo root
+after the last one:
+
+  npm run typecheck        10/10
+  npx turbo test --force    5/5   (a new task: @blackcode/platform-api)
+  npm run lint             10/10, 0 errors (9 pre-existing warnings)
+  npm run build             3/3
+  cd cli && go build/vet/test   clean
+  make routes              not run — no `routes` annotation changed, and none
+                           could: both new methods are session-only and have no
+                           `bk` command by design
+
+CHECKS WATCHED FAIL, and restored:
+  1. the required `appSlug` — dropped it, `TS2554` at the call site
+  2. `AppContext.footprint` required — omitted it, 4 typecheck failures across
+     two apps and two test fixtures
+  3. cli-parity — removed the `/api/me/footprint` exclusion in sales, RED on
+     BOTH methods by name
+  4. `apps/sales/lib/read-only.test.ts` — fired on its own, unprompted, the
+     moment `account-settings.tsx` called `apiSend`. Declared with a reason
+  5. the new identity check — stubbed to `if (false)`, the new test goes RED on
+     exactly the one case
+  6. and the one that was not a check failing but a check MISSING: §2.3
+
+DATABASE: local dev only, and only rows I created. No migration. Production
+untouched — I hold no credentials for it and asked for none.
+
+`bk` WAS NEVER RUN. Not once, under any config. Nothing in this phase has a `bk`
+command, so there was no reason to, and README's warning made "no reason to" the
+right amount of reason.
