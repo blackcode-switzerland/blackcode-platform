@@ -743,12 +743,34 @@ somebody has to make, not a bug somebody forgot.
    data lost: data **stranded**, and unrecoverable by the person, because there
    is no sign-in left to recover with.
 
-   > **Until this is fixed, do not close an account that has data in more than
-   > one app.**
+   > ~~**Until this is fixed, do not close an account that has data in more than
+   > one app.**~~ **CLOSED 2026-08-11 by Phase 9 (agent 9).**
 
-   **Phase 9 opens with an honesty fix before any redesign**: a report that
-   covers one app must say so rather than presenting a total. Small, not the
-   fix, and it makes the wrong thing visible while the right thing is built.
+   **Phase 9 opened with the honesty fix** — `DeleteAccountReport` carries the
+   app it covers, as a required field, and the screen renders it — and then
+   built the mechanism: `GET/DELETE /api/me/footprint` on every app,
+   `AppContext.footprint` required, and a server-side census fanned out over
+   `platform.apps.base_url` with the caller's session cookie. `?scope=all_apps`
+   purges every other app first and closes the account LAST, so a partial
+   failure leaves a working account rather than stranded data, and it is refused
+   outright (409) while any app is unreachable.
+
+   **`ON DELETE RESTRICT` STAYS AND IS STILL INERT** — deliberately, with the
+   reasoning now written on the column (`apps/sales/lib/db/schema.ts`). It
+   cannot fire against an UPDATE, dropping it would swap an inert guard for no
+   guard, and making the delete hard so it CAN fire would make it refuse the
+   closure outright while the twelve cascades on `platform.workspaces` took
+   issues' content with them. What protects the data is the application layer.
+
+   **AND ONE THING AGENT 8 GOT WRONG, found by measuring rather than reasoning.**
+   §2.4 said a wrong or stale `base_url` "would make an app look unreachable,
+   which now BLOCKS deletion — a safe direction". It does not. An address
+   pointing at ANOTHER APP IN THE SUITE answers confidently, as that app: with
+   `sales.base_url` set to the issues deployment, the census reported ISSUES'
+   workspaces under the name "Sales", `reachable: true`, and the close would have
+   purged one origin twice and stranded the real sales data. Every app now names
+   itself in its reply and both the census and the purge reject an answer from an
+   app they did not address.
 
 ### And one rule this project produced, which belongs everywhere
 

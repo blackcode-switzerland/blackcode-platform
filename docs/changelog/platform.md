@@ -30,6 +30,53 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-11 — closing an account now reaches every app
+
+**Breaking for one route. Fixes a data-stranding bug that was live.**
+
+Your blackcode account is one login for every app, and each app keeps its own
+workspaces and records. Closing the account only ever deleted **one** app's data.
+Everything else survived, owned by an account that could no longer authenticate —
+not lost, **stranded**, and unrecoverable by the person, because there was no
+sign-in left to recover with.
+
+**What is new**
+
+- **`GET /api/me/footprint`** — what THIS app holds for you: the workspaces you
+  solely own, the ones that block because other people are in them, and counts of
+  what is inside them in the app's own nouns. Every app serves it.
+- **`DELETE /api/me/footprint`** — delete your data in THIS app. **Your account is
+  not touched** and you can sign in again. This is how `b/sales` deletes b/sales
+  data; only that deployment can.
+- **`DELETE /api/me?dry_run=true`** now returns an `apps` array: one entry per app
+  in the suite, each either `{reachable: true, footprint}` or
+  `{reachable: false, error}`. There is no third shape — an app that did not
+  answer can never be reported as holding nothing.
+
+**Breaking: `DELETE /api/me` now requires `?scope=all_apps`.** A bare call is a
+`400 scope_required` carrying a suggestion. The route's meaning widened to reach
+every app, and an irreversible operation that quietly starts doing more than the
+caller asked is the wrong place for a default.
+
+**It refuses to run on a partial picture.** `?scope=all_apps` answers
+`409 incomplete_census`, naming the apps, if any app could not be reached. Deleting
+your data in one app stays available throughout — that needs no census.
+
+**The order is the recovery story.** Every other app is emptied first, one at a
+time; the account row is closed last. So a failure halfway leaves you with an
+account that still works and an error naming the app that failed, never a closed
+account and data you can no longer reach.
+
+**Not reachable from `bk`, and now structurally so.** Both new methods are
+session-only: a `bk_live_…` token does not work on them at all. An agent must
+never delete its owner's data, and `Confirm()` auto-approves under
+`BK_NO_PROMPT=1`, so the guard is the credential rather than a prompt.
+
+**What to adapt:** if you drive `DELETE /api/me` from anything other than the web
+UI, add `?scope=all_apps`. Otherwise nothing — no `bk` command changes.
+
+---
+
 ## 2026-08-11 — the account-deletion preview now states which app it covers
 
 **Not breaking for `bk`** (the route is deliberately unreachable from the CLI),

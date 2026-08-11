@@ -1,6 +1,12 @@
 import { defineConfig } from 'vitest/config'
 
-// The one test in this repo that is ABOUT shared code rather than in an app.
+// The tests in this repo that are about the BOUNDARY between packages and apps,
+// rather than about one app.
+//
+// It was "the one test about shared code" until 2026-08-11, when
+// `packages/platform-api` grew its own `test/` for `account-census.test.ts` —
+// unit tests of one package's logic belong with that package. What stays here
+// is what no single package owns.
 //
 // It lives here because platform-testing owns the boundary harness and is
 // app-agnostic: a check on `packages/*` that an app owned would be duplicated

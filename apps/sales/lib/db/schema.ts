@@ -1090,6 +1090,32 @@ export const salesWorkspaces = salesSchema.table(
     id: serial('id').primaryKey(),
     name: varchar('name', { length: 80 }).notNull(),
     slug: varchar('slug', { length: 40 }).notNull(),
+    /**
+     * ── `ON DELETE RESTRICT` HERE IS INERT, AND KEEPING IT IS A DECISION ──────
+     *
+     * It reads like "an account cannot be closed while it owns a sales
+     * workspace". It has never meant that and cannot: closing an account is
+     * `softDeleteUser`, an **UPDATE** setting `deleted_at`, and an UPDATE does
+     * not fire a delete rule. So nothing refused, nothing cascaded, and until
+     * 2026-08-11 the workspace survived — owned by an account that could no
+     * longer authenticate by password or by Google and whose tokens had been
+     * revoked. Data stranded rather than lost, and unrecoverable by the person.
+     * (Measured in Phase 8; multiAppFinalRefactor/PLAN.md §9 item 8.)
+     *
+     * **What actually protects this data is `lib/db/queries/footprint.ts`**:
+     * `DELETE /api/me?scope=all_apps` asks this app what it holds, purges it
+     * through this app's own route, and asserts the app comes back empty BEFORE
+     * it touches `platform.users`. An application-layer question, answered in
+     * the application layer.
+     *
+     * The constraint stays because it is correct for the one case it can see —
+     * a genuine hard `DELETE FROM platform.users` — and dropping it would swap
+     * an inert guard for no guard. It must NOT be read as the thing that makes
+     * account closure safe. Do not "fix" it by making `softDeleteUser` a hard
+     * delete: RESTRICT would then REFUSE the closure outright, and the twelve
+     * `ON DELETE CASCADE` FKs on `platform.workspaces` would take issues'
+     * content with it.
+     */
     owner_id: integer('owner_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),

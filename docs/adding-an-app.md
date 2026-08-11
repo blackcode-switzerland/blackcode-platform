@@ -86,7 +86,7 @@ import each other.**
 | Package | What it gives you |
 |---|---|
 | `platform-db` | The Drizzle schema and client factory for the `platform.*` tables. **The ones that are still genuinely shared are identity**: `users`, `api_tokens`, `password_reset_otps`, `email_whitelist`, `apps`, `error_events`, `blob_references`. The rest (`workspaces`, `workspace_members`, `comments`, `labels`, `events`, `uploads`, `entities`, `links`, `inbox_messages`) are **`apps/issues`' data living under a shared name** — do not read or write them, and see the boundary rules below. Plus the four sign-in callbacks you must not reimplement: `getUserByEmail`, `touchLastLogin`, `upsertUserFromOAuth`, `materializePendingInvitationsForUser` |
-| `platform-api` | The HTTP plumbing: the shared `apiHandler` / `resolveWorkspace` behind an `AppContext`, **the platform route factories you can safely mount** (`@blackcode/platform-api/routes` — read `apps/_scaffold/app/api/README.md` first), the `Errors` envelope (`{ error, code, suggestion? }`), `jsonList()` → `{ data, next_cursor }`, cursor pagination, log sanitisation, platform-wide limits. **`AppContext.workspaces` is where you say whose workspaces you serve, and it is required** |
+| `platform-api` | The HTTP plumbing: the shared `apiHandler` / `resolveWorkspace` behind an `AppContext`, **the platform route factories you can safely mount** (`@blackcode/platform-api/routes` — read `apps/_scaffold/app/api/README.md` first), the `Errors` envelope (`{ error, code, suggestion? }`), `jsonList()` → `{ data, next_cursor }`, cursor pagination, log sanitisation, platform-wide limits. **`AppContext.workspaces` is where you say whose workspaces you serve, and it is required** — as is **`AppContext.footprint`**, which is how the account close learns what your app holds and how to remove it (§11) |
 | `platform-auth` | Identity, and only identity: API tokens, password handling, the platform whitelist (`isEmailAllowed`), `sessionCookieConfig()`. No HTTP |
 | `platform-ui` | The design system: `components/ui/` primitives, the TipTap rich-text editor and its media companions. **Two lines, not one:** `transpilePackages` in `next.config.js` makes it compile, and `@source "…/packages/platform-ui/src"` in your Tailwind stylesheet makes its CSS exist. Neither implies the other and only the first fails loudly — see step 1 |
 | `platform-storage` | The upload ledger, app-prefixed paths, the per-app reference-scanner registry, and the GC **that will not delete a file any app still references** |
@@ -771,6 +771,41 @@ created. So an app with no browser session does not mount `/api/tokens` — that
 a decision, not an omission, and it belongs in `UNSERVED_OPERATIONS` or simply
 unmounted.
 
+> ### `/api/me/footprint` IS NOT OPTIONAL — MOUNT BOTH METHODS
+>
+> Added 2026-08-11 (Phase 9). This is the one factory on this page that you must
+> mount, and the scaffold ships it mounted.
+>
+> **If you do not, closing a blackcode account leaves your app's data behind** —
+> owned by an account that can no longer authenticate, invisible to its owner,
+> and unrecoverable by them. Not lost: *stranded*. That was live behaviour for
+> `apps/sales` until this phase, and the `ON DELETE RESTRICT` that looked like it
+> would prevent it cannot fire, because the account close is an `UPDATE`.
+>
+> Two halves, and you owe both:
+>
+> 1. **`AppContext.footprint`** — required, so this fails to compile rather than
+>    failing silently. Copy `apps/_scaffold/lib/db/queries/footprint.ts` and
+>    change the nouns. Two rules in its header are load-bearing: `purge` must
+>    never touch `platform.users` / `api_tokens` / `inbox_messages` (that is the
+>    ACCOUNT, and closing it is a separate act that happens once, from
+>    `apps/issues`), and `purge` must return a **fresh read** rather than an
+>    optimistic construction, because the account close asserts on it.
+> 2. **The route**, both `GET` and `DELETE`, in `app/api/me/footprint/route.ts`.
+>    It is session-only by construction, so both methods go in your
+>    `EXCLUDED_PATHS` with the reason the scaffold ships.
+>
+> You still do **not** mount `DELETE /api/me`. Full account closure lives in one
+> app. This is the narrow half — "delete my data in THIS app" — and only your
+> deployment can do it, because no other role can reach your schema.
+>
+> One more thing you owe, in step 3: a correct `base_url` in `platform.apps`. It
+> is now load-bearing for a destructive operation, and a **wrong** one does not
+> fail safe — an address pointing at another app in the suite answers
+> confidently, as that app. The census rejects a reply whose `app` does not match
+> the app it addressed, which turns a config error into "unreachable" and refuses
+> the close. Verify the row rather than trusting it.
+
 **Mount only the ones your app should answer for — and then apply the test.**
 
 > **A permanent subset is legitimate. An ACCIDENTAL subset is a bug. The test is
@@ -875,6 +910,11 @@ nobody closed it. So, before you call an app done, sign in and OPEN:
 - the member list, and the invite flow end to end including the link
 - one create, one edit, one delete, one restore
 - one file upload, if you serve uploads
+- **Settings → Account, with a second app running AND with it stopped.** The
+  deletion screen is a census over every app, so it is the one page whose
+  correctness depends on a deployment other than yours. Stopped, it must name
+  the missing app AS UNKNOWN and disable "close my account everywhere" — assert
+  on the input's `disabled` property, not on it looking greyed out
 
 **Report what you saw per page, not "everything works".** A summary would have
 hidden both of the bugs above.

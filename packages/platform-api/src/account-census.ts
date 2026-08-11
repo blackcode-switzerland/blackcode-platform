@@ -143,11 +143,21 @@ export async function purgeRemoteApp(
       cache: 'no-store',
     })
     const body = await res.json().catch(() => null)
+    const envelope = body && typeof body === 'object' ? (body as Record<string, unknown>) : null
     if (!res.ok) {
-      const detail = body && typeof body === 'object' && 'message' in body ? String(body.message) : ''
+      const detail = envelope && 'error' in envelope ? String(envelope.error) : ''
       return { ok: false, error: `${entry.name} answered HTTP ${res.status}${detail ? `: ${detail}` : ''}` }
     }
-    const remaining = asFootprint(body && typeof body === 'object' ? body.remaining : null)
+    // The same identity check the census makes, and it matters MORE here: this
+    // one already deleted something. An app answering under the wrong address
+    // means we just purged a deployment we did not mean to address.
+    if (envelope?.app !== entry.app) {
+      return {
+        ok: false,
+        error: `${entry.name} answered as "${String(envelope?.app ?? 'unknown')}" — its base_url points at the wrong deployment`,
+      }
+    }
+    const remaining = asFootprint(envelope.remaining)
     if (!remaining) {
       return { ok: false, error: `${entry.name} answered 200 with a body this app cannot read` }
     }
@@ -177,7 +187,30 @@ async function fetchFootprint(
       return { ...base, reachable: false, error: `answered HTTP ${res.status}` }
     }
     const body = await res.json().catch(() => null)
-    const footprint = asFootprint(body && typeof body === 'object' ? body.footprint : null)
+    const envelope = body && typeof body === 'object' ? (body as Record<string, unknown>) : null
+
+    // ── WHO ANSWERED? ASK, DO NOT ASSUME THE ADDRESS WAS RIGHT ────────────────
+    // A stale or wrong `base_url` does NOT fail safe, and this was measured
+    // rather than reasoned about: pointing `sales`' address at the issues
+    // deployment made the census report ISSUES' workspaces and issue count
+    // under the name "Sales", reachable and confident. The whole-account close
+    // would then have purged the issues origin twice, asserted "sales is
+    // empty", and closed the account over an untouched sales workspace — the
+    // stranding bug this phase exists to fix, reached through a config error.
+    //
+    // Every app names itself in its own reply, so the check is free: if the
+    // answer is not from the app we addressed, we did not reach that app.
+    // `platform.apps.base_url` is load-bearing for a destructive operation for
+    // the first time, and this is what stops it being trusted blindly.
+    if (envelope?.app !== base.app) {
+      return {
+        ...base,
+        reachable: false,
+        error: `answered as "${String(envelope?.app ?? 'unknown')}" — its base_url in platform.apps points at the wrong deployment`,
+      }
+    }
+
+    const footprint = asFootprint(envelope.footprint)
     if (!footprint) {
       return { ...base, reachable: false, error: 'answered 200 with a body this app cannot read' }
     }

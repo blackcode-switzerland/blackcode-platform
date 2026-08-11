@@ -36,6 +36,7 @@ describes them as they are today.
 - [Authentication & authorization](#authentication--authorization)
 - [Database schema](#database-schema)
 - [Per-app access](#per-app-access-phase-4)
+- [Closing an account, across apps](#closing-an-account-across-apps-phase-9-2026-08-11)
 - [The event spine](#the-event-spine)
 - [API reference](#api-reference)
 - [Query layer](#query-layer)
@@ -170,6 +171,20 @@ until `resolveEventEntitySeqs` turned out to read `issues.*` two calls down.
 > live. Required *within* the contribution, though: a default of
 > `platform.events` would mean an app serving another app's feed for a workspace
 > id that means a different team.
+
+> **`footprint` IS on AppContext, and it is the sharpest case for the rule**
+> (2026-08-11). It answers "what does this app hold for this person, and how do
+> I remove it" — `packages/platform-api/src/account-footprint.ts`. By the
+> one-route test it looks like a contribution: `/api/me/footprint` is the only
+> route that reads it. It is on AppContext anyway, because the cost of an app
+> not answering is not a missing feature, it is **stranded data**. Closing an
+> account used to soft-delete `platform.users` and hard-delete ONE app's
+> workspaces; every other app's data survived, owned by an account that could no
+> longer authenticate — invisible to its owner and unrecoverable by them. A
+> default, or an optional field, would mean a new app is silently SKIPPED by the
+> account close. Required means it cannot be born that way. An app that holds
+> nothing per person answers `UNKNOWN_FOOTPRINT` explicitly; "I hold nothing" is
+> an answer and silence is not.
 
 **Class B takes a second argument — AppContext does not grow callbacks.**
 AppContext is what every app supplies for every route, so a field two routes read
@@ -582,6 +597,76 @@ justification (that after the app split a bare `workspace_id` is ambiguous, so
 the `app` column disambiguates it) was sound about a column that did not hold
 data. `error_events.app` stays and is unaffected: it answers "what has app X
 been throwing lately?", which is a real reader.
+
+## Closing an account, across apps (Phase 9, 2026-08-11)
+
+**One account spans every app; each app owns its own data.** So "close my
+account" is the one operation that has to cross a boundary the rest of this
+platform spends its effort keeping closed.
+
+### What it did before, and why it was worse than a reporting bug
+
+`deleteAccountReport` enumerated `platform.workspaces` — `apps/issues`' own
+table since Phase 2 — and `softDeleteUser` deleted from it. Everything else
+survived. `sales.workspaces.owner_id` carries `ON DELETE RESTRICT`, which reads
+like protection and **cannot fire**: the account close is an `UPDATE` setting
+`deleted_at`, and an UPDATE does not fire a delete rule.
+
+The result was not data lost. It was data **stranded** — retained, owned by an
+account that could no longer authenticate by password or by Google and whose
+tokens had been revoked, unmentioned at any point in the flow, and unrecoverable
+by the person, because there was no sign-in left to recover with.
+
+### The mechanism: an HTTP fan-out, not a shared table
+
+No deployment can read another app's tables — an app's Postgres role has no
+grant on another app's schema (platform-architecture §4.3). So the census is
+**asked**, not queried:
+
+1. Every app serves `GET /api/me/footprint`, answering only for itself from its
+   own tables, through `AppContext.footprint`.
+2. The deployment serving `DELETE /api/me` reads `platform.apps`, and calls each
+   OTHER app's footprint route, **forwarding the caller's own session cookie**.
+   That works because the cookie is domain-widened to `.blackcode.ch` (D-16) and
+   `NEXTAUTH_SECRET` is deliberately identical across apps.
+
+A shared `platform.account_footprint` table was rejected: it is
+`platform.entities` again — a projection that drifts, needing a reconciler that
+cannot be written, because the reconciler would have to read every app's tables.
+A browser-side fan-out was rejected too: it needs CORS with credentials on every
+app, and it puts the census in the least trustworthy place.
+
+### The three properties that make it safe
+
+| Property | How |
+|---|---|
+| **"No answer" can never be read as "no data"** | `AppCensusEntry` is a discriminated union: `{reachable: true, footprint}` or `{reachable: false, error}`. There is no field on the second shape that could hold a zero. A caller that forgets to branch does not compile |
+| **An irreversible act never runs on a partial census** | `?scope=all_apps` returns **409 `incomplete_census`**, naming the apps that did not answer. `DELETE /api/me/footprint` — "this app only" — stays available throughout, because it is answerable locally and needs no census |
+| **The account row is touched LAST** | Every other app is purged first, sequentially. The worst partial failure is "one app emptied, account still works, error names the app that failed", which the person can retry. The inverse order reintroduces stranding inside the fix |
+
+And `purge` returns a **fresh** footprint rather than `void`, so the caller
+asserts each app is empty instead of trusting its 200 — CLAUDE.md finding #16:
+assert the positive, treat the refusals as the weaker half.
+
+> **`platform.apps.base_url` is load-bearing for a destructive operation for the
+> first time, and a wrong one does NOT fail safe.** Measured on 2026-08-11:
+> pointing `sales`' `base_url` at the issues deployment made the census report
+> ISSUES' workspaces under the name "Sales", `reachable: true`, with no warning.
+> Every app therefore NAMES ITSELF in its reply, and both the census and the
+> purge reject an answer from an app they did not address.
+> `packages/platform-api/test/account-census.test.ts` holds that case.
+
+### What each app owes
+
+Full account closure stays **issues-only** — one place, one typed confirmation.
+Every other app serves the narrow half (`/api/me/footprint`, both methods) and
+supplies `AppContext.footprint`. `purge` must never touch `platform.users`,
+`platform.api_tokens` or `platform.inbox_messages`: those are the ACCOUNT, and
+closing it is a separate, louder act.
+
+Both methods are session-only by construction (`requireSessionResolver`) and are
+in every app's `EXCLUDED_PATHS`. An agent must never delete its owner's data, and
+`Confirm()` is not a guard for agents — it auto-approves under `BK_NO_PROMPT=1`.
 
 ## The event spine
 
@@ -1008,6 +1093,10 @@ POST     /api/auth/password-reset/request       request OTP
 POST     /api/auth/password-reset/confirm       confirm OTP + set password
 
 GET      /api/me                                current user (+ active_workspace_id, via, is_super_admin)
+DELETE   /api/me?dry_run=true                    what closing the account would do, IN EVERY APP (the census)
+DELETE   /api/me?scope=all_apps                  close the account everywhere. 409 if any app is unreachable
+GET      /api/me/footprint                       what THIS app holds for me      (session-only, every app serves it)
+DELETE   /api/me/footprint                       delete my data in THIS app; the account is untouched
 POST     /api/me/active-workspace                set active workspace
 GET      /api/me/inbox                            list inbox  (?unread, ?limit)
 POST     /api/me/inbox/mark-read                  mark read (ids | all)
