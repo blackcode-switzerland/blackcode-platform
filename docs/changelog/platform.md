@@ -30,6 +30,75 @@ with its app. `bk changelog --app platform` filters to this file.
 
 ---
 
+## 2026-08-10 — BREAKING: per-app access is gone; `bk app` becomes the address book
+
+Membership is now the whole gate. `platform.workspace_apps` and
+`platform.app_access` are **dropped**, with the routes, commands and screens that
+served them.
+
+They answered "is this app switched on inside this workspace, and may this person
+open it?" — a question that needs one workspace shared by several apps. Since
+2026-08-10 each app owns its workspaces, so **a workspace belongs to exactly one
+app and its members are that app's users**. There is no second gate left to be
+refused by.
+
+### Removed
+
+| Gone | Use instead |
+|---|---|
+| `bk app enable <app>` | `bk <app> invite send <email>` — invite them to a workspace in that app |
+| `bk app disable <app>` | `bk <app> member remove <user>` |
+| `bk app default-access <app> --mode …` | nothing; membership is the grant |
+| `bk app access list\|grant\|revoke <app>` | `bk <app> member list`, `bk <app> invite send`, `bk <app> member remove` |
+| `bk <app> workspace list --all` | `bk <app> workspace list` — it returns the same rows now |
+| `bk <app> invite send --app <app>` | invite from the app you mean |
+| `GET\|PATCH /api/workspaces/{ws}/apps`, `…/apps/{app}/access…` | — |
+| `GET /api/workspaces?all=1`'s widened list and per-row `apps` array | `GET /api/workspaces` |
+| `PLATFORM_ENFORCE_APP_ACCESS` | — |
+
+Every removed command exits non-zero and names its replacement on stderr, so a
+run that hits one can recover inside the same run. `POST …/invitations` **rejects**
+a body still carrying `app` with a 400 and a suggestion, rather than ignoring it:
+silently dropping it would tell a client its invitation granted access it did not.
+
+### `/api/meta`'s `apps` block changed meaning — read this if you parse it
+
+It was the apps you held a GRANT for, each with the workspaces you could reach it
+in. It is now the **address book**: every enabled app in the suite, with its
+`base_url`.
+
+- **`workspaces` is populated only for the app answering the request.** For any
+  other app it is `[]`, and that means *"not known here"*, **not** *"you have none
+  there"*. Ask that app's own `/api/meta` — that is what `base_url` is for.
+- **More apps may appear than before.** The list is no longer filtered by what you
+  can reach, because no deployment can determine that any more: each app's
+  membership lives in its own schema.
+- `links.relations` is **removed** (`bk link` went on 2026-08-10 and no app writes
+  the table). `links.urn_format` and `links.urn_example` are unchanged — putting
+  the other end's URN in a record's own text is the documented replacement.
+
+The old shape was not merely about to become wrong, it already was: a brand-new
+issues signup was told `apps.sales.workspaces` contained their platform
+workspace — a workspace `apps/sales` itself answers 404 for.
+
+### `bk app` narrows
+
+`bk app list` and `bk app use` remain. `list` no longer reports ENABLED, DEFAULT
+ACCESS or ACCESS — those described the dropped tables — and prints APP, SERVER,
+REACHABLE. **It also no longer needs an active workspace**, which fixes it
+404ing from a CLI homed on an app that never served `/api/workspaces/{ws}/apps`.
+
+An app listed as REACHABLE that you have no workspace in is a normal state. Ask
+it: `bk <app> workspace list`.
+
+### Also dropped: `platform.transaction_log`
+
+No writer since before the monorepo, and `/api/undo` has been a 410 since
+2026-08-05. The migration refuses to drop it if any row is newer than 30 days —
+a recent row would mean a writer nobody has found.
+
+---
+
 ## 2026-08-10 — BREAKING: ten `bk` verbs move behind the app name, and `bk link` is removed
 
 **This breaks every script and every agent that uses a bare data verb.** Each old

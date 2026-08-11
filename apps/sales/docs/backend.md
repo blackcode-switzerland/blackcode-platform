@@ -702,14 +702,9 @@ supplies its own, over `lib/db/queries/workspaces.ts`. `apiHandler`,
 and `platformMetaBlock` all go through it. The plumbing is shared; the data is
 not, and that distinction is the whole refactor in one line.
 
-**Two methods on that source are deliberate no-ops, and `lib/workspace-source.test.ts`
+**One method on that source is a deliberate no-op, and `lib/workspace-source.test.ts`
 asserts the absence:**
 
-- `assertAppAccess` — **a member of a sales workspace is a sales user.** The
-  per-app gate (`platform.workspace_apps` + `platform.app_access`) exists to
-  switch an app on and off inside a workspace two apps share; nothing shares a
-  `sales.workspaces` row. This app no longer consults
-  `PLATFORM_ENFORCE_APP_ACCESS` anywhere. Both tables are dropped in Phase 5.
 - `setDefaultForUser` — `platform.users.active_workspace_id` is one column shared
   by every deployment, so a sales workspace id written into it is read back by
   `apps/issues` as one of ITS ids. The default comes from this app's own tenancy

@@ -156,8 +156,18 @@ real problem.
 owns `sales.workspaces`; a member of a sales workspace is a sales user, full
 stop. There is no second app inside one of its workspaces to be switched off, so
 there is no second empty to describe — and a screen nobody can ever reach reads
-to the next person as protection. `PLATFORM_ENFORCE_APP_ACCESS` is not consulted
-anywhere in this app any more.
+to the next person as protection. `PLATFORM_ENFORCE_APP_ACCESS` was not consulted
+anywhere in this app after that date, and on 2026-08-10 the variable and both
+tables were removed platform-wide (Phase 5).
+
+**The sibling frame `app/dashboard/[ws]/layout.tsx` was missed by that change and
+404'd every sales-only account until 2026-08-10.** It kept resolving membership
+through `listMyWorkspaces(getDb(), user.id, { app: APP_SLUG })` — the shared
+platform table — so somebody with no *issues* workspace matched nothing and got a
+404 on their own dashboard while every API route worked for them. It reads
+`listWorkspacesForUser` now. Worth knowing as a shape: the two layouts are one
+directory apart, and only the outer one was in the diff that moved this app's
+tenancy.
 
 | | Condition | What it says |
 |---|---|---|
@@ -398,15 +408,17 @@ unions from — three lists that cannot drift because there is one of each.
 
 `sales.user_preferences.ui_mode`, per person per workspace, default `read_only`.
 `read_only` renders no editing. **The server never consults it** — not in a
-route, not in a query, not anywhere. Authorisation is `platform.app_access` and
-the workspace role.
+route, not in a query, not anywhere. Authorisation is workspace MEMBERSHIP and
+the workspace role. (It was `platform.app_access` and the role until that table
+was dropped on 2026-08-10; the point of this section is unaffected — the mode was
+never either of them.)
 
 Verified on the seeded database, 2026-08-07, in BOTH directions, because one
 direction proves nothing:
 
 | Set up | Result |
 |---|---|
-| `ui_mode = 'full'`, per-app access revoked | `PATCH …/prospects/1` → **403 `app_access_denied`**. The mode grants nothing |
+| `ui_mode = 'full'`, per-app access revoked | `PATCH …/prospects/1` → **403 `app_access_denied`**. The mode grants nothing. *(This exact setup is no longer constructible — per-app access was dropped 2026-08-10. The equivalent today is removing the person from the workspace, which 404s. The 2026-08-07 measurement stands as the record of what was checked then.)* |
 | `ui_mode = 'read_only'`, access granted | the same request → **200**, and the change lands. The mode withholds nothing |
 
 ### 8.2 What `full` makes writable, and why not everything
@@ -528,12 +540,17 @@ so `app/api/me/route.ts` deliberately exports GET and PATCH and **not** DELETE.
 And platform administration lives in one app (§11).
 
 **The name and the link are DERIVED, never spelled.** The page's server half
-calls `appsReachableByUser` and passes the apps this person can reach, with
-their registered `base_url`s — the same mechanism D-18 uses for a cross-app link.
+calls `listAppRegistry` and passes every other app in the suite with its
+registered `base_url` — the same mechanism D-18 uses for a cross-app link. It
+called `appsReachableByUser` until 2026-08-10; that function went with
+`platform.app_access`, and no deployment can determine what another app's
+membership holds.
 Hardcoding another app's slug here would be a second declaration of a fact that
 lives in `platform.apps`, and it would be wrong the day a third app arrives. A
-person who can reach only b/sales gets the same sentence with no link, which is
-still the right answer: the control exists and it is not here.
+Until 2026-08-10 somebody who could reach only b/sales got the same sentence with
+no link. The list is the address book now, so the link appears for everyone —
+following it and finding no workspace there is a legible outcome, whereas being
+unable to find the app that holds your password was not.
 
 The administration line is shown to **everybody**, not only to super admins.
 `is_super_admin` says whether you have the surface; it does not say where the

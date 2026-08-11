@@ -225,7 +225,7 @@ After changing env vars, redeploy the affected app: `./devops/release.sh web iss
 | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Google OAuth sign-in — **configured and live** |
 | `RESEND_API_KEY` + `RESEND_FROM_EMAIL` | Transactional email (invitations, password reset) |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob — **configured and live** |
-| `PLATFORM_ENFORCE_APP_ACCESS` | Enforces per-app access in `resolveWorkspace` |
+| ~~`PLATFORM_ENFORCE_APP_ACCESS`~~ | **Removed 2026-08-10** — the per-app gate is gone; delete it from both projects (`docs/env.md`) |
 
 > **Two credentials, deliberately.** `DATABASE_URL` is the app role and **cannot**
 > migrate — that is the point, not a limitation. `MIGRATE_DATABASE_URL` is the

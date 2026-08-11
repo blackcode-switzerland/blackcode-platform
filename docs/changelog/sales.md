@@ -22,6 +22,27 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-10 — the sales dashboard was 404ing for every sales-only account
+
+**Fixed.** A brand-new sales sign-up — the account this app's Phase 2 exists to
+create — got **404 on their own dashboard** at `/dashboard/<workspace>`, while
+every API route for the same person worked normally.
+
+The workspace frame resolved membership through `platform.workspaces`, the SHARED
+table, filtered by the per-app access grants. Phase 2 moved this app's workspaces
+to `sales.workspaces` and repointed the layout beside it; this file, one directory
+down, was missed. Somebody with no *issues* workspace therefore matched nothing.
+
+It reads `sales.workspaces` now. If you signed up for b/sales and the app appeared
+to be empty or missing, that was this, and it is fixed.
+
+*(Note for anyone reverting: dropping only the access filter would have been worse
+than leaving the bug. The page would then have matched any PLATFORM workspace
+sharing the slug, and migration 0004 mirrored ids and slugs deliberately — that is
+a cross-tenant frame, not a fix.)*
+
+---
+
 ## 2026-08-10 — every b/sales verb names the app: `bk sales workspace`, `bk sales member`, `bk sales invite`
 
 **Breaking for anything scripted.** The bare `workspace`, `member` and `invite`

@@ -506,12 +506,6 @@
       "app": "platform"
     },
     {
-      "method": "DELETE",
-      "path": "/api/workspaces/{ws}/apps/{app}/access/{userId}",
-      "command": "bk app access revoke",
-      "app": "platform"
-    },
-    {
       "method": "GET",
       "path": "/api/changelog",
       "command": "bk skill sync",
@@ -572,18 +566,6 @@
       "app": "platform"
     },
     {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/apps",
-      "command": "bk app list",
-      "app": "platform"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/apps/{app}/access",
-      "command": "bk app access list",
-      "app": "platform"
-    },
-    {
       "method": "PATCH",
       "path": "/api/me",
       "command": "bk profile edit",
@@ -593,12 +575,6 @@
       "method": "PATCH",
       "path": "/api/super-admin/errors/{id}",
       "command": "bk super-admin errors unresolve",
-      "app": "platform"
-    },
-    {
-      "method": "PATCH",
-      "path": "/api/workspaces/{ws}/apps/{app}",
-      "command": "bk app enable",
       "app": "platform"
     },
     {
@@ -623,12 +599,6 @@
       "method": "POST",
       "path": "/api/tokens",
       "command": "bk token create",
-      "app": "platform"
-    },
-    {
-      "method": "POST",
-      "path": "/api/workspaces/{ws}/apps/{app}/access",
-      "command": "bk app access grant",
       "app": "platform"
     },
     {

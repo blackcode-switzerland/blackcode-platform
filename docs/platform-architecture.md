@@ -41,7 +41,7 @@ split explicit.
 
 | Layer | Tables |
 |---|---|
-| **Platform** (shared by every app) | `users`, `workspaces`, `workspace_members`, `workspace_invitations`, `apps`, `workspace_apps`, `app_access`, `api_tokens`, `password_reset_otps`, `email_whitelist`, `uploads`, `comments`, `labels`, `events`, `inbox_messages`, `deletion_batches`, `error_events`, `links`, `entities`, `blob_references` |
+| **Platform** (shared by every app) | `users`, `workspaces`, `workspace_members`, `workspace_invitations`, `apps`, `api_tokens`, `password_reset_otps`, `email_whitelist`, `uploads`, `comments`, `labels`, `events`, `inbox_messages`, `deletion_batches`, `error_events`, `links`, `entities`, `blob_references`. (`workspace_apps`, `app_access` and `transaction_log` were dropped 2026-08-10 — §4.5.) |
 | **Issues app** (its own schema) | `issues`, `tasks`, `projects`, `project_updates`, `issue_labels`, `issue_assignees`, `issue_watchers`, `project_labels`, `project_members`, `attachments`, `workspace_counters` |
 
 Two properties made the split cheaper than expected and are worth preserving:
@@ -135,7 +135,7 @@ The split is decided by one question — *"would a sales app need this?"*
 
 ```
 platform.*   users, workspaces, workspace_members, workspace_invitations,
-             apps, workspace_apps, app_access, api_tokens, password_reset_otps,
+             apps, api_tokens, password_reset_otps,
              email_whitelist, uploads, comments, labels, events, inbox_messages,
              deletion_batches, error_events, links, entities, blob_references
 
@@ -202,37 +202,59 @@ organisation in both, `bk activity --ws kali-sa` needs one tenant boundary, and 
 person should have one workspace list — not the same company existing three times
 under three slugs that drift apart.
 
-### 4.5 Identity is global, access is per app
+### 4.5 Identity is global, tenancy is per app
 
 | Table | Means | Scope |
 |---|---|---|
 | `platform.users` | your account | global — one login, every app |
-| `platform.workspace_members` | you are in this organisation | per workspace |
-| `platform.workspace_apps` | this app is on for this organisation | per workspace, per app |
-| `platform.app_access` | you may use this app here | per workspace, per app, per user |
+| `platform.workspace_members` | you are in one of THIS app's workspaces | per workspace |
 
-```
-workspace_apps (workspace_id, app, enabled_at, enabled_by, default_access)
-app_access     (workspace_id, app, user_id, role, granted_at, granted_by)
-```
+**Membership is the whole gate.** There were two more rows in this table until
+2026-08-10 — `platform.workspace_apps` ("this app is on for this organisation")
+and `platform.app_access` ("you may use this app here") — and both are dropped
+(migration `0045`).
 
-**Grant policy: default-on, per-workspace override.** Enabling an app for a
-workspace grants every current member; new members are granted automatically. An
-admin can flip `default_access` to `invite_only` per workspace per app, after
-which access is granted one person at a time. `workspace_invitations` carries an
-`app` column so a person can be invited straight into one app.
+They existed because §4.4's one shared `platform.workspaces` meant a workspace
+could run several apps, so "which of them may you open?" was a real question.
+multiAppFinalRefactor Phase 2 ended that: each app owns its workspaces
+(`platform.workspaces` is `apps/issues`', `sales.workspaces` is sales'), so a
+workspace belongs to exactly one app and **its members are that app's users.**
+The gate was approximating an equivalence that is now structural.
 
-**Visibility follows access, and that is what keeps it unconfusing:** the
-workspace *record* is shared, the workspace *visibility* is not. Log into sales
-and you see only workspaces where sales is enabled **and** you have access — not
-every workspace you belong to. Same rule in the CLI: `bk workspace list` shows
-the current app's workspaces; `--all` shows every workspace with a badge per app.
+> **This section previously ended: "Consequence worth having: `bk meta` returns
+> only the apps that token can reach. An agent working for a sales-only user
+> cannot discover the issues app exists."**
+>
+> **That rule is RETIRED, not weakened.** It is rewritten here rather than
+> footnoted because leaving a superseded rule in place is how it gets
+> re-litigated (see §4.6's own note).
+>
+> It is retired for two measured reasons:
+>
+> 1. **It is no longer derivable.** Reachability lives in each app's own
+>    membership table, and an app's Postgres role has no grant on another app's
+>    schema (§4.3). A deployment can answer for itself and for nobody else. This
+>    is the same wall as CLAUDE.md finding #14.
+> 2. **It was already answering falsely.** A brand-new `apps/issues` signup got a
+>    grant for every enabled app, so `/api/meta` reported
+>    `apps.sales.workspaces` as their PLATFORM workspace slug — a workspace
+>    `apps/sales` answers 404 for, and which sales' own `/api/meta` correctly
+>    reported as `workspaces: []`.
+>
+> It was also only ever skin-deep: `bk` embeds `topics/*/*.md` for **every** app
+> into one binary, so anybody who installs the CLI already holds every app's
+> guide.
 
-Enforcement is `resolveWorkspace`, behind `PLATFORM_ENFORCE_APP_ACCESS`.
+**What replaces it: the address book, and honesty about scope.**
+`/api/meta`'s `apps` block is every enabled row of `platform.apps` — which apps
+exist and where they are deployed — and `workspaces` is populated **only for the
+app answering the request**. An empty array for another app means *"not known
+here"*, not *"you have none there"*; conflating those two is what produced the
+false claim above. Whether you can get in is answered by the app at that address.
 
-Consequence worth having: **`bk meta` returns only the apps that token can
-reach.** An agent working for a sales-only user cannot discover the issues app
-exists.
+So an app listed as reachable that you have no workspace in is a normal state,
+not an error. `bk app list` is the address book; `bk <app> workspace list` is the
+question about tenancy.
 
 ### 4.6 Counters live in the app, not in a shared table
 
@@ -703,9 +725,10 @@ another app.**
 
 > **One login across all apps: THE CODE IS IN, THE DEPLOY IS NOT.** The session
 > cookie is scoped to `.blackcode.ch` — signing in to issues signs you in to
-> sales too, with access still gated per app by §4.5: shared session, separate
-> authorisation. Without it, moving between apps means logging in N times, which
-> is the fastest way to make a suite feel like N products.
+> sales too. Authentication is shared; TENANCY is not (§4.5), so being signed in
+> to sales does not put you in a sales workspace, and that app tells you so in
+> its own words. Without the shared cookie, moving between apps means logging in
+> N times, which is the fastest way to make a suite feel like N products.
 >
 > `packages/platform-auth/src/session-cookie.ts` since 2026-08-06 (D-16). It is
 > shared code, not each app's, for the reason D-27 item 3 gives: it is ONE

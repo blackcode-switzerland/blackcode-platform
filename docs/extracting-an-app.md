@@ -135,8 +135,7 @@ this dataset; the restore takes seconds.
 
    That is the trivial version of a question this document **deliberately does
    not answer**: a full `platform` dump carries every app's rows in
-   `platform.apps`, `workspace_apps` and `app_access`, and `platform.users`
-   carries every user of every app. Some of those are other customers' names.
+   `platform.apps`, and `platform.users` carries every user of every app. Some of those are other customers' names.
    **That is a data-protection question, not a schema question**, and the right
    answer depends on the counterparty, the contract and the jurisdiction —
    none of which a rehearsal has. Whoever does a real extraction owns it. Raise

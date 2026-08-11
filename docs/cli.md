@@ -391,28 +391,35 @@ full; `--reference` prints only the baseline reference.
 | `bk issues workspace transfer [slug\|id] --to <user>` | `POST /api/workspaces/:ref/transfer` | Owner only; you become a regular member. |
 | `bk issues workspace delete <slug\|id> --confirm <slug\|id>` | `DELETE /api/workspaces/:ref` | Owner only, irreversible. `--confirm` must repeat the argument and is required even with `--yes` / `BK_NO_PROMPT=1`. Never defaults to the active workspace. Clears the active selection if it deleted it. |
 
-### Apps & access (workspace-scoped)
+### Apps — the address book (not workspace-scoped)
 
-Membership puts a person in the organisation; **app access** lets them open an app
-inside it. `bk app` is a PLATFORM verb, so it stays at the root when Phase 5 moves
-this app's nouns behind `bk issues …` — "which apps does this org run" is the same
-question from any app.
+**Per-app access was removed on 2026-08-10** (multiAppFinalRefactor Phase 5).
+`platform.workspace_apps` and `platform.app_access` are dropped, and with them
+`bk app enable|disable|default-access` and `bk app access list|grant|revoke`.
+Each app owns its workspaces, so a workspace belongs to exactly one app and
+**membership is the whole gate** — `bk <app> member list` is the question that
+used to be split in two.
+
+What is left is routing: which apps exist, and where.
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk app list` | `GET /api/workspaces/:ws/apps` | Any member. Shows enabled state, `default_access`, and how many members hold access. |
-| `bk app enable <app> [--mode M]` | `PATCH /api/workspaces/:ws/apps/:app` | Owner only. `--mode all_members` (default) grants every current member immediately; `invite_only` grants nobody. |
-| `bk app disable <app> --confirm <app>` | `PATCH /api/workspaces/:ws/apps/:app` | Owner only. Revokes every grant. `--confirm` must repeat the slug, required even with `--yes`. **The server refuses to disable the app serving the request** (`cannot_disable_current_app`) — it would lock the workspace out of the product with no route back. |
-| `bk app default-access <app> --mode M` | `PATCH /api/workspaces/:ws/apps/:app` | Owner only. Switching TO `all_members` grants every current member; switching to `invite_only` keeps existing grants (revoke explicitly if that is the intent). |
-| `bk app access list <app>` | `GET /api/workspaces/:ws/apps/:app/access` | Any member. Lists members **without** access too — "who is missing it" is the question this gets asked. |
-| `bk app access grant <app> --user <ref>` | `POST /api/workspaces/:ws/apps/:app/access` | Owner only. `<ref>` is an id, email, name, or `me`. |
-| `bk app access revoke <app> --user <ref>` | `DELETE /api/workspaces/:ws/apps/:app/access/:userId` | Owner only. The workspace owner cannot be revoked (`cannot_revoke_owner`) — nobody could grant it back. |
+| `bk app list` | none | Reads the learned registry in `~/.config/bk/config.json`, plus a liveness probe per app. Prints APP, SERVER, REACHABLE. **Needs no active workspace** — it used to call `GET /api/workspaces/:ws/apps`, which only `apps/issues` mounted, so it 404'd from a CLI homed anywhere else. |
+| `bk app use <slug>` | none | Sets the home app: where the bare identity verbs go. `bk <app> …` always pins its own app regardless. |
 
-Calling into a workspace where you are a member but hold no access exits **4**
-with `app_access_denied` and a `hint:` line naming who can grant it. `bk meta`
-reports `current_app` and an `apps` object — the apps your token can reach, keyed
-by slug, with the workspaces you can reach each in. An app you cannot reach
-anywhere is absent entirely.
+The registry is **learned, never typed**: `bk login` and `bk meta` write it from
+`/api/meta`, which reports every enabled row of `platform.apps`.
+
+`bk meta` reports `current_app` and an `apps` object keyed by slug. Since
+2026-08-10 that object is the address book rather than a grant list, and the
+difference matters if you parse it: **`workspaces` is populated only for the app
+answering the request**, and `[]` for any other app means *"not known here"*, not
+*"you have none there"*. No deployment can answer for another — each app's
+membership lives in its own schema, and an app's Postgres role has no grant on
+another's (`docs/platform-db.md`).
+
+So an app listed as REACHABLE that you have no workspace in is a normal state,
+not an error. Ask it: `bk <app> workspace list`.
 
 ### Moving / copying items between workspaces
 

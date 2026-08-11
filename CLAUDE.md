@@ -41,9 +41,17 @@ What the migration bought:
 - The database is **`platform.*` + `issues.*`**, never `public`. Production runs
   as the bounded role `issues_app`; migrations run as `MIGRATE_DATABASE_URL`.
   See **`docs/platform-db.md`** — the boundary, the two credentials, the grants.
-- Apps are real data: `platform.apps`, `workspace_apps`, `app_access`. Workspace
-  listings are app-scoped and `resolveWorkspace` enforces access behind
-  `PLATFORM_ENFORCE_APP_ACCESS`.
+- Apps are real data: **`platform.apps` is the ADDRESS BOOK** — which apps exist
+  and where they are deployed. `workspace_apps` and `app_access` were **dropped
+  2026-08-10** (multiAppFinalRefactor Phase 5) with `requireAppAccess` and
+  `PLATFORM_ENFORCE_APP_ACCESS`: each app owns its workspaces, so a workspace
+  belongs to exactly one app and **membership is the whole gate**.
+  `/api/meta`'s `apps` block is the address book, not a grant list —
+  `workspaces` is populated only for the app answering the request, and `[]` for
+  another app means "not known here", never "you have none there". No deployment
+  can answer for another; each app's membership lives in its own schema.
+  docs/platform-architecture.md §4.5's "an agent must not discover an app its
+  user cannot reach" is **retired** there, with the measurements.
 - **The CLI has TWO verb tiers since 2026-08-10, and the tier is visible in the
   spelling** (`bk guide platform/apps`). **Bare** is your ACCOUNT and this
   BINARY — `login`, `logout`, `whoami`, `token`, `profile`, `meta`, `app`,

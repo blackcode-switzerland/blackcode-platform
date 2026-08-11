@@ -57,48 +57,48 @@ bk --ws <slug> issues issue list        # ONE command; changes no active workspa
 another workspace so you never mutate the caller's active workspace as a side
 effect. It is resolved by the app the command names, like everything else.
 
-## Membership is not access
+## Membership IS access
 
-Two different things, and confusing them is the second most common mistake here:
+There used to be two things here and confusing them was the second most common
+mistake on this platform:
 
-- **Membership** — you are in that app's workspace. `bk <app> member list` shows it.
-- **App access** — whether the app is switched on for you at all.
-  `bk app access list <app>` shows it.
+- **Membership** — you are in that app's workspace.
+- **App access** — whether that app was switched on for you inside it.
 
-`bk <app> workspace list` shows only the workspaces you can use **that app** in.
-One where the app is switched off, or where you were never granted it, is not
-somewhere you can write, so listing it would be offering a guaranteed failure.
-
-```bash
-bk issues workspace list          # workspaces you can use issues in
-bk issues workspace list --all    # every workspace you are a member of, + which
-                                  # apps you can reach in each
-```
-
-If a workspace you expected is missing, run `--all`. An empty APPS column means
-you are a member but hold no access there.
-
-A request into a workspace you have no access to fails with exit code 4 and a
-`hint:` line naming who can grant it. That hint is the recovery path — read it
-rather than retrying.
-
-## Apps in a workspace
+The second is GONE as of 2026-08-10. A workspace belongs to exactly one app, so
+being a member of an issues workspace is what using issues means, and there is no
+second gate to be refused by. `bk <app> member list` is the whole answer.
 
 ```bash
-bk app list                                 # which apps this workspace runs
-bk app access list <app>                    # who has access, and who does not
-bk app access grant <app> --user <ref>      # owner only
-bk app access revoke <app> --user <ref>     # owner only
-bk app default-access <app> --mode …        # all_members | invite_only
-bk app enable <app>                         # owner only
-bk app disable <app> --confirm <app>        # owner only; revokes every grant
+bk issues workspace list          # the issues workspaces you are a member of
+bk sales workspace list           # the sales ones — a different set entirely
 ```
 
-Run `bk meta` for the app slugs you can reach and `bk app list` for how each one
-currently grants access — neither is baked into this binary.
+Each app keeps its OWN workspaces and its own active one, so the same person can
+be in one app's workspace and in none of another's. If a workspace you expected
+is missing from one app, you are not a member of it THERE — ask an owner of that
+app's workspace to invite you: `bk <app> invite send <email>`.
 
-You cannot disable the app you are calling from — it would lock the whole
-workspace out of the product with no way back in.
+`bk <app> workspace list` used to take `--all`, which showed workspaces the app
+was switched off in plus the apps reachable in each. Both of those described the
+gate, so the flag went with it and the plain listing is the whole answer.
+
+## The apps in the suite
+
+```bash
+bk app list                # every app, its server, and whether you can reach it
+bk app use <slug>          # switch the home app (where the bare identity verbs go)
+```
+
+This is an ADDRESS BOOK, not a permission list. It answers "which apps exist and
+where do they live", which is what lets `bk <app> …` route without anyone typing
+a URL. It does not answer "may I open this one" — no single deployment can, since
+each app's membership lives in its own schema.
+
+So an app listed as REACHABLE that you have no workspace in is a normal state,
+not an error. Ask that app: `bk <app> workspace list`.
+
+Run `bk meta` to refresh the registry if an app is missing or has moved.
 
 ## Managing workspaces
 
@@ -141,4 +141,4 @@ Three things to know before you call it:
 If you delete that app's active workspace, its active selection is cleared — run
 `bk <app> workspace use <slug>` before the next scoped command in that app.
 
-Related commands: `bk meta`, `bk issues workspace list|show|create|use|edit|transfer|delete`, `bk sales workspace list|show|use`, `bk app list|enable|disable|default-access`, `bk app access list|grant|revoke`, `bk issues member list|remove|leave`, `bk issues invite send|list|revoke|pending`
+Related commands: `bk meta`, `bk issues workspace list|show|create|use|edit|transfer|delete`, `bk sales workspace list|show|use`, `bk app list|use`, `bk issues member list|remove|leave`, `bk issues invite send|list|revoke|pending`

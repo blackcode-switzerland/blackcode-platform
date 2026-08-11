@@ -78,9 +78,10 @@ RUN_MIGRATIONS=1
 
 # plus any optional integrations above
 
-# Deliberately NOT set: PLATFORM_ENFORCE_APP_ACCESS. Unset means per-app access
-# IS enforced, which is what you want. Set it to 0 only to switch enforcement
-# off in an emergency — see docs/env.md.
+# PLATFORM_ENFORCE_APP_ACCESS is GONE as of 2026-08-10. It gated per-app access;
+# `platform.workspace_apps` and `platform.app_access` are dropped and membership
+# is the whole gate now. If it is still set in a Vercel project, remove it — see
+# docs/env.md.
 ```
 
 After setting `DATABASE_URL`, run the migrations against that database:

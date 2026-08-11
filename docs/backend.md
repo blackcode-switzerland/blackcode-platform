@@ -318,13 +318,11 @@ membership** in one step. If the workspace doesn't exist *or* the user isn't a
 member it throws `notFound` (404, not 403 — so we don't leak existence).
 `requireOwner(ctx)` throws `forbidden` unless `ctx.role === 'owner'`.
 
-Since Phase 4 there is a **second gate** after membership: `requireAppAccess`
-(`@blackcode/platform-auth`) throws 403 `app_access_denied` unless the caller may
-use *this app* in that workspace. Membership puts you in the organisation; app
-access lets you open an app inside it — see "Per-app access" below. That 403 is
-deliberately not a 404: the caller IS a member, so hiding the workspace would hide
-the one fact they need, which is that access is grantable and by whom. It is the
-only 403 in the codebase that carries a `suggestion`.
+Membership is the whole of it. A **second gate** ran here from Phase 4 until
+2026-08-10 — `requireAppAccess`, a 403 `app_access_denied` unless the caller could
+use *this app* in that workspace — and it went with `platform.app_access`: these
+are this app's own workspaces, so a member of one is a user of this app. See
+"Per-app access — REMOVED" below.
 
 > **Super admin** is env-based, not DB-based. Set `SUPER_ADMINS=email1,email2` in
 > the environment. Super admins bypass the access whitelist and get a "Super Admin"
@@ -348,10 +346,10 @@ for exact column types, indexes, and check constraints.
 | `workspaces` | `name`, `slug` (unique), `owner_id`, `logo_url`, `deleted_at` |
 | `workspace_members` | `(workspace_id, user_id)` unique; `role` ∈ `owner` \| `member` |
 | `workspace_counters` | per-workspace sequence allocators: `last_issue_seq`, `last_project_seq`, `last_task_seq` (allocated in-transaction by `allocateNext*Seq`) |
-| `workspace_invitations` | `email`, `token` (unique), `role`, `status` ∈ `pending`/`accepted`/`revoked`/`expired`/`declined`, `expires_at`, `app` (nullable — NULL = org-level invite, set = invited into one app and granted it on accept even under `invite_only`) |
-| `apps` | the app registry (migration `0034`). `slug` PK — the same slug used in the CLI namespace and guide folders, so a surrogate id would just make every one of those unreadable. `name`, `description`, `base_url`, `enabled` (platform-wide kill switch) |
-| `workspace_apps` | "this app is on for this organisation". PK `(workspace_id, app)`; `default_access` ∈ `all_members` \| `invite_only`; `enabled_by`/`enabled_at` |
-| `app_access` | "this user may use this app here". PK `(workspace_id, app, user_id)`; `role` mirrors `workspace_members.role`; `granted_by` (NULL = granted by the system: the backfill or the `all_members` policy). Its FK is to **`workspace_members(workspace_id, user_id)`** ON DELETE CASCADE, not to `workspaces` — that makes access-without-membership unrepresentable and makes removing a member drop their access by cascade rather than by remembering to |
+| `workspace_invitations` | `email`, `token` (unique), `role`, `status` ∈ `pending`/`accepted`/`revoked`/`expired`/`declined`, `expires_at`, `app` (**no reader since 2026-08-10** — it named the app to also grant on accept; new rows are NULL, historical rows kept) |
+| `apps` | the app ADDRESS BOOK (migration `0034`). `slug` PK — the same slug used in the CLI namespace and guide folders, so a surrogate id would just make every one of those unreadable. `name`, `description`, `base_url`, `enabled` (platform-wide kill switch), `maintains_blob_index`. This is what `/api/meta`'s `apps` block and `bk app list` report |
+| ~~`workspace_apps`~~, ~~`app_access`~~ | **DROPPED 2026-08-10** (migration `0045`). The per-app gate — see "Per-app access — REMOVED" below |
+| ~~`transaction_log`~~ | **DROPPED 2026-08-10** (migration `0045`). No writer since before the monorepo; `/api/undo` has been a 410 since 2026-08-05 |
 | `api_tokens` | `token_hash` (unique), `token_prefix`, `scopes` (default `['full']`), `expires_at`, `last_used_at` |
 | `password_reset_otps` | `email`, `otp_hash`, `expires_at`, `consumed_at`, `attempts` |
 | `email_whitelist` | Platform access control (migration `0023`). `type` ∈ `email` \| `domain`; `value` is the address or domain; `added_by` FK to users. Active only when `SUPER_ADMINS` env var is set. |
@@ -508,83 +506,68 @@ their status/priority vocabularies.
 An app may FK into and query `platform.*` freely; it may not read or write
 another app's schema, and the per-app Postgres roles make that a database
 guarantee rather than a convention.
-## Per-app access (Phase 4)
+## Per-app access — REMOVED 2026-08-10 (multiAppFinalRefactor Phase 5)
 
-Three levels decide what a person can reach. Only the last two are new:
+**Membership is the whole gate.** Two levels decide what a person can reach:
 
 | Level | Table | Means |
 |---|---|---|
 | identity | `platform.users` | your account — one login, every app |
-| membership | `platform.workspace_members` | you are in this organisation |
-| app enabled | `platform.workspace_apps` | this app is on for this organisation |
-| app access | `platform.app_access` | *you* may use this app here |
+| membership | `platform.workspace_members` | you are in one of THIS app's workspaces |
 
-**This app's identity** is `APP_SLUG` in `lib/app.ts` (`'issues'`), and it lives in
-the app rather than in a platform package on purpose: a platform package that knew
-the slug would be a platform package that knew about one app. Every access check
-takes the slug as an argument.
+`platform.workspace_apps` and `platform.app_access` are **dropped** (migration
+0045), along with `requireAppAccess`, `WorkspaceSource.assertAppAccess`,
+`isAppAccessEnforced`, the `PLATFORM_ENFORCE_APP_ACCESS` switch, the four
+`/api/workspaces/{ws}/apps**` routes, `listMyWorkspaces`' `{ app }` filter, the
+`scopedToApp` argument, and `?all=1` on `GET /api/workspaces`.
 
-**Where the code is.** The data layer is
-`@blackcode/platform-db`'s `app-access.ts` — queries and grant/revoke helpers, no
-HTTP knowledge. The enforcement layer is `@blackcode/platform-api`'s
-`requireAppAccess` — one place that decides what a denial looks like (403,
-`app_access_denied`, a `suggestion`, and a `console.warn` naming user + workspace +
-app).
+**Why, in one sentence.** They gated an app INSIDE a workspace that several apps
+shared; each app owns its workspaces now, so a workspace belongs to exactly one
+app and its members ARE that app's users. The gate was approximating an
+equivalence that has since become structural.
 
-> It sat in `platform-auth` until 2026-08-06 and moved because the shared
-> `resolveWorkspace` has to call it, and `platform-auth` importing `Errors` from
-> `platform-api` was the one edge that made the package graph a cycle. The
-> resulting split is worth stating plainly, because it is the rule for anything
-> added later: **`platform-db` queries · `platform-api` enforcement and errors ·
-> `platform-auth` identity only, no HTTP.**
+It was not merely redundant by the end. A grant row named a `platform.workspaces`
+id for an app whose workspaces had moved to its own schema, so `/api/meta` told a
+brand-new issues signup that `apps.sales.workspaces` held their platform
+workspace — a workspace `apps/sales` itself answers 404 for.
 
-**The kill switch.** `PLATFORM_ENFORCE_APP_ACCESS` — enforced unless explicitly
-falsey (`0`/`false`/`no`/`off`/empty). Opt-out rather than opt-in because the
-environment where you forget to set a variable should be the one that keeps
-checking, not the one that quietly stops. It gates both the 403 *and* the
-visibility filter, so switching it off restores pre-Phase-4 behaviour completely.
+**This app's identity** is still `APP_SLUG` in `lib/app.ts` (`'issues'`), and it
+still lives in the app rather than in a platform package: a platform package that
+knew the slug would be a platform package that knew about one app. What changed is
+that `platformWorkspaceSource(db)` no longer takes it — nothing inside was per-app
+once the gate went, and a parameter every caller supplies and nobody reads is the
+friendly shape of the problem CLAUDE.md is about.
 
-**Visibility follows access.** `listMyWorkspaces(userId, { app })` filters to the
-workspaces the user can use that app in; called with no `app` it returns raw
-membership. Both callers matter:
+**The package split the gate established still stands**, and it is the rule for
+anything added later: **`platform-db` queries · `platform-api` enforcement and
+errors · `platform-auth` identity only, no HTTP.** (`requireAppAccess` moved from
+platform-auth to platform-api on 2026-08-06 because `platform-auth` importing
+`Errors` was the one edge that made the package graph a cycle.)
 
-- app-scoped — `GET /api/workspaces`, `/api/meta`, the dashboard layout, and
-  `getDefaultWorkspaceSlug`. Offering a workspace the caller cannot write to is
-  offering a guaranteed 403.
-- unfiltered — `ensureDefaultWorkspace` (a filtered empty answer there would mint
-  a *second* workspace for someone who already has one they cannot reach) and
-  `?all=1` (which exists precisely to show what the filter hides).
+### What replaced the invariants
 
-**The two membership INSERT sites must grant in the same transaction.** There are
-exactly two, and both are covered by
-`lib/db/queries/app-access.integration.test.ts`:
+The gate carried three guarantees. Two are gone because what they guarded is
+gone; one moved down a layer and got stronger.
 
-| Site | Entry points | Grants via |
-|---|---|---|
-| `createWorkspace` (`queries/workspaces.ts`) | workspace create, `POST /api/auth/register`, OAuth first login (`lib/auth.ts` → `ensureDefaultWorkspace`) | `enableAllAppsForWorkspace` |
-| `acceptInvitation` (`queries/invitations.ts`) | accepting an invitation | `grantDefaultAppAccess` (+ `alsoGrantApp` for a per-app invite) |
+- ~~*A membership row that commits without its `app_access` row is a person who
+  is a member of a workspace they cannot open.*~~ There is no second row. The
+  `workspace_members` INSERT is the whole of joining, so the two INSERT sites
+  (`createWorkspace`, `acceptInvitation`) can no longer commit half-done. Both
+  dropped their grant call; `acceptInvitation` no longer returns `apps_granted`.
+- ~~*Removing a member removes their access; access without membership is
+  impossible.*~~ Both were `app_access`'s composite FK to
+  `workspace_members(workspace_id, user_id)`, and both are vacuous now.
+- **An app cannot read another app's tenancy** — this is the one that matters,
+  and it is a Postgres grant, not a check: each app's role has no privilege on
+  another app's schema (`docs/platform-db.md`). That is also why reachability is
+  no longer derivable centrally, and why `/api/meta`'s `apps` block became the
+  address book rather than a grant list.
 
-A membership row that commits without its `app_access` row is a person who is a
-member of a workspace they cannot open — and it does not throw, it renders empty.
-`addMember` was a third INSERT site with no callers; Phase 4 **deleted** it rather
-than leave a function that would create that state the moment somebody wired it up.
-
-**Two guarantees are the database's, not the code's**, so a future third path
-cannot forget them:
-
-- removing a member removes their access — `app_access`'s FK is to
-  `workspace_members(workspace_id, user_id)` ON DELETE CASCADE.
-- access without membership is impossible — the same FK refuses the INSERT.
-
-Deleting a workspace cascades `workspaces → workspace_members → app_access`, so
-`app_access` needs no direct FK to `workspaces`.
-
-**One deliberate refusal.** `PATCH …/apps/{app}` will not disable the app serving
-the request (`cannot_disable_current_app`). It would revoke every member's access
-to the app that hosts the route needed to undo it — an irreversible action behind
-one toggle. `--confirm`-style repetition would not help: the problem is not intent,
-it is that there is no way back. The same reasoning gives `cannot_revoke_owner` on
-the revoke route.
+**`workspace_invitations.app` has no reader.** It named the app an invitee was
+being invited INTO, and drove `alsoGrantApp`. The column and its historical rows
+are kept — dropping a column on a live table for tidiness is what PLAN.md §2
+warns against — but nothing writes it (new rows are NULL) and nothing reads it.
+Worth a decision in a later phase, not a silent removal here.
 
 ## The event spine
 
@@ -1138,9 +1121,14 @@ worse than a missing one.
 Recovery is the recycle bin (`deletion.ts`, `bk trash`), which is what users and
 agents have actually been using. History is the event spine.
 
-The `platform.transaction_log` table is still there; dropping it is a separate
-change. Do not wire a new writer to it — if per-field undo is ever wanted, build
-it on `platform.events`, which already records every mutation.
+**The `platform.transaction_log` table was DROPPED on 2026-08-10** (migration
+`0045`), which is the separate change this paragraph anticipated. Do not
+recreate it — if per-field undo is ever wanted, build it on `platform.events`,
+which already records every mutation.
+
+The drop is gated on `max(created_at)`, not on `count(*) = 0`: the migration
+refuses if any row is newer than 30 days, because a recent row would mean a
+writer this audit did not find, and that is more interesting than the table.
 
 > **Correction, 2026-08-10: "empty" above is a claim about production on
 > 2026-08-05, and it is not the gate to drop the table on.** Local dev has **4
