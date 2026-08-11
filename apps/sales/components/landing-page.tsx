@@ -49,7 +49,6 @@
 // also why this page cannot be mistaken for the issues one without a single
 // deliberate difference being written down.
 
-import Image from 'next/image'
 import Link from 'next/link'
 import {
   ArrowRight,
@@ -60,61 +59,39 @@ import {
   Terminal,
   Workflow,
 } from 'lucide-react'
+import { SiteFrame } from '@/components/site-chrome'
 
+// The header and footer that used to be defined in this file moved to
+// `components/site-chrome.tsx` on 2026-08-11, unchanged, so that `/login` could
+// wear them too. Read that file's header for why they were extracted rather
+// than copied.
 export function LandingPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <SiteHeader />
-      <main>
-        <Hero />
-        <WhatItIsFor />
-        <ForAgents />
-        <FinalCTA />
-      </main>
-      <SiteFooter />
-    </div>
+    <SiteFrame nav={<HeaderNav />}>
+      <Hero />
+      <WhatItIsFor />
+      <ForAgents />
+      <FinalCTA />
+    </SiteFrame>
   )
 }
 
-/* ---------------------------------------------------------------- chrome -- */
-
-function SiteHeader() {
+function HeaderNav() {
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
-      {/* h-12, the sales density (D-4) — the same header height the app shell
-          uses, so arriving in the product is not a jolt. */}
-      <div className="mx-auto flex h-12 max-w-5xl items-center gap-2.5 px-5 sm:px-6">
-        <Image src="/logo.png" alt="b/" width={22} height={22} className="rounded-md" />
-        <span className="text-[15px] font-semibold tracking-tight">sales</span>
-        <nav className="ml-auto flex items-center gap-2">
-          <Link
-            href="/login"
-            className="rounded-lg px-3 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/login?tab=signup"
-            className="rounded-lg bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
-          >
-            Create an account
-          </Link>
-        </nav>
-      </div>
-    </header>
-  )
-}
-
-function SiteFooter() {
-  return (
-    <footer className="border-t border-border">
-      <div className="mx-auto flex max-w-5xl flex-col gap-2 px-5 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:px-6">
-        <span>b/sales — a blackcode product.</span>
-        <a href="mailto:contact@blackcode.ch" className="hover:text-foreground sm:ml-auto">
-          contact@blackcode.ch
-        </a>
-      </div>
-    </footer>
+    <>
+      <Link
+        href="/login"
+        className="rounded-lg px-3 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        Sign in
+      </Link>
+      <Link
+        href="/login?tab=signup"
+        className="rounded-lg bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+      >
+        Create an account
+      </Link>
+    </>
   )
 }
 

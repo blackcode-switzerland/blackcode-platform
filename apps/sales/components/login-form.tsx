@@ -43,8 +43,10 @@ import Image from 'next/image'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
+import { GoogleMark } from '@blackcode/platform-ui/ui/google-mark'
 import { ApiClientError, apiSend } from '@/lib/client'
 import { PasswordResetFlow } from '@/components/password-reset-flow'
+import { SiteFrame } from '@/components/site-chrome'
 
 type Mode = 'signin' | 'signup' | 'reset'
 
@@ -133,23 +135,67 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
     }
   }
 
+  // ── THE GOOGLE BUTTON, DRAWN ONCE AND PLACED FIRST ────────────────────────
+  // It used to sit BELOW the email/password form, after an "OR", with no mark
+  // on it. Both halves were wrong. Position is a claim about which door is the
+  // main one, and one click beats filling two fields — putting it second said
+  // the opposite. And an unmarked "Continue with Google" is the shape a phishing
+  // page has; the mark is what makes it recognisable at a glance.
+  //
+  // Rendered here, once, so the sign-in and create-account panels cannot drift
+  // apart — they are the same `mode` on one form, and a second copy for the
+  // second panel is how the two would end up different. The reset panel does
+  // not show it: "continue with Google" is not an answer to "I forgot my
+  // password", and offering it there sends somebody who wants their password
+  // back into a flow that never asks for one.
+  const googleButton = googleEnabled ? (
+    <>
+      <button
+        type="button"
+        onClick={() => signIn('google', { callbackUrl })}
+        className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+      >
+        <GoogleMark size={16} />
+        Continue with Google
+      </button>
+      <div className="my-5 flex items-center gap-3">
+        <span className="h-px flex-1 bg-border" />
+        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">or</span>
+        <span className="h-px flex-1 bg-border" />
+      </div>
+    </>
+  ) : null
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background p-6">
-      <div className="w-full max-w-sm">
+    // ── THE PAGE HAS THE LANDING PAGE'S FRAME SINCE 2026-08-11 ──────────────
+    // This was a bare centred card in an empty viewport: no header, no footer,
+    // and therefore no way back to `/` — so "Sign in" on a page with chrome
+    // landed you somewhere that looked like a different site. The frame is
+    // `components/site-chrome.tsx`, shared with the landing page rather than
+    // copied into it. No nav: "Sign in" and "Create an account" are both this
+    // page. The card itself is unchanged — narrow and centred.
+    <SiteFrame>
+      <div className="mx-auto flex w-full max-w-sm flex-col justify-center px-6 py-16 sm:py-24">
         <div className="mb-8 text-center">
           {/* The real mark. This was a `b/` drawn in text on an emerald square,
               which made THREE treatments of one logo in one app once
               `public/logo.png` arrived (2026-08-11): the sidebar's, the landing
               page's, and this. The front door is the worst place to be the odd
               one out — it is the first thing anybody sees of the product, and
-              the mail they arrived from carries this same file. */}
+              the mail they arrived from carries this same file.
+
+              `rounded-md`, not `rounded-xl`, since 2026-08-11. The radius on
+              this mark is a CONSTANT 6px everywhere else it is drawn — 18, 22,
+              24 and 28px in the two apps, all 6 — not a proportion of the size,
+              so scaling it with the box at 44px made the front door the one
+              place the logo looked different. */}
           <Image
             src="/logo.png"
             alt="b/"
             width={44}
             height={44}
             priority
-            className="mx-auto mb-4 rounded-xl"
+            className="mx-auto mb-4 rounded-md"
           />
           <h1 className="text-xl font-semibold tracking-tight text-foreground">b/sales</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -185,6 +231,8 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
                 </button>
               ))}
             </div>
+
+            {googleButton}
 
             <form onSubmit={mode === 'signin' ? onSignIn : onSignUp} className="space-y-3">
               {mode === 'signup' && (
@@ -271,25 +319,6 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
                 {mode === 'signin' ? 'Sign in' : 'Create account'}
               </button>
             </form>
-
-            {googleEnabled && (
-              <>
-                <div className="my-5 flex items-center gap-3">
-                  <span className="h-px flex-1 bg-border" />
-                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    or
-                  </span>
-                  <span className="h-px flex-1 bg-border" />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => signIn('google', { callbackUrl })}
-                  className="w-full rounded-lg border border-border bg-card px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-                >
-                  Continue with Google
-                </button>
-              </>
-            )}
           </>
         )}
 
@@ -304,6 +333,6 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
           be approved by a super admin before they can sign up.
         </p>
       </div>
-    </main>
+    </SiteFrame>
   )
 }

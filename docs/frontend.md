@@ -42,7 +42,7 @@ data flows. **Source of truth is the code** — this describes it as it is today
   utilities are declared in `app/globals.css` via `@theme inline`.
 - **TanStack Query** for all server data.
 - **next-themes** for light/dark (class strategy).
-- **TipTap** for rich text (`components/rich-text-editor.tsx`).
+- **TipTap** for rich text (`@blackcode/platform-ui/rich-text-editor`).
 - **sonner** for toasts, **lucide-react** for icons, **date-fns** for dates,
   **@hello-pangea/dnd** for kanban drag-and-drop.
 - A few **shadcn-style** primitives live in `components/ui/`, but most UI is
@@ -264,6 +264,13 @@ kanban, detail pages, modals) rendering work-item state identically.
 - **`components/ui/member-avatar.tsx`** — `MemberAvatar({ name, email,
   avatarUrl, size? })`; image when present, else initials on a deterministic
   hashed color.
+- **`components/ui/google-mark.tsx`** — `GoogleMark({ size? })`: the Google "G"
+  for a "Continue with Google" button, inline SVG on a white tile so it survives
+  dark mode. It lives here rather than in an app because both apps draw it and
+  because its four hexes are a third party's brand, not app palette — which is
+  what lets `apps/sales` use it without tripping `lib/palette.test.ts` (D-4:
+  every colour that app renders is decided in `lib/pipeline.ts`). Read the
+  file's header before moving it.
 - **`components/ui/multi-assignee-select.tsx`** — `MultiAssigneeSelect({ assignees, members, onChange, compact?, align? })`. Multi-select assignee picker that renders stacked `MemberAvatar`s (up to 2, then "+N") and a searchable checkbox dropdown. `onChange` receives the full `number[]` of selected user IDs. Use `compact` mode for tight list rows. Replaces the old single-value `PropertySelect` for assignees everywhere.
 - **`components/ui/property-select.tsx`** — `PropertySelect` quiet chip-button
   opening a searchable, keyboard-navigable popover. Replaces native `<select>`
@@ -286,7 +293,7 @@ kanban, detail pages, modals) rendering work-item state identically.
   `restore_parent` / `standalone` choice; calls `onConfirm(resolutions)`.
 - **`components/ui/modal.tsx`** — `Modal` overlay (backdrop blur, animate-in,
   ESC/overlay close, scroll lock).
-- **`components/rich-text-editor.tsx`** — TipTap.
+- **`@blackcode/platform-ui/rich-text-editor`** (`packages/platform-ui/src/rich-text-editor.tsx`) — TipTap.
   - `RichTextEditor({ content, onChange, placeholder?, editable?, onFileUpload?,
     hideToolbar?, minHeight?, variant: 'bordered' | 'seamless', mentionItems?,
     onBlur? })`. `seamless` is for always-editable detail-page bodies; `bordered`

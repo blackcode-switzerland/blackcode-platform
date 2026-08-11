@@ -348,7 +348,17 @@ export function useRemoveCommunication(ws: string) {
 // display preference, and a preference that could stop somebody joining the app
 // at all would be a permission over their account — D-7's misreading exactly.
 
-const teamKeys = (ws: string): QueryKey[] => [['members', ws], ['invitations', ws]]
+// `invite-candidates` joined this list on 2026-08-11, when the members page
+// started RENDERING that query (the super admin's shortcut). Every one of these
+// three mutations changes an answer it gives — invite sets `invited`, revoke
+// clears it, remove clears `already_member` — so leaving it out would have left
+// a row showing "Invite" for somebody just invited until the next reload. The
+// route has existed since Phase 2; it is being read for the first time.
+const teamKeys = (ws: string): QueryKey[] => [
+  ['members', ws],
+  ['invitations', ws],
+  ['invite-candidates', ws],
+]
 
 export function useInviteMember(ws: string) {
   return useRecordMutation<{ email: string }>(ws, {

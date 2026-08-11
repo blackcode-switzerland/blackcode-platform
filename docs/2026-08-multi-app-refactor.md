@@ -669,6 +669,21 @@ somebody has to make, not a bug somebody forgot.
 > unmet.** 1, 5 and 7 are untouched. Item 8 is NEW: Phase 8 found that
 > `deleteAccountReport` has been enumerating only `platform.workspaces` since
 > Phase 2 and therefore cannot see any app but issues.
+>
+> **STATUS 2026-08-11, later the same day, after Phase 9/10.** **Item 8 is
+> CLOSED.** `packages/platform-api/src/account-census.ts` fans out over
+> `platform.apps.base_url`, forwarding the caller's cookie, and each app answers
+> for itself from `GET /api/me/footprint` under its own Postgres role. The
+> safety property is a TYPE, not a convention — `AppCensusEntry` is a
+> discriminated union with no field that can hold `0` where the truth is
+> *unknown*, so a caller that forgets to branch does not compile — and a
+> whole-account close is **refused with a 409 while any app is unreachable**,
+> while "this app only" stays allowed. That is finding #14's lesson written into
+> a signature. The body of item 8 below is left as it was written; it records
+> what was true when it was found.
+>
+> **Items 1, 5, 6 and 7 remain open.** 6 still needs the human and one query
+> against production, not the next agent.
 
 1. **Arriving on another app's cookie gets you a session and no workspace.**
    Production behaviour today. The session is shared across `*.blackcode.ch`

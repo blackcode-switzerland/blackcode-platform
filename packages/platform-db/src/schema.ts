@@ -511,6 +511,21 @@ export const labels = platformSchema.table(
   })
 )
 
+// ⚠ THIS TABLE DOES NOT EXIST. Migration `0045_drop_app_gates_and_transaction_log.sql`
+// dropped `platform.transaction_log` on 2026-08-10 — the undo feature that never
+// had a writer — and this declaration was left behind. Confirmed 2026-08-11
+// against `information_schema.tables`, not against the repo: the catalog is the
+// only place that can answer this, which is CLAUDE.md finding #20's lesson.
+//
+// Nothing imports `transactionLog` or `TransactionLogEntry`, so nothing is
+// broken today; a query written against either would fail at runtime with
+// `relation "platform.transaction_log" does not exist`. **Do not start using it.**
+//
+// It is still HERE rather than deleted because deleting it is a migration
+// question, not a typing one: drizzle diffs this file against the snapshot in
+// `meta/`, and a snapshot that still carries the table would make the next
+// `db:generate` emit a bare `DROP TABLE` that fails on a database where it is
+// already gone. Removing it means checking the snapshot first.
 export const transactionLog = platformSchema.table(
   'transaction_log',
   {

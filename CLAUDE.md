@@ -26,6 +26,7 @@ A **monorepo** (npm workspaces + Turborepo) holding Blackcode's internal apps.
 
 | Need | Read |
 |---|---|
+| **Never seen this repo** | **`docs/working-in-this-repo.md`** — the orientation. The traps that have actually bitten (with their reasons), the shapes the checks here have been wrong in, and how to work here. Written 2026-08-11 |
 | **Add an app** | **`docs/adding-an-app.md`** — the authoritative, self-contained checklist. Copy `apps/_scaffold`, follow it top to bottom. Rewritten 2026-08-07 from what building the second app actually found |
 | Current design rules | `docs/platform-architecture.md` |
 | Why the repo looks like this | `docs/2026-08-platform-migration.md` — and what is **still owed** |
@@ -41,9 +42,20 @@ What the migration bought:
   apps share. Apps import these; apps never import each other.
   **`apps/issues/lib/auth.ts` (next-auth `authOptions`) deliberately did NOT
   move** — the reason is in `packages/platform-auth/src/index.ts`.
-- The database is **`platform.*` + `issues.*`**, never `public`. Production runs
-  as the bounded role `issues_app`; migrations run as `MIGRATE_DATABASE_URL`.
-  See **`docs/platform-db.md`** — the boundary, the two credentials, the grants.
+- The database is **`platform.*` + `issues.*` + `sales.*`** (and `scaffold.*`,
+  never deployed) — never `public`. Each app runs as its own bounded role
+  (`issues_app`, `sales_app`), with no grant on any other app's schema;
+  migrations run as `MIGRATE_DATABASE_URL`. See **`docs/platform-db.md`** — the
+  boundary, the two credentials, the grants.
+  > **`platform.*` is NOT a synonym for "shared".** Only `users`, `apps`,
+  > `api_tokens`, `password_reset_otps`, `email_whitelist` and `blob_references`
+  > are read by every app. `workspaces`, `workspace_members`,
+  > `workspace_invitations`, `comments`, `labels`, `uploads`, `events`,
+  > `inbox_messages`, `deletion_batches`, `entities` and `links` are
+  > **`apps/issues`' own**, left in that schema because moving a live app's
+  > tenancy costs a migration and buys nothing. `apps/sales` has its own in
+  > `sales.*` and reads none of them. The full split:
+  > `docs/platform-architecture.md` §2.
 - Apps are real data: **`platform.apps` is the ADDRESS BOOK** — which apps exist
   and where they are deployed. `workspace_apps` and `app_access` were **dropped
   2026-08-10** (multiAppFinalRefactor Phase 5) with `requireAppAccess` and
@@ -314,7 +326,11 @@ Full detail in `docs/frontend.md` (platform-wide) and
 
 ## Rich text editor
 
-`apps/issues/components/rich-text-editor.tsx` — TipTap-based, used for all descriptions and comments.
+`packages/platform-ui/src/rich-text-editor.tsx`, imported as
+`@blackcode/platform-ui/rich-text-editor` — TipTap-based, used for all
+descriptions and comments, by **both** apps. (It was
+`apps/issues/components/rich-text-editor.tsx` until the migration moved it into
+the shared package; nothing of that path is left.)
 
 - **Slash command** (`/`): H1–H4, Bold, Italic, Strike, Underline, Link, Quote, Code block, Bullet list, Numbered list, Checklist, Table, Attach file.
 - **BubbleMenu** (on selection): full formatting bar.
@@ -561,19 +577,23 @@ never describe an app's internals, and an app's docs never describe another app.
 
 `/docs` — the platform and the monorepo:
 
-- `backend.md` — shared API conventions, auth, `platform.*` schema, per-app access, the event spine, the blob index
+- `working-in-this-repo.md` — **start here if you have never seen this repo.** The traps, the shapes the checks have been wrong in, how to work here
+- `backend.md` — shared API conventions, auth, the `platform.*` schema (and which of its tables are actually shared), the event spine, the blob index
 - `frontend.md` — theme + tokens, `components/ui/` primitives, app shell, data fetching
 - `cli.md` — CLI internals, build, release, version policy
 - `platform-db.md` — the database boundary, roles, grants, migrations
 - `adding-an-app.md` — **the authoritative, self-contained checklist**
 - `platform-architecture.md` — current design rules (was `PLATFORM-ARCHITECTURE.md`)
 - `2026-08-platform-migration.md` — why the repo looks like this; what is still owed
+- `2026-08-multi-app-refactor.md` — the ten phases that separated the apps. **§9 is the OPEN LEDGER** — what is still not closed, with items 1, 5, 6 and 7 outstanding. Item 6 needs a human with production access
 - `extracting-an-app.md` — the rehearsed extraction
-- `devops.md`, `env.md`
+- `db-safety.md`, `devops.md`, `env.md`
 - `changelog/` — the dated record
 - `sql/` — role creation, the boundary probe, rollback scripts
-- `architecture-rebuild.md`, `specs/`, `next-fixes.md`, `migration/` — **historical**,
-  each carrying a dated superseded note. Never follow as instructions
+- `architecture-rebuild.md`, `specs/`, `next-fixes.md`, `migration/`,
+  `sales-app-plan.md`, `improvements.md`, `npm-package-rename.md` —
+  **historical**. Never follow as instructions; they describe earlier eras of
+  this repo (three verb tiers, `apps/_template`, `bk link`) that are gone
 
 `/apps/issues/docs` — that app only: `backend.md`, `frontend.md`, `marketing.md`
 (moved from root 2026-08-06 — it describes the app's landing page, which is an

@@ -343,12 +343,18 @@ export async function addMember(
 
 /**
  * Who this owner could invite without retyping an email: everyone they already
- * share a SALES workspace with, minus themselves.
+ * share a SALES workspace with, minus themselves — plus, for a super admin,
+ * every account on the platform.
  *
- * The privacy guard is the join, not a filter applied afterwards — a person you
- * share no sales workspace with is not discoverable here at all. That is the
- * same rule `platform-db`'s version enforces, restricted to this app's tenancy,
- * which is the change: an issues colleague is no longer a sales suggestion.
+ * For an ordinary owner the privacy guard is the join, not a filter applied
+ * afterwards: a person you share no sales workspace with is not discoverable
+ * here at all. That is the same rule `platform-db`'s version enforces,
+ * restricted to this app's tenancy, which is the change from before Phase 2 —
+ * an issues colleague is no longer a sales suggestion.
+ *
+ * The super admin is the deliberate exception; `includePlatform` is why the
+ * caller decides it. See the route's header for what changed on 2026-08-11 and
+ * why the earlier refusal did not survive contact with the actual job.
  */
 export interface InviteCandidate {
   user_id: number
@@ -358,11 +364,25 @@ export interface InviteCandidate {
   already_member: boolean
   invited: boolean
   shared_workspaces: string[]
+  /**
+   * True when this person is here ONLY because the caller is a super admin —
+   * no shared sales workspace. The UI groups them separately, because "somebody
+   * you work with" and "somebody with a blackcode login" are different claims
+   * and one of them is a directory.
+   */
+  from_platform: boolean
 }
 
 export async function listInviteCandidates(input: {
   userId: number
   currentWorkspaceId: number
+  /**
+   * Decided by the CALLER. Who counts as a super admin is
+   * `@blackcode/platform-auth`'s question — `SUPER_ADMINS` plus the whitelist —
+   * and a db query module has no business importing that, exactly as
+   * `platform-db`'s copy of this argues.
+   */
+  includePlatform: boolean
 }): Promise<InviteCandidate[]> {
   const db = getDb()
 
@@ -408,6 +428,7 @@ export async function listInviteCandidates(input: {
       already_member: memberIds.has(r.user_id),
       invited: pendingEmails.has(r.email.toLowerCase()),
       shared_workspaces: [],
+      from_platform: false,
     }
     if (!entry.shared_workspaces.includes(r.workspace_name)) {
       entry.shared_workspaces.push(r.workspace_name)
@@ -415,7 +436,42 @@ export async function listInviteCandidates(input: {
     byUser.set(r.user_id, entry)
   }
 
-  return [...byUser.values()].sort((a, b) =>
-    (a.name ?? a.email).localeCompare(b.name ?? b.email)
-  )
+  // A super admin additionally sees every live account. `byUser.has` first, so
+  // somebody who IS a shared colleague keeps `from_platform: false` and their
+  // workspace names — the platform pass adds people, it never re-labels one.
+  //
+  // `platform.users` is read, not written, and this app's role has SELECT on it
+  // — the same grant the `sharedRows` join above already relies on.
+  if (input.includePlatform) {
+    const platformRows = await db.execute(sql`
+      SELECT u.id AS user_id, u.email, u.name, u.avatar_url
+      FROM platform.users u
+      WHERE u.deleted_at IS NULL AND u.id <> ${input.userId}
+    `)
+    for (const r of platformRows.rows as {
+      user_id: number
+      email: string
+      name: string | null
+      avatar_url: string | null
+    }[]) {
+      if (byUser.has(r.user_id)) continue
+      byUser.set(r.user_id, {
+        user_id: r.user_id,
+        email: r.email,
+        name: r.name,
+        avatar_url: r.avatar_url,
+        already_member: memberIds.has(r.user_id),
+        invited: pendingEmails.has(r.email.toLowerCase()),
+        shared_workspaces: [],
+        from_platform: true,
+      })
+    }
+  }
+
+  return [...byUser.values()].sort((a, b) => {
+    // Joinable people first, then the ones already in — a list whose top rows
+    // are all "Already in" reads as having nothing to offer.
+    if (a.already_member !== b.already_member) return a.already_member ? 1 : -1
+    return (a.name ?? a.email).localeCompare(b.name ?? b.email)
+  })
 }

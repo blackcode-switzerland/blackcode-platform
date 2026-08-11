@@ -35,11 +35,18 @@ type Config struct {
 	Server string `json:"server"`
 	Token  string `json:"token"`
 
-	// HomeApp is the app whose lens the NEUTRAL and CROSS-APP verbs use — whose
-	// server answers `bk workspace list`, `bk search`, `bk meta`. Set by
-	// `bk app use <slug>`, and learned on login from the app the login server
-	// says it is. Empty is legal: it means "no lens", and those verbs simply go
-	// to HomeServer.
+	// HomeApp is the app whose server answers the BARE verbs — the ones about
+	// your ACCOUNT and this BINARY: `bk meta`, `bk whoami`, `bk profile`,
+	// `bk token`, `bk changelog`, `bk version`. Set by `bk app use <slug>`, and
+	// learned on login from the app the login server says it is. Empty is legal:
+	// it means "no lens", and those verbs simply go to HomeServer.
+	//
+	// This comment named `bk workspace list` and `bk search` until 2026-08-11.
+	// Both moved: there are TWO tiers now, not three, and anything touching an
+	// app's DATA is spelled `bk <app> <verb>` — D-11's NEUTRAL tier assumed one
+	// `platform.workspaces` and its CROSS-APP tier assumed one entity index, and
+	// multiAppFinalRefactor Phases 2 and 3 ended both. A bare data verb had no
+	// answer left, only a default taken from this field.
 	HomeApp string `json:"home_app,omitempty"`
 	// HomeServer is where those verbs go.
 	HomeServer string `json:"home_server,omitempty"`

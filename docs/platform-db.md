@@ -13,9 +13,13 @@ app's own tables, see that app's `docs/backend.md`.
 
 ```
 neondb
-├── platform.*     what every app shares — identity, workspaces, membership,
-│                  per-app access, comments, labels, uploads, events, entities,
-│                  links, blob_references
+├── platform.*     identity and the things there is genuinely one of —
+│                  users, apps, api_tokens, password_reset_otps,
+│                  email_whitelist, blob_references.
+│                  ALSO, for historical reasons, apps/issues' OWN workspaces,
+│                  members, invitations, comments, labels, uploads, events,
+│                  entities and links: being in `platform.*` does NOT mean
+│                  shared. See docs/platform-architecture.md §2
 ├── issues.*       the issue tracker's own tables
 ├── sales.*        the sales app's own tables
 └── scaffold.*     the scaffold's (apps/_scaffold — never deployed)

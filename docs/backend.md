@@ -350,8 +350,22 @@ are this app's own workspaces, so a member of one is a user of this app. See
 
 ## Database schema
 
-Defined in `lib/db/schema.ts` (Drizzle). Grouped by concern below; see the file
-for exact column types, indexes, and check constraints.
+The `platform.*` tables are defined in `packages/platform-db/src/schema.ts`
+(Drizzle) and re-exported by each app; `issues.*` is in
+`apps/issues/lib/db/schema.ts`. Grouped by concern below; see the files for exact
+column types, indexes, and check constraints.
+
+> **Read this before assuming a `platform.*` table is shared.** Since
+> multiAppFinalRefactor Phases 2–3 (2026-08-10) it is not a synonym: `users`,
+> `apps`, `api_tokens`, `password_reset_otps`, `email_whitelist` and
+> `blob_references` are the tables every app genuinely reads the same row of.
+> `workspaces`, `workspace_members`, `workspace_invitations`, `uploads`,
+> `comments`, `labels`, `events`, `inbox_messages`, `deletion_batches`,
+> `entities` and `links` are **`apps/issues`' own**, sitting in the platform
+> schema because moving a live app's tenancy costs a migration and buys nothing.
+> `apps/sales` has its own equivalents in `sales.*` and reads none of those.
+> The full table, with the reasoning, is `docs/platform-architecture.md` §2 and
+> §4.4. A new app gets its own: `docs/adding-an-app.md`.
 
 ### Identity & access
 
@@ -879,10 +893,13 @@ view only — `burndown_series` (`remaining` vs. a straight-line `ideal`).
   DOMPurify whitelists the same `data-*` attributes, and the server sanitizer
   allowlist permits the `div` node, so the embed survives end-to-end. Covered by
   `lib/rich-text.test.ts`. The node's wire format (tag, `data-type` marker, and
-  `data-*` attribute names) lives in **one** place — `lib/file-attachment.ts` —
-  imported by both the server emitter/sanitizer (`lib/rich-text.ts`) and the
-  editor's parse/render + DOMPurify allowlist (`components/rich-text-editor.tsx`),
-  so the two sides can't drift.
+  `data-*` attribute names) lives in **one** place —
+  `@blackcode/platform-ui/file-attachment` — imported by both the server
+  emitter/sanitizer (each app's `lib/rich-text.ts`) and the editor's
+  parse/render + DOMPurify allowlist
+  (`@blackcode/platform-ui/rich-text-editor`), so the two sides can't drift.
+  Both moved into `packages/platform-ui` during the migration; neither is in an
+  app's tree any more.
 
 ### Discovery (for agents & tooling)
 

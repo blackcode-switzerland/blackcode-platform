@@ -245,7 +245,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         >
           <Menu size={18} />
         </button>
-        <Image src="/logo.png" alt="b/" width={18} height={18} className="rounded" />
+        {/* rounded-md, like every other render of this mark in both apps. The
+            radius on the blackcode logo is a constant 6px at every size it is
+            drawn at, not a proportion — this was `rounded` (4px) and the row
+            above it is `rounded-md`. */}
+        <Image src="/logo.png" alt="b/" width={18} height={18} className="rounded-md" />
         <span className="text-sm font-semibold">issues</span>
       </header>
 

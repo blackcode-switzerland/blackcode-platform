@@ -22,6 +22,45 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-11 — A super admin can invite any blackcode account from the members page; the front door wears the site's frame
+
+**Not breaking.** No route changed shape and no command changed spelling. One
+route answers with more rows than it used to, for one kind of caller.
+
+**`GET /api/workspaces/{ws}/invite-candidates` — widened for super admins.**
+
+- Every candidate now carries **`from_platform`** (boolean). `false` means "you
+  already share a sales workspace with this person" — the only kind of row this
+  route used to return. `true` means "this person has a blackcode account and
+  you are a super admin", and those rows have an empty `shared_workspaces`.
+- **For a super admin**, the response now includes every live `platform.users`
+  account, in addition to the shared-workspace people. **For everybody else the
+  response is unchanged** — still only the people you share a sales workspace
+  with, which remains the privacy rule this route was built on.
+- The existing fields are untouched, `is_super_admin` still reports the same
+  thing, and the envelope is still `{ data, is_super_admin }`.
+- **For `bk sales invite candidates`:** a super admin will see more rows than
+  before. Nothing to change; if you were relying on the list being only your own
+  colleagues, filter on `from_platform == false`.
+- Candidates are now sorted joinable-first (`already_member` rows last), then
+  alphabetically. Do not depend on the order — sort what you read.
+
+**Web UI.**
+
+- `/dashboard/{ws}/members` renders the candidate list for super admins, with a
+  search filter and a one-click Invite per person. It is hidden for everybody
+  else, off the server's `is_super_admin`, and the invite-by-email field is
+  unchanged and still the way to invite somebody who has no account yet.
+  There is still **no super-admin page in b/sales** and there will not be one.
+- `/login` (sign-in, create-account and forgot-password) now carries the landing
+  page's header and footer, so the brand links back to `/`.
+- **Continue with Google** now shows the Google mark and sits **above** the
+  email/password form rather than below it. Same provider, same flow, same
+  `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` gate — a deployment without them
+  still draws no button.
+
+---
+
 ## 2026-08-11 — Members moved into the sidebar; settings keeps the app frame; b/sales has a front page
 
 **Not breaking for `bk`.** No route changed shape, no command changed spelling.

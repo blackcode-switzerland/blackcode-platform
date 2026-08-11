@@ -35,10 +35,10 @@
 // `lib/palette.test.ts` has nothing to find — D-4 is that every colour in this
 // app is decided in `lib/pipeline.ts`, and a members list needs none of them.
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Copy, Trash2, UserPlus, X } from 'lucide-react'
+import { Check, Copy, Search, Trash2, UserPlus, X } from 'lucide-react'
 import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 import { apiGet, wsPath } from '@/lib/client'
 import { useInviteMember, useRemoveMember, useRevokeInvitation } from '@/lib/mutations'
@@ -75,8 +75,20 @@ interface SentInvitation {
   accept_url: string
 }
 
+interface InviteCandidate {
+  user_id: number
+  email: string
+  name: string | null
+  avatar_url: string | null
+  already_member: boolean
+  invited: boolean
+  shared_workspaces: string[]
+  from_platform: boolean
+}
+
 export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boolean; meId: number }) {
   const [email, setEmail] = useState('')
+  const [search, setSearch] = useState('')
   const [lastSent, setLastSent] = useState<SentInvitation | null>(null)
 
   // ── THIS PAGE DID NOT ASK UNTIL 2026-08-11, AND IT WAS THE ONLY ONE ────────
@@ -126,9 +138,46 @@ export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boo
   // path — `lib/read-only.test.ts` asserts it. The first version of this file
   // called `apiSend` directly and that guard caught it, correctly: membership
   // became a sales row on 2026-08-10 and stopped being an account operation.
+  // ── THE SUPER ADMIN'S SHORTCUT (2026-08-11) ────────────────────────────────
+  //
+  // b/sales has no administration screens and is not growing any — that is
+  // deliberate, and `app/dashboard/settings/account/page.tsx` says so to the
+  // person reading it. So the one super-admin capability this app needs lives
+  // HERE, inside the page whose subject it already is, rather than behind a
+  // /super-admin route that would exist to hold a single list.
+  //
+  // The gate is the SERVER's `is_super_admin`, not a guess made here: this
+  // component cannot read `SUPER_ADMINS` (it is not a public env var) and the
+  // whitelist is a table. A client-side guess would be a second, weaker copy of
+  // a rule that already has one authority. The route is owner-gated too, which
+  // is why `enabled` matches the `invitations` query above — asking as a plain
+  // member would render an error where there is nothing wrong.
+  //
+  // NOT a substitute for the email field below it. Somebody with no blackcode
+  // account cannot appear in this list at all, and inviting them is the case
+  // the field exists for.
+  const candidates = useQuery({
+    queryKey: ['invite-candidates', ws],
+    enabled: isOwner,
+    queryFn: async () =>
+      await apiGet<{ data: InviteCandidate[]; is_super_admin: boolean }>(
+        wsPath(ws, '/invite-candidates')
+      ),
+  })
+
   const invite = useInviteMember(ws)
   const revoke = useRevokeInvitation(ws)
   const remove = useRemoveMember(ws)
+
+  const isSuperAdmin = candidates.data?.is_super_admin ?? false
+  const filteredCandidates = useMemo(() => {
+    const rows = candidates.data?.data ?? []
+    const q = search.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter(
+      (c) => c.email.toLowerCase().includes(q) || (c.name ?? '').toLowerCase().includes(q)
+    )
+  }, [candidates.data, search])
 
   return (
     <div className="space-y-6">
@@ -324,6 +373,98 @@ export function MemberSettings({ ws, isOwner, meId }: { ws: string; isOwner: boo
                     >
                       Revoke
                     </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
+
+      {/* ── SUPER ADMINS ONLY ──────────────────────────────────────────────
+          Rendered off the SERVER's flag. `candidates.data` is undefined while
+          the query is in flight and after a failure, so `isSuperAdmin` is false
+          in both cases and this section is absent rather than empty — the safe
+          direction: a normal owner must never see it, and a super admin seeing
+          it a moment late costs nothing.
+
+          There is no skeleton for the same reason. A placeholder here would be
+          a hole in the page that a non-super-admin also sees, which announces
+          the feature to precisely the people it is hidden from. */}
+      {isOwner && isSuperAdmin && (
+        <Section
+          title="Everyone with a blackcode account"
+          note="You are a super admin, so you can add any existing account to b/sales directly. Everybody else here only sees the people they already share this pipeline with."
+        >
+          <div className="relative">
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name or email…"
+              className="w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
+            />
+          </div>
+
+          {candidates.isError && <ErrorState error={candidates.error} />}
+
+          {filteredCandidates.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {search.trim() ? 'Nobody matches that.' : 'No other accounts on the platform yet.'}
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {filteredCandidates.map((c) => (
+                <li key={c.user_id} className="flex items-center gap-3 py-2.5">
+                  <MemberAvatar
+                    name={c.name}
+                    email={c.email}
+                    avatarUrl={c.avatar_url}
+                    size={28}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm text-foreground">{c.name ?? c.email}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {c.email}
+                      {/* Said only when true. Everyone in this list has an
+                          account; only some of them are already colleagues, and
+                          that is the fact worth carrying. */}
+                      {c.shared_workspaces.length > 0 && (
+                        <span className="text-muted-foreground/70">
+                          {' · also in '}
+                          {c.shared_workspaces.join(', ')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {c.already_member ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                      <Check size={12} />
+                      In this pipeline
+                    </span>
+                  ) : c.invited ? (
+                    <span className="shrink-0 text-xs text-muted-foreground">Invited</span>
+                  ) : (
+                    canWrite && (
+                      <button
+                        type="button"
+                        disabled={invite.isPending}
+                        onClick={() =>
+                          invite.mutate(
+                            { email: c.email },
+                            { onSuccess: (sent) => setLastSent(sent as SentInvitation) }
+                          )
+                        }
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
+                      >
+                        <UserPlus size={13} />
+                        Invite
+                      </button>
+                    )
                   )}
                 </li>
               ))}

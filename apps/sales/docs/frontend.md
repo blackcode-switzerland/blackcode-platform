@@ -269,8 +269,28 @@ not repeated here. Two things are this app's own:
 | `/dashboard/settings/{profile,account,tokens,preferences}` | §9 — inside the shell since 2026-08-11 |
 | `/dashboard/settings/members` | a redirect to `/dashboard/{ws}/members`, kept for bookmarks |
 | `/invitations/{token}` | where an invitation link lands — accept or decline |
-| `/login` | sign in, create an account, reset a password. `?tab=signup` opens the create-account panel — the landing page's CTA depends on it |
+| `/login` | sign in, create an account, reset a password. `?tab=signup` opens the create-account panel — the landing page's CTA depends on it. Wears the landing page's header and footer since 2026-08-11 — see below |
 | `/` | **the landing page** (2026-08-11). Signed-in visitors are redirected to `/dashboard`; it was a bare redirect for everybody until self-signup gave it an audience. See `components/landing-page.tsx`, whose header sets out what may not be written on it |
+
+**The signed-out frame is `components/site-chrome.tsx`** — `SiteHeader`,
+`SiteFooter`, `SiteFrame`. Both `/` and `/login` render it, and it was
+**extracted from the landing page rather than copied into the login page**: two
+copies of a header drift, which is the failure this repo spent a week undoing in
+four other places. `/login` passes no nav (both of its links would be the page
+you are on) and keeps the brand, which is the only way back to `/` — that is the
+whole reason the auth pages were given chrome.
+
+The brand mark on `/login` is **`rounded-md` at 44px**. The radius on
+`public/logo.png` is a constant 6px at every size it is drawn at in both apps
+(18, 22, 24, 28, 32, 44) and is not scaled with the box; this page was the one
+place that scaled it, at `rounded-xl`.
+
+**Continue with Google sits ABOVE the email/password form**, with the divider
+between, on both the sign-in and create-account panels and on neither the reset
+panel. Position is a claim about which door is the main one. The mark itself is
+`@blackcode/platform-ui/ui/google-mark` — shared, because it is a third party's
+brand rather than this app's palette, which is also what keeps its four hexes
+out of `lib/palette.test.ts`'s scope (D-4).
 
 Three conventions they all share, each of which is a decision:
 
@@ -623,6 +643,27 @@ The word *workspace* does not appear on it. It says "your team", because a sales
 user has exactly one and never picks it (PLAN.md §1). Roles are shown and not
 editable: no app on this platform has a change-role route, and inventing one here
 would have been a new platform capability landed inside a tenancy migration.
+
+**One third section is super-admin-only (2026-08-11): "Everyone with a blackcode
+account".** A searchable list of every live `platform.users` row, with one-click
+invite. It is the only super-admin capability in b/sales and it lives inside the
+page whose subject it already is — **there is no super-admin section in this
+app's settings and there will not be one**, which `app/dashboard/settings/
+account/page.tsx` states to the reader.
+
+Three things about it are load-bearing:
+
+- **The gate is the server's `is_super_admin`**, from
+  `GET /api/workspaces/{ws}/invite-candidates`, not a client guess: this
+  component cannot read `SUPER_ADMINS` and the whitelist is a table. While the
+  query is in flight, and after it fails, the flag is false and the section is
+  **absent rather than skeletal** — a placeholder would announce the feature to
+  exactly the people it is hidden from.
+- **It does not replace the email field.** Somebody with no blackcode account
+  cannot appear in the list at all, and that is the case the field exists for.
+- **The two sources stay apart.** Candidates carry `from_platform`; the ones you
+  already share a pipeline with say so on their row. "Somebody you work with"
+  and "somebody who has a login" are different claims.
 
 Inviting and removing go through `lib/mutations.ts` behind `useCanWrite()` —
 they are sales RECORDS now.

@@ -10,7 +10,9 @@ export function OnboardingCreateWorkspace({ defaultName }: { defaultName: string
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
       <div className="mb-6 flex items-center gap-2.5">
-        <Image src="/logo.png" alt="blackcode issues" width={32} height={32} className="rounded-lg" />
+        {/* rounded-md, like every other render of this mark in both apps — the
+            radius is a constant 6px at every size, not a proportion. */}
+        <Image src="/logo.png" alt="blackcode issues" width={32} height={32} className="rounded-md" />
         <span className="font-bold">blackcode issues</span>
       </div>
       <p className="mb-6 max-w-sm text-center text-sm text-muted-foreground">

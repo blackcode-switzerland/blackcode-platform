@@ -24,15 +24,28 @@ published to npm as `@blackcode_sa/bc-issues`).
 Run every command from the **repo root**; Turborepo delegates into the workspace.
 
 **The platform migration is finished — all nine phases (0–8) have landed.**
-`packages/platform-{db,api,ui,auth,agent,storage,testing}` exist; the database is
-`platform.*` + `issues.*` + `sales.*` (never `public`), one bounded role per app;
-apps are
-real data and every workspace-scoped route enforces per-app access; the CLI,
-guide, changelog, `bk meta` and docs are split per app; everything is addressable
-by URN; storage is shared, app-prefixed and reference-counted across apps.
+`packages/platform-{db,api,ui,auth,agent,storage,testing,email}` exist — eight,
+`platform-email` since 2026-08-11. The database is `platform.*` + `issues.*` +
+`sales.*` (never `public`), one bounded role per app. Apps are real data
+(`platform.apps` is the address book). The CLI, guide, changelog, `bk meta` and
+docs are split per app; everything is addressable by URN; the blob STORE is
+shared and reference-counted across apps while each app keeps its own upload
+LEDGER.
 
-Adding an app is **`docs/adding-an-app.md`** (walked end to end). Extracting one
-is **`docs/extracting-an-app.md`** (rehearsed). The database boundary is
+**What the apps share is short: one account, one password, one set of API tokens,
+one sign-in, one app registry, one Blob store.** Everything else — workspaces,
+members, invitations, comments, labels, uploads ledger, activity, trash, search —
+each app owns. **There is no per-app access gate**: `platform.workspace_apps`,
+`platform.app_access`, `requireAppAccess` and `PLATFORM_ENFORCE_APP_ACCESS` were
+all dropped on 2026-08-10, because a workspace now belongs to exactly one app and
+**membership is the whole gate**. Beware: a table living in `platform.*` does not
+mean it is shared — most of them are `apps/issues`' own
+(`docs/platform-architecture.md` §2).
+
+New here? **`docs/working-in-this-repo.md`** is the orientation: the traps, the
+shapes the checks have been wrong in, and how to work here. Adding an app is
+**`docs/adding-an-app.md`** (walked end to end). Extracting one is
+**`docs/extracting-an-app.md`** (rehearsed). The database boundary is
 **`docs/platform-db.md`**.
 
 Commands come in TWO tiers since 2026-08-10 and the spelling says which
@@ -83,25 +96,33 @@ A guide topic must **never** restate a dynamic value. Point at `bk meta`.
 > **A check you have not watched fail is not a check.** Break the thing it
 > guards, watch it go red, restore.
 
-**Nine guardrails in this repo have been found green-but-inert**, each of which
-looked like working protection: three packages with no ESLint config at all; a
-`SECURITY DEFINER` guard comparing `current_user` (the function's owner) instead
-of the caller; an orphan check that structurally could not detect an orphan; an
-import rule whose globs matched none of the imports that escape an app; a route
-collector that deduped two apps into one; a probe that was **commented out**
-(a commented-out probe reports success); `pg_dump --schema=issues`, which prints
-27 errors, exits 0, and leaves a database that boots with its triggers and
-foreign keys silently gone; a test asserting a hand-written error string the
-binary never emits; and a guide guard that banned six literal strings and passed
-two entire hardcoded vocabularies.
+**Twenty-one guardrails in this repo have been found green-but-inert**, each of
+which looked like working protection: three packages with no ESLint config at
+all; a `SECURITY DEFINER` guard comparing `current_user` (the function's owner)
+instead of the caller; an orphan check that structurally could not detect an
+orphan; an import rule whose globs matched none of the imports that escape an
+app; a route collector that deduped two apps into one; a probe that was
+**commented out** (a commented-out probe reports success); `pg_dump
+--schema=issues`, which prints 27 errors, exits 0, and leaves a database that
+boots with its triggers and foreign keys silently gone; a provisioning script
+whose grants named a schema it never created, failing five of ten statements and
+exiting 0; and a **migration** that was guarded, re-runnable, idempotent, did
+nothing, and reported success.
 
-**The count is still growing.** Two of the nine were found *after* the migration
-closed — including the import rule above, which was still green four days after
-being diagnosed, sitting next to its working replacement. Assume the next one
-exists. Full list with the mechanism of each: `CLAUDE.md`.
+**The count is still growing, and it does not fall as the rule gets better
+known.** Several were found *after* the migration closed; five landed in the
+phase whose entire job was to disbelieve the previous one, two of them being that
+phase's own new guards, found inert within minutes of being written. Assume the
+next one exists. Full list with the mechanism of each: `CLAUDE.md`; the
+transferable *shapes*: `docs/working-in-this-repo.md` §4.
 
-Two corollaries: **a skipped check must skip LOUDLY**, and **assert your inputs**
-— a guard that found nothing to check otherwise passes.
+Four corollaries: **a skipped check must skip LOUDLY** (not `console.warn` —
+vitest drops it); **assert your inputs**, since a guard that found nothing to
+check otherwise passes; **a check built on "was this denied?" cannot tell a
+working boundary from an absent subject**, so assert the positive case first —
+and make that positive case assert the OUTCOME, not a side effect the error path
+also trips; and **check the catalog, not the repo** — a constraint name, a
+trigger and a cascade rule are facts no grep of `apps/` can see.
 
 ## The one rule that matters most
 

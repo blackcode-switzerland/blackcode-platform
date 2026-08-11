@@ -41,14 +41,38 @@ split explicit.
 
 | Layer | Tables |
 |---|---|
-| **Platform** (shared by every app) | `users`, `workspaces`, `workspace_members`, `workspace_invitations`, `apps`, `api_tokens`, `password_reset_otps`, `email_whitelist`, `uploads`, `comments`, `labels`, `events`, `inbox_messages`, `deletion_batches`, `error_events`, `links`, `entities`, `blob_references`. (`workspace_apps`, `app_access` and `transaction_log` were dropped 2026-08-10 — §4.5.) |
-| **Issues app** (its own schema) | `issues`, `tasks`, `projects`, `project_updates`, `issue_labels`, `issue_assignees`, `issue_watchers`, `project_labels`, `project_members`, `attachments`, `workspace_counters` |
+| **`platform.*` — genuinely shared, every app reads the same row** | `users`, `apps`, `api_tokens`, `password_reset_otps`, `email_whitelist`, `blob_references` |
+| **`platform.*` — the ISSUES app's, in the platform schema for historical reasons** | `workspaces`, `workspace_members`, `workspace_invitations`, `uploads`, `comments`, `labels`, `events`, `inbox_messages`, `deletion_batches`, `entities`, `links` |
+| **`platform.*` — neither: infrastructure** | `error_events` (every app writes its own rows; nobody reads another app's) |
+| **`issues.*`** | `issues`, `tasks`, `projects`, `project_updates`, `issue_labels`, `issue_assignees`, `issue_watchers`, `project_labels`, `project_members`, `attachments`, `workspace_counters` |
+| **`sales.*`** | its own `workspaces`, `workspace_members`, `invitations`, `labels`, `uploads`, `events`, `user_preferences`, `counters`, plus the pipeline nouns |
 
-Two properties made the split cheaper than expected and are worth preserving:
-`comments` is **polymorphic** (`parent_type` / `parent_id`), and `labels` /
-`uploads` are **workspace-scoped, not issue-scoped**. Both grew an app dimension
-in Phase 1e of the sales app — `<app>:<noun>` type columns and `labels.app` — for
-the reason §4.6 gives: polymorphic and shared is not the same as app-neutral.
+> **The second row is the one that misleads.** *Being in `platform.*` no longer
+> means "shared".* multiAppFinalRefactor Phases 2 and 3 (2026-08-10) gave
+> `apps/sales` its **own** workspaces, members, invitations, labels, uploads
+> ledger and events, in `sales.*`; it does not read the `platform.*` copies of
+> any of them, and `platform.entities` has had **`apps/issues` as its only
+> writer** since Phase 3. Those tables stayed where they are because moving a
+> live app's tenancy costs a migration and buys nothing — not because a second
+> app shares them. A new app gets its own, in its own schema: see
+> `docs/adding-an-app.md`.
+>
+> The short version of what IS shared: **one account, one password, one set of
+> API tokens, one sign-in, one app registry, one Blob store.** Everything else
+> an app touches, it owns.
+>
+> `platform.transaction_log`, `platform.workspace_apps` and `platform.app_access`
+> were dropped 2026-08-10 — §4.5. (`transactionLog` is still declared in
+> `packages/platform-db/src/schema.ts`; the table is not there. Read that
+> declaration's comment before touching it.)
+
+Two properties made the original split cheaper than expected and are still true
+of the issues copies: `comments` is **polymorphic** (`parent_type` / `parent_id`),
+and `labels` / `uploads` are **workspace-scoped, not issue-scoped**. Both grew an
+app dimension in Phase 1e of the sales app — `<app>:<noun>` type columns and
+`labels.app` — for the reason §4.6 gives: polymorphic and shared is not the same
+as app-neutral. Phases 2–3 then went further and gave sales its own tables
+outright, which is the shape a third app should copy.
 
 ## 3. Repo layout
 
@@ -194,16 +218,44 @@ grant catches is one that reached production:
 > maintenance. An extraction dumps `platform` + the app's schema + `drizzle`.
 > Procedure: [`extracting-an-app.md`](extracting-an-app.md).
 
-### 4.4 One workspace record, shared by every app
+### 4.4 Each app owns its workspaces
 
-**A workspace is the company. An app is a capability inside it.** There is one
-`kali-sa` row, and every app operates inside it.
+**A workspace belongs to exactly one app.** `platform.workspaces` is
+`apps/issues`'; `sales.workspaces` is `apps/sales`'; a new app makes its own.
+Membership in an app's workspace is what using that app means, and it is the
+whole gate — §4.5.
 
-Per-app workspaces were rejected: the URN `bc:sales:kali-sa/deal/17` only links
-meaningfully to `bc:issues:kali-sa/issue/482` if `kali-sa` is the same
-organisation in both, `bk activity --ws kali-sa` needs one tenant boundary, and a
-person should have one workspace list — not the same company existing three times
-under three slugs that drift apart.
+> **This section used to say the opposite**, and it is rewritten rather than
+> footnoted, for the reason §4.6's note gives: a superseded design left in place
+> gets re-litigated. It read: *"One workspace record, shared by every app. A
+> workspace is the company, an app is a capability inside it. There is one
+> `kali-sa` row and every app operates inside it."* Per-app workspaces were
+> rejected there on three arguments, and **multiAppFinalRefactor Phase 2
+> (2026-08-10) reversed the decision** after each argument was measured:
+>
+> 1. *"The URN `bc:sales:kali-sa/deal/17` only links meaningfully to
+>    `bc:issues:kali-sa/issue/482` if `kali-sa` is the same organisation in
+>    both."* — A URN is built from an app's **own** slug and #number, so every
+>    app can print and resolve one regardless. Nothing in the URN needed a shared
+>    row; what needed one was `bk link`, and that was **removed** (Phase 4) for
+>    its own reasons.
+> 2. *"`bk activity --ws kali-sa` needs one tenant boundary."* — `activity` is
+>    app-owned now (`bk <app> activity`), over that app's own events. There is no
+>    cross-app activity read to give a boundary to.
+> 3. *"A person should have one workspace list."* — They have one per app, which
+>    is the honest list: an app can only answer for its own tenancy, because its
+>    Postgres role has no grant on another app's schema (§4.3). The single list
+>    was answering for apps it could not see, which is the false answer §4.5
+>    documents.
+>
+> What the old design cost, concretely: there was **no way to put a person into
+> b/sales from b/sales** — they had to be invited into an ISSUES workspace and
+> then granted the sales app inside it. That is what made the second app an
+> add-on rather than an app, and ending it is what the whole refactor was for.
+>
+> The nominal loss is real and was accepted: the same company can now exist as
+> `kali-sa` in two apps with two independent slugs, and nothing keeps them in
+> step. No product surface joins them, so nothing observes the drift.
 
 ### 4.5 Identity is global, tenancy is per app
 
