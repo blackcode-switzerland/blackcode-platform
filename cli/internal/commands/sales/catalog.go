@@ -133,8 +133,8 @@ func newProductShowCmd() *cobra.Command {
 }
 
 func productFlags(cmd *cobra.Command, req *client.ProductRequest, fit, refs *[]string) {
-	cmd.Flags().StringVar(&req.Category, "category", "", "module | service | licence (`bk meta` for values)")
-	cmd.Flags().StringVar(&req.Name, "name", "", "Product name")
+	cmd.Flags().StringVar(&req.Category, "category", "", "module | service | licence (required; `bk meta` for values)")
+	cmd.Flags().StringVar(&req.Name, "name", "", "Product name (required)")
 	cmd.Flags().StringVar(&req.PriceLabel, "price", "", "The price AS WRITTEN (\"from CHF 12,000\")")
 	cmd.Flags().StringVar(&req.PriceFrom, "price-from", "", "Lower bound, a plain amount")
 	cmd.Flags().StringVar(&req.PriceTo, "price-to", "", "Upper bound, a plain amount")
@@ -426,10 +426,10 @@ func newTemplateEditCmd() *cobra.Command {
 }
 
 func templateFlags(cmd *cobra.Command, req *client.TemplateRequest) {
-	cmd.Flags().StringVar(&req.Channel, "channel", "", "email | whatsapp | call (`bk meta` for values)")
-	cmd.Flags().StringVar(&req.Category, "category", "", "Template category (`bk meta` for values)")
+	cmd.Flags().StringVar(&req.Channel, "channel", "", "email | whatsapp | call (required; `bk meta` for values)")
+	cmd.Flags().StringVar(&req.Category, "category", "", "Template category (required; `bk meta` for values)")
 	cmd.Flags().StringVar(&req.Stage, "stage", "", "The pipeline stage this template is for")
-	cmd.Flags().StringVar(&req.Name, "name", "", "Template name")
+	cmd.Flags().StringVar(&req.Name, "name", "", "Template name (required)")
 	cmd.Flags().StringVar(&req.Subject, "subject", "", "Subject line, for an email template")
 	cmd.Flags().StringVar(&req.Body, "body", "", "The message, with {{placeholders}}")
 }
@@ -679,9 +679,9 @@ from the index that stops it being deleted while still in use.`,
 		},
 	}
 	cmd.Flags().StringVar(&req.Title, "title", "", "What the document is (required)")
-	cmd.Flags().StringVar(&req.Kind, "kind", "", "pdf | deck | image | video | link (`bk meta` for values)")
-	cmd.Flags().StringVar(&req.UploadURL, "upload", "", "URL of a file uploaded to this app")
-	cmd.Flags().StringVar(&req.ExternalURL, "url", "", "An external link")
+	cmd.Flags().StringVar(&req.Kind, "kind", "", "pdf | deck | image | video | link (required; `bk meta` for values)")
+	cmd.Flags().StringVar(&req.UploadURL, "upload", "", "URL of a file uploaded to this app (this OR --url, exactly one)")
+	cmd.Flags().StringVar(&req.ExternalURL, "url", "", "An external link (this OR --upload, exactly one)")
 	cmd.Flags().StringVar(&req.Description, "description", "", "What it is for")
 	cmd.Flags().StringSliceVar(&tags, "tag", nil, "Tags (repeatable)")
 	for _, f := range []string{"title", "kind"} {

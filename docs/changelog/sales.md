@@ -22,6 +22,33 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-11 — `--help` now names every field the server refuses without
+
+**Not breaking. Help text only — no route, no behaviour, no flag added or removed.**
+
+An agent composing `bk sales product create` has two sources for "what does this
+need?": the flag descriptions, and a 400 from the server. The second worked —
+these routes answer `missing_name` / `unknown_category` with a suggestion naming
+the flag — but it costs a round trip, and a round trip mid-run is where a task
+gets abandoned.
+
+Checked every sales create surface against its route. **Eight flags were enforced
+server-side and did not say so:**
+
+| Command | Was silent about |
+|---|---|
+| `bk sales product create` | `--name`, `--category` |
+| `bk sales template create` | `--name`, `--channel`, `--category` |
+| `bk sales doc add` | `--kind`, and that `--upload`/`--url` is exactly one of the two |
+
+`prospect create`, `meeting schedule|log`, `comm log`, `contact add` and
+`objection raise` were already correct, which is what kept the gap invisible —
+the app looked consistent from any single example.
+
+Dynamic values are still not listed in help or in `bk guide`: a flag says
+`bk meta for values` and `bk meta` carries the current vocabulary, so a stage or
+category can change without a CLI release.
+
 ## 2026-08-11 — you can be in more than one workspace, and now you can move between them
 
 **Not breaking.** Nothing changes for a person with one workspace, which is
