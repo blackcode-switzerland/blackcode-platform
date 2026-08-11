@@ -70,6 +70,17 @@ if [ "$BASE_TABLE_COUNT" -eq 0 ]; then
 fi
 
 # --- declarations: parse "# EXPECTED ..." / "# schema.table delta reason" --
+#
+# `delta` is normally a signed row count (-8). It may also be the literal word
+# DROPPED, which declares that the whole TABLE is expected to be gone — added
+# 2026-08-10 for Phase 5, the only phase that drops tables.
+#
+# Without it a drop had no way to be declared at all: the diff engine's rule (c)
+# fails a table that is in the baseline and absent from the database, and the
+# delta arithmetic never runs because there is no live row to compare against. So
+# the one phase whose whole job is dropping tables would have had to run against
+# a guaranteed FAIL and re-capture afterwards — which is exactly the state where
+# a real loss hides, because the operator is already expecting red.
 DECL="$WORK_DIR/declarations.tsv"
 awk '
   /^# EXPECTED / {

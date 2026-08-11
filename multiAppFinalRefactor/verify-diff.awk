@@ -20,6 +20,15 @@
 BEGIN { FS = "\t"; OFS = " "; fails = 0 }
 
 FILENAME == declfile {
+  # DROPPED declares the whole TABLE is expected to be gone (Phase 5). Kept
+  # separate from the delta sum on purpose: `$2 + 0` on the word DROPPED is 0 in
+  # awk, so folding it in would silently declare "expect no change" — a
+  # declaration that reads as strict and asserts nothing.
+  if ($2 == "DROPPED") {
+    decl_dropped[$1] = 1
+    decl_note[$1] = (decl_note[$1] == "" ? $3 : decl_note[$1] "; " $3)
+    next
+  }
   decl_sum[$1] += ($2 + 0)
   decl_note[$1] = (decl_note[$1] == "" ? $3 : decl_note[$1] "; " $3)
   next
@@ -44,7 +53,30 @@ END {
   # (c) table in baseline, missing from the live database
   for (t in base_seen) {
     if (!(t in live_seen)) {
-      print "FAIL", t, "table present in baseline but MISSING from the database (had " base_count[t] " rows)"
+      if (t in decl_dropped) {
+        # Declared DROPPED. Report the row count it took with it — a drop is the
+        # most irreversible thing in this refactor, and "how many rows went" is
+        # the number somebody will want afterwards. INFO, not silence.
+        print "INFO", t, "table DROPPED as declared (took " base_count[t] " rows with it) (" decl_note[t] ")"
+      } else {
+        print "FAIL", t, "table present in baseline but MISSING from the database (had " base_count[t] " rows)"
+        fails++
+      }
+    }
+  }
+
+  # (c2) declared DROPPED but STILL THERE. The other direction, and it is not
+  # cosmetic: a migration that failed silently, or was never run, leaves the
+  # table in place — and without this the declaration would simply be ignored and
+  # the run would pass, reporting success for a drop that did not happen. Same
+  # shape as CLAUDE.md finding #6: a check that cannot see its own no-op.
+  for (t in decl_dropped) {
+    if (t in live_seen) {
+      print "FAIL", t, "declared DROPPED but the table is STILL PRESENT (" live_count[t] " rows) — the migration did not run, or failed"
+      fails++
+    }
+    else if (!(t in base_seen)) {
+      print "FAIL", t, "declared DROPPED but it is not in the baseline either — nothing to drop, so the declaration is describing the wrong table"
       fails++
     }
   }

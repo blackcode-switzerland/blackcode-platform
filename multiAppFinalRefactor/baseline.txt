@@ -9,6 +9,11 @@
 #   # platform.comments -8   sales rows, parent_type LIKE 'sales:%'
 # verify.sh sums declarations per table and requires the actual decrease to match exactly.
 #
+# The delta may also be the word DROPPED, which declares the whole TABLE is
+# expected to be gone (added 2026-08-10 for Phase 5). It is checked BOTH ways:
+# an undeclared drop fails, and a declared drop that did NOT happen — the
+# migration never ran, or failed — fails too.
+#
 # schema.table<TAB>count<TAB>min_id<TAB>max_id
 issues.attachments	71	4	74
 issues.issue_assignees	415	NOID	NOID
@@ -65,3 +70,10 @@ sales.uploads	0	NULL	NULL
 sales.user_preferences	1	NOID	NOID
 sales.workspace_members	1	1	1
 sales.workspaces	1	1	1
+
+# EXPECTED 2026-08-10 phase-5 agent6
+# platform.workspace_apps DROPPED   the per-app gate. Apps stopped sharing workspaces in Phase 2, so "is this app on for this workspace" has no subject. Migration 0045.
+# EXPECTED 2026-08-10 phase-5 agent6
+# platform.app_access DROPPED   the per-app gate. A workspace belongs to one app now, so its members ARE that app's users. Migration 0045.
+# EXPECTED 2026-08-10 phase-5 agent6
+# platform.transaction_log DROPPED   dead since before the monorepo: no writer, /api/undo is a 410. Migration 0045 REFUSES if any row is newer than 30 days.

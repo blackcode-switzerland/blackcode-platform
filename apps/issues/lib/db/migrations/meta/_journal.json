@@ -316,6 +316,13 @@
       "when": 1786060920000,
       "tag": "0044_error_events_app",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1786147320000,
+      "tag": "0045_drop_app_gates_and_transaction_log",
+      "breakpoints": true
     }
   ]
 }
