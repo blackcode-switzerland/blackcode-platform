@@ -26,6 +26,23 @@ func newMeetingCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "meeting",
 		Short: "The meetings ledger — past and upcoming",
+		// Three commands, one workflow. Which of them to reach for is decided by
+		// WHEN the meeting is, and the group listing alone does not say so — an
+		// agent choosing between "log" and "schedule" reads this page and gets a
+		// list of verbs with no relation between them.
+		Long: `The meetings ledger — past and upcoming.
+
+Which verb depends on when the meeting is:
+
+  log       a meeting that already happened — --outcome required up front
+  schedule  a future meeting — its outcome is recorded later, with "outcome"
+  outcome   fill in how a scheduled meeting went (and mark it as having happened)
+
+NOTHING HERE SENDS OR SCHEDULES ANYTHING. The app records meetings; it creates
+no calendar event and invites nobody, and that is a deliberate non-goal.
+
+"cancel" keeps the record and marks it cancelled — a meeting that was arranged
+and did not happen is a fact about the deal. "rm" bins the record itself.`,
 	}
 	cmd.AddCommand(
 		newMeetingListCmd(),
@@ -97,7 +114,7 @@ are both at that end of the list.
 		},
 	}
 	cmd.Flags().IntVar(&prospect, "prospect", 0, "Only this prospect's meetings (its #number)")
-	cmd.Flags().StringSliceVar(&statuses, "status", nil, "Filter by status (`bk meta` for values)")
+	cmd.Flags().StringSliceVar(&statuses, "status", nil, "Filter by status — "+vocab("meeting_statuses", "repeatable"))
 	cmd.Flags().StringVar(&from, "from", "", "Only meetings at or after this ISO timestamp")
 	cmd.Flags().StringVar(&to, "to", "", "Only meetings at or before this ISO timestamp")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Max meetings to return")
@@ -185,12 +202,20 @@ func newMeetingCreateCmd(use, defaultStatus, long string) *cobra.Command {
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/meetings"},
 		Short:       map[string]string{"schedule": "Record an upcoming meeting", "log": "Record a meeting that happened"}[use],
 		Long:        long,
-		Args:        cobra.NoArgs,
+		Args:        cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
+			// Either shape: `meeting schedule 8 …` or `--prospect 8`. This
+			// command's canonical spelling is the flag, and the positional is
+			// accepted because the prospect-first families next door taught it.
+			n, _, err := resolveProspect(cmd, args, req.Prospect, 0)
+			if err != nil {
+				return err
+			}
+			req.Prospect = n
 			req.Status = defaultStatus
 			req.Attendees = splitAll(attendees)
 			if use == "log" && strings.TrimSpace(req.Outcome) == "" {
@@ -206,22 +231,26 @@ func newMeetingCreateCmd(use, defaultStatus, long string) *cobra.Command {
 				return err
 			}
 			return output.Render(format, m, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "recorded meeting #%d (%s): %s\n%s\n",
-					m.Number, m.Status, m.Title, m.URN)
+				_, err := fmt.Fprintf(w, "recorded meeting #%d (%s) with %s (#%d): %s\n%s\n",
+					m.Number, m.Status, m.ProspectName, m.ProspectNumber, m.Title, m.URN)
 				return err
 			})
 		},
 	}
-	cmd.Flags().IntVar(&req.Prospect, "prospect", 0, "The prospect's #number (required)")
+	cmd.Flags().IntVar(&req.Prospect, "prospect", 0,
+		"The prospect's #number (required, unless given as the first argument)")
 	cmd.Flags().StringVar(&req.At, "at", "", "When, ISO 8601 (required)")
-	cmd.Flags().StringVar(&req.Type, "type", "", "Meeting type (required; `bk meta` for values)")
+	cmd.Flags().StringVar(&req.Type, "type", "", "Meeting type — "+vocab("meeting_types", "required"))
 	cmd.Flags().StringVar(&req.Title, "title", "", "What the meeting is (required)")
 	cmd.Flags().StringSliceVar(&attendees, "attendee", nil, "Who was there (repeatable; plain names)")
 	cmd.Flags().StringVar(&req.Agenda, "agenda", "", "What it is for")
 	if use == "log" {
 		cmd.Flags().StringVar(&req.Outcome, "outcome", "", "What came of it (required)")
 	}
-	for _, f := range []string{"prospect", "at", "type", "title"} {
+	// "prospect" is NOT marked required here: it may arrive as the first
+	// argument instead, and cobra's check runs before RunE can see that.
+	// resolveProspect refuses the genuinely-missing case, naming both spellings.
+	for _, f := range []string{"at", "type", "title"} {
 		_ = cmd.MarkFlagRequired(f)
 	}
 	return cmd
@@ -426,8 +455,8 @@ func newCommListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&prospect, "prospect", 0, "Only this prospect's log (its #number)")
-	cmd.Flags().StringSliceVar(&channels, "channel", nil, "Filter by channel (`bk meta` for values)")
-	cmd.Flags().StringVar(&dir, "dir", "", "in | out (`bk meta` for values)")
+	cmd.Flags().StringSliceVar(&channels, "channel", nil, "Filter by channel — "+vocab("channels", "repeatable"))
+	cmd.Flags().StringVar(&dir, "dir", "", "Filter by direction — "+vocab("comm_directions"))
 	cmd.Flags().StringVar(&from, "from", "", "At or after this ISO timestamp")
 	cmd.Flags().StringVar(&to, "to", "", "At or before this ISO timestamp")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Max rows to return")
@@ -451,13 +480,20 @@ deliberate non-goal rather than a gap.
 An internal note about a prospect is a communication too: use the note channel.
 This app has no comment threads, so that is where a note lives.
 
---at defaults to now. Run "bk meta" for the channels and directions.`,
-		Args: cobra.NoArgs,
+--at defaults to now. Run "bk meta" for the channels and directions.
+
+The prospect may be given as --prospect <n> or as the first argument.`,
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
+			n, _, err := resolveProspect(cmd, args, req.Prospect, 0)
+			if err != nil {
+				return err
+			}
+			req.Prospect = n
 			if cmd.Flags().Changed("contact") {
 				req.Contact = &contact
 			}
@@ -470,20 +506,24 @@ This app has no comment threads, so that is where a note lives.
 				return err
 			}
 			return output.Render(format, m, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "logged %s #%d (%s %s)\n%s\n",
-					"communication", m.Number, m.Channel, m.Direction, m.URN)
+				_, err := fmt.Fprintf(w, "logged %s #%d (%s %s) against %s (#%d)\n%s\n",
+					"communication", m.Number, m.Channel, m.Direction,
+					m.ProspectName, m.ProspectNumber, m.URN)
 				return err
 			})
 		},
 	}
-	cmd.Flags().IntVar(&req.Prospect, "prospect", 0, "The prospect's #number (required)")
-	cmd.Flags().StringVar(&req.Channel, "channel", "", "Channel (required; `bk meta` for values)")
-	cmd.Flags().StringVar(&req.Direction, "dir", "", "in | out (required)")
+	cmd.Flags().IntVar(&req.Prospect, "prospect", 0,
+		"The prospect's #number (required, unless given as the first argument)")
+	cmd.Flags().StringVar(&req.Channel, "channel", "", "Channel — "+vocab("channels", "required"))
+	cmd.Flags().StringVar(&req.Direction, "dir", "", "Which way — "+vocab("comm_directions", "required"))
 	cmd.Flags().StringVar(&req.At, "at", "", "When it happened, ISO 8601 (default now)")
 	cmd.Flags().StringVar(&req.Subject, "subject", "", "Subject line, where there is one")
 	cmd.Flags().StringVar(&req.Body, "body", "", "What was said")
 	cmd.Flags().IntVar(&contact, "contact", 0, "Which contact (the ID from `bk sales contact list`)")
-	for _, f := range []string{"prospect", "channel", "dir"} {
+	// See the note on `meeting schedule`: "prospect" may arrive positionally, so
+	// resolveProspect enforces it rather than cobra.
+	for _, f := range []string{"channel", "dir"} {
 		_ = cmd.MarkFlagRequired(f)
 	}
 	return cmd

@@ -59,6 +59,21 @@ Two kinds of knowledge, two homes. Knowing the split saves you a wrong guess:
 This guide **never** restates a value from `bk meta` — if you need a number or a
 vocabulary, fetch it. That is why the two can never disagree.
 
+`bk meta --vocab <key>` is the flat version, for exactly this: one value per
+line, a plain array under `--json`, and no parser needed. `bk meta --vocab` with
+no key lists the keys the app that answered serves, and an unknown key is an
+error naming the ones that exist.
+
+```bash
+bk meta --vocab                   # the keys
+bk meta --vocab <key>             # the values, with their labels
+```
+
+Some flags DO name their values in `--help`, as a fast path. That is a copy held
+to the server by a build-time check, not a second authority: when a flag's help
+and `bk meta` disagree, **`bk meta` is right** — the help was written when your
+binary was built.
+
 ## Ground rules
 
 - Add `--json` to every read command. Table output is for humans.

@@ -22,6 +22,68 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-12 — every vocabulary flag names its values, and "which prospect" takes either shape
+
+**Not breaking. Nothing was renamed and no route changed** — every spelling that
+worked yesterday still works.
+
+An agent that ran the whole sales surface found two inconsistencies, and both
+trained it to guess:
+
+**1. Twenty flags take a vocabulary value; six named their values and fourteen
+said "run `bk meta`".** So it learned from one flag that the values were in the
+help, and was failed by the next: it tried `--type discovery` on
+`meeting schedule` (a *channel* value) and `--category outreach` on
+`template create`, and paid a round trip each time.
+
+Every one of them now names its values AND keeps the `bk meta` pointer:
+
+```
+--kind    pdf | deck | image | video | link (required; `bk meta` for values)
+--stage   new_lead | contacted | meeting | negotiation | won | lost (repeatable; `bk meta` for values)
+```
+
+**`bk meta` is still the authority.** The enumeration is a copy held to
+`apps/sales/lib/pipeline.ts` by a build-time check
+(`apps/sales/lib/cli-vocabulary.test.ts`), so a value added here and not there
+fails the build rather than shipping a `bk` that prints a stale list. If your
+binary's `--help` and `bk meta --vocab <key>` ever disagree, **the server is
+right** — see `bk meta --vocab` in the platform changelog.
+
+**2. "Which prospect?" had two conventions.** `contact add 12` and the objection
+verbs took it positionally; `comm log --prospect 12` and the meeting verbs took a
+flag. Carrying one shape into the other family dead-ended
+(`objection counter 1 --prospect 8`).
+
+**Both shapes now work on every command that acts on a prospect** — the contact,
+objection, journey, match and label verbs, `prospect next`, `prospect stage`,
+`comm log` and `meeting schedule|log`:
+
+```bash
+bk sales contact add 12 --name "Julien Roche"
+bk sales contact add --prospect 12 --name "Julien Roche"    # identical
+bk sales comm log 12 --channel email --dir out              # identical
+```
+
+Naming two DIFFERENT prospects is an **error** naming both, and nothing is
+written — it is never resolved silently in favour of one.
+
+Also in this change:
+
+- **`bk sales doc add --prospect/--product/--template`**, each repeatable:
+  create a document and attach it in one call, over the same links `doc link`
+  writes. `doc link` remains the way to attach a document that already exists.
+  If the document is created and a link then fails, the error says the document
+  **was created** and names its #number — do not add it twice.
+- **Confirmations name the company, not just the id.** `added contact 1 to
+  prospect #2` is now `added contact 1 to prospect #2 (Roches SA)`; the same for
+  `objection raise`, `journey add`, `match set`, `label attach`, `comm log` and
+  `meeting schedule|log`. `--json` payloads are unchanged.
+- **`bk sales meeting --help`** now says how `log`, `schedule` and `outcome`
+  relate, instead of listing three verbs with no relation between them.
+
+`--json` output is unchanged throughout. Nothing here needs a client change.
+
 ## 2026-08-11 — `--help` now names every field the server refuses without
 
 **Not breaking. Help text only — no route, no behaviour, no flag added or removed.**

@@ -36,6 +36,34 @@ is every limit. They change without a release of this binary, so nothing in this
 guide lists them. If a command rejects a value, `bk meta` is where the accepted
 ones are.
 
+`bk meta --vocab <key>` prints ONE of them as a flat list, one value per line
+(and a plain array under `--json`, so it pipes). `bk meta --vocab` with no key
+lists the keys, and an unknown key is an error naming the ones that exist:
+
+```bash
+bk meta --vocab                   # which vocabularies this server serves
+bk meta --vocab stages            # the values, with their labels
+```
+
+The `--help` of a flag that takes one of these values also names the values, as
+a fast path. **`bk meta` is the authority** — the help text was written when the
+binary was built, this reads the server. Where they disagree, the server wins.
+
+## Which prospect? Either spelling works
+
+Every command that acts on a prospect takes its #number as the first argument
+**or** as `--prospect <n>`:
+
+```bash
+bk sales contact add 12 --name "Julien Roche"
+bk sales contact add --prospect 12 --name "Julien Roche"     # the same call
+bk sales comm log 12 --channel <channel> --dir out           # also the same
+```
+
+Naming two DIFFERENT prospects — `bk sales objection counter 12 3 --prospect 9` —
+is an error that names both, and nothing is changed. The canonical spelling is
+whichever one `--help` shows; the other exists so a wrong guess resolves.
+
 ## Finding a prospect
 
 ```bash

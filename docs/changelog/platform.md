@@ -7,6 +7,46 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-12 — `bk meta --vocab <key>`: one vocabulary, as a flat list
+
+**Not breaking. `bk meta` with no flag is unchanged**, byte for byte, in every
+output format.
+
+`bk meta` prints prose and a workspace table; `bk meta --json` is a deeply nested
+document. Neither answered "what are the valid stages?" without a parser — so an
+agent that wanted the values read `--help` instead, and `--help` is a document
+inside the binary, which is the one thing that can be a release behind the
+server.
+
+```bash
+bk meta --vocab                   # the keys the app that answered serves
+bk meta --vocab stages            # the values, one per line, with their labels
+bk meta --vocab stages --json     # a plain array — it pipes
+```
+
+- An **unknown key is an error naming the keys that exist**. The command exists
+  to stop a caller guessing, and "unknown key" full stop is one guess earlier in
+  the same problem.
+- `--json` prints the **server's** array verbatim, so a field added server-side
+  (today: `color`) reaches you with no CLI release.
+- It reads `apps.<current>.vocabulary` from `GET /api/meta`, falling back to the
+  deprecated top-level `vocabulary` key, so it works against both apps and
+  against a server older than the nested block.
+
+**It is the authority.** Some `bk <app>` flags now name their values in `--help`
+as a fast path; those are copies held to their app's source by a build-time
+check, not a second source of truth. Where a flag's help and this command
+disagree, this command is right.
+
+**`meta` stays a BARE verb.** Vocabularies are per app, so `bk sales meta` looks
+like the natural spelling and is not: `meta` is your account and this binary, it
+reports the HOME app's vocabulary, and `bk --app-server sales meta` targets
+another deployment. No app tier was added to `meta`.
+
+One tightening worth knowing if you script it: **`bk meta <anything>` used to
+accept and silently ignore a positional argument** and now errors, pointing at
+`bk meta --vocab <key>`. Both `--vocab <key>` and `--vocab=<key>` are accepted.
+
 ## 2026-08-11 — `bk login --token` explains itself, and a usage mistake exits 2
 
 **Not breaking.** `echo <token> | bk login --token` is unchanged and still the

@@ -18,7 +18,8 @@ import (
 // one is active", so an agent can pick its target BY NAME/SLUG instead of an
 // opaque numeric id (the most common cause of writing to the wrong workspace).
 func newMetaCmd() *cobra.Command {
-	return &cobra.Command{
+	var vocabKey string
+	cmd := &cobra.Command{
 		Use:         "meta",
 		Annotations: map[string]string{"routes": "GET /api/meta"},
 		Short:       "Bootstrap context: who am I + every app + where each command goes",
@@ -42,7 +43,32 @@ numeric id (ids are opaque and easy to confuse). Then target it with
 ` + "`bk <app> workspace use <slug>`" + ` or a per-command ` + "`--ws <slug>`" + `. The active
 workspace is only a default, not necessarily where you mean to write.
 
-Use --ws <slug|id> to preview another workspace's context without switching.`,
+Use --ws <slug|id> to preview another workspace's context without switching.
+
+--vocab <key> prints ONE vocabulary as a flat list — the values, one per line,
+and a plain array under --json so it pipes. It is the answer to "what are the
+valid stages?" without a parser, and it is the AUTHORITY: a flag's --help may
+enumerate the values it knew when the binary was built, this reads the server.
+
+  bk meta --vocab            list the keys this server serves
+  bk meta --vocab stages     the values, with their labels
+  bk meta                    unchanged
+
+An unknown key is an error naming the keys that exist.`,
+		// A positional is accepted ONLY as `--vocab`'s argument. pflag hands a
+		// bare `--vocab` its NoOptDefVal and leaves the next word in args, which
+		// is what makes `--vocab stages` and `--vocab=stages` both work; without
+		// this check `bk meta stages` would be silently ignored, as it was.
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return nil
+			}
+			if !cmd.Flags().Changed("vocab") || len(args) > 1 {
+				return cmdutil.Usagef("unexpected argument %q — `bk meta` takes none, and a "+
+					"vocabulary key goes to `bk meta --vocab <key>`", args[0])
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -55,6 +81,10 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 			meta, err := c.Meta(cmdutil.ClientWorkspaceSlug(cfg))
 			if err != nil {
 				return err
+			}
+
+			if cmd.Flags().Changed("vocab") {
+				return renderVocab(cmd, format, meta, vocabKeyFrom(vocabKey, args))
 			}
 
 			// Re-learn the app address book (D-1). `bk meta` is the command every
@@ -197,6 +227,13 @@ Use --ws <slug|id> to preview another workspace's context without switching.`,
 			})
 		},
 	}
+	cmd.Flags().StringVar(&vocabKey, "vocab", "",
+		"Print ONE vocabulary as a flat list; pass no key to list the keys this server serves")
+	// Makes a bare `bk meta --vocab` legal. The cost is that `--vocab stages`
+	// leaves "stages" as a positional, which the Args validator above expects and
+	// RunE reads back — see the note there.
+	cmd.Flags().Lookup("vocab").NoOptDefVal = vocabAsked
+	return cmd
 }
 
 // sortedAppSlugs keeps `bk meta` output stable: Go map iteration is randomised,

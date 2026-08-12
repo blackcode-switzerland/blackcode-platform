@@ -116,11 +116,11 @@ reads the text columns and returns the snippet that matched.
 			})
 		},
 	}
-	cmd.Flags().StringSliceVar(&stages, "stage", nil, "Filter by pipeline stage (repeatable; `bk meta` for the values)")
+	cmd.Flags().StringSliceVar(&stages, "stage", nil, "Filter by pipeline stage — "+vocab("stages", "repeatable"))
 	cmd.Flags().StringVar(&owner, "owner", "", "Filter by deal owner: an email, or \"me\"")
 	cmd.Flags().StringVar(&label, "label", "", "Filter by label name")
 	cmd.Flags().StringVar(&query, "q", "", "Substring match on the company name")
-	cmd.Flags().IntVar(&limit, "limit", 0, "Max prospects to return (`bk meta` for the cap)")
+	cmd.Flags().IntVar(&limit, "limit", 0, "Max prospects to return (bk meta for the cap)")
 	cmd.Flags().IntVar(&cursor, "cursor", 0, "Continue from the cursor printed by the previous page")
 	cmd.Flags().BoolVar(&includeDeleted, "include-deleted", false, "Include prospects that are in the recycle bin")
 	return cmd
@@ -199,7 +199,7 @@ The opening journey step is written for you, attributed to whoever ran this.`,
 	cmd.Flags().StringVar(&req.Name, "name", "", "Company name (required)")
 	cmd.Flags().StringVar(&req.City, "city", "", "City")
 	cmd.Flags().StringVar(&req.Sector, "sector", "", "Sector, free text (\"SaaS · staffing\")")
-	cmd.Flags().StringVar(&req.Stage, "stage", "", "Pipeline stage (`bk meta` for the values)")
+	cmd.Flags().StringVar(&req.Stage, "stage", "", "Pipeline stage — "+vocab("stages", "default: the first"))
 	cmd.Flags().StringVar(&req.Value, "value", "", "Deal value, a plain amount (\"24000\")")
 	cmd.Flags().StringVar(&req.Currency, "currency", "", "ISO currency code (default CHF)")
 	cmd.Flags().StringVar(&req.Owner, "owner", "", "Deal owner: an email, or \"me\"")
@@ -341,6 +341,7 @@ intent.`,
 
 func newProspectStageCmd() *cobra.Command {
 	var note, reason string
+	var prospect int
 	cmd := &cobra.Command{
 		Use:         "stage <n> <stage>",
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/prospects/{n}/stage"},
@@ -354,14 +355,17 @@ whoever ran it, and on a closing stage it also sets the close date — which is 
 --note is the journey step's note ("they asked for a revised quote").
 --reason is the close reason, and is only read for a closing stage.
 
-Run "bk meta" for the current stage values.`,
-		Args: cobra.ExactArgs(2),
+Run "bk meta" for the current stage values.
+
+The prospect may be given as the first argument or as --prospect <n>; the stage
+is positional either way.`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, err := prospectNumber(args[0])
+			n, tail, err := resolveProspect(cmd, args, prospect, 1)
 			if err != nil {
 				return err
 			}
@@ -370,7 +374,7 @@ Run "bk meta" for the current stage values.`,
 				return err
 			}
 			p, err := c.SetProspectStage(ws, n, client.SetProspectStageRequest{
-				Stage:  strings.TrimSpace(args[1]),
+				Stage:  strings.TrimSpace(tail[0]),
 				Note:   note,
 				Reason: reason,
 			})
@@ -384,6 +388,7 @@ Run "bk meta" for the current stage values.`,
 			})
 		},
 	}
+	addProspectFlag(cmd, &prospect)
 	cmd.Flags().StringVar(&note, "note", "", "What happened, recorded on the journey step")
 	cmd.Flags().StringVar(&reason, "reason", "", "Close reason (only read for a closing stage)")
 	return cmd
@@ -407,6 +412,7 @@ Run "bk meta" for the current stage values.`,
 func newProspectNextCmd() *cobra.Command {
 	var actionType, due, dueLabel, note, owner string
 	var clear bool
+	var prospect int
 	cmd := &cobra.Command{
 		Use:         "next <n> --type <type> --due <YYYY-MM-DD>",
 		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/prospects/{n}/next-action"},
@@ -423,14 +429,16 @@ an agent, because writing the next action is not the same as owning the deal.
 
 --clear removes the next action entirely.
 
-Run "bk meta" for the current next-action types.`,
-		Args: cobra.ExactArgs(1),
+Run "bk meta" for the current next-action types.
+
+The prospect may be given as the first argument or as --prospect <n>.`,
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, err := prospectNumber(args[0])
+			n, _, err := resolveProspect(cmd, args, prospect, 0)
 			if err != nil {
 				return err
 			}
@@ -470,7 +478,8 @@ Run "bk meta" for the current next-action types.`,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&actionType, "type", "", "What is owed (`bk meta` for the values)")
+	addProspectFlag(cmd, &prospect)
+	cmd.Flags().StringVar(&actionType, "type", "", "What is owed — "+vocab("next_action_types"))
 	cmd.Flags().StringVar(&due, "due", "", "When, as a real date YYYY-MM-DD")
 	cmd.Flags().StringVar(&dueLabel, "due-label", "", "The phrase you wrote (\"this week\") — kept verbatim")
 	cmd.Flags().StringVar(&note, "note", "", "What exactly is owed")

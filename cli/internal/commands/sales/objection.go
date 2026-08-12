@@ -47,17 +47,18 @@ func newObjectionCmd() *cobra.Command {
 }
 
 func newObjectionListCmd() *cobra.Command {
-	return &cobra.Command{
+	var prospect int
+	cmd := &cobra.Command{
 		Use:         "list <prospect>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n}/objections"},
 		Short:       "List a prospect's objections",
-		Args:        cobra.ExactArgs(1),
+		Args:        cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, err := prospectNumber(args[0])
+			n, _, err := resolveProspect(cmd, args, prospect, 0)
 			if err != nil {
 				return err
 			}
@@ -87,13 +88,17 @@ func newObjectionListCmd() *cobra.Command {
 			})
 		},
 	}
+	addProspectFlag(cmd, &prospect)
+	return cmd
 }
 
 func newObjectionRaiseCmd() *cobra.Command {
 	var req client.RaiseObjectionRequest
+	var prospect int
 	cmd := &cobra.Command{
-		Use:         "raise <prospect> --type <type>",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/prospects/{n}/objections"},
+		Use: "raise <prospect> --type <type>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n}," +
+			"POST /api/workspaces/{ws}/prospects/{n}/objections"},
 		Short:       "Record an objection",
 		Long: `Record something they pushed back on.
 
@@ -101,14 +106,16 @@ func newObjectionRaiseCmd() *cobra.Command {
 Both, when you have both: the gap between them is the thing worth recording, and
 a single notes field loses it.
 
-Run "bk meta" for the objection types.`,
-		Args: cobra.ExactArgs(1),
+Run "bk meta" for the objection types.
+
+The prospect may be given as the first argument or as --prospect <n>.`,
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, err := prospectNumber(args[0])
+			n, _, err := resolveProspect(cmd, args, prospect, 0)
 			if err != nil {
 				return err
 			}
@@ -121,12 +128,14 @@ Run "bk meta" for the objection types.`,
 				return err
 			}
 			return output.Render(format, row, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "raised objection %d (%s) on prospect #%d\n", row.ID, row.Type, n)
+				_, err := fmt.Fprintf(w, "raised objection %d (%s) on prospect %s\n",
+					row.ID, row.Type, prospectLabel(c, ws, n))
 				return err
 			})
 		},
 	}
-	cmd.Flags().StringVar(&req.Type, "type", "", "Objection type (required; `bk meta` for values)")
+	addProspectFlag(cmd, &prospect)
+	cmd.Flags().StringVar(&req.Type, "type", "", "Objection type — "+vocab("objection_types", "required"))
 	cmd.Flags().StringVar(&req.RaisedBy, "raised-by", "", "Who raised it, by name")
 	cmd.Flags().StringVar(&req.RaisedAt, "at", "", "When, ISO 8601 (default now)")
 	cmd.Flags().StringVar(&req.Spoken, "spoken", "", "What they actually said")
@@ -137,6 +146,7 @@ Run "bk meta" for the objection types.`,
 
 func newObjectionCounterCmd() *cobra.Command {
 	var counter string
+	var prospect int
 	cmd := &cobra.Command{
 		Use:         "counter <prospect> <objection-id> --counter <text>",
 		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/prospects/{n}/objections/{oid}"},
@@ -145,14 +155,18 @@ func newObjectionCounterCmd() *cobra.Command {
 
 Countered is not resolved: it means we have answered, not that they accepted.
 "bk sales objection resolve" is the second event, and keeping them apart is what
-lets you see which counters actually worked.`,
-		Args: cobra.ExactArgs(2),
+lets you see which counters actually worked.
+
+The prospect may be given as the first argument or as --prospect <n>: the second
+is the spelling "bk sales comm log" uses, and carrying it over here used to
+dead-end.`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, oid, err := prospectAndChild(args, "objection")
+			n, oid, err := prospectAndChild(cmd, args, prospect, "objection")
 			if err != nil {
 				return err
 			}
@@ -173,26 +187,28 @@ lets you see which counters actually worked.`,
 			})
 		},
 	}
+	addProspectFlag(cmd, &prospect)
 	cmd.Flags().StringVar(&counter, "counter", "", "What we say back (required)")
 	_ = cmd.MarkFlagRequired("counter")
 	return cmd
 }
 
 func newObjectionResolveCmd() *cobra.Command {
-	return &cobra.Command{
+	var prospect int
+	cmd := &cobra.Command{
 		Use:         "resolve <prospect> <objection-id>",
 		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/prospects/{n}/objections/{oid}"},
 		Short:       "Mark an objection as settled",
 		Long: `Mark an objection resolved — they accepted the answer, or it stopped
 mattering. The record stays: an objection that was raised and settled is part of
 how the deal went.`,
-		Args: cobra.ExactArgs(2),
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, oid, err := prospectAndChild(args, "objection")
+			n, oid, err := prospectAndChild(cmd, args, prospect, "objection")
 			if err != nil {
 				return err
 			}
@@ -210,11 +226,14 @@ how the deal went.`,
 			})
 		},
 	}
+	addProspectFlag(cmd, &prospect)
+	return cmd
 }
 
 func newObjectionRemoveCmd() *cobra.Command {
 	var confirm string
 	var yes bool
+	var prospect int
 	cmd := &cobra.Command{
 		Use:         "rm <prospect> <objection-id> --confirm <type>",
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/prospects/{n}/objections/{oid}"},
@@ -229,13 +248,13 @@ To say it stopped mattering, use "bk sales objection resolve" — that keeps the
 record, which is almost always what you want.
 
 --confirm must be the objection's TYPE, as shown by "bk sales objection list".`,
-		Args: cobra.ExactArgs(2),
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, oid, err := prospectAndChild(args, "objection")
+			n, oid, err := prospectAndChild(cmd, args, prospect, "objection")
 			if err != nil {
 				return err
 			}
@@ -286,6 +305,7 @@ record, which is almost always what you want.
 			})
 		},
 	}
+	addProspectFlag(cmd, &prospect)
 	cmd.Flags().StringVar(&confirm, "confirm", "", "Repeat the objection TYPE to authorise (required)")
 	cmdutil.AddYesFlag(cmd, &yes)
 	return cmd

@@ -388,7 +388,7 @@ See [The embedded guide & skill](#the-embedded-guide--skill) for how to maintain
 | `bk login [--server URL] [--token]` | Browser flow, or headless `--token` (reads token from stdin). |
 | `bk logout` | Clear local config. |
 | `bk whoami` | Show current user (id, email, name, role, via). |
-| `bk meta` | Agent bootstrap (`GET /api/meta`): current user, active workspace, and **every workspace you belong to** (id, name, slug, role, active marker). Run it first and pick your target by name/slug, not the numeric id. `--ws <slug\|id>` previews another workspace's context without switching. |
+| `bk meta` | Agent bootstrap (`GET /api/meta`): current user, active workspace, and **every workspace you belong to** (id, name, slug, role, active marker). Run it first and pick your target by name/slug, not the numeric id. `--ws <slug\|id>` previews another workspace's context without switching. `--vocab <key>` prints ONE vocabulary flat (one value per line; a plain array under `--json`); `--vocab` with no key lists the keys, an unknown key errors naming them. A stray positional is now an error rather than silently ignored. |
 | `bk version` | Print version, commit, build date. |
 | `bk changelog [--full] [--reference] [--server URL]` | What changed + the current CLI version floor (`GET /api/changelog`). **Public — works before `bk login`.** |
 
@@ -1169,6 +1169,28 @@ Rules for topic files, enforced by `guide_test.go`:
   list live on the server; write *"run `bk meta`"* instead. The test fails the
   build on a hardcoded one.
 - Written for an agent: imperative, short, examples over prose.
+
+> **A FLAG DESCRIPTION IS NOT A GUIDE TOPIC, and since 2026-08-12 the sales
+> flags enumerate.** `bk sales doc add --kind` reads
+> `pdf | deck | image | video | link (required; `bk meta` for values)`. The rule
+> above is unchanged and still binding on `topics/*.md`; what changed is that the
+> same *prohibition* was costing round trips at the one place a caller is
+> actually standing when it needs the values.
+>
+> **The difference is the guard, not the wording.** A topic is prose with nothing
+> holding it to the source. The enumerations are generated from ONE map —
+> `cli/internal/commands/sales/vocab.go` — which
+> `apps/sales/lib/cli-vocabulary.test.ts` holds against
+> `apps/sales/lib/pipeline.ts`, red in both directions: a value added there and
+> not here, and a value here that is not there. `vocab_test.go` is the other
+> half, holding each FLAG to that map. Neither alone is sufficient.
+>
+> It is the trade `apps/sales/lib/db/label-default-color.test.ts` already takes
+> (SQL cannot import a constant); Go cannot import TypeScript either. **Do not
+> copy a vocabulary into a Go string by hand** — add it to that map, wire the
+> flag through `vocab()`, and add the row to `vocab_test.go`'s table.
+>
+> `bk meta --vocab <key>` is the live half and remains the authority.
 
 `bk guide` must stay **offline and unauthenticated** — it is what an agent runs
 when everything else is failing. Its `routes` annotation is `"none"`, and a test

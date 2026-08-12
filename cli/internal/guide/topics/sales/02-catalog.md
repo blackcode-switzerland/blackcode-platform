@@ -47,9 +47,16 @@ Rendering sends nothing and records nothing. It is a read.
 bk sales upload contract.pdf                     # → prints a URL
 bk sales doc add --title "Phase 2 offer" --kind <kind> --upload <url>
 bk sales doc add --title "Demo recording" --kind <kind> --url https://…
-bk sales doc link 4 --prospect 12
+bk sales doc add --title "Phase 2 offer" --kind <kind> --upload <url> \
+  --prospect 12 --prospect 14                    # create and attach in one call
+bk sales doc link 4 --prospect 12                # attach one that already exists
 bk sales doc list --prospect 12
 ```
+
+`--prospect`, `--product` and `--template` on `doc add` are repeatable and write
+the same links `doc link` does. If the document is created and a link then fails,
+the error says so and names the #number — **do not add it again**; attach the
+rest with `doc link`.
 
 A document is **either** a file stored against this app **or** an external link,
 never both, and the difference is not cosmetic: only a stored file is covered by

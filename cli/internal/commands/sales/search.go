@@ -96,7 +96,7 @@ than the addressable ones: a contact and an objection are searchable and have no
 			})
 		},
 	}
-	cmd.Flags().StringSliceVar(&types, "type", nil, "Restrict to these record types (`bk meta` for the list)")
-	cmd.Flags().IntVar(&limit, "limit", 0, "Max hits (`bk meta` for the cap)")
+	cmd.Flags().StringSliceVar(&types, "type", nil, "Restrict to these record types — "+vocab("search_types", "repeatable"))
+	cmd.Flags().IntVar(&limit, "limit", 0, "Max hits (bk meta for the cap)")
 	return cmd
 }

@@ -34,17 +34,18 @@ func newMatchCmd() *cobra.Command {
 }
 
 func newMatchListCmd() *cobra.Command {
-	return &cobra.Command{
+	var prospect int
+	cmd := &cobra.Command{
 		Use:         "list <prospect>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n}/matches"},
 		Short:       "What has been matched to this prospect",
-		Args:        cobra.ExactArgs(1),
+		Args:        cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, err := prospectNumber(args[0])
+			n, _, err := resolveProspect(cmd, args, prospect, 0)
 			if err != nil {
 				return err
 			}
@@ -83,14 +84,18 @@ func newMatchListCmd() *cobra.Command {
 			})
 		},
 	}
+	addProspectFlag(cmd, &prospect)
+	return cmd
 }
 
 func newMatchSetCmd() *cobra.Command {
 	var product, fit, template int
 	var why string
+	var prospect int
 	cmd := &cobra.Command{
-		Use:         "set <prospect> --product <n>",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/prospects/{n}/matches"},
+		Use: "set <prospect> --product <n>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n}," +
+			"POST /api/workspaces/{ws}/prospects/{n}/matches"},
 		Short:       "Record which product fits this prospect, and why",
 		Long: `Store your verdict for one prospect and one product.
 
@@ -102,14 +107,16 @@ worth writing: it is what the next person (or the next run) reads instead of
 guessing why this pairing was chosen.
 
 Running it again for the same pair REPLACES the verdict rather than adding a
-second one.`,
-		Args: cobra.ExactArgs(1),
+second one.
+
+The prospect may be given as the first argument or as --prospect <n>.`,
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, err := prospectNumber(args[0])
+			n, _, err := resolveProspect(cmd, args, prospect, 0)
 			if err != nil {
 				return err
 			}
@@ -129,12 +136,13 @@ second one.`,
 				return err
 			}
 			return output.Render(format, m, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "matched prospect #%d with product #%d (%s)\n",
-					n, m.ProductNumber, m.ProductName)
+				_, err := fmt.Fprintf(w, "matched prospect %s with product #%d (%s)\n",
+					prospectLabel(c, ws, n), m.ProductNumber, m.ProductName)
 				return err
 			})
 		},
 	}
+	addProspectFlag(cmd, &prospect)
 	cmd.Flags().IntVar(&product, "product", 0, "The product's #number (required)")
 	cmd.Flags().IntVar(&fit, "fit", 0, "How well it fits, 0-100 — your judgement, not a computed score")
 	cmd.Flags().IntVar(&template, "template", 0, "The template to lead with (its #number)")
@@ -146,6 +154,7 @@ second one.`,
 func newMatchClearCmd() *cobra.Command {
 	var product int
 	var yes bool
+	var prospect int
 	cmd := &cobra.Command{
 		Use:         "clear <prospect> --product <n>",
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/prospects/{n}/matches"},
@@ -155,9 +164,9 @@ func newMatchClearCmd() *cobra.Command {
 A match is a judgement with no bin state behind it, so this is permanent — but
 it is also cheap to redo, which is why it does not demand a name repeated back
 the way a record delete does.`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			n, err := prospectNumber(args[0])
+			n, _, err := resolveProspect(cmd, args, prospect, 0)
 			if err != nil {
 				return err
 			}
@@ -176,6 +185,7 @@ the way a record delete does.`,
 			return nil
 		},
 	}
+	addProspectFlag(cmd, &prospect)
 	cmd.Flags().IntVar(&product, "product", 0, "The product's #number (required)")
 	cmdutil.AddYesFlag(cmd, &yes)
 	_ = cmd.MarkFlagRequired("product")

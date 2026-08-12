@@ -36,17 +36,18 @@ func newJourneyCmd() *cobra.Command {
 }
 
 func newJourneyListCmd() *cobra.Command {
-	return &cobra.Command{
+	var prospect int
+	cmd := &cobra.Command{
 		Use:         "list <prospect>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n}/journey"},
 		Short:       "Show a prospect's journey",
-		Args:        cobra.ExactArgs(1),
+		Args:        cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, err := prospectNumber(args[0])
+			n, _, err := resolveProspect(cmd, args, prospect, 0)
 			if err != nil {
 				return err
 			}
@@ -76,13 +77,17 @@ func newJourneyListCmd() *cobra.Command {
 			})
 		},
 	}
+	addProspectFlag(cmd, &prospect)
+	return cmd
 }
 
 func newJourneyAddCmd() *cobra.Command {
 	var req client.AddJourneyStepRequest
+	var prospect int
 	cmd := &cobra.Command{
-		Use:         "add <prospect> --stage <stage>",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/prospects/{n}/journey"},
+		Use: "add <prospect> --stage <stage>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n}," +
+			"POST /api/workspaces/{ws}/prospects/{n}/journey"},
 		Short:       "Record a journey step WITHOUT moving the deal",
 		Long: `Add a step to the ladder without changing the prospect's stage.
 
@@ -93,14 +98,16 @@ This command is for the two cases where the deal did not move:
   --status upcoming   a rung ahead of where the deal is (no date, no actor)
   --at <timestamp>    a step that happened before this record existed
 
-Run "bk meta" for the current stage and status values.`,
-		Args: cobra.ExactArgs(1),
+Run "bk meta" for the current stage and status values.
+
+The prospect may be given as the first argument or as --prospect <n>.`,
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, err := prospectNumber(args[0])
+			n, _, err := resolveProspect(cmd, args, prospect, 0)
 			if err != nil {
 				return err
 			}
@@ -113,14 +120,15 @@ Run "bk meta" for the current stage and status values.`,
 				return err
 			}
 			return output.Render(format, step, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "recorded %s (%s) on prospect #%d — its stage is unchanged\n",
-					step.Stage, step.Status, n)
+				_, err := fmt.Fprintf(w, "recorded %s (%s) on prospect %s — its stage is unchanged\n",
+					step.Stage, step.Status, prospectLabel(c, ws, n))
 				return err
 			})
 		},
 	}
-	cmd.Flags().StringVar(&req.Stage, "stage", "", "The stage this step is about (required; `bk meta` for values)")
-	cmd.Flags().StringVar(&req.Status, "status", "", "done | current | upcoming (`bk meta` for values; default done)")
+	addProspectFlag(cmd, &prospect)
+	cmd.Flags().StringVar(&req.Stage, "stage", "", "The stage this step is about — "+vocab("stages", "required"))
+	cmd.Flags().StringVar(&req.Status, "status", "", vocab("stage_entry_statuses", "default done"))
 	cmd.Flags().StringVar(&req.Note, "note", "", "What happened at this step")
 	cmd.Flags().StringVar(&req.OccurredAt, "at", "", "When it happened, ISO 8601 (default now)")
 	_ = cmd.MarkFlagRequired("stage")

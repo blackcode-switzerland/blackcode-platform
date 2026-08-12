@@ -40,17 +40,18 @@ func newContactCmd() *cobra.Command {
 }
 
 func newContactListCmd() *cobra.Command {
-	return &cobra.Command{
+	var prospect int
+	cmd := &cobra.Command{
 		Use:         "list <prospect>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n}/contacts"},
 		Short:       "List a prospect's contacts",
-		Args:        cobra.ExactArgs(1),
+		Args:        cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, err := prospectNumber(args[0])
+			n, _, err := resolveProspect(cmd, args, prospect, 0)
 			if err != nil {
 				return err
 			}
@@ -84,28 +85,35 @@ func newContactListCmd() *cobra.Command {
 			})
 		},
 	}
+	addProspectFlag(cmd, &prospect)
+	return cmd
 }
 
 func newContactAddCmd() *cobra.Command {
 	var req client.ContactRequest
 	var primary bool
+	var prospect int
 	cmd := &cobra.Command{
-		Use:         "add <prospect> --name <person>",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/prospects/{n}/contacts"},
-		Short:       "Add a contact to a prospect",
+		Use: "add <prospect> --name <person>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n}," +
+			"POST /api/workspaces/{ws}/prospects/{n}/contacts"},
+		Short: "Add a contact to a prospect",
 		Long: `Add a decision maker.
 
 --primary marks this one as THE contact and demotes any other. At most one
 prospect contact is primary at a time, and naming a new one is taken to mean the
 old one is not — a 409 you would have to resolve in two calls is a worse product
-than doing the obvious thing.`,
-		Args: cobra.ExactArgs(1),
+than doing the obvious thing.
+
+The prospect may be given as the first argument or as --prospect <n>; both work
+everywhere in this app, and naming two different ones is an error.`,
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, err := prospectNumber(args[0])
+			n, _, err := resolveProspect(cmd, args, prospect, 0)
 			if err != nil {
 				return err
 			}
@@ -121,11 +129,15 @@ than doing the obvious thing.`,
 				return err
 			}
 			return output.Render(format, row, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "added contact %d to prospect #%d: %s\n", row.ID, n, row.Name)
+				// The company, not just the id: ten prospects in, the #number on
+				// its own no longer tells anybody which deal this landed on.
+				_, err := fmt.Fprintf(w, "added contact %d to prospect %s: %s\n",
+					row.ID, prospectLabel(c, ws, n), row.Name)
 				return err
 			})
 		},
 	}
+	addProspectFlag(cmd, &prospect)
 	cmd.Flags().StringVar(&req.Name, "name", "", "The person's name (required)")
 	cmd.Flags().StringVar(&req.Role, "role", "", "Their role (\"Co-founder · product\")")
 	cmd.Flags().StringVar(&req.Email, "email", "", "Email")
@@ -139,17 +151,18 @@ than doing the obvious thing.`,
 func newContactEditCmd() *cobra.Command {
 	var req client.ContactRequest
 	var primary bool
+	var prospect int
 	cmd := &cobra.Command{
 		Use:         "edit <prospect> <contact-id>",
 		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/prospects/{n}/contacts/{cid}"},
 		Short:       "Edit a contact",
-		Args:        cobra.ExactArgs(2),
+		Args:        cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, cid, err := prospectAndChild(args, "contact")
+			n, cid, err := prospectAndChild(cmd, args, prospect, "contact")
 			if err != nil {
 				return err
 			}
@@ -170,6 +183,7 @@ func newContactEditCmd() *cobra.Command {
 			})
 		},
 	}
+	addProspectFlag(cmd, &prospect)
 	cmd.Flags().StringVar(&req.Name, "name", "", "The person's name")
 	cmd.Flags().StringVar(&req.Role, "role", "", "Their role")
 	cmd.Flags().StringVar(&req.Email, "email", "", "Email")
@@ -182,6 +196,7 @@ func newContactEditCmd() *cobra.Command {
 func newContactRemoveCmd() *cobra.Command {
 	var confirm string
 	var yes bool
+	var prospect int
 	cmd := &cobra.Command{
 		Use:         "rm <prospect> <contact-id> --confirm <name>",
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/prospects/{n}/contacts/{cid}"},
@@ -190,13 +205,13 @@ func newContactRemoveCmd() *cobra.Command {
 
 --confirm must be the PERSON'S NAME at that id, not the id again. Repeating an
 id back proves nothing about whether it is the right one.`,
-		Args: cobra.ExactArgs(2),
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			n, cid, err := prospectAndChild(args, "contact")
+			n, cid, err := prospectAndChild(cmd, args, prospect, "contact")
 			if err != nil {
 				return err
 			}
@@ -242,6 +257,7 @@ id back proves nothing about whether it is the right one.`,
 			})
 		},
 	}
+	addProspectFlag(cmd, &prospect)
 	cmd.Flags().StringVar(&confirm, "confirm", "", "Repeat the contact's NAME to authorise the removal (required)")
 	cmdutil.AddYesFlag(cmd, &yes)
 	return cmd
@@ -250,15 +266,19 @@ id back proves nothing about whether it is the right one.`,
 // prospectAndChild parses `<prospect> <child-id>` — a #number then a row id.
 // One helper, so the asymmetry described at the top of this file is applied the
 // same way by every command that has it.
-func prospectAndChild(args []string, noun string) (int, int, error) {
-	n, err := prospectNumber(args[0])
+//
+// The prospect half goes through resolveProspect, so `--prospect 8 3` is the
+// same call as `8 3`. The CHILD id stays positional in both shapes: it is not a
+// second convention, it is the argument the command is about.
+func prospectAndChild(cmd *cobra.Command, args []string, prospectFlag int, noun string) (int, int, error) {
+	n, tail, err := resolveProspect(cmd, args, prospectFlag, 1)
 	if err != nil {
 		return 0, 0, err
 	}
-	id, err := strconv.Atoi(strings.TrimSpace(args[1]))
+	id, err := strconv.Atoi(strings.TrimSpace(tail[0]))
 	if err != nil || id <= 0 {
 		return 0, 0, fmt.Errorf("invalid %s id %q — it is the ID column of `bk sales %s list %d`",
-			noun, args[1], noun, n)
+			noun, tail[0], noun, n)
 	}
 	return n, id, nil
 }

@@ -127,6 +127,6 @@ Run "bk meta" for the values --ui-mode accepts.`,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&uiMode, "ui-mode", "", "What the web app renders — run `bk meta` for the values")
+	cmd.Flags().StringVar(&uiMode, "ui-mode", "", "What the web app renders — "+vocab("ui_modes"))
 	return cmd
 }

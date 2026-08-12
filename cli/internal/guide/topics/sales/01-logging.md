@@ -16,7 +16,12 @@ bk sales comm log --prospect 12 --channel <channel> --dir out \
   --subject "Revised quote" --body "Two milestones, 12k + 12k."
 ```
 
-`--dir out` is us to them, `in` is them to us. Run `bk meta` for the channels.
+`--dir out` is us to them, `in` is them to us. Run `bk meta --vocab channels`
+for the channels; the flag's own `--help` names them too, as a fast path.
+
+The prospect can also be the first argument — `bk sales comm log 12 --channel
+<channel> --dir out` — which is the shape `bk sales contact add` and the
+objection verbs use. Both work on every command in this app.
 
 **An internal note is a communication too.** This app has no comment threads, so
 a thought about a prospect that was not said to anybody goes in the log with the

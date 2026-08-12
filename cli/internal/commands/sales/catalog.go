@@ -74,7 +74,7 @@ func newProductListCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&category, "category", "", "Filter by category (`bk meta` for values)")
+	cmd.Flags().StringVar(&category, "category", "", "Filter by category — "+vocab("product_categories"))
 	cmd.Flags().StringVar(&query, "q", "", "Substring match on the name")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Max products to return")
 	return cmd
@@ -133,7 +133,7 @@ func newProductShowCmd() *cobra.Command {
 }
 
 func productFlags(cmd *cobra.Command, req *client.ProductRequest, fit, refs *[]string) {
-	cmd.Flags().StringVar(&req.Category, "category", "", "module | service | licence (required; `bk meta` for values)")
+	cmd.Flags().StringVar(&req.Category, "category", "", vocab("product_categories", "required"))
 	cmd.Flags().StringVar(&req.Name, "name", "", "Product name (required)")
 	cmd.Flags().StringVar(&req.PriceLabel, "price", "", "The price AS WRITTEN (\"from CHF 12,000\")")
 	cmd.Flags().StringVar(&req.PriceFrom, "price-from", "", "Lower bound, a plain amount")
@@ -296,9 +296,9 @@ func newTemplateListCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&channel, "channel", "", "Filter by channel (`bk meta` for values)")
-	cmd.Flags().StringVar(&category, "category", "", "Filter by category (`bk meta` for values)")
-	cmd.Flags().StringVar(&stage, "stage", "", "Filter by the stage it is for")
+	cmd.Flags().StringVar(&channel, "channel", "", "Filter by channel — "+vocab("template_channels"))
+	cmd.Flags().StringVar(&category, "category", "", "Filter by category — "+vocab("template_categories"))
+	cmd.Flags().StringVar(&stage, "stage", "", "Filter by the stage it is for — "+vocab("stages"))
 	cmd.Flags().StringVar(&query, "q", "", "Substring match on the name")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Max templates to return")
 	return cmd
@@ -426,9 +426,9 @@ func newTemplateEditCmd() *cobra.Command {
 }
 
 func templateFlags(cmd *cobra.Command, req *client.TemplateRequest) {
-	cmd.Flags().StringVar(&req.Channel, "channel", "", "email | whatsapp | call (required; `bk meta` for values)")
-	cmd.Flags().StringVar(&req.Category, "category", "", "Template category (required; `bk meta` for values)")
-	cmd.Flags().StringVar(&req.Stage, "stage", "", "The pipeline stage this template is for")
+	cmd.Flags().StringVar(&req.Channel, "channel", "", vocab("template_channels", "required"))
+	cmd.Flags().StringVar(&req.Category, "category", "", "Template category — "+vocab("template_categories", "required"))
+	cmd.Flags().StringVar(&req.Stage, "stage", "", "The pipeline stage this template is for — "+vocab("stages"))
 	cmd.Flags().StringVar(&req.Name, "name", "", "Template name (required)")
 	cmd.Flags().StringVar(&req.Subject, "subject", "", "Subject line, for an email template")
 	cmd.Flags().StringVar(&req.Body, "body", "", "The message, with {{placeholders}}")
@@ -568,7 +568,7 @@ attached to three prospects is one row with three links, never three copies.`,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&kind, "kind", "", "Filter by kind (`bk meta` for values)")
+	cmd.Flags().StringVar(&kind, "kind", "", "Filter by kind — "+vocab("document_kinds"))
 	cmd.Flags().StringVar(&query, "q", "", "Substring match on the title")
 	cmd.Flags().IntVar(&prospect, "prospect", 0, "Only documents linked to this prospect (its #number)")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Max documents to return")
@@ -643,10 +643,12 @@ func numbersOrDash(ns []int) string {
 func newDocAddCmd() *cobra.Command {
 	var req client.DocumentRequest
 	var tags []string
+	var prospects, products, templates []int
 	cmd := &cobra.Command{
-		Use:         "add --title <t> --kind <k> (--url <u> | --upload <u>)",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/documents"},
-		Short:       "Add a document to the library",
+		Use: "add --title <t> --kind <k> (--url <u> | --upload <u>)",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/documents," +
+			"POST /api/workspaces/{ws}/documents/{n}/links"},
+		Short: "Add a document to the library",
 		Long: `Add a file or a link to the one library.
 
 EXACTLY ONE location:
@@ -656,7 +658,11 @@ EXACTLY ONE location:
 
 The difference is not cosmetic: only an uploaded file is covered by the
 cross-app delete gate, and putting a stored file's URL in --url would hide it
-from the index that stops it being deleted while still in use.`,
+from the index that stops it being deleted while still in use.
+
+--prospect / --product / --template attach it as it is created, each repeatable.
+They are the same links "bk sales doc link" writes, done in one call; that
+command remains the way to attach a document that already exists.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -672,14 +678,32 @@ from the index that stops it being deleted while still in use.`,
 			if err != nil {
 				return err
 			}
-			return output.Render(format, d, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "added document #%d: %s\n%s\n", d.Number, d.Title, d.URN)
+			// The document EXISTS from here on, and every later failure has to say
+			// so. A caller told only "failed" adds it a second time — and this
+			// command's whole point is that it is two writes behind one call.
+			linked, err := linkNewDocument(c, ws, d, prospects, products, templates)
+			if err != nil {
+				return fmt.Errorf("document #%d (%s) WAS created; %w — attach the rest with "+
+					"`bk sales doc link %d …`, do not re-add it", d.Number, d.Title, err, d.Number)
+			}
+			return output.Render(format, linked, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "added document #%d: %s\n%s\n", linked.Number, linked.Title, linked.URN)
+				if err != nil {
+					return err
+				}
+				if n := len(prospects) + len(products) + len(templates); n > 0 {
+					_, err = fmt.Fprintf(w, "linked to prospects %s and products %s\n",
+						numbersOrDash(linked.Prospects), numbersOrDash(linked.Products))
+				}
 				return err
 			})
 		},
 	}
+	cmd.Flags().IntSliceVar(&prospects, "prospect", nil, "Attach to this prospect as it is created (repeatable)")
+	cmd.Flags().IntSliceVar(&products, "product", nil, "Attach to this product as it is created (repeatable)")
+	cmd.Flags().IntSliceVar(&templates, "template", nil, "Attach to this template as it is created (repeatable)")
 	cmd.Flags().StringVar(&req.Title, "title", "", "What the document is (required)")
-	cmd.Flags().StringVar(&req.Kind, "kind", "", "pdf | deck | image | video | link (required; `bk meta` for values)")
+	cmd.Flags().StringVar(&req.Kind, "kind", "", vocab("document_kinds", "required"))
 	cmd.Flags().StringVar(&req.UploadURL, "upload", "", "URL of a file uploaded to this app (this OR --url, exactly one)")
 	cmd.Flags().StringVar(&req.ExternalURL, "url", "", "An external link (this OR --upload, exactly one)")
 	cmd.Flags().StringVar(&req.Description, "description", "", "What it is for")
@@ -688,6 +712,52 @@ from the index that stops it being deleted while still in use.`,
 		_ = cmd.MarkFlagRequired(f)
 	}
 	return cmd
+}
+
+// linkNewDocument attaches a freshly created document to everything `doc add`
+// was given, one call per target because the route takes exactly one.
+//
+// It returns the LAST document state the server sent, so the confirmation
+// reports the links that actually landed rather than the ones that were asked
+// for. On the first failure it stops and reports which target failed — the
+// caller is mid-way through a partial attach, and "3 of 5" with no names is not
+// something anybody can act on.
+func linkNewDocument(c *client.Client, ws string, d *client.SalesDocument,
+	prospects, products, templates []int) (*client.SalesDocument, error) {
+	type target struct {
+		noun string
+		n    int
+	}
+	var targets []target
+	for _, n := range prospects {
+		targets = append(targets, target{"prospect", n})
+	}
+	for _, n := range products {
+		targets = append(targets, target{"product", n})
+	}
+	for _, n := range templates {
+		targets = append(targets, target{"template", n})
+	}
+
+	out := d
+	for _, t := range targets {
+		n := t.n
+		req := client.DocumentLinkRequest{}
+		switch t.noun {
+		case "prospect":
+			req.Prospect = &n
+		case "product":
+			req.Product = &n
+		case "template":
+			req.Template = &n
+		}
+		next, err := c.LinkDocument(ws, d.Number, req)
+		if err != nil {
+			return out, fmt.Errorf("linking it to %s #%d failed: %w", t.noun, n, err)
+		}
+		out = next
+	}
+	return out, nil
 }
 
 func newDocEditCmd() *cobra.Command {
@@ -728,7 +798,7 @@ whether the delete gate covers it. Remove this one and add the other.`,
 		},
 	}
 	cmd.Flags().StringVar(&req.Title, "title", "", "What the document is")
-	cmd.Flags().StringVar(&req.Kind, "kind", "", "Document kind (`bk meta` for values)")
+	cmd.Flags().StringVar(&req.Kind, "kind", "", "Document kind — "+vocab("document_kinds"))
 	cmd.Flags().StringVar(&req.Description, "description", "", "What it is for")
 	cmd.Flags().StringSliceVar(&tags, "tag", nil, "Tags (repeatable; replaces the set)")
 	return cmd

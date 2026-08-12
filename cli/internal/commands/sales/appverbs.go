@@ -93,10 +93,12 @@ func appOwnedVerbs() []*cobra.Command {
 }
 
 func newLabelAttachCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:         "attach <prospect> <label_id>",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/prospects/{n}/labels,GET /api/workspaces/{ws}/prospects/{n}/labels"},
-		Short:       "Attach a label to a prospect",
+	var prospect int
+	cmd := &cobra.Command{
+		Use: "attach <prospect> <label_id>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/prospects/{n}/labels," +
+			"GET /api/workspaces/{ws}/prospects/{n}/labels,GET /api/workspaces/{ws}/prospects/{n}"},
+		Short: "Attach a label to a prospect",
 		Long: `Attach a label to a prospect.
 
 The first argument is the prospect's #NUMBER; the second is the LABEL ID from
@@ -104,16 +106,18 @@ The first argument is the prospect's #NUMBER; the second is the LABEL ID from
 you asked for a state and that is the state.
 
 A label belonging to another app cannot be attached: labels are app-scoped, and
-that scope is what stops the issue tracker's labels filling this app's picker.`,
-		Args: cobra.ExactArgs(2),
+that scope is what stops the issue tracker's labels filling this app's picker.
+
+The prospect may be given as the first argument or as --prospect <n>.`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			n, err := prospectNumber(args[0])
+			n, tail, err := resolveProspect(cmd, args, prospect, 1)
 			if err != nil {
 				return err
 			}
-			labelID, err := strconv.Atoi(args[1])
+			labelID, err := strconv.Atoi(tail[0])
 			if err != nil || labelID <= 0 {
-				return fmt.Errorf("invalid label_id %q — run `bk sales label list` for the ids", args[1])
+				return fmt.Errorf("invalid label_id %q — run `bk sales label list` for the ids", tail[0])
 			}
 			c, ws, err := clientAndWorkspace()
 			if err != nil {
@@ -122,26 +126,33 @@ that scope is what stops the issue tracker's labels filling this app's picker.`,
 			if err := c.AttachProspectLabel(ws, n, labelID); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "attached label %d to prospect #%d\n", labelID, n)
+			fmt.Fprintf(cmd.OutOrStdout(), "attached label %d to prospect %s\n",
+				labelID, prospectLabel(c, ws, n))
 			return nil
 		},
 	}
+	addProspectFlag(cmd, &prospect)
+	return cmd
 }
 
 func newLabelDetachCmd() *cobra.Command {
-	return &cobra.Command{
+	var prospect int
+	cmd := &cobra.Command{
 		Use:         "detach <prospect> <label_id>",
 		Annotations: map[string]string{"routes": "DELETE /api/workspaces/{ws}/prospects/{n}/labels/{lid}"},
 		Short:       "Detach a label from a prospect",
-		Args:        cobra.ExactArgs(2),
+		Long: `Detach a label from a prospect.
+
+The prospect may be given as the first argument or as --prospect <n>.`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			n, err := prospectNumber(args[0])
+			n, tail, err := resolveProspect(cmd, args, prospect, 1)
 			if err != nil {
 				return err
 			}
-			labelID, err := strconv.Atoi(args[1])
+			labelID, err := strconv.Atoi(tail[0])
 			if err != nil || labelID <= 0 {
-				return fmt.Errorf("invalid label_id %q — run `bk sales prospect show %d` to see its labels", args[1], n)
+				return fmt.Errorf("invalid label_id %q — run `bk sales prospect show %d` to see its labels", tail[0], n)
 			}
 			c, ws, err := clientAndWorkspace()
 			if err != nil {
@@ -154,4 +165,6 @@ func newLabelDetachCmd() *cobra.Command {
 			return nil
 		},
 	}
+	addProspectFlag(cmd, &prospect)
+	return cmd
 }
