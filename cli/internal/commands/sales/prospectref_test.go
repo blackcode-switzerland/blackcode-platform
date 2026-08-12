@@ -156,3 +156,49 @@ func TestEveryProspectCommandAcceptsBothSpellings(t *testing.T) {
 			"finding the surface it is meant to check", checked)
 	}
 }
+
+// ...AND THE OTHER DIRECTION, which the walk above cannot see.
+//
+// It sweeps commands whose CANONICAL shape is positional. The four whose
+// canonical shape is the FLAG do not say `<prospect>` in their Use line, so
+// nothing above would notice if one of them stopped accepting the positional —
+// and that is half the change. They are listed by hand because a sweep over
+// "has a --prospect flag" would also catch `doc add`, `doc link`, `doc list`,
+// `meeting list` and `comm list`, where --prospect is a link target or a filter
+// and a leading positional would mean nothing.
+//
+// `prospect next` and `prospect stage` are here for the same reason: their Use
+// lines say `<n>`, not `<prospect>`, because under `bk sales prospect` the
+// prospect IS the noun.
+func TestTheFlagCanonicalCommandsAlsoTakeThePositional(t *testing.T) {
+	for _, path := range []string{
+		"comm log", "meeting schedule", "meeting log",
+		"prospect next", "prospect stage",
+	} {
+		t.Run(path, func(t *testing.T) {
+			cmd, _, err := NewGroup().Find(strings.Fields(path))
+			if err != nil {
+				t.Fatalf("`bk sales %s` does not resolve: %v — this list is stale", path, err)
+			}
+			if cmd.Flags().Lookup("prospect") == nil {
+				t.Fatalf("`bk sales %s` has no --prospect at all", path)
+			}
+			// The positional form has to be ACCEPTED by the arg validator. A
+			// command still on cobra.NoArgs/ExactArgs would refuse it before
+			// resolveProspect ever ran, and every other assertion here would
+			// still pass.
+			tail := 0
+			if path == "prospect stage" {
+				tail = 1 // <stage>
+			}
+			args := make([]string, tail+1)
+			for i := range args {
+				args[i] = "8"
+			}
+			if err := cmd.Args(cmd, args); err != nil {
+				t.Errorf("`bk sales %s` refuses the leading positional (%v), so the shape the "+
+					"prospect-first families use dead-ends here: %v", path, args, err)
+			}
+		})
+	}
+}
