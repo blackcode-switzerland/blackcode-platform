@@ -83,7 +83,20 @@ bk sales workspace use acme      # …and this one's, separately
 
 The two are different rows in different tables that may happen to share an id and
 a slug. Setting one does not move the other, and a slug only means something
-against the app it was resolved in. `bk meta` prints what each is.
+against the app it was resolved in.
+
+To see every app's at once — local state, no requests:
+
+```bash
+bk app list --no-probe
+   APP     SERVER                       WORKSPACE   REACHABLE
+*  issues  https://issues.blackcode.ch  acme        —
+   sales   https://sales.blackcode.ch   acme-sales  —
+```
+
+`bk meta` prints the same thing in its `routing` block, alongside where each
+command will be sent. `(none)` means you have not chosen a workspace in that app
+yet, which is a normal state and not an error.
 
 If you upgraded from an older `bk`, the single active workspace you had comes
 forward as your **home app's**, and no other app's — a slug resolved against one
@@ -194,8 +207,14 @@ bk issues issue create --title "Export fails for Helvetia" \
 
 A URN — `bc:<app>:<workspace>/<type>/<number>` — is an address any app can print
 and a human or agent can resolve. There is no command that records a relation
-between two apps' records; the `link` verb was removed on 2026-08-10 for that reason,
-because it needed one index that every app wrote into.
+between two apps' records, and that is a design decision rather than a gap: the
+`link` verb was removed on 2026-08-10 because it needed one index that every app
+wrote into, and no app can validate, update or clean up a row whose far end
+lives in a schema its database role cannot read.
+
+`bk guide platform/cross-app` walks a full two-app session, and says which
+things are per app by design — workspaces, documents, labels, uploads, inboxes
+— and which are genuinely shared.
 
 ## The verbs are not spelled the same everywhere
 

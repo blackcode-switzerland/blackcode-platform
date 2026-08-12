@@ -696,40 +696,11 @@ type Entity struct {
 	DeletedAt  *string `json:"deleted_at,omitempty" yaml:"deleted_at,omitempty"`
 }
 
-// Link is one relation, reported from the point of view of the URN asked about:
-// Direction says whether that URN is the from ("out") or the to ("in") side, and
-// the Other* fields describe the far end. Links are directed and stored once, so
-// this is how the same row reads from both sides.
-type Link struct {
-	Direction       string  `json:"direction" yaml:"direction"`
-	Rel             string  `json:"rel" yaml:"rel"`
-	FromURN         string  `json:"from_urn" yaml:"from_urn"`
-	ToURN           string  `json:"to_urn" yaml:"to_urn"`
-	OtherURN        string  `json:"other_urn" yaml:"other_urn"`
-	OtherApp        string  `json:"other_app" yaml:"other_app"`
-	OtherEntityType string  `json:"other_entity_type" yaml:"other_entity_type"`
-	OtherNumber     int     `json:"other_number" yaml:"other_number"`
-	OtherTitle      string  `json:"other_title" yaml:"other_title"`
-	OtherURL        *string `json:"other_url,omitempty" yaml:"other_url,omitempty"`
-	OtherDeleted    bool    `json:"other_deleted" yaml:"other_deleted"`
-	CreatedByName   *string `json:"created_by_name,omitempty" yaml:"created_by_name,omitempty"`
-	CreatedAt       *string `json:"created_at,omitempty" yaml:"created_at,omitempty"`
-}
-
-type CreateLinkRequest struct {
-	From string `json:"from"`
-	To   string `json:"to"`
-	Rel  string `json:"rel"`
-}
-
-type CreateLinkResponse struct {
-	From string `json:"from" yaml:"from"`
-	To   string `json:"to" yaml:"to"`
-	Rel  string `json:"rel" yaml:"rel"`
-	// False when the link already existed. Creating one twice is not an error —
-	// an agent retrying after a timeout must not see a failure.
-	Created bool `json:"created" yaml:"created"`
-}
+// `Link`, `CreateLinkRequest` and `CreateLinkResponse` were here until
+// 2026-08-12. They decoded `bk link`'s three responses; the command went on
+// 2026-08-10 and the route factory behind it went with these. Cross-app
+// references are not supported — the far end's URN goes in the record's own
+// text, which is a string and needs no type. `bk guide platform/cross-app`.
 
 // EntityDriftReport is the reconciliation job's answer: how many rows the
 // projection and the source tables disagree about, and which.

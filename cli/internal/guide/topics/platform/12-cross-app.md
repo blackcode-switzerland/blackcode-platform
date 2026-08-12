@@ -45,11 +45,13 @@ Get one from `bk <app> search`, from a `show` command, or from the `subject_urn`
 field on an activity entry. Do not hand-assemble one from parts you guessed. Run
 `bk meta` for the app slugs you can reach and the entity types each publishes.
 
-## Relating two apps' records, now that `link` is gone
+## Relating two apps' records: the URN goes in the record's own text
 
-The removed `link` verb recorded the relation in a table both apps read. There is no such table
-now, so the relation lives where a human and an agent will both find it — in the
-record's own text:
+**This is the design, not a workaround.** Say it that way to yourself before you
+go looking for the command that does it properly — there isn't one, and there is
+not going to be one.
+
+A relation between two apps' records lives in the text of one of them:
 
 ```bash
 bk sales prospect show 8              # prints bc:sales:acme/prospect/8
@@ -57,11 +59,33 @@ bk issues issue create --title "Export fails for Helvetia" \
   --description "Prospect: bc:sales:acme/prospect/8"
 ```
 
-That is a fact one app holds and neither can drift from, and it survives being
-read by a person. What it does not give you is a reverse lookup: nothing lists
-"every issue mentioning this prospect". Search the text instead —
-`bk issues search "prospect/8"` matches titles, and the app's own listing
-searches descriptions.
+Three properties, and they are why this is better than the table that used to
+hold it:
+
+- **It is a fact ONE app holds.** Nothing has to be kept in step with anything,
+  so nothing can fall out of step.
+- **It survives being read by a person.** A relation in a join table is invisible
+  unless something renders it; a URN in a summary is visible to whoever opens the
+  record, in the app, in the CLI, and in a database dump.
+- **It cannot be orphaned.** Deleting the far end leaves a string that still says
+  what was meant, rather than a row pointing at nothing.
+
+What it does not give you is a **reverse lookup**: nothing lists "every issue
+mentioning this prospect". Search the text instead — `bk issues search
+"prospect/8"` matches titles, and each app's own listing searches descriptions.
+
+### There is no cross-app link command, and this is why
+
+A `link` verb existed until 2026-08-10 and recorded the relation in one index
+every app wrote into. That index has had a **single writer** since. A link with
+one end in one app and one in another cannot be maintained by either of them: no
+app's database role can read another app's schema, so nothing can check that the
+far end exists, nothing can update it when it is renamed, and nothing can clean
+it up when it is deleted. A relation that can silently point at nothing is worse
+than no relation at all, because it looks like one.
+
+An old script that still calls it gets a non-zero exit and a sentence naming
+this page, so a run that hits one can recover inside the same run.
 
 ## Searching, per app
 
@@ -104,6 +128,101 @@ To see two apps' history, ask both. The binary is the connector:
 bk issues activity --since 24h
 bk sales activity --since 24h
 ```
+
+## What is per app, and what is genuinely shared
+
+This is the part that surprises people, so it is stated flatly rather than left
+to be discovered.
+
+**Shared — one of each, across every app:**
+
+| | |
+|---|---|
+| your account | one user record, one email |
+| your password | changed once, in any app, and it is changed everywhere |
+| sign-in | one login; switching apps needs no re-auth and no new shell |
+| your API token | one token, valid against every app you can reach |
+| this binary | one `bk`, one guide, one changelog |
+
+**Per app — one of each, PER APP, by design:**
+
+- workspaces, and which one is active
+- members and invitations
+- documents and uploads
+- labels
+- the inbox
+- history / activity
+- the recycle bin
+- search
+
+One rule explains the whole right-hand column: **each app owns its own tenancy.**
+A workspace belongs to exactly one app, and membership of it is the entire access
+gate. So a label, an upload, an invitation or a notification is a fact *about a
+workspace*, and a workspace belongs to one app — there is nowhere else for those
+things to live.
+
+Two consequences worth having in mind before you go looking for a command:
+
+- **There is no shared document library, and there will not be one.** Documents
+  hang off a workspace, and a workspace belongs to one app. A library spanning
+  apps would need a tenancy that belongs to none of them — which is the thing
+  every app was separated to stop depending on. Upload into the app that owns
+  the work, and reference it from the other by URN.
+- **The same slug in two apps is two different workspaces.** They may share an
+  id as well. Setting one app's active workspace does not move another's, and
+  resolving a slug only means something against the app you resolved it in.
+
+## A session across two apps, end to end
+
+Nothing forces you to pick one app. The connector is **you, driving this
+binary** — never a shared table.
+
+```bash
+# 1. Where am I, in every app? Local state; no requests with --no-probe.
+bk app list --no-probe
+   APP     SERVER                       WORKSPACE   REACHABLE
+*  issues  https://issues.blackcode.ch  acme        ok
+   sales   https://sales.blackcode.ch   acme-sales  ok
+
+# 2. Point each app at the workspace you mean. Once per app; they are separate.
+bk issues workspace use acme
+bk sales workspace use acme-sales
+
+# 3. Work in the app that OWNS the thing, and take its address with you.
+bk sales prospect show 8
+#8  Helvetia AG
+bc:sales:acme-sales/prospect/8        <- printed under the title
+
+# 4. Carry the address across, in the new record's own text.
+bk issues issue create --title "Export fails for Helvetia" \
+  --description "Prospect: bc:sales:acme-sales/prospect/8 — blocked on SSO"
+created #512
+
+# 5. And back the other way, so either record leads to the other.
+#    Not every `view`/`show` prints a URN — `bk <app> search` always does.
+bk issues search "#512"
+URN                          APP     TYPE   #    TITLE
+bc:issues:acme/issue/512     issues  issue  512  Export fails for Helvetia
+
+bk sales prospect edit 8 --summary "Blocked on bc:issues:acme/issue/512 — SSO"
+
+# 6. Two apps' history is two commands. There is no merged feed.
+bk issues activity --since 24h
+bk sales activity --since 24h
+```
+
+Step 5 is the one people skip. A URN written into only one of the two records is
+findable from one side only, and the side you will be standing on later is the
+one you did not write it into.
+
+Three reliable ways to get a URN, when a `show` does not print one: `bk <app>
+search` (the `URN` column, always present), the `subject_urn` field on an
+activity entry, and `bk meta` for the URN format and this app's slug. **Do not
+hand-assemble one from parts you guessed** — a URN that resolves to nothing is
+indistinguishable from a record that was deleted.
+
+`bk meta` prints the same routing block as step 1, plus your identity and the
+app address book, and it refreshes that address book while it is there.
 
 ## Which deployment answers
 

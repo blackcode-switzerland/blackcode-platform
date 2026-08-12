@@ -1,13 +1,18 @@
 package client
 
-// Client methods for the cross-app primitives (Phase 6): federated search over
-// platform.entities, typed links between URNs, and the reconciliation report.
+// Client methods for the entity index: search over `platform.entities`, and the
+// reconciliation report.
 //
-// All three are workspace-scoped even though a URN already names its workspace.
-// That is not redundancy for its own sake: the server decides which workspace the
+// Search is workspace-scoped even though a URN already names its workspace. That
+// is not redundancy for its own sake: the server decides which workspace the
 // caller may act in, and treating the workspace segment of a caller-supplied
-// string as an authorisation fact would be the one place a link could reach
-// across tenants.
+// string as an authorisation fact is how a read reaches across tenants.
+//
+// `ListLinks`, `CreateLink` and `DeleteLink` were here until 2026-08-12. They
+// called `/api/workspaces/{ws}/links` for `bk link`, a command removed on
+// 2026-08-10 whose route factory no app had mounted since. Cross-app references
+// are not supported; the far end's URN goes in the record's own text, which is a
+// string and needs no client method. `bk guide platform/cross-app`.
 
 import (
 	"fmt"
@@ -17,10 +22,6 @@ import (
 
 type entityListEnvelope struct {
 	Data []Entity `json:"data"`
-}
-
-type linkListEnvelope struct {
-	Data []Link `json:"data"`
 }
 
 // SearchEntities runs a federated search across every app's entities in the
@@ -49,48 +50,6 @@ func (c *Client) SearchEntities(query string, apps, types []string, limit int, i
 		return nil, err
 	}
 	return env.Data, nil
-}
-
-// ListLinks returns every link touching `urn`, in both directions.
-func (c *Client) ListLinks(urn string) ([]Link, error) {
-	q := url.Values{}
-	q.Set("urn", urn)
-	path, err := c.wsPath("links")
-	if err != nil {
-		return nil, err
-	}
-	var env linkListEnvelope
-	if err := c.get(path+"?"+q.Encode(), &env); err != nil {
-		return nil, err
-	}
-	return env.Data, nil
-}
-
-// CreateLink relates two URNs. Idempotent: the response says whether a row was
-// actually inserted, and creating the same link twice is a success either way.
-func (c *Client) CreateLink(from, to, rel string) (*CreateLinkResponse, error) {
-	path, err := c.wsPath("links")
-	if err != nil {
-		return nil, err
-	}
-	var out CreateLinkResponse
-	if err := c.postJSON(path, CreateLinkRequest{From: from, To: to, Rel: rel}, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
-}
-
-// DeleteLink removes one directed relation. All three components identify it.
-func (c *Client) DeleteLink(from, to, rel string) error {
-	q := url.Values{}
-	q.Set("from", from)
-	q.Set("to", to)
-	q.Set("rel", rel)
-	path, err := c.wsPath("links")
-	if err != nil {
-		return err
-	}
-	return c.deleteJSON(path+"?"+q.Encode(), nil, nil)
 }
 
 // EntityDrift runs the reconciliation job. `repair` switches it from a read-only
