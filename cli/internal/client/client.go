@@ -178,7 +178,14 @@ func New(baseURL, token, workspaceSlug string) *Client {
 		BaseURL:       strings.TrimRight(baseURL, "/"),
 		Token:         token,
 		WorkspaceSlug: workspaceSlug,
-		HTTP:          &http.Client{Timeout: 30 * time.Second},
+		// NEVER auto-follow. Go's own policy strips `Authorization` across a
+		// domain, which turns a deployment's canonical-host redirect into a 401
+		// on every authenticated command — see doFollowingOurOwnRedirect, which
+		// does the following instead and can carry credentials one hop.
+		HTTP: &http.Client{
+			Timeout:       30 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
 	}
 }
 
@@ -197,6 +204,110 @@ func (c *Client) wsPath(suffix string) (string, error) {
 	return "/api/workspaces/" + c.WorkspaceSlug + "/" + suffix, nil
 }
 
+// doFollowingOurOwnRedirect performs the request and follows redirects ITSELF,
+// carrying credentials across exactly one cross-origin hop.
+//
+// ---------------------------------------------------------------------------
+// WHY: GO DROPS THE BEARER TOKEN ON A CROSS-DOMAIN REDIRECT, SILENTLY
+// ---------------------------------------------------------------------------
+// `net/http` strips `Authorization` when a redirect crosses to a different
+// domain. That is correct default behaviour — but it means a deployment that
+// redirects its old hostname to its canonical one turns EVERY authenticated
+// command into a 401, with nothing on screen connecting the two.
+//
+// MEASURED 2026-08-12 against production, the day a redirect was put on the old
+// hostname:
+//
+//	redirect #1 -> https://issues.blackcode.ch/api/me
+//	Authorization on the FOLLOW-UP request: ""
+//	final status: 401 Unauthorized
+//
+// Every user whose config still named the old host lost every authenticated
+// command at once — INCLUDING `bk login`, whose token check is an authenticated
+// GET, so the one command that repairs the config could not complete. A
+// self-healing address book is worth nothing when the request that heals it is
+// the one being refused.
+//
+// ---------------------------------------------------------------------------
+// WHY RE-ATTACHING THE TOKEN IS SAFE HERE, AND WHERE THE LINE IS
+// ---------------------------------------------------------------------------
+// We already trust the host we asked: it receives this token on every request.
+// A redirect from it is that host DELEGATING to another address — the same
+// signal `RedirectedOrigin` already treats as authoritative for the address
+// book. Honouring it with credentials is the same trust decision, made once.
+//
+// Four limits, because "resend the token wherever you are told" is a
+// credential-leak primitive:
+//
+//   - **Never a downgrade.** https -> http is followed WITHOUT credentials.
+//     (Not "https only": a local dev server is plain http, and http -> http
+//     exposes nothing a listener could not already read.)
+//   - **One credentialed cross-origin hop.** After it, a further cross-origin
+//     redirect drops the token again, exactly as Go would.
+//   - **Same method and body**, replayed from `GetBody`, so a POST is not
+//     silently downgraded to a GET.
+//   - A same-origin redirect is followed normally; nothing was stripped.
+func (c *Client) doFollowingOurOwnRedirect(req *http.Request) (*http.Response, error) {
+	const maxHops = 5
+	credentialedHopUsed := false
+
+	for hop := 0; ; hop++ {
+		resp, err := c.HTTP.Do(req)
+		if err != nil || resp.StatusCode < 300 || resp.StatusCode > 399 {
+			return resp, err
+		}
+		loc := resp.Header.Get("Location")
+		if loc == "" || hop >= maxHops {
+			return resp, nil
+		}
+		target, perr := req.URL.Parse(loc)
+		if perr != nil {
+			return resp, nil
+		}
+
+		sameOrigin := strings.EqualFold(originOf(target), originOf(req.URL))
+		// The address book learns from this even when we do not carry the token
+		// across — it is the deployment naming itself either way.
+		if !sameOrigin && originOf(target) != "" {
+			RedirectedOrigin = originOf(target)
+		}
+
+		// NEVER DOWNGRADE. The rule is not "https only" — it is "not less secure
+		// than we already were". A first version demanded https on the target
+		// and its own positive test could not pass, because a local dev server
+		// is plain http and an http->http redirect strips nothing a listener
+		// could not already read. What must never happen is https -> http.
+		downgrade := strings.EqualFold(req.URL.Scheme, "https") && !strings.EqualFold(target.Scheme, "https")
+		carry := sameOrigin ||
+			(c.Token != "" && !downgrade && !credentialedHopUsed)
+		if !sameOrigin && carry {
+			credentialedHopUsed = true
+			if Verbose {
+				fmt.Fprintf(os.Stderr, "· %s redirected to %s — re-issuing with credentials\n",
+					originOf(req.URL), originOf(target))
+			}
+		}
+
+		var body io.ReadCloser
+		if req.GetBody != nil {
+			if body, err = req.GetBody(); err != nil {
+				return resp, nil
+			}
+		}
+		next, rerr := http.NewRequest(req.Method, target.String(), body)
+		if rerr != nil {
+			return resp, nil
+		}
+		next.Header = req.Header.Clone()
+		if !carry {
+			next.Header.Del("Authorization")
+			next.Header.Del("Cookie")
+		}
+		_ = resp.Body.Close()
+		req = next
+	}
+}
+
 func (c *Client) do(req *http.Request, out any) error {
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
@@ -210,7 +321,7 @@ func (c *Client) do(req *http.Request, out any) error {
 	}
 
 	started := time.Now()
-	resp, err := c.HTTP.Do(req)
+	resp, err := c.doFollowingOurOwnRedirect(req)
 	elapsed := time.Since(started)
 	if err != nil {
 		// A dial/TLS/DNS failure, not an API answer. Since 2.0.0 the address
@@ -245,11 +356,8 @@ func (c *Client) do(req *http.Request, out any) error {
 	//
 	// Recorded, not acted on here: `bk login` and `bk meta` are where the
 	// address book is written. See applyAppRegistry.
-	if resp.Request != nil && resp.Request.URL != nil && req.URL != nil {
-		if got, asked := originOf(resp.Request.URL), originOf(req.URL); got != "" && !strings.EqualFold(got, asked) {
-			RedirectedOrigin = got
-		}
-	}
+	// (Recorded inside doFollowingOurOwnRedirect, which is the only thing that
+	// sees a 3xx now that the transport no longer follows them itself.)
 	// Hard floor: if we're below the minimum supported version, refuse the
 	// request outcome so every command fails fast and the user must upgrade.
 	if version.Parsable(version.Version) && MinSeen != "" && version.Less(version.Version, MinSeen) {

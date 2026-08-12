@@ -7,6 +7,51 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-12 — a moved hostname stops logging you out
+
+**Fixes a live authentication failure.** If `bk` reported *"Authentication
+required (401)"* on every command today, this is why, and the workaround until
+you upgrade is:
+
+```bash
+bk login --server https://issues.blackcode.ch
+```
+
+**What happened.** `bk login`'s built-in default was `https://bc-issues.vercel.app`
+until 2026-08-11, so anyone who logged in without `--server` stored it. Both
+addresses answered, so nothing was wrong. On 2026-08-12 a redirect was put on the
+old hostname pointing at the canonical one — and **Go's HTTP client deletes the
+`Authorization` header when a redirect crosses to a different domain.** That is
+correct, documented language behaviour, not a bug in Go.
+
+So the request was redirected, arrived with no credentials, and the server
+answered 401. Measured against production:
+
+```
+redirect #1 -> https://issues.blackcode.ch/api/me
+Authorization on the FOLLOW-UP request: ""
+final status: 401 Unauthorized
+```
+
+Every authenticated command failed at once — **including `bk login`**, whose
+token check is an authenticated request. So the one command that repairs a stale
+address could not complete, and the self-healing address book added on
+2026-08-11 could never fire: the request that heals it was the one being refused.
+
+**The fix.** The CLI now follows redirects itself and re-issues the request with
+credentials across **one** cross-origin hop, then records the canonical address
+so the hop happens once. A moved hostname repairs itself.
+
+Three limits, because resending a token wherever you are told is a
+credential-leak primitive:
+
+- **Never a downgrade.** `https` → `http` is followed WITHOUT credentials.
+- **One credentialed cross-origin hop.** A chain cannot walk the token onward.
+- **Method and body preserved**, so a `POST` is not silently downgraded to a
+  `GET`.
+
+Nothing changes for anyone whose address was already canonical.
+
 ## 2026-08-12 — Windows is a first-class platform: the config path a message names is the one that exists
 
 **Not breaking.** Nothing renamed, no route changed. Windows users were being
