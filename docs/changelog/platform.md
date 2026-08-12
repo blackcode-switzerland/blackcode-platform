@@ -7,6 +7,32 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-12 — Windows is a first-class platform: the config path a message names is the one that exists
+
+**Not breaking.** Nothing renamed, no route changed. Windows users were being
+handed instructions that could not work on their machine.
+
+### `bk` prints the config file's REAL path
+
+`bk login --help`, `bk app use --help` and `bk meta`'s `routing.note` all spelled
+the location as the literal `~/.config/bk/config.json`. On Windows the file is at
+`C:\Users\<you>\.config\bk\config.json`, and `~` is not expanded by `cmd.exe` at
+all — so every one of those messages named a path that does not exist for the
+users they were meant to help. Under `BK_CONFIG_DIR` they were wrong on every
+platform, including the one they were written on.
+
+All three now print the absolute path this binary is actually reading, for the OS
+actually running it, and following `BK_CONFIG_DIR` when it is set:
+
+```bash
+bk meta --json | jq -r .routing.note      # names the exact file
+```
+
+Nothing to adapt: a message that used to be a dead end now names a file you can
+open. `config.DisplayPath()` is the single source, and a guard
+(`cli/internal/config/display_path_test.go`) parses every Go file in the CLI and
+fails the build if a string literal spells the path itself again.
+
 ## 2026-08-12 — every app's active workspace is visible in one command, and `bk link`'s dead code is gone
 
 **Not breaking.** Two things, both closing the same finding: what crosses an app

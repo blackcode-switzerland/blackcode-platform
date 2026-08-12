@@ -42,8 +42,17 @@ bk login --server https://your-host        # self-hosted / non-default server
 echo "$MY_TOKEN" | bk login --token        # headless: read a token from stdin
 ```
 
-`bk login` stores the token in `~/.config/bk/config.json` (mode 0600) and sends
-it on every request. Check it with `bk whoami`; clear it with `bk logout`.
+`bk login` stores the token in a per-user config file and sends it on every
+request. Check it with `bk whoami`; clear it with `bk logout`.
+
+| OS | Where the config file is |
+|---|---|
+| macOS / Linux | `~/.config/bk/config.json` (mode 0600) |
+| Windows | `C:\Users\<you>\.config\bk\config.json` |
+| anywhere, overridden | `$BK_CONFIG_DIR/config.json` |
+
+`bk meta` prints the exact path this binary is using, under `routing.note` — ask
+it rather than guessing, and note that `~` is not expanded by `cmd.exe`.
 
 **`--token` is a switch, not a value.** It reads the token from **stdin**, so
 the secret never enters your shell history, your process list or a CI log.
@@ -66,8 +75,35 @@ cmd.exe /c npm install -g @blackcode_sa/bc-issues      # or bypass PowerShell
 cmd.exe /c bk whoami
 ```
 
+The installer checks the policy itself and prints both lines when it will bite,
+so you should see this before you hit it.
+
+**PATH, in PowerShell.** The `export PATH=…` above is a POSIX shell; the
+equivalents are:
+
+```powershell
+$env:PATH = "$(npm prefix -g);$env:PATH"     # this session only
+```
+
+```cmd
+setx PATH "%PATH%;%APPDATA%\npm"              # persistent, new shells only
+```
+
+**The piped token form, in PowerShell.** `echo <token> | bk login --token` works
+— `echo` is `Write-Output` — but the pipeline to a native binary is encoded with
+`$OutputEncoding`, which in Windows PowerShell 5.1 is not UTF-8. `bk` strips a
+UTF-8 or UTF-16 byte-order mark and decodes UTF-16 before validating, so a token
+piped from any of them arrives intact. If a token you are sure is right is still
+refused, take the pipeline out of the picture entirely — run `--token` with no
+pipe and it prompts, with the input hidden:
+
+```powershell
+bk login --token        # no pipe: prompts for the token, input hidden
+```
+
 If an install aborts partway, a second attempt can fail with `EBUSY` on the bin
-shim — the first attempt still holds it. Close the shell and retry.
+shim — the first attempt still holds it. Close the shell and retry; the
+installer says so when it happens.
 
 **One login covers every app.** `--server` may name ANY deployment — every app
 serves the browser authorize page — and the token works on all of them. Logging

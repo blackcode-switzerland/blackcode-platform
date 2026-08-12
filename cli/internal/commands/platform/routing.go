@@ -262,7 +262,7 @@ func buildRoutingBlock(cfg *config.Config) routingBlock {
 			"cross_app": home,
 			"app_owned": "app_servers[<app>] — `bk <app> …` always resolves through the map, never falls back",
 		},
-		Note: "local to this machine (~/.config/bk/config.json); refreshed by `bk login` and `bk meta`, " +
+		Note: "local to this machine (" + config.DisplayPath() + "); refreshed by `bk login` and `bk meta`, " +
 			"switched by `bk app use <slug>` and `bk <app> workspace use <slug>`, overridden for one " +
 			"command by `--app-server <slug>` and `--ws <slug>`",
 	}
@@ -339,7 +339,7 @@ to the issues app, whatever the home app is, because its name says so. That is
 the point of the 2.1.0 verb move — no hidden state decides where a command lands,
 and each app remembers its own active workspace.
 
-This is local state, written to ~/.config/bk/config.json. Run "bk app list" to
+This is local state, written to ` + config.DisplayPath() + `. Run "bk app list" to
 see every app and its server, or "bk meta" to refresh the registry from the
 platform. Use "--app-server <slug>" to redirect a single command instead.`,
 		Args: cobra.ExactArgs(1),

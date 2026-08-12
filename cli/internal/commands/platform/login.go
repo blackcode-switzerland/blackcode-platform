@@ -31,7 +31,7 @@ func newLoginCmd() *cobra.Command {
 		Short:       "Authenticate against any Blackcode app's server",
 		Long: `By default, opens a browser to /cli/authorize on the server, captures
 the minted token via a loopback HTTP server, and saves credentials to
-~/.config/bk/config.json (mode 0600).
+` + config.DisplayPath() + ` (mode 0600).
 
 ONE LOGIN COVERS EVERY APP. --server names whichever app's URL you have; the
 token it mints is valid against all of them, and `+"`bk login`"+` also learns the

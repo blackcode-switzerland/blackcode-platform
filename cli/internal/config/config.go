@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -182,6 +183,43 @@ func path() (string, error) {
 		return "", err
 	}
 	return filepath.Join(d, "config.json"), nil
+}
+
+// DisplayPath is where the config file ACTUALLY IS on the machine running this
+// binary, for printing to a human.
+//
+// ---------------------------------------------------------------------------
+// WHY THIS EXISTS
+// ---------------------------------------------------------------------------
+// Three user-facing strings — `bk login`'s help, `bk app use`'s help and the
+// `note` in `bk app routing` — spelled the location as the literal
+// `~/.config/bk/config.json`. On Windows the file is at
+// `C:\Users\<you>\.config\bk\config.json`, so every one of those messages named
+// a path that does not exist for the users this was written for, and `~` is not
+// expanded by cmd.exe at all. A message naming an unreachable path is a dead
+// end, which is the one thing this CLI's error and help text is not allowed to
+// be.
+//
+// It also answers correctly under `BK_CONFIG_DIR`, which is how every agent and
+// every test in this repo isolates itself — and until now the help text said
+// `~/.config/bk/config.json` while the process was reading somewhere else
+// entirely.
+//
+// The ABSOLUTE path is deliberate over a `~`/`%USERPROFILE%` abbreviation:
+// there is no one abbreviation that expands in bash, cmd.exe AND PowerShell,
+// and the whole point is that the reader can paste it. The placeholder fallback
+// is used only when the OS cannot tell us where home is.
+func DisplayPath() string {
+	p, err := path()
+	if err == nil {
+		return p
+	}
+	// os.UserHomeDir failed (no $HOME / no %USERPROFILE%). Name the shape rather
+	// than a location we would be inventing.
+	if runtime.GOOS == "windows" {
+		return filepath.Join("%USERPROFILE%", ".config", "bk", "config.json")
+	}
+	return filepath.Join("~", ".config", "bk", "config.json")
 }
 
 func Load() (*Config, error) {

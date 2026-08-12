@@ -43,8 +43,11 @@ cross-compile into `dist/`.
 
 `bk login` opens your browser to `/cli/authorize`, captures the minted token via
 a loopback HTTP server, validates it against `/api/me`, and saves
-credentials to `~/.config/bk/config.json` (mode 0600). Revoke any time from
-**Settings → API Tokens**.
+credentials to `~/.config/bk/config.json` on macOS/Linux, or
+`C:\Users\<you>\.config\bk\config.json` on Windows (mode 0600 where the OS has
+one). `bk meta` prints the exact path this binary uses, under `routing.note` —
+`config.DisplayPath()` is the one function that answers this, and no help string
+may spell the path itself. Revoke any time from **Settings → API Tokens**.
 
 For headless / CI / agent use, paste a token from stdin instead:
 
@@ -210,7 +213,8 @@ that `bk meta` should serve.
 
 ## Environment
 
-- `BK_CONFIG_DIR` — override the config directory (default `~/.config/bk`).
+- `BK_CONFIG_DIR` — override the config directory (default `~/.config/bk`, or
+  `%USERPROFILE%\.config\bk` on Windows).
   **Set this in any automated context**: the default points at whatever server
   the developer last logged into, which is usually production.
 - `BK_NO_PROMPT=1` — skip every interactive confirmation prompt. Note that this
