@@ -3,6 +3,7 @@ package cmdutil
 import (
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -206,12 +207,50 @@ func ClientForApp(cfg *config.Config, app string) (*client.Client, error) {
 		}
 		return nil, err
 	}
-	c := client.New(base, cfg.Token, ClientWorkspaceSlug(cfg))
+	ws := ClientWorkspaceSlug(cfg)
+	logRouting(app, reason, base, ws)
+	c := client.New(base, cfg.Token, ws)
 	// The client carries the app so a transport failure can say WHICH app's
 	// address was wrong, rather than printing a bare dial error and leaving the
 	// caller to work out where the URL came from.
 	c.App = app
 	return c, nil
+}
+
+// logRouting prints, under -v, the three decisions this file makes and WHY.
+//
+// ---------------------------------------------------------------------------
+// THE GAP THIS CLOSES (issue #10, the `--verbose` audit)
+// ---------------------------------------------------------------------------
+// The hardest failure class in this CLI is routing: which app, which server,
+// which workspace — each drawn from a different place (a command-group pin, a
+// --app-server override, the home app, --ws, the per-app active workspace), and
+// none of it was visible at any verbosity. -v printed a URL, which is the ANSWER
+// with the reasoning removed, and `bk meta` prints the config rather than what
+// THIS invocation resolved.
+//
+// `--ws` is called out separately because it is the one that produces a
+// convincing wrong answer: a command run against a workspace the caller did not
+// mean returns 200 and real data.
+func logRouting(app, reason, base, ws string) {
+	if !client.Verbose {
+		return
+	}
+	if app == "" {
+		app = "(none)"
+	}
+	if reason == "" {
+		reason = "home server"
+	}
+	fmt.Fprintf(os.Stderr, "· app %s → %s  [%s]\n", app, base, reason)
+	switch {
+	case ws == "":
+		fmt.Fprintf(os.Stderr, "· workspace: none set for %s\n", app)
+	case strings.TrimSpace(WSOverride) != "":
+		fmt.Fprintf(os.Stderr, "· workspace %s  [--ws, this command only]\n", ws)
+	default:
+		fmt.Fprintf(os.Stderr, "· workspace %s  [active workspace for %s]\n", ws, app)
+	}
 }
 
 // ResolveWorkspaceRef returns either the slug/id explicitly given as the first

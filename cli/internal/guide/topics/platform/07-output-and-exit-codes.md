@@ -16,7 +16,32 @@ Global flags, available on every command:
 |---|---|
 | `--json` / `--yaml` / `--yml` / `-o FORMAT` | output format (default `table`) |
 | `--ws <slug\|id>` | target one command at another workspace |
-| `-v` / `--verbose` | log each HTTP request/response to stderr (or `BK_DEBUG=1`) |
+| `-v` / `--verbose` | trace the whole run to stderr (or `BK_DEBUG=1`) |
+
+## `-v` — what it shows
+
+```
+· bk <version> — config <path>          which config file this run is reading
+· command: bk issues issue edit         the command cobra resolved
+· app issues → https://…  [pinned by the `bk issues …` command group]
+· workspace demo-ws  [--ws, this command only]
+→ PATCH https://…/api/workspaces/demo-ws/issues/5
+  body: {"title":"hello there"}         what was actually sent
+← 400 Bad Request (16 bytes, 41ms)
+  {"error":"nope"}
+```
+
+The first four lines print for **every** command, including the ones that make no
+request at all — so `bk -v app use`, `bk -v guide` and a command that fails before
+it reaches the network still say which config and which routing they used.
+
+Reach for it when an answer is *wrong* rather than absent: the routing lines name
+which app, which server and which workspace, and where each came from. A command
+run against a workspace you did not mean returns 200 and real data.
+
+**Headers are never printed, at any verbosity.** The `Authorization` header
+carries your token and this output goes into bug reports. A non-JSON request body
+(an upload) is described rather than dumped.
 
 ## Shapes
 

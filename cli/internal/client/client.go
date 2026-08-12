@@ -206,9 +206,12 @@ func (c *Client) do(req *http.Request, out any) error {
 
 	if Verbose {
 		fmt.Fprintf(os.Stderr, "→ %s %s\n", req.Method, req.URL.String())
+		logRequestBody(req)
 	}
 
+	started := time.Now()
 	resp, err := c.HTTP.Do(req)
+	elapsed := time.Since(started)
 	if err != nil {
 		// A dial/TLS/DNS failure, not an API answer. Since 2.0.0 the address
 		// came out of the app registry rather than a single configured server,
@@ -259,7 +262,17 @@ func (c *Client) do(req *http.Request, out any) error {
 	}
 
 	if Verbose {
-		fmt.Fprintf(os.Stderr, "← %d %s (%d bytes)\n", resp.StatusCode, http.StatusText(resp.StatusCode), len(body))
+		fmt.Fprintf(os.Stderr, "← %d %s (%d bytes, %s)\n",
+			resp.StatusCode, http.StatusText(resp.StatusCode), len(body), elapsed.Round(time.Millisecond))
+		// A REDIRECT IS INVISIBLE OTHERWISE. Go follows it transparently, so a
+		// command answered by a host nobody named looks identical to one answered
+		// by the host in the config — and the address is sticky (see the block
+		// above). Under -v it is the difference between "why is this 404" and
+		// "because you are talking to a different deployment".
+		if RedirectedOrigin != "" && !strings.EqualFold(RedirectedOrigin, originOf(req.URL)) {
+			fmt.Fprintf(os.Stderr, "  redirected to %s — that host is now the canonical address for this app\n",
+				RedirectedOrigin)
+		}
 		if len(body) > 0 {
 			fmt.Fprintf(os.Stderr, "  %s\n", truncate(string(body), 2000))
 		}
@@ -301,6 +314,46 @@ func (c *Client) do(req *http.Request, out any) error {
 		return fmt.Errorf("decode response: %w (body=%q)", err, truncate(string(body), 200))
 	}
 	return nil
+}
+
+// logRequestBody prints what a write command actually SENT.
+//
+// ---------------------------------------------------------------------------
+// THE GAP THIS CLOSES (issue #10, the `--verbose` audit)
+// ---------------------------------------------------------------------------
+// -v logged the request LINE and the whole response, and nothing in between. So
+// the single most common debugging question — "a 400 on `issue edit`; what did
+// it send?" — was the one thing -v could not answer, and the caller was left
+// re-deriving the payload from flag parsing by eye.
+//
+// Two things it deliberately does NOT do:
+//
+//   - **Headers are never printed.** The Authorization header is set two lines
+//     above this and carries the bearer token. -v output goes into bug reports
+//     and CI logs, and a debug flag that leaks a credential is a worse bug than
+//     any it helps find. There is no --verbose level that turns this on.
+//   - **Non-JSON bodies are described, not dumped.** An upload is a multipart
+//     body of arbitrary size; printing it would bury the session in binary and
+//     could itself be what makes a failure unreadable.
+func logRequestBody(req *http.Request) {
+	if req.Body == nil || req.GetBody == nil {
+		return
+	}
+	ct := req.Header.Get("Content-Type")
+	if ct != "" && !strings.HasPrefix(ct, "application/json") {
+		fmt.Fprintf(os.Stderr, "  body: %s, %d bytes (not shown)\n", ct, req.ContentLength)
+		return
+	}
+	rc, err := req.GetBody()
+	if err != nil {
+		return
+	}
+	defer rc.Close()
+	b, err := io.ReadAll(io.LimitReader(rc, 4096))
+	if err != nil || len(bytes.TrimSpace(b)) == 0 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "  body: %s\n", truncate(strings.TrimSpace(string(b)), 2000))
 }
 
 func truncate(s string, n int) string {

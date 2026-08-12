@@ -11,6 +11,7 @@ import (
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/platform"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/sales"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/scaffold"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/version"
 	"github.com/spf13/cobra"
@@ -61,7 +62,7 @@ Global flags:
   -o table|json|yaml|yml   output format (default: table)
   --json / --yaml / --yml  shortcuts; piping to jq/yq is intended
   --ws <slug|id>           target ONE command at another workspace
-  -v / --verbose           log each HTTP request/response to stderr
+  -v / --verbose           trace config, routing, request and response to stderr
 
 Exit codes (stable; for branching in scripts/agents):
   0 ok   1 generic   2 usage   3 auth(401)   4 perm(403)
@@ -170,6 +171,22 @@ func NewRoot() *cobra.Command {
 			// Verbose can be turned on per-invocation (--verbose) or via env.
 			if cmdutil.VerboseFlag || os.Getenv("BK_DEBUG") == "1" {
 				client.Verbose = true
+				// THE HEADER FIRES FOR EVERY COMMAND, INCLUDING THE ONES THAT
+				// MAKE NO REQUEST. -v used to be defined entirely inside the
+				// HTTP client, so `bk -v app use sales`, `bk -v guide` and every
+				// local-state command printed absolutely nothing — a debug flag
+				// that is silent is indistinguishable from a broken one, and the
+				// caller's next move is to doubt the flag rather than the state.
+				//
+				// It names the CONFIG FILE for the same reason `bk login --help`
+				// now does: BK_CONFIG_DIR is how every agent and every CI job
+				// isolates itself, two agents on this project have run commands
+				// against PRODUCTION believing they had isolated, and both were
+				// caught by noticing the DATA was wrong. One line at the top of
+				// a verbose run makes it visible before the request goes out.
+				fmt.Fprintf(os.Stderr, "· bk %s — config %s\n",
+					version.Version, config.DisplayPath())
+				fmt.Fprintf(os.Stderr, "· command: %s\n", cmd.CommandPath())
 			}
 		},
 	}
@@ -184,7 +201,7 @@ func NewRoot() *cobra.Command {
 	root.Flags().Bool("version", false, "Print the bk CLI version and exit (same output as: bk version)")
 	output.RegisterFlags(root)
 	root.PersistentFlags().StringVar(&cmdutil.WSOverride, "ws", "", "Target workspace (slug or id) for this command only; does not change the active workspace")
-	root.PersistentFlags().BoolVarP(&cmdutil.VerboseFlag, "verbose", "v", false, "Log each HTTP request/response to stderr (or set BK_DEBUG=1)")
+	root.PersistentFlags().BoolVarP(&cmdutil.VerboseFlag, "verbose", "v", false, "Trace config, routing, request and response to stderr (or set BK_DEBUG=1)")
 	// --app-server, NOT --app. `--app` is already a FILTER on six commands
 	// (`bk activity --app`, `bk search --app`, `bk storage list --app`,
 	// `bk changelog --app`, `bk guide --app`, `bk invite send --app`), and a

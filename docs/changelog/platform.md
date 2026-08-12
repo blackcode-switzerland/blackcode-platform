@@ -98,6 +98,45 @@ failure with a different fix (`bk guide platform/encoding`).
 The encoding note fires only on a genuine **401/403**. An unreachable host or a
 wrong `--server` produces the same Go error and says nothing about encoding.
 
+### `-v` traces the whole run, not just the HTTP
+
+**Not breaking** — stdout is untouched; every line below goes to stderr, as all
+non-data output does.
+
+`-v` / `BK_DEBUG=1` logged the request LINE and the response, and nothing else.
+Three gaps, all closed:
+
+- **What a write actually SENT was invisible.** "A 400 on `issue edit`, what did
+  it send?" was the one question `-v` could not answer.
+- **Routing was invisible.** Which app, which server, which workspace — each
+  drawn from a different place (a command-group pin, `--app-server`, the home
+  app, `--ws`, the per-app active workspace), and none of it logged. This is the
+  failure class that returns 200 and real data from somewhere you did not mean.
+- **A command that made no request printed nothing at all**, so `bk -v app use`
+  and `bk -v guide` were silent — indistinguishable from a broken flag.
+
+```
+· bk 2.4.0 — config /Users/you/.config/bk/config.json
+· command: bk issues issue edit
+· app issues → https://issues.blackcode.ch  [pinned by the `bk issues …` command group]
+· workspace demo-ws  [--ws, this command only]
+→ PATCH https://issues.blackcode.ch/api/workspaces/demo-ws/issues/5
+  body: {"title":"hello there"}
+← 400 Bad Request (16 bytes, 41ms)
+  {"error":"nope"}
+```
+
+The response line now carries a duration, and a transparently-followed redirect
+is called out rather than left invisible.
+
+**Headers are never printed, at any verbosity, by design.** The `Authorization`
+header carries your token and this output goes into bug reports and CI logs; a
+guard (`cli/internal/client/verbose_test.go`) fails the build if it ever appears.
+A non-JSON request body — an upload — is described, not dumped.
+
+The `-v` line in `bk --help`, `bk guide platform/output`, and the agent skill
+file all say what it now shows.
+
 ### A 401 from `bk login` no longer answers "run `bk login`"
 
 Every 401 got the same hint, and inside `bk login` it is a loop: the server has
