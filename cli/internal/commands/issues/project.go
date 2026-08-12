@@ -161,43 +161,42 @@ func newProjectMembersCmd() *cobra.Command {
 func newProjectIssuesCmd() *cobra.Command {
 	var status, assignee string
 	cmd := &cobra.Command{
-		Use:         "issues <project-id>",
-		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues"},
-		Short:       "List issues for a project (optionally filter by status/assignee)",
+		Use:         "issues <project>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues,GET /api/users,GET /api/workspaces/{ws}/projects"},
+		Short:       "List issues for a project, by id or name (optionally filter by status/assignee)",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid project id: %w", err)
-			}
+			// The positional is handed to runIssueList as-is: it resolves it
+			// through resolveProjectRef, so `project issues "Website relaunch"`
+			// works here for the same reason `issue list --project` does.
 			return runIssueList(cmd, issueListFlags{
-				projectID: id,
-				status:    status,
-				assignee:  assignee,
+				project:  args[0],
+				status:   status,
+				assignee: assignee,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&status, "status", "", "Filter by status. CLIENT-SIDE: every issue in the project is fetched first, then filtered here")
+	cmd.Flags().StringVar(&status, "status", "", "Filter by status: "+vocab("issue_statuses")+". CLIENT-SIDE: every issue in the project is fetched first, then filtered here")
 	cmd.Flags().StringVar(&assignee, "assignee", "", "Filter by assignee id, email, or 'me'. CLIENT-SIDE: every issue in the project is fetched first, then filtered here")
 	return cmd
 }
 
 func newProjectTasksCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:         "tasks <project-id>",
-		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/tasks"},
-		Short:       "List tasks for a project",
+		Use:         "tasks <project>",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/tasks,GET /api/workspaces/{ws}/projects"},
+		Short:       "List tasks for a project, by id or name",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
-			id, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid project id: %w", err)
-			}
 			c, err := cmdutil.NewClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveProjectRef(c, args[0])
 			if err != nil {
 				return err
 			}
@@ -248,7 +247,11 @@ func newProjectCreateCmd() *cobra.Command {
 				Description: body,
 			}
 			if cmd.Flags().Changed("priority") {
-				req.Priority = &priority
+				code, err := parseProjectPriority(priority)
+				if err != nil {
+					return err
+				}
+				req.Priority = &code
 			}
 			if cmd.Flags().Changed("visibility") {
 				req.Visibility = &visibility
@@ -276,7 +279,7 @@ func newProjectCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&summary, "summary", "", "Short plain-text summary (shown in kanban cards)")
 	cmd.Flags().StringVar(&description, "description", "", "Project description (use \"-\" to read stdin)")
 	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description from a file")
-	cmd.Flags().StringVar(&priority, "priority", "", "Priority (urgent/high/medium/low/none)")
+	cmd.Flags().StringVar(&priority, "priority", "", "Priority: "+vocabPriority("project"))
 	cmd.Flags().StringVar(&visibility, "visibility", "", "Visibility (public/private/secret)")
 	cmd.Flags().StringVar(&color, "color", "", "Hex color e.g. #5E6AD2")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD")
@@ -320,7 +323,11 @@ func newProjectEditCmd() *cobra.Command {
 				req.Status = &status
 			}
 			if cmd.Flags().Changed("priority") {
-				req.Priority = &priority
+				code, err := parseProjectPriority(priority)
+				if err != nil {
+					return err
+				}
+				req.Priority = &code
 			}
 			if cmd.Flags().Changed("visibility") {
 				req.Visibility = &visibility
@@ -359,8 +366,8 @@ func newProjectEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&summary, "summary", "", "Short plain-text summary (shown in kanban cards)")
 	cmd.Flags().StringVar(&description, "description", "", "New description (use \"-\" for stdin)")
 	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description from file")
-	cmd.Flags().StringVar(&status, "status", "", "New status (active, archived, ...)")
-	cmd.Flags().StringVar(&priority, "priority", "", "Priority (urgent/high/medium/low/none)")
+	cmd.Flags().StringVar(&status, "status", "", "New status: "+vocab("project_statuses"))
+	cmd.Flags().StringVar(&priority, "priority", "", "Priority: "+vocabPriority("project"))
 	cmd.Flags().StringVar(&visibility, "visibility", "", "Visibility (public/private/secret)")
 	cmd.Flags().StringVar(&color, "color", "", "Hex color e.g. #5E6AD2")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD")
@@ -555,19 +562,19 @@ func newProjectUpdatesListCmd() *cobra.Command {
 }
 
 func newProjectUpdatesAddCmd() *cobra.Command {
-	var status, body, bodyFile string
+	var status, health, body, bodyFile, projectFlag string
 	cmd := &cobra.Command{
-		Use:         "add <project-id>",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/projects/{id}/updates"},
-		Short:       "Post a health update on a project (status: on_track/at_risk/off_track)",
-		Args:        cobra.ExactArgs(1),
+		Use:         "add <project>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/projects/{id}/updates,GET /api/workspaces/{ws}/projects"},
+		Short:       "Post a health update on a project (--status, aka --health)",
+		Args:        cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := strconv.Atoi(args[0])
+			status, err := mergeAlias(cmd, "status", status, "health", health)
 			if err != nil {
-				return fmt.Errorf("invalid project id: %w", err)
+				return err
 			}
 			if status == "" {
-				return fmt.Errorf("--status is required (on_track/at_risk/off_track)")
+				return fmt.Errorf("--status is required: %s", vocab("project_update_health"))
 			}
 			content, err := cmdutil.ReadBody(body, bodyFile)
 			if err != nil {
@@ -578,6 +585,10 @@ func newProjectUpdatesAddCmd() *cobra.Command {
 				return err
 			}
 			c, cfg, err := cmdutil.NewClientAndConfig()
+			if err != nil {
+				return err
+			}
+			id, _, err := resolveProjectPositionalOrFlag(cmd, c, args, projectFlag, 0)
 			if err != nil {
 				return err
 			}
@@ -603,9 +614,15 @@ func newProjectUpdatesAddCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&status, "status", "", "on_track | at_risk | off_track (required)")
+	cmd.Flags().StringVar(&status, "status", "", vocab("project_update_health", "required")+". --health is an alias")
+	// The alias names the values TOO. A caller reading `--help` stops at the
+	// first flag that answers their question, and "see the other flag" is a
+	// second lookup for a flag that exists to save one.
+	cmd.Flags().StringVar(&health, "health", "", vocab("project_update_health")+
+		". Alias for --status — this posts a HEALTH update, and that is the word most callers reach for")
 	cmd.Flags().StringVar(&body, "body", "", "Optional message (\"-\" for stdin)")
 	cmd.Flags().StringVar(&bodyFile, "body-file", "", "Read body from file")
+	addProjectFlag(cmd, &projectFlag)
 	return cmd
 }
 

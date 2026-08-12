@@ -26,10 +26,27 @@ watch, activity. Run `bk <group> --help` for the current set; the help is
 generated from the binary and is always right.
 
 ```bash
-bk issues issue create --project 4 --title "Fix login" --priority 2
+bk issues issue create --project 4 --title "Fix login" --priority urgent
 bk issues issue list --project 4 --status todo --mine --json
 bk issues issue edit 42 --status in_progress --assignee me
 ```
+
+## Naming a project: an id or its name
+
+Every `--project` flag, and the positional on `project issues` / `project tasks`,
+takes **either**. A bare integer is an id; anything else is a name, matched
+case-insensitively. So a project you just created can be used straight away
+without capturing its id:
+
+```bash
+bk issues issue create --project "Website relaunch" --title "Fix login"
+bk issues task list --project 4
+```
+
+Two projects can share a name. One that matches more than one is an **error**
+listing every match with its id — it never picks one for you. A project literally
+*named* `12` cannot be reached by name, for the same reason a label named `58`
+cannot: the bare integer is read as an id first.
 
 ## Vocabularies — always fetch, never assume
 
@@ -39,9 +56,29 @@ Status, priority and project-health values come from `bk meta`:
 bk meta --json | jq '.vocabulary'
 ```
 
-Issue priority is an integer; project priority is a `P0`–`P4` string (the CLI
-also accepts the friendly words `urgent|high|medium|low|none`). Do not hardcode
-either — `bk meta` is authoritative.
+**Priority is one vocabulary with two storage shapes**, and both commands accept
+the same words. An issue's priority is stored as an integer and a project's as a
+`P0`–`P4` string; `--priority` on either takes the word, and each writes what its
+own table holds. The raw form still works on both. Do not hardcode a vocabulary —
+`bk meta` is authoritative, and a value outside it is refused by the CLI rather
+than stored.
+
+## What a write echoes back
+
+Confirmations name the record, not just its number, so a run working through
+many items does not have to re-read them:
+
+```
+$ bk issues issue edit 59 --status done
+updated #59 "Fix the login race" (status=done priority=P1 urgent)
+```
+
+`--json` is unaffected — this is the human renderer only, and the payload is the
+route's.
+
+`bk issues issue view` shows an `Attachments:` row **whether or not there are
+any**, like the `Labels:` row: an absent row and an empty row would look
+identical, and only one of them is true.
 
 ## Long bodies: three forms
 

@@ -43,25 +43,25 @@ func newIssueCmd() *cobra.Command {
 }
 
 type issueListFlags struct {
-	projectID int
-	status    string
-	assignee  string
-	mine      bool
-	search    string
+	project  string
+	status   string
+	assignee string
+	mine     bool
+	search   string
 }
 
 func newIssueListCmd() *cobra.Command {
 	var f issueListFlags
 	cmd := &cobra.Command{
 		Use:         "list",
-		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues,GET /api/users"},
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues,GET /api/users,GET /api/workspaces/{ws}/projects"},
 		Short:       "List issues",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runIssueList(cmd, f)
 		},
 	}
-	cmd.Flags().IntVar(&f.projectID, "project", 0, "Filter by project id")
-	cmd.Flags().StringVar(&f.status, "status", "", "Filter by status. CLIENT-SIDE: every issue in the workspace is fetched first, then filtered here — use --search to filter on the server")
+	cmd.Flags().StringVar(&f.project, "project", "", "Filter by project — "+projectFlagHelp)
+	cmd.Flags().StringVar(&f.status, "status", "", "Filter by status: "+vocab("issue_statuses")+". CLIENT-SIDE: every issue in the workspace is fetched first, then filtered here — use --search to filter on the server")
 	cmd.Flags().StringVar(&f.assignee, "assignee", "", "Filter by assignee id, email, or 'me'. CLIENT-SIDE: every issue in the workspace is fetched first, then filtered here")
 	cmd.Flags().BoolVar(&f.mine, "mine", false, "Show only issues assigned to the current user. CLIENT-SIDE: every issue in the workspace is fetched first, then filtered here")
 	cmd.Flags().StringVar(&f.search, "search", "", "Search title/description, or the #id (e.g. 123 or #123); server-side")
@@ -78,10 +78,15 @@ func runIssueList(cmd *cobra.Command, f issueListFlags) error {
 		return err
 	}
 
+	projectID, err := resolveProjectRef(c, f.project)
+	if err != nil {
+		return err
+	}
+
 	// The issues endpoint returns every matching issue in one response (no
 	// pagination); total is the server-side count for the current filter (before
 	// client-side --status/--assignee/--mine filtering).
-	page, err := c.ListIssues(client.ListIssuesOpts{ProjectID: f.projectID, Search: f.search})
+	page, err := c.ListIssues(client.ListIssuesOpts{ProjectID: projectID, Search: f.search})
 	if err != nil {
 		return err
 	}
@@ -194,7 +199,7 @@ func filterIssues(c *client.Client, cfg *config.Config, issues []client.Issue, f
 func newIssueViewCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:         "view <id>",
-		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues/{id}"},
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues/{id},GET /api/workspaces/{ws}/issues/{id}/attachments"},
 		Short:       "Show a single issue by its #number (the id shown in the app)",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -230,6 +235,12 @@ func newIssueViewCmd() *cobra.Command {
 				// and only one of them is true — so a caller checking whether
 				// an attach stuck now gets an answer either way.
 				fmt.Fprintf(w, "Labels:      %s\n", issueLabelLabel(iss.Labels))
+				// ALWAYS printed, for the reason the Labels line above is: an
+				// absent row and an empty row look identical and only one of them
+				// is true. Attaching a file worked and `issue view` said nothing
+				// about it, so the only way to learn a file was there was to guess
+				// that `issue attachments` exists.
+				fmt.Fprintf(w, "Attachments: %s\n", issueAttachmentLabel(c, iss))
 				if iss.TaskName != nil {
 					fmt.Fprintf(w, "Task:   %s\n", *iss.TaskName)
 				}
@@ -246,17 +257,25 @@ func newIssueViewCmd() *cobra.Command {
 }
 
 func newIssueCreateCmd() *cobra.Command {
-	var projectID, priority int
-	var title, description, descriptionFile, status, attach string
+	var project, priority string
+	var title, description, bodyAlias, descriptionFile, status, attach string
 	var assignee, task, startDate, dueDate string
 	var labels, files []string
 	cmd := &cobra.Command{
 		Use:         "create",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/issues"},
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/issues,GET /api/workspaces/{ws}/projects"},
 		Short:       "Create an issue",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if projectID == 0 || title == "" {
+			if project == "" || title == "" {
 				return fmt.Errorf("--project and --title are required")
+			}
+			description, err := mergeAlias(cmd, "description", description, "body", bodyAlias)
+			if err != nil {
+				return err
+			}
+			priorityValue, err := parseIssuePriority(priority)
+			if err != nil {
+				return err
 			}
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -267,6 +286,10 @@ func newIssueCreateCmd() *cobra.Command {
 				return err
 			}
 			c, cfg, err := cmdutil.NewClientAndConfig()
+			if err != nil {
+				return err
+			}
+			projectID, err := resolveProjectRef(c, project)
 			if err != nil {
 				return err
 			}
@@ -285,7 +308,7 @@ func newIssueCreateCmd() *cobra.Command {
 				Title:       title,
 				Description: body,
 				Status:      status,
-				Priority:    priority,
+				Priority:    priorityValue,
 			}
 			if assignee != "" && !strings.EqualFold(assignee, "none") {
 				uid, err := ResolveUserID(assignee, c, cfg)
@@ -335,12 +358,13 @@ func newIssueCreateCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().IntVar(&projectID, "project", 0, "Project id (required)")
+	cmd.Flags().StringVar(&project, "project", "", "Project — "+projectFlagHelp+" (required)")
 	cmd.Flags().StringVar(&title, "title", "", "Issue title (required)")
-	cmd.Flags().StringVar(&description, "description", "", "Description — Markdown or HTML (use \"-\" for stdin; --description-file for multi-line to avoid escaping newlines)")
+	cmd.Flags().StringVar(&description, "description", "", "Description — Markdown or HTML (use \"-\" for stdin; --description-file for multi-line to avoid escaping newlines). --body is an alias")
+	cmd.Flags().StringVar(&bodyAlias, "body", "", "Alias for --description (`issue comment` and `project updates add` call it --body)")
 	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description (Markdown or HTML) from file")
-	cmd.Flags().StringVar(&status, "status", "", "Status (backlog/todo/in_progress/done/cancelled)")
-	cmd.Flags().IntVar(&priority, "priority", 0, "Priority 1-5 (1=urgent)")
+	cmd.Flags().StringVar(&status, "status", "", "Status: "+vocab("issue_statuses"))
+	cmd.Flags().StringVar(&priority, "priority", "", "Priority: "+vocabPriority("issue"))
 	cmd.Flags().StringVar(&attach, "attach", "", "Path to a file to add to the issue's attachments list (separate from the body; --file embeds inline instead)")
 	cmdutil.AddFileFlag(cmd, &files)
 	cmd.Flags().StringVar(&assignee, "assignee", "", "Assignee (id, email, name, or 'me')")
@@ -375,7 +399,7 @@ func newIssueCreateCmd() *cobra.Command {
 // rather than depending on flag order.
 func newIssueEditCmd() *cobra.Command {
 	var status, title, description, descriptionFile string
-	var priority int
+	var priority string
 	var assignee, task, startDate, dueDate string
 	var addLabels, removeLabels []string
 	cmd := &cobra.Command{
@@ -403,7 +427,11 @@ func newIssueEditCmd() *cobra.Command {
 				req.Description = &body
 			}
 			if cmd.Flags().Changed("priority") {
-				req.Priority = &priority
+				n, err := parseIssuePriority(priority)
+				if err != nil {
+					return err
+				}
+				req.Priority = &n
 			}
 			c, cfg, err := cmdutil.NewClientAndConfig()
 			if err != nil {
@@ -478,16 +506,17 @@ func newIssueEditCmd() *cobra.Command {
 			}
 
 			return output.Render(format, iss, func(w io.Writer) error {
-				fmt.Fprintf(w, "updated %s (status=%s priority=P%d)\n", issueRef(iss), iss.Status, iss.Priority)
+				fmt.Fprintf(w, "updated %s (status=%s priority=%s)\n",
+					issueLabel(iss), iss.Status, issuePriorityLabel(iss.Priority))
 				return nil
 			})
 		},
 	}
-	cmd.Flags().StringVar(&status, "status", "", "New status (backlog/todo/in_progress/done/cancelled)")
+	cmd.Flags().StringVar(&status, "status", "", "New status: "+vocab("issue_statuses"))
 	cmd.Flags().StringVar(&title, "title", "", "New title")
 	cmd.Flags().StringVar(&description, "description", "", "New description — Markdown or HTML (\"-\" for stdin; --description-file for multi-line)")
 	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description (Markdown or HTML) from file")
-	cmd.Flags().IntVar(&priority, "priority", 0, "New priority (1-5)")
+	cmd.Flags().StringVar(&priority, "priority", "", "New priority: "+vocabPriority("issue"))
 	cmd.Flags().StringVar(&assignee, "assignee", "", "Assignee (id, email, name, 'me', or 'none' to clear)")
 	cmd.Flags().StringVar(&task, "task", "", "Task id (or 'none' to clear)")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD (or 'none')")
@@ -513,13 +542,24 @@ func newIssueDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !cmdutil.Confirm(fmt.Sprintf("Delete issue %s?", strings.TrimPrefix(args[0], "#")), yes) {
+			// CAPTURED BEFORE THE DELETE, and best-effort. CLAUDE.md's rule for
+			// irreversible commands is that they report WHAT they destroyed, not
+			// just that they destroyed one — `deleted issue #59` is the difference
+			// between a wrong delete somebody catches immediately and one nobody
+			// notices for a month. The title cannot be read back afterwards, so it
+			// is read now; a failed read falls back to the bare number rather than
+			// blocking a delete the caller asked for.
+			label := fmt.Sprintf("#%d", id)
+			if iss, err := c.GetIssue(id); err == nil {
+				label = issueLabel(iss)
+			}
+			if !cmdutil.Confirm(fmt.Sprintf("Delete issue %s?", label), yes) {
 				return fmt.Errorf("aborted")
 			}
 			if err := c.DeleteIssue(id); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "deleted issue #%d\n", id)
+			fmt.Fprintf(cmd.OutOrStdout(), "deleted issue %s\n", label)
 			return nil
 		},
 	}
@@ -575,7 +615,7 @@ func newIssueAssignCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, iss, func(w io.Writer) error {
-				fmt.Fprintf(w, "issue %s assigned: %s\n", issueRef(iss), issueAssigneeLabel(iss.Assignees))
+				fmt.Fprintf(w, "issue %s assigned: %s\n", issueLabel(iss), issueAssigneeLabel(iss.Assignees))
 				return nil
 			})
 		},
@@ -607,7 +647,7 @@ func newIssueUnassignCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, iss, func(w io.Writer) error {
-				fmt.Fprintf(w, "issue %s unassigned\n", issueRef(iss))
+				fmt.Fprintf(w, "issue %s unassigned\n", issueLabel(iss))
 				return nil
 			})
 		},
@@ -1061,6 +1101,63 @@ func issueRef(iss *client.Issue) string {
 	return fmt.Sprintf("#%d", iss.ID)
 }
 
+// issueLabel NAMES an issue for a confirmation line: `#59 "Fix the login race"`.
+//
+// ---------------------------------------------------------------------------
+// WHY, AND WHY IT COSTS NOTHING
+// ---------------------------------------------------------------------------
+// `updated #59 (status=done priority=P1)` was the whole of what `issue edit`
+// echoed, and a caller working through nineteen issues loses which id was which
+// inside a minute — the source report says so about itself. `bk sales` has
+// printed `prospect #2 (Nexova AG)` since 2026-08-12 for exactly this reason.
+//
+// Unlike the sales equivalent this needs NO second request: every command using
+// it already holds the issue the route just returned, and `title` is in that
+// payload. There is no failure mode to fall back from, which is why this takes
+// a *client.Issue rather than an id — a signature that cannot be handed
+// something it would have to go and fetch.
+//
+// It is called from inside the human renderer, so `--json` is unchanged.
+func issueLabel(iss *client.Issue) string {
+	title := strings.TrimSpace(iss.Title)
+	if title == "" {
+		return issueRef(iss)
+	}
+	return fmt.Sprintf("%s %q", issueRef(iss), cmdutil.Truncate(title, 60))
+}
+
+// issuePriorityLabel renders a stored priority for a confirmation line, naming
+// it when the name is known: `P1 urgent`. A priority outside the vocabulary
+// prints as the bare code rather than as a wrong word.
+func issuePriorityLabel(n int) string {
+	if name := issuePriorityName(n); name != "" {
+		return fmt.Sprintf("P%d %s", n, name)
+	}
+	return fmt.Sprintf("P%d", n)
+}
+
+// mergeAlias resolves a flag that has an alternative spelling.
+//
+// Nothing is renamed: `canonical` is the flag in `Use`/`--help`, `alias` is the
+// spelling a caller reasonably guesses from a neighbouring command. Passing
+// both with DIFFERENT values is an error naming both, never a silent preference
+// — the same rule `resolveProspect` follows in sales, and for the same reason:
+// silently picking one writes a value the caller did not name.
+func mergeAlias(cmd *cobra.Command, canonical, canonicalValue, alias, aliasValue string) (string, error) {
+	usedCanonical := cmd.Flags().Changed(canonical)
+	usedAlias := cmd.Flags().Changed(alias)
+	switch {
+	case usedCanonical && usedAlias && canonicalValue != aliasValue:
+		return "", cmdutil.Usagef(
+			"--%s and --%s are the same flag and were given different values (%q vs %q) "+
+				"— pass one, not both; nothing was changed", canonical, alias, canonicalValue, aliasValue)
+	case usedAlias && !usedCanonical:
+		return aliasValue, nil
+	default:
+		return canonicalValue, nil
+	}
+}
+
 // ResolveUserID resolves a user reference (id, email, display name, or "me")
 // to a numeric user ID. Does not accept "none"/"null" — callers handle those.
 func ResolveUserID(ref string, c *client.Client, cfg *config.Config) (int, error) {
@@ -1079,6 +1176,40 @@ func issueAssigneeLabel(assignees []client.IssueAssignee) string {
 		} else {
 			names = append(names, a.Email)
 		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// issueAttachmentLabel formats an issue's attachments for the `view` screen.
+//
+// ---------------------------------------------------------------------------
+// THE COUNT IS FREE; THE NAMES COST ONE REQUEST, AND ONLY WHEN THERE ARE ANY
+// ---------------------------------------------------------------------------
+// `GET …/issues/{id}` already returns `attachment_count` — verified against a
+// running route on 2026-08-12 — so the row costs nothing on the common case of
+// an issue with no attachments, which is the case that has to stay cheap.
+//
+// When the count is non-zero the filenames are worth a second request: "3
+// attachments" still leaves the caller running another command to learn
+// anything, which is the dead end this row exists to close. A failure to fetch
+// them falls back to the count and the command that lists them — a read that
+// could not enrich its output must not turn a successful read into an error.
+//
+// `--json` pays nothing: this runs inside the human renderer only, and the JSON
+// payload is the route's, unchanged.
+func issueAttachmentLabel(c *client.Client, iss *client.Issue) string {
+	n := cmdutil.IntOr(iss.AttachmentCount, 0)
+	if n == 0 {
+		return "—"
+	}
+	fallback := fmt.Sprintf("%d (bk issues issue attachments %d)", n, iss.ID)
+	atts, err := c.ListIssueAttachments(iss.ID)
+	if err != nil || len(atts) == 0 {
+		return fallback
+	}
+	names := make([]string, 0, len(atts))
+	for _, a := range atts {
+		names = append(names, fmt.Sprintf("%s (#%d)", a.Filename, a.ID))
 	}
 	return strings.Join(names, ", ")
 }

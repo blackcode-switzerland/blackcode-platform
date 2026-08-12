@@ -164,7 +164,25 @@ func CollectRoutes(root *cobra.Command) ([]RouteEntry, []string) {
 					// Found by walking docs/adding-an-app.md: the new app copied
 					// the scaffold's route path, and its parity test reported that
 					// no bk command belonged to it.
-					seen[e.App+" "+e.Method+" "+e.Path] = e
+					//
+					// WITHIN one app, several commands legitimately claim one route
+					// — `issue view` and `issue attachments` both read
+					// `…/issues/{id}/attachments`. This used to keep the LAST
+					// writer, so which name landed in routes.json depended on
+					// cobra's alphabetical ordering, and the other command showed
+					// no routes at all in docs/cli-inventory.md. That is CLAUDE.md
+					// finding #5's mechanism exactly ("the second appeared to have
+					// no commands"), one level down: coverage was never wrong, the
+					// ATTRIBUTION was, and the artefact reads as attribution.
+					//
+					// So claimants accumulate. `command` is a comma-separated list
+					// in route order, and the parity test's "claimed by" message
+					// now names every command that would break.
+					key := e.App + " " + e.Method + " " + e.Path
+					if prior, ok := seen[key]; ok && prior.Command != e.Command {
+						e.Command = prior.Command + ", " + e.Command
+					}
+					seen[key] = e
 				}
 			}
 		}

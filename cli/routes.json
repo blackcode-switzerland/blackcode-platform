@@ -34,7 +34,7 @@
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/issues/{id}/labels/{lid}",
-      "command": "bk issues label detach",
+      "command": "bk issues issue edit, bk issues label detach",
       "app": "issues"
     },
     {
@@ -118,13 +118,13 @@
     {
       "method": "GET",
       "path": "/api/users",
-      "command": "bk issues user view",
+      "command": "bk issues issue assign, bk issues issue list, bk issues project issues, bk issues user list, bk issues user view",
       "app": "issues"
     },
     {
       "method": "GET",
       "path": "/api/workspaces",
-      "command": "bk issues workspace use",
+      "command": "bk issues inbox list, bk issues workspace list, bk issues workspace use",
       "app": "issues"
     },
     {
@@ -166,7 +166,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/issues",
-      "command": "bk issues project issues",
+      "command": "bk issues issue list, bk issues project issues",
       "app": "issues"
     },
     {
@@ -184,7 +184,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/issues/{id}/attachments",
-      "command": "bk issues issue attachments",
+      "command": "bk issues issue attachments, bk issues issue view",
       "app": "issues"
     },
     {
@@ -196,7 +196,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/issues/{id}/labels",
-      "command": "bk issues label detach",
+      "command": "bk issues issue edit, bk issues label attach, bk issues label detach",
       "app": "issues"
     },
     {
@@ -226,7 +226,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/projects",
-      "command": "bk issues project list",
+      "command": "bk issues issue create, bk issues issue list, bk issues project issues, bk issues project list, bk issues project tasks, bk issues project updates add, bk issues task create, bk issues task list",
       "app": "issues"
     },
     {
@@ -268,7 +268,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/tasks",
-      "command": "bk issues task list",
+      "command": "bk issues project tasks, bk issues task list",
       "app": "issues"
     },
     {
@@ -304,7 +304,7 @@
     {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/issues/{id}",
-      "command": "bk issues issue unassign",
+      "command": "bk issues issue assign, bk issues issue edit, bk issues issue unassign",
       "app": "issues"
     },
     {
@@ -406,7 +406,7 @@
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/issues/{id}/labels",
-      "command": "bk issues label attach",
+      "command": "bk issues issue edit, bk issues label attach",
       "app": "issues"
     },
     {
@@ -430,7 +430,7 @@
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/move",
-      "command": "bk issues move",
+      "command": "bk issues copy, bk issues move",
       "app": "issues"
     },
     {
@@ -514,13 +514,13 @@
     {
       "method": "GET",
       "path": "/api/changelog",
-      "command": "bk skill sync",
+      "command": "bk changelog, bk skill check, bk skill sync",
       "app": "platform"
     },
     {
       "method": "GET",
       "path": "/api/me",
-      "command": "bk whoami",
+      "command": "bk login, bk profile view, bk whoami",
       "app": "platform"
     },
     {
@@ -544,7 +544,7 @@
     {
       "method": "GET",
       "path": "/api/super-admin/errors",
-      "command": "bk super-admin errors stats",
+      "command": "bk super-admin errors list, bk super-admin errors stats",
       "app": "platform"
     },
     {
@@ -580,7 +580,7 @@
     {
       "method": "PATCH",
       "path": "/api/super-admin/errors/{id}",
-      "command": "bk super-admin errors unresolve",
+      "command": "bk super-admin errors resolve, bk super-admin errors unresolve",
       "app": "platform"
     },
     {
@@ -718,7 +718,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces",
-      "command": "bk sales workspace use",
+      "command": "bk sales workspace list, bk sales workspace use",
       "app": "sales"
     },
     {
@@ -742,7 +742,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/communications/{n}",
-      "command": "bk sales comm show",
+      "command": "bk sales comm rm, bk sales comm show",
       "app": "sales"
     },
     {
@@ -754,7 +754,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/documents/{n}",
-      "command": "bk sales doc show",
+      "command": "bk sales doc rm, bk sales doc show",
       "app": "sales"
     },
     {
@@ -790,7 +790,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/meetings/{n}",
-      "command": "bk sales meeting show",
+      "command": "bk sales meeting rm, bk sales meeting show",
       "app": "sales"
     },
     {
@@ -826,7 +826,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/products/{n}",
-      "command": "bk sales product show",
+      "command": "bk sales product delete, bk sales product show",
       "app": "sales"
     },
     {
@@ -838,7 +838,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/prospects/{n}",
-      "command": "bk sales prospect show",
+      "command": "bk sales contact add, bk sales journey add, bk sales label attach, bk sales match set, bk sales objection raise, bk sales prospect delete, bk sales prospect show",
       "app": "sales"
     },
     {
@@ -886,7 +886,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/templates/{n}",
-      "command": "bk sales template show",
+      "command": "bk sales template delete, bk sales template show",
       "app": "sales"
     },
     {
@@ -916,7 +916,7 @@
     {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/meetings/{n}",
-      "command": "bk sales meeting outcome",
+      "command": "bk sales meeting cancel, bk sales meeting edit, bk sales meeting outcome",
       "app": "sales"
     },
     {
@@ -934,7 +934,7 @@
     {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/prospects/{n}",
-      "command": "bk sales prospect edit",
+      "command": "bk sales prospect assign, bk sales prospect edit",
       "app": "sales"
     },
     {
@@ -952,7 +952,7 @@
     {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/prospects/{n}/objections/{oid}",
-      "command": "bk sales objection resolve",
+      "command": "bk sales objection counter, bk sales objection resolve",
       "app": "sales"
     },
     {
@@ -1006,7 +1006,7 @@
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/documents/{n}/links",
-      "command": "bk sales doc link",
+      "command": "bk sales doc add, bk sales doc link",
       "app": "sales"
     },
     {
@@ -1024,7 +1024,7 @@
     {
       "method": "POST",
       "path": "/api/workspaces/{ws}/meetings",
-      "command": "bk sales meeting schedule",
+      "command": "bk sales meeting log, bk sales meeting schedule",
       "app": "sales"
     },
     {
@@ -1108,7 +1108,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces",
-      "command": "bk scaffold workspace use",
+      "command": "bk scaffold workspace list, bk scaffold workspace use",
       "app": "scaffold"
     },
     {

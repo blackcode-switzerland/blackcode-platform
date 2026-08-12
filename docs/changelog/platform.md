@@ -7,6 +7,30 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-12 — `bk <app> inbox list --ws` scopes the inbox to one workspace
+
+**Not breaking. The default is unchanged and stays GLOBAL.**
+
+`inbox list` returned every notification from every workspace, going back weeks,
+with no way to narrow it. `GET /api/me/inbox` has always read `?workspace_id=`
+and the CLI never sent it.
+
+The persistent `--ws` flag — "target workspace for this command only" — now
+means that here too, instead of being accepted and silently ignored:
+
+```
+bk issues inbox list --unread --ws my-workspace
+```
+
+It takes a slug or a workspace id. A slug that does not exist is an **error**,
+not a fall back to the unfiltered list: a caller who named a workspace and got
+150 messages from every workspace has no way to see that the filter was dropped.
+
+**With no `--ws` the inbox is still every workspace and every app that notifies
+you**, deliberately — an inbox that quietly scoped itself to whatever
+`workspace use` last set would hide the invitation that arrived from somewhere
+else. Filtering by project, task and member is not implemented yet.
+
 ## 2026-08-12 — `bk --version`, and errors that name the flag you meant
 
 **Not breaking.** Nothing was renamed or removed. Five changes, all of which

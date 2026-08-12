@@ -57,6 +57,23 @@ bk --ws <slug> issues issue list        # ONE command; changes no active workspa
 another workspace so you never mutate the caller's active workspace as a side
 effect. It is resolved by the app the command names, like everything else.
 
+### `--ws` also narrows the inbox
+
+`bk <app> inbox list` is **global**: every workspace, and every app that notifies
+you. That is deliberate — an inbox scoped to your active workspace would hide the
+invitation that arrived from somewhere else, and you would have no way to see
+that it had.
+
+`--ws` narrows it, and is the only thing that does:
+
+```bash
+bk issues inbox list --unread            # everything you have not read, anywhere
+bk issues inbox list --unread --ws acme  # just that workspace
+```
+
+It takes a slug or a workspace id. A slug that does not resolve is an error, not
+a quiet fall back to the unfiltered list.
+
 ## Membership IS access
 
 There used to be two things here and confusing them was the second most common

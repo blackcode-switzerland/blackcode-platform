@@ -30,11 +30,11 @@ func newTaskCmd() *cobra.Command {
 }
 
 func newTaskListCmd() *cobra.Command {
-	var projectID int
+	var project string
 	var search string
 	cmd := &cobra.Command{
 		Use:         "list",
-		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/tasks"},
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/tasks,GET /api/workspaces/{ws}/projects"},
 		Short:       "List tasks (optionally filter by --project)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -45,6 +45,10 @@ func newTaskListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			projectID, err := resolveProjectRef(c, project)
+			if err != nil {
+				return err
+			}
 			ms, err := c.ListTasks(projectID, search)
 			if err != nil {
 				return err
@@ -52,7 +56,7 @@ func newTaskListCmd() *cobra.Command {
 			return output.Render(format, ms, taskTable(ms, cmd.ErrOrStderr()))
 		},
 	}
-	cmd.Flags().IntVar(&projectID, "project", 0, "Filter by project id")
+	cmd.Flags().StringVar(&project, "project", "", "Filter by project — "+projectFlagHelp)
 	cmd.Flags().StringVar(&search, "search", "", "Search name/description, or the #id (e.g. 123 or #123); server-side")
 	return cmd
 }
@@ -108,16 +112,20 @@ func newTaskViewCmd() *cobra.Command {
 }
 
 func newTaskCreateCmd() *cobra.Command {
-	var projectID int
-	var name, description, descriptionFile, dueDate string
+	var project string
+	var name, description, bodyAlias, descriptionFile, dueDate string
 	var files []string
 	cmd := &cobra.Command{
 		Use:         "create",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/tasks"},
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/tasks,GET /api/workspaces/{ws}/projects"},
 		Short:       "Create a task",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if projectID == 0 || name == "" {
+			if project == "" || name == "" {
 				return fmt.Errorf("--project and --name are required")
+			}
+			description, err := mergeAlias(cmd, "description", description, "body", bodyAlias)
+			if err != nil {
+				return err
 			}
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -128,6 +136,10 @@ func newTaskCreateCmd() *cobra.Command {
 				return err
 			}
 			c, err := cmdutil.NewClient()
+			if err != nil {
+				return err
+			}
+			projectID, err := resolveProjectRef(c, project)
 			if err != nil {
 				return err
 			}
@@ -157,9 +169,10 @@ func newTaskCreateCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().IntVar(&projectID, "project", 0, "Project id (required)")
+	cmd.Flags().StringVar(&project, "project", "", "Project — "+projectFlagHelp+" (required)")
 	cmd.Flags().StringVar(&name, "name", "", "Task name (required)")
-	cmd.Flags().StringVar(&description, "description", "", "Description (\"-\" for stdin)")
+	cmd.Flags().StringVar(&description, "description", "", "Description (\"-\" for stdin). --body is an alias")
+	cmd.Flags().StringVar(&bodyAlias, "body", "", "Alias for --description (`issue comment` and `project updates add` call it --body)")
 	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description from file")
 	cmd.Flags().StringVar(&dueDate, "due-date", "", "Due date YYYY-MM-DD")
 	cmdutil.AddFileFlag(cmd, &files)

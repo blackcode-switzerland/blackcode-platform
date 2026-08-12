@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 	"github.com/spf13/cobra"
@@ -25,12 +27,36 @@ func newInboxCmd(acfg Config) *cobra.Command {
 	return cmd
 }
 
+// THE INBOX IS GLOBAL BY DEFAULT AND STAYS THAT WAY, BUT `--ws` NOW NARROWS IT.
+//
+// ---------------------------------------------------------------------------
+// WHY THE GLOBAL FLAG RATHER THAN A NEW ONE
+// ---------------------------------------------------------------------------
+// "150+ notifications from all workspaces, going back weeks" is what a daily
+// `inbox list` returns, and there was no way to narrow it — not because the
+// route cannot, but because the CLI never asked: `GET /api/me/inbox` has always
+// read `?workspace_id=`, and `listInbox`/`countUnread` have always filtered on
+// it.
+//
+// `--ws` is the persistent root flag, documented as "target workspace for this
+// command only". That is precisely what is wanted here, so this command honours
+// it instead of growing a second, near-identical `--workspace` beside it — a
+// caller who reached for `--ws` and got a silently unfiltered list was not
+// wrong, they were ignored.
+//
+// The DEFAULT is unchanged and deliberate (decision Q3): with no `--ws`, the
+// list is every workspace and every app that writes to this user's inbox. An
+// inbox that quietly showed one workspace would hide the invitation that
+// arrived from another.
+//
+// `--ws` takes a slug OR an id and the route takes an integer, so a slug costs
+// one extra request to `/api/workspaces` to resolve. An id costs nothing.
 func newInboxListCmd(acfg Config) *cobra.Command {
 	var unread bool
 	cmd := &cobra.Command{
 		Use:         "list",
-		Annotations: map[string]string{"routes": "GET /api/me/inbox"},
-		Short:       "List inbox messages",
+		Annotations: map[string]string{"routes": "GET /api/me/inbox,GET /api/workspaces"},
+		Short:       "List inbox messages (every workspace; --ws narrows it to one)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -40,7 +66,11 @@ func newInboxListCmd(acfg Config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			page, err := c.ListInbox(unread, false)
+			workspaceID, err := inboxWorkspaceID(c)
+			if err != nil {
+				return err
+			}
+			page, err := c.ListInbox(unread, false, workspaceID)
 			if err != nil {
 				return err
 			}
@@ -77,7 +107,45 @@ func newInboxListCmd(acfg Config) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&unread, "unread", false, "Only show unread messages")
+	// --ws is a PERSISTENT ROOT flag, so its own description cannot say what it
+	// does here. This is where a caller reading `inbox list --help` is standing.
+	cmd.Long = "List this user's notifications.\n\n" +
+		"The inbox is GLOBAL by default — every workspace, and every app that\n" +
+		"notifies you. Pass the root --ws flag to narrow it to one workspace:\n\n" +
+		"  bk issues inbox list --unread --ws my-workspace\n\n" +
+		"--ws takes a slug or a workspace id; `bk issues workspace list` shows both."
 	return cmd
+}
+
+// inboxWorkspaceID turns the --ws override into the workspace id the route
+// takes, or 0 for "every workspace".
+//
+// It reads the OVERRIDE ONLY, never the active workspace. That distinction is
+// the whole of decision Q3: an inbox that silently scoped itself to whatever
+// `workspace use` last set would hide the invitation that arrived from
+// somewhere else, and the caller would have no way to see that it had.
+func inboxWorkspaceID(c *client.Client) (int, error) {
+	ref := strings.TrimSpace(cmdutil.WSOverride)
+	if ref == "" {
+		return 0, nil
+	}
+	if n, err := strconv.Atoi(ref); err == nil {
+		return n, nil
+	}
+	workspaces, err := c.ListMyWorkspaces()
+	if err != nil {
+		return 0, fmt.Errorf("resolve workspace %q: %w", ref, err)
+	}
+	for _, w := range workspaces {
+		if strings.EqualFold(w.Slug, ref) {
+			return w.ID, nil
+		}
+	}
+	// Not a silent fall back to the global list: a caller who named a workspace
+	// and got every workspace cannot tell the filter was dropped, and would read
+	// the noise as the answer.
+	return 0, cmdutil.Usagef(
+		"no workspace with slug %q — `bk workspace list` shows yours, or pass its id to --ws", ref)
 }
 
 func newInboxReadCmd(acfg Config) *cobra.Command {

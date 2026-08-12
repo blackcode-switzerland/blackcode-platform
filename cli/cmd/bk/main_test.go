@@ -536,17 +536,26 @@ func TestUnknownFlagNamesTheNearMiss(t *testing.T) {
 		want string
 	}{
 		{
-			// THE REPORTED CASE, and the one a pure edit-distance suggester
-			// cannot reach: health→status is distance 5.
+			// The one a pure edit-distance suggester cannot reach: health→status
+			// is distance 5.
+			//
+			// NOT `project updates add` any more, which is where the session that
+			// prompted this actually failed: Phase 2 gave that command `--health`
+			// as a real alias and `--project` as a real flag, so neither is an
+			// unknown flag there and neither can produce a hint. The synonym rule
+			// is unchanged and still needs a subject, so this points at a command
+			// that genuinely has `--status` and no `--health`.
 			name: "health means status",
-			argv: []string{"issues", "project", "updates", "add", "12", "--health", "on_track"},
+			argv: []string{"issues", "issue", "edit", "12", "--health", "done"},
 			want: "--status",
 		},
 		{
 			// The other half of the same session: the value was right, the
-			// spelling was a flag, and the answer is a positional.
+			// spelling was a flag, and the answer is a positional. Same move as
+			// above — `project members` still takes its project positionally and
+			// has no `--project` flag.
 			name: "project is a positional",
-			argv: []string{"issues", "project", "updates", "add", "--project", "12"},
+			argv: []string{"issues", "project", "members", "--project", "12"},
 			want: "<project-id> is a positional argument",
 		},
 		{

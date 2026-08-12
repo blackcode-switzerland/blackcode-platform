@@ -2,8 +2,16 @@
 
 > ## ⚠️ A SNAPSHOT, NOT THE REFERENCE. IT WILL GO STALE.
 >
-> **206 commands, captured 2026-08-11 17:24 UTC, from a build of the working
-> tree at v2.2.0 + the help-text corrections of that afternoon.**
+> **207 commands, regenerated 2026-08-12 from a build of the working tree after
+> the Phase 2 issues-consistency work.** (Previously: 206 commands, 2026-08-11
+> 17:24 UTC, v2.2.0 + that afternoon's help-text corrections.)
+>
+> **The generator was silently broken between those two dates.** Phase 1 added a
+> count to cobra's `Available Commands:` heading, `devops/cli-inventory.py`
+> matched the bare string, and it therefore emitted two EMPTY tables and exited
+> 0 — so following the regenerate instruction below would have destroyed this
+> file and reported success. Fixed, and the script now exits non-zero when the
+> walk finds no leaf commands.
 >
 > Every row was read from the **binary**, not from source and not from a doc —
 > a command whose help has drifted looks identical to a correct one in source.
@@ -43,14 +51,14 @@
 |---|---|---|
 | `bk app list` | List the apps in the suite, the server each answers on, and whether you can reach it | — |
 | `bk app use` | Switch the home app: which server the bare identity verbs talk to | — |
-| `bk changelog` | What's changed in the API and CLI (read this to get up to date) | — |
+| `bk changelog` | What's changed in the API and CLI (read this to get up to date) | GET /api/changelog |
 | `bk guide` | The complete usage guide for this bk binary (offline, no auth) | — |
-| `bk login` | Authenticate against any Blackcode app's server | — |
+| `bk login` | Authenticate against any Blackcode app's server | GET /api/me |
 | `bk logout` | Remove stored credentials | — |
 | `bk meta` | Bootstrap context: who am I + every app + where each command goes | GET /api/meta |
 | `bk profile edit` | Update your profile (name, tagline, avatar URL) | PATCH /api/me |
-| `bk profile view` | Show your profile | — |
-| `bk skill check` | Report whether the skill and the binary are current (exit 9 = update available) | — |
+| `bk profile view` | Show your profile | GET /api/me |
+| `bk skill check` | Report whether the skill and the binary are current (exit 9 = update available) | GET /api/changelog |
 | `bk skill install` | Write the agent skill file (default: ./.claude/skills/blackcode/SKILL.md) | — |
 | `bk skill path` | Print where the skill file would be (or already is) | — |
 | `bk skill sync` | Bring the agent skill (and, if needed, the binary) up to date | GET /api/changelog |
@@ -58,8 +66,8 @@
 | `bk super-admin blob-drift` | Check platform.blob_references against a live scan of this app's tables | GET /api/super-admin/blob-drift, POST /api/super-admin/blob-drift |
 | `bk super-admin entity-drift` | Check platform.entities against THIS SERVER's app's source tables | GET /api/super-admin/entity-drift, POST /api/super-admin/entity-drift |
 | `bk super-admin errors delete` | Permanently delete one or more error events | DELETE /api/super-admin/errors, DELETE /api/super-admin/errors/{id} |
-| `bk super-admin errors list` | List error events (newest first) | — |
-| `bk super-admin errors resolve` | Mark an error as resolved | — |
+| `bk super-admin errors list` | List error events (newest first) | GET /api/super-admin/errors |
+| `bk super-admin errors resolve` | Mark an error as resolved | PATCH /api/super-admin/errors/{id} |
 | `bk super-admin errors stats` | Show aggregate error counts (total / open / resolved) | GET /api/super-admin/errors |
 | `bk super-admin errors unresolve` | Re-open a resolved error | PATCH /api/super-admin/errors/{id} |
 | `bk super-admin errors view` | Show full detail for one error (stack + context) | GET /api/super-admin/errors/{id} |
@@ -70,7 +78,7 @@
 | `bk token create` | Create a new API token (the secret is shown once — copy it now) | POST /api/tokens |
 | `bk token delete` | Revoke an API token | DELETE /api/tokens/{id} |
 | `bk token list` | List your API tokens | GET /api/tokens |
-| `bk version` | Print the bk CLI version | — |
+| `bk version` | Print the bk CLI version (`bk --version` is the same output) | — |
 | `bk whoami` | Print the authenticated user | GET /api/me |
 
 ### Tier 2 — `bk issues …` (this app's data)
@@ -80,9 +88,9 @@
 | `bk issues activity` | Show issues's workspace activity feed | GET /api/workspaces/{ws}/activity |
 | `bk issues analytics` | Show workspace analytics (summary, throughput, distributions) | GET /api/workspaces/{ws}/analytics |
 | `bk issues attachment list` | List every issue attachment in the workspace | GET /api/workspaces/{ws}/attachments |
-| `bk issues copy` | Copy projects/tasks/issues to another workspace (leaves the source in place) | — |
+| `bk issues copy` | Copy projects/tasks/issues to another workspace (leaves the source in place) | POST /api/workspaces/{ws}/move |
 | `bk issues inbox archive` | Archive inbox messages | POST /api/me/inbox/archive |
-| `bk issues inbox list` | List inbox messages | GET /api/me/inbox |
+| `bk issues inbox list` | List inbox messages (every workspace; --ws narrows it to one) | GET /api/me/inbox, GET /api/workspaces |
 | `bk issues inbox read` | Mark inbox messages as read | POST /api/me/inbox/mark-read |
 | `bk issues inbox unarchive` | Move archived messages back to inbox | POST /api/me/inbox/unarchive |
 | `bk issues invite accept` | Accept an invitation by its token | POST /api/invitations/accept |
@@ -94,26 +102,26 @@
 | `bk issues invite send` | Invite a teammate to the active workspace by email | POST /api/workspaces/{ws}/invitations |
 | `bk issues invite show` | Preview an invitation without accepting it | GET /api/invitations/{token} |
 | `bk issues issue activity` | Show activity (comments + changes) on an issue | GET /api/workspaces/{ws}/issues/{id}/activity |
-| `bk issues issue assign` | Assign an issue (user is id, email, name, or 'me') | — |
+| `bk issues issue assign` | Assign an issue (user is id, email, name, or 'me') | GET /api/users, PATCH /api/workspaces/{ws}/issues/{id} |
 | `bk issues issue attach` | Upload and attach a file to an issue | POST /api/workspaces/{ws}/issues/{id}/attachments |
 | `bk issues issue attachments` | List attachments on an issue | GET /api/workspaces/{ws}/issues/{id}/attachments |
-| `bk issues issue comment` | Post a comment on an issue (use --body "-" for stdin; --reply-to to reply; --file to attach) | POST /api/workspaces/{ws}/issues/{id}/comments |
+| `bk issues issue comment` | Post a comment on an issue (--reply-to threads, --file attaches, @email notifies) | POST /api/workspaces/{ws}/issues/{id}/comments |
 | `bk issues issue comments` | List comments on an issue | GET /api/workspaces/{ws}/issues/{id}/comments |
-| `bk issues issue create` | Create an issue | POST /api/workspaces/{ws}/issues |
+| `bk issues issue create` | Create an issue | GET /api/workspaces/{ws}/projects, POST /api/workspaces/{ws}/issues |
 | `bk issues issue delete` | Delete an issue (project owners/admins only) | DELETE /api/workspaces/{ws}/issues/{id} |
 | `bk issues issue delete-comment` | Delete a comment (author only) | DELETE /api/workspaces/{ws}/comments/{id} |
 | `bk issues issue detach` | Delete an attachment from an issue | DELETE /api/workspaces/{ws}/issues/{id}/attachments/{attachmentId} |
-| `bk issues issue edit` | Edit an issue (status, title, priority, description, assignee, task, dates) | — |
+| `bk issues issue edit` | Edit an issue (status, title, priority, description, assignee, task, dates, labels) | DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid}, GET /api/workspaces/{ws}/issues/{id}/labels, PATCH /api/workspaces/{ws}/issues/{id}, POST /api/workspaces/{ws}/issues/{id}/labels |
 | `bk issues issue edit-comment` | Edit a comment on an issue (author only) | PATCH /api/workspaces/{ws}/comments/{id} |
-| `bk issues issue list` | List issues | — |
+| `bk issues issue list` | List issues | GET /api/users, GET /api/workspaces/{ws}/issues, GET /api/workspaces/{ws}/projects |
 | `bk issues issue unassign` | Clear the assignee on an issue | PATCH /api/workspaces/{ws}/issues/{id} |
 | `bk issues issue unwatch` | Unsubscribe from notifications on an issue | DELETE /api/workspaces/{ws}/issues/{id}/watch |
-| `bk issues issue view` | Show a single issue by its #number (the id shown in the app) | GET /api/workspaces/{ws}/issues/{id} |
+| `bk issues issue view` | Show a single issue by its #number (the id shown in the app) | GET /api/workspaces/{ws}/issues/{id}, GET /api/workspaces/{ws}/issues/{id}/attachments |
 | `bk issues issue watch` | Subscribe to notifications on an issue (--status to just report the current state) | GET /api/workspaces/{ws}/issues/{id}/watch, POST /api/workspaces/{ws}/issues/{id}/watch |
-| `bk issues label attach` | Attach a label to an issue | GET /api/workspaces/{ws}/issues/{id}/labels, POST /api/workspaces/{ws}/issues/{id}/labels |
+| `bk issues label attach` | Attach a label to an issue (by name or id) | GET /api/workspaces/{ws}/issues/{id}/labels, POST /api/workspaces/{ws}/issues/{id}/labels |
 | `bk issues label create` | Create a label in the active workspace | POST /api/workspaces/{ws}/labels |
 | `bk issues label delete` | Delete a label (removes it from everything it is attached to) | DELETE /api/workspaces/{ws}/labels/{id} |
-| `bk issues label detach` | Detach a label from an issue | DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid} |
+| `bk issues label detach` | Detach a label from an issue (by name or id) | DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid}, GET /api/workspaces/{ws}/issues/{id}/labels |
 | `bk issues label edit` | Rename or recolour a label | PATCH /api/workspaces/{ws}/labels/{id} |
 | `bk issues label list` | List labels in the active workspace | GET /api/workspaces/{ws}/labels |
 | `bk issues label view` | Show a label | GET /api/workspaces/{ws}/labels/{id} |
@@ -127,12 +135,12 @@
 | `bk issues project create` | Create a new project | POST /api/workspaces/{ws}/projects |
 | `bk issues project delete` | Move a project to the Trash | DELETE /api/workspaces/{ws}/projects/{id} |
 | `bk issues project edit` | Edit a project (name, description, status, priority, visibility, color, dates) | PATCH /api/workspaces/{ws}/projects/{id} |
-| `bk issues project issues` | List issues for a project (optionally filter by status/assignee) | GET /api/workspaces/{ws}/issues |
+| `bk issues project issues` | List issues for a project, by id or name (optionally filter by status/assignee) | GET /api/users, GET /api/workspaces/{ws}/issues, GET /api/workspaces/{ws}/projects |
 | `bk issues project list` | List projects you are a member of | GET /api/workspaces/{ws}/projects |
 | `bk issues project members` | List members of a project | GET /api/workspaces/{ws}/projects/{id}/members |
 | `bk issues project remove-member` | Remove a member from a project | DELETE /api/workspaces/{ws}/projects/{id}/members |
-| `bk issues project tasks` | List tasks for a project | — |
-| `bk issues project updates add` | Post a health update on a project (status: on_track/at_risk/off_track) | POST /api/workspaces/{ws}/projects/{id}/updates |
+| `bk issues project tasks` | List tasks for a project, by id or name | GET /api/workspaces/{ws}/projects, GET /api/workspaces/{ws}/tasks |
+| `bk issues project updates add` | Post a health update on a project (--status, aka --health) | GET /api/workspaces/{ws}/projects, POST /api/workspaces/{ws}/projects/{id}/updates |
 | `bk issues project updates delete` | Delete a project health update (author only) | DELETE /api/workspaces/{ws}/projects/{id}/updates/{updateId} |
 | `bk issues project updates list` | List health updates for a project | GET /api/workspaces/{ws}/projects/{id}/updates |
 | `bk issues project view` | Show a single project | GET /api/workspaces/{ws}/projects/{id} |
@@ -141,22 +149,22 @@
 | `bk issues storage rm` | Permanently delete an orphaned file | DELETE /api/workspaces/{ws}/storage/{id} |
 | `bk issues task comment` | Post a comment on a task | POST /api/workspaces/{ws}/tasks/{id}/comments |
 | `bk issues task comments` | List comments on a task | GET /api/workspaces/{ws}/tasks/{id}/comments |
-| `bk issues task create` | Create a task | POST /api/workspaces/{ws}/tasks |
+| `bk issues task create` | Create a task | GET /api/workspaces/{ws}/projects, POST /api/workspaces/{ws}/tasks |
 | `bk issues task delete` | Move a task to the Trash | DELETE /api/workspaces/{ws}/tasks/{id} |
 | `bk issues task edit` | Edit a task (name, description, due date; use 'none' to clear due date) | PATCH /api/workspaces/{ws}/tasks/{id} |
-| `bk issues task list` | List tasks (optionally filter by --project) | GET /api/workspaces/{ws}/tasks |
+| `bk issues task list` | List tasks (optionally filter by --project) | GET /api/workspaces/{ws}/projects, GET /api/workspaces/{ws}/tasks |
 | `bk issues task view` | Show a task | GET /api/workspaces/{ws}/tasks/{id} |
 | `bk issues trash empty` | Permanently delete everything in the recycle bin (owner only) | POST /api/workspaces/{ws}/trash/empty |
 | `bk issues trash list` | List items in the recycle bin | GET /api/workspaces/{ws}/trash |
 | `bk issues trash purge` | Permanently delete items from the recycle bin (owner only) | DELETE /api/workspaces/{ws}/trash/purge |
 | `bk issues trash restore` | Restore items (or a whole batch) from the recycle bin | POST /api/workspaces/{ws}/trash/restore |
 | `bk issues upload` | Upload file(s) and print the public URL(s) | GET /api/upload, POST /api/upload, POST /api/upload/blob |
-| `bk issues user list` | List all users | — |
+| `bk issues user list` | List all users | GET /api/users |
 | `bk issues user view` | Show a user (by id or email) | GET /api/users |
 | `bk issues workspace create` | Create a new workspace | POST /api/workspaces |
 | `bk issues workspace delete` | Permanently delete a workspace and everything in it (owner only) | DELETE /api/workspaces/{ws} |
 | `bk issues workspace edit` | Edit workspace settings (name, slug) | PATCH /api/workspaces/{ws} |
-| `bk issues workspace list` | List the workspaces you are a member of in this app | — |
+| `bk issues workspace list` | List the workspaces you are a member of in this app | GET /api/workspaces |
 | `bk issues workspace show` | Show details of a workspace (defaults to active) | GET /api/workspaces/{ws} |
 | `bk issues workspace transfer` | Transfer workspace ownership to another member (owner only) | POST /api/workspaces/{ws}/transfer |
 | `bk issues workspace use` | Set the active workspace for subsequent commands | GET /api/workspaces, POST /api/me/active-workspace |
@@ -168,17 +176,17 @@
 | `bk sales activity` | Show sales's workspace activity feed | GET /api/workspaces/{ws}/activity |
 | `bk sales comm list` | List logged communications, most recent first | GET /api/workspaces/{ws}/communications |
 | `bk sales comm log` | Record that a message was sent or received | POST /api/workspaces/{ws}/communications |
-| `bk sales comm rm` | Move a logged communication to the recycle bin | DELETE /api/workspaces/{ws}/communications/{n} |
+| `bk sales comm rm` | Move a logged communication to the recycle bin | DELETE /api/workspaces/{ws}/communications/{n}, GET /api/workspaces/{ws}/communications/{n} |
 | `bk sales comm show` | Show one logged communication in full | GET /api/workspaces/{ws}/communications/{n} |
-| `bk sales contact add` | Add a contact to a prospect | POST /api/workspaces/{ws}/prospects/{n}/contacts |
+| `bk sales contact add` | Add a contact to a prospect | GET /api/workspaces/{ws}/prospects/{n}, POST /api/workspaces/{ws}/prospects/{n}/contacts |
 | `bk sales contact edit` | Edit a contact | PATCH /api/workspaces/{ws}/prospects/{n}/contacts/{cid} |
 | `bk sales contact list` | List a prospect's contacts | GET /api/workspaces/{ws}/prospects/{n}/contacts |
 | `bk sales contact rm` | Remove a contact from a prospect | DELETE /api/workspaces/{ws}/prospects/{n}/contacts/{cid} |
-| `bk sales doc add` | Add a document to the library | POST /api/workspaces/{ws}/documents |
+| `bk sales doc add` | Add a document to the library | POST /api/workspaces/{ws}/documents, POST /api/workspaces/{ws}/documents/{n}/links |
 | `bk sales doc edit` | Edit a document's title, kind, description or tags | PATCH /api/workspaces/{ws}/documents/{n} |
 | `bk sales doc link` | Attach a document to a prospect, product or template | POST /api/workspaces/{ws}/documents/{n}/links |
 | `bk sales doc list` | List documents | GET /api/workspaces/{ws}/documents |
-| `bk sales doc rm` | Move a document to the recycle bin | DELETE /api/workspaces/{ws}/documents/{n} |
+| `bk sales doc rm` | Move a document to the recycle bin | DELETE /api/workspaces/{ws}/documents/{n}, GET /api/workspaces/{ws}/documents/{n} |
 | `bk sales doc show` | Show one document and what it is linked to | GET /api/workspaces/{ws}/documents/{n} |
 | `bk sales doc unlink` | Detach a document from a prospect, product or template | DELETE /api/workspaces/{ws}/documents/{n}/links |
 | `bk sales invite accept` | Accept an invitation by its token | POST /api/invitations/accept |
@@ -189,9 +197,9 @@
 | `bk sales invite revoke` | Revoke a pending invitation | DELETE /api/workspaces/{ws}/invitations/{id} |
 | `bk sales invite send` | Invite a teammate to the active workspace by email | POST /api/workspaces/{ws}/invitations |
 | `bk sales invite show` | Preview an invitation without accepting it | GET /api/invitations/{token} |
-| `bk sales journey add` | Record a journey step WITHOUT moving the deal | POST /api/workspaces/{ws}/prospects/{n}/journey |
+| `bk sales journey add` | Record a journey step WITHOUT moving the deal | GET /api/workspaces/{ws}/prospects/{n}, POST /api/workspaces/{ws}/prospects/{n}/journey |
 | `bk sales journey list` | Show a prospect's journey | GET /api/workspaces/{ws}/prospects/{n}/journey |
-| `bk sales label attach` | Attach a label to a prospect | GET /api/workspaces/{ws}/prospects/{n}/labels, POST /api/workspaces/{ws}/prospects/{n}/labels |
+| `bk sales label attach` | Attach a label to a prospect | GET /api/workspaces/{ws}/prospects/{n}, GET /api/workspaces/{ws}/prospects/{n}/labels, POST /api/workspaces/{ws}/prospects/{n}/labels |
 | `bk sales label create` | Create a label in the active workspace | POST /api/workspaces/{ws}/labels |
 | `bk sales label delete` | Delete a label (removes it from everything it is attached to) | DELETE /api/workspaces/{ws}/labels/{id} |
 | `bk sales label detach` | Detach a label from a prospect | DELETE /api/workspaces/{ws}/prospects/{n}/labels/{lid} |
@@ -200,33 +208,34 @@
 | `bk sales label view` | Show a label | GET /api/workspaces/{ws}/labels/{id} |
 | `bk sales match clear` | Remove a match | DELETE /api/workspaces/{ws}/prospects/{n}/matches |
 | `bk sales match list` | What has been matched to this prospect | GET /api/workspaces/{ws}/prospects/{n}/matches |
-| `bk sales match set` | Record which product fits this prospect, and why | POST /api/workspaces/{ws}/prospects/{n}/matches |
-| `bk sales meeting cancel` | Mark a meeting as cancelled | — |
+| `bk sales match set` | Record which product fits this prospect, and why | GET /api/workspaces/{ws}/prospects/{n}, POST /api/workspaces/{ws}/prospects/{n}/matches |
+| `bk sales meeting cancel` | Mark a meeting as cancelled | PATCH /api/workspaces/{ws}/meetings/{n} |
+| `bk sales meeting edit` | Change a meeting's details | PATCH /api/workspaces/{ws}/meetings/{n} |
 | `bk sales meeting list` | List meetings, most recent first | GET /api/workspaces/{ws}/meetings |
-| `bk sales meeting log` | Record a meeting that happened | — |
+| `bk sales meeting log` | Record a meeting that happened | POST /api/workspaces/{ws}/meetings |
 | `bk sales meeting outcome` | Record how a meeting went | PATCH /api/workspaces/{ws}/meetings/{n} |
-| `bk sales meeting rm` | Move a meeting to the recycle bin | DELETE /api/workspaces/{ws}/meetings/{n} |
+| `bk sales meeting rm` | Move a meeting to the recycle bin | DELETE /api/workspaces/{ws}/meetings/{n}, GET /api/workspaces/{ws}/meetings/{n} |
 | `bk sales meeting schedule` | Record an upcoming meeting | POST /api/workspaces/{ws}/meetings |
 | `bk sales meeting show` | Show one meeting | GET /api/workspaces/{ws}/meetings/{n} |
 | `bk sales member list` | List members of the active workspace | GET /api/workspaces/{ws}/members |
 | `bk sales member remove` | Remove a member from the active workspace (owner only) | DELETE /api/workspaces/{ws}/members/{userId} |
-| `bk sales metrics` | How the last N days went | GET /api/workspaces/{ws}/metrics |
-| `bk sales objection counter` | Write the answer to an objection | — |
+| `bk sales metrics` | Closed deals, new deals and activity over a period (--period 30d) | GET /api/workspaces/{ws}/metrics |
+| `bk sales objection counter` | Write the answer to an objection | PATCH /api/workspaces/{ws}/prospects/{n}/objections/{oid} |
 | `bk sales objection list` | List a prospect's objections | GET /api/workspaces/{ws}/prospects/{n}/objections |
-| `bk sales objection raise` | Record an objection | POST /api/workspaces/{ws}/prospects/{n}/objections |
+| `bk sales objection raise` | Record an objection | GET /api/workspaces/{ws}/prospects/{n}, POST /api/workspaces/{ws}/prospects/{n}/objections |
 | `bk sales objection resolve` | Mark an objection as settled | PATCH /api/workspaces/{ws}/prospects/{n}/objections/{oid} |
 | `bk sales objection rm` | Delete an objection PERMANENTLY | DELETE /api/workspaces/{ws}/prospects/{n}/objections/{oid} |
 | `bk sales pipeline` | Deal count and value by stage | GET /api/workspaces/{ws}/pipeline |
 | `bk sales preferences set` | Change your display settings | PATCH /api/workspaces/{ws}/preferences |
 | `bk sales preferences show` | Show your display settings | GET /api/workspaces/{ws}/preferences |
 | `bk sales product create` | Add a product to the catalog | POST /api/workspaces/{ws}/products |
-| `bk sales product delete` | Move a product to the recycle bin | DELETE /api/workspaces/{ws}/products/{n} |
+| `bk sales product delete` | Move a product to the recycle bin | DELETE /api/workspaces/{ws}/products/{n}, GET /api/workspaces/{ws}/products/{n} |
 | `bk sales product edit` | Edit a product | PATCH /api/workspaces/{ws}/products/{n} |
 | `bk sales product list` | List products | GET /api/workspaces/{ws}/products |
 | `bk sales product show` | Show one product | GET /api/workspaces/{ws}/products/{n} |
-| `bk sales prospect assign` | Set (or clear) a prospect's deal owner | — |
+| `bk sales prospect assign` | Set (or clear) a prospect's deal owner | PATCH /api/workspaces/{ws}/prospects/{n} |
 | `bk sales prospect create` | Create a prospect | POST /api/workspaces/{ws}/prospects |
-| `bk sales prospect delete` | Move a prospect to the recycle bin (requires the company name) | DELETE /api/workspaces/{ws}/prospects/{n} |
+| `bk sales prospect delete` | Move a prospect to the recycle bin (requires the company name) | DELETE /api/workspaces/{ws}/prospects/{n}, GET /api/workspaces/{ws}/prospects/{n} |
 | `bk sales prospect edit` | Edit a prospect's details, or reassign it | PATCH /api/workspaces/{ws}/prospects/{n} |
 | `bk sales prospect list` | List prospects in the active workspace | GET /api/workspaces/{ws}/prospects |
 | `bk sales prospect next` | Set (or clear) what this prospect is owed next | PATCH /api/workspaces/{ws}/prospects/{n}/next-action |
@@ -234,7 +243,7 @@
 | `bk sales prospect stage` | Move a deal to another stage and record the journey step | POST /api/workspaces/{ws}/prospects/{n}/stage |
 | `bk sales search` | Full-text search INSIDE this app's records | GET /api/workspaces/{ws}/sales-search |
 | `bk sales template create` | Add a template | POST /api/workspaces/{ws}/templates |
-| `bk sales template delete` | Move a template to the recycle bin | DELETE /api/workspaces/{ws}/templates/{n} |
+| `bk sales template delete` | Move a template to the recycle bin | DELETE /api/workspaces/{ws}/templates/{n}, GET /api/workspaces/{ws}/templates/{n} |
 | `bk sales template edit` | Edit a template | PATCH /api/workspaces/{ws}/templates/{n} |
 | `bk sales template list` | List templates | GET /api/workspaces/{ws}/templates |
 | `bk sales template render` | Fill a template in | POST /api/workspaces/{ws}/templates/{n}/render |
@@ -245,7 +254,7 @@
 | `bk sales trash purge` | Permanently delete items from the recycle bin (owner only) | DELETE /api/workspaces/{ws}/trash/purge |
 | `bk sales trash restore` | Restore items (or a whole batch) from the recycle bin | POST /api/workspaces/{ws}/trash/restore |
 | `bk sales upload` | Upload file(s) and print the public URL(s) | GET /api/upload, POST /api/upload, POST /api/upload/blob |
-| `bk sales workspace list` | List the workspaces you are a member of in this app | — |
+| `bk sales workspace list` | List the workspaces you are a member of in this app | GET /api/workspaces |
 | `bk sales workspace show` | Show details of a workspace (defaults to active) | GET /api/workspaces/{ws} |
 | `bk sales workspace use` | Set the active workspace for subsequent commands | GET /api/workspaces, POST /api/me/active-workspace |
 
@@ -259,6 +268,6 @@
 | `bk scaffold member list` | List members of the active workspace | GET /api/workspaces/{ws}/members |
 | `bk scaffold note create` | Create a note | POST /api/workspaces/{ws}/notes |
 | `bk scaffold note list` | List notes in the active workspace | GET /api/workspaces/{ws}/notes |
-| `bk scaffold workspace list` | List the workspaces you are a member of in this app | — |
+| `bk scaffold workspace list` | List the workspaces you are a member of in this app | GET /api/workspaces |
 | `bk scaffold workspace show` | Show details of a workspace (defaults to active) | GET /api/workspaces/{ws} |
 | `bk scaffold workspace use` | Set the active workspace for subsequent commands | GET /api/workspaces, POST /api/me/active-workspace |

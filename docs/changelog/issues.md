@@ -35,6 +35,105 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-08-12 — `--priority` takes the same words on issues and projects, and `project --priority` stopped corrupting data
+
+**One BREAKING change, and it is a bug fix.** No route changed.
+
+### `bk issues project create|edit --priority` was writing values nothing reads
+
+The flag's help said `urgent/high/medium/low/none`. Those are not values this
+app has ever stored. `issues.projects.priority` is a `varchar(10)` holding
+`P0`–`P4`, the route did no vocabulary check, and the column has no constraint —
+so `--priority urgent` wrote the literal string `urgent`, and the project then
+rendered as **"No priority"** in the listing, on the detail page and in
+`bk meta`. Nothing anywhere reported a problem.
+
+It now maps the names to the codes and **refuses anything else**:
+
+```
+$ bk issues project create --name Relaunch --priority urgent   # writes P0
+$ bk issues project create --name Relaunch --priority P0       # also fine
+$ bk issues project create --name Relaunch --priority critical
+error: invalid --priority "critical" — use one of urgent | high | medium | low | none, or a code: P0/P1/P2/P3/P4
+```
+
+**Breaking only if you were relying on the broken behaviour.** A script passing
+`urgent`, `high`, `medium`, `low` or `none` now writes the value the web app
+shows; one passing anything else fails instead of silently storing it.
+
+**Existing rows are not migrated.** Any project written this way still holds a
+word instead of a code. `bk issues project list --json` shows the raw value;
+re-set it with `bk issues project edit <id> --priority <name>`.
+
+### `bk issues issue create|edit --priority` takes names too
+
+`issue` took an integer and `project` took a word, inside one app. Both now take
+the same five names, and each still writes what its own table stores. **Nothing
+is renamed** — `--priority 1` works exactly as before, and both spellings appear
+in `--help`.
+
+An out-of-range integer now fails **locally**, naming both spellings, instead of
+costing a round trip to `priority must be 1-5 (400)`.
+
+### `--project` takes a NAME anywhere it is a flag
+
+`issue create`, `issue list`, `task create`, `task list`, `project updates add`,
+plus the positionals on `project issues` and `project tasks`. A bare integer is
+an id; anything else is a name, matched case-insensitively — the rule
+`label attach` already used. A name matching **more than one** project is an
+error listing every match with its id, never "pick the first":
+
+```
+$ bk issues issue create --project "Twin" --title x
+error: 2 projects are named "Twin" (#4, #5) — pass the id instead; nothing was changed
+```
+
+A project literally named `12` cannot be reached by name. An id costs no extra
+request, so existing scripts are unaffected.
+
+### `issue edit` says which issue
+
+```
+- updated #59 (status=done priority=P1)
++ updated #59 "Fix the login race" (status=done priority=P1 urgent)
+```
+
+Also on `issue assign`, `issue unassign` and `issue delete` — the last reads the
+title **before** the delete, so an irreversible command reports what it
+destroyed. `--json` payloads are unchanged; this is the human renderer only.
+`project edit` and `task edit` already named their records.
+
+### `issue view` lists attachments
+
+A new `Attachments:` row, **always printed** (`—` when there are none) for the
+same reason the `Labels:` row is: an absent row and an empty row look identical
+and only one of them is true. Attaching a file worked and `view` said nothing
+about it. An issue with no attachments costs no extra request — the count is
+already in the payload; the filenames cost one, and only when there is something
+to name.
+
+### `project updates add` accepts `--project` and `--health`
+
+Both were dead ends that had to be recovered from:
+
+```
+bk issues project updates add --project 12 --health on_track   # both now work
+bk issues project updates add 12 --status on_track             # unchanged, still canonical
+```
+
+`--health` is an alias for `--status`; `--project` is an alternative to the
+positional. Passing a pair with **different** values is an error naming both,
+exit 2. (This supersedes the two examples in platform.md's 2026-08-12 flag-hint
+entry: those flags are no longer unknown there, so no hint fires.)
+
+### `--body` is an alias for `--description`
+
+On `issue create` and `task create`, because `issue comment` and
+`project updates add` call the same thing `--body`. `--description` stays
+canonical; both are in `--help`. Different values → error naming both.
+
+---
+
 ## 2026-08-12 — `@mention` was always there, and now the help says so
 
 **Not breaking. No route changed.** Help text only — but it documents behaviour

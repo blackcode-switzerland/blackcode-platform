@@ -134,7 +134,7 @@ bk login --server https://issues.example.com   # browser-based authorize flow
 bk issues workspace list                               # show your workspaces
 bk issues workspace use acme                           # pick the active workspace
 bk issues project list                                 # show your projects
-bk issues issue create --project 1 --title "Fix login" --priority 2
+bk issues issue create --project 1 --title "Fix login" --priority urgent
 bk issues issue list --project 1 --mine
 bk issues issue comment 42 --body "Investigating now"
 ```
@@ -549,11 +549,11 @@ bk issues copy --to growth --project 42 --cascade-issues=false
 **`issue create` flags**:
 
 ```
---project N             (required)
+--project N | NAME      (required) — a bare integer is an id, anything else a name
 --title "..."           (required)
---description D | -      literal, or "-" for stdin
+--description D | -      literal, or "-" for stdin (--body is an alias)
 --description-file F     read description from file
---priority 1-5          1 = urgent
+--priority P            urgent | high | medium | low | none, or 1-5 (1 = urgent)
 --status S              backlog | todo | in_progress | done | cancelled
 --assignee REF [...]    id, email, display name, or "me" — repeatable for multiple assignees
 --task N           task id
@@ -565,6 +565,21 @@ bk issues copy --to growth --project 42 --cascade-issues=false
 ```
 
 > `--status` is free-form on the CLI side and validated server-side. The canonical issue statuses are `backlog`, `todo`, `in_progress`, `done`, and `cancelled`.
+
+> **`--priority` is NOT free-form, on either noun, and that is deliberate.**
+> Issue priority is stored as an integer 1–5 and project priority as a `P0`–`P4`
+> string, so the same five names (`urgent|high|medium|low|none`) map to different
+> stored values on `issue` and on `project`. The CLI resolves and validates them
+> locally — an out-of-range integer fails before the request, and an unknown word
+> fails instead of being passed through.
+>
+> Passing a word through is what `project create|edit` used to do, and the
+> project route validates nothing: `--priority urgent` wrote the literal string
+> `urgent` into a `varchar(10)` every reader treats as `P0`–`P4`, and the project
+> rendered as "No priority" everywhere. Fixed 2026-08-12. The mapping lives in
+> `cli/internal/commands/issues/vocab.go` and is held against
+> `apps/issues/lib/work-items.ts` by `apps/issues/lib/cli-vocabulary.test.ts`,
+> which fails in both directions.
 
 #### Embedding files in descriptions & comments
 
@@ -684,7 +699,7 @@ Per-user notifications (invitations, mentions, assignments, status changes).
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk issues inbox list [--unread]` | `GET /api/me/inbox` | Prints an unread count to stderr. `--unread` shows only unread messages. |
+| `bk issues inbox list [--unread] [--ws W]` | `GET /api/me/inbox` | Prints an unread count to stderr. `--unread` shows only unread messages. **Global by default** — every workspace, every app that notifies you. The persistent `--ws` (slug or id) narrows it to one; an unresolvable slug errors rather than falling back to the unfiltered list. |
 | `bk issues inbox read [id ...] \| --all` | `POST /api/me/inbox/mark-read` | Provide message ids, or `--all` to mark every unread message read. |
 | `bk issues inbox archive <id> [id ...]` | `POST /api/me/inbox/archive` | At least one id is required. |
 

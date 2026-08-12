@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -259,13 +260,24 @@ type InboxPage struct {
 	UnreadCount int            `json:"unread_count" yaml:"unread_count"`
 }
 
-func (c *Client) ListInbox(unreadOnly, includeArchived bool) (*InboxPage, error) {
+// ListInbox reads the caller's notifications.
+//
+// workspaceID scopes the read to one workspace when > 0. The route has always
+// read `?workspace_id=` — `listInbox`/`countUnread` filter on it — and nothing
+// in the CLI ever sent it, so `inbox list` was every workspace, going back
+// weeks, with no way to narrow it. Verified against a running route on
+// 2026-08-12: the request the CLI sent was `/api/me/inbox?limit=200` and
+// `--ws` changed nothing about it.
+func (c *Client) ListInbox(unreadOnly, includeArchived bool, workspaceID int) (*InboxPage, error) {
 	path := "/api/me/inbox?limit=200"
 	if unreadOnly {
 		path += "&unread=true"
 	}
 	if includeArchived {
 		path += "&include_archived=true"
+	}
+	if workspaceID > 0 {
+		path += "&workspace_id=" + strconv.Itoa(workspaceID)
 	}
 	var page InboxPage
 	if err := c.get(path, &page); err != nil {
