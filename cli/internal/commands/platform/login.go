@@ -2,6 +2,7 @@ package platform
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/browser"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
@@ -34,10 +36,10 @@ the minted token via a loopback HTTP server, and saves credentials to
 ` + config.DisplayPath() + ` (mode 0600).
 
 ONE LOGIN COVERS EVERY APP. --server names whichever app's URL you have; the
-token it mints is valid against all of them, and `+"`bk login`"+` also learns the
-address book, so `+"`bk <app> …`"+` routes without anyone typing a second URL.
+token it mints is valid against all of them, and ` + "`bk login`" + ` also learns the
+address book, so ` + "`bk <app> …`" + ` routes without anyone typing a second URL.
 It does NOT grant anything: whether you have a workspace in an app is that app's
-own question, and `+"`bk <app> workspace list`"+` asks it.
+own question, and ` + "`bk <app> workspace list`" + ` asks it.
 
 Use --token for headless/CI, where there is no browser. It is a SWITCH, not a
 value: the token is read from STDIN, so it never lands in your shell history,
@@ -83,7 +85,7 @@ this.`,
 	}
 	cmd.Flags().StringVar(&server, "server", "", "Server base URL of any Blackcode app (default: "+config.DefaultServer+")")
 	cmd.Flags().BoolVar(&pasteToken, "token", false, "Read a pre-existing token from STDIN instead of opening a browser. A "+
-			"switch, not a value: echo <token> | bk login --token")
+		"switch, not a value: echo <token> | bk login --token")
 	return cmd
 }
 
@@ -128,11 +130,171 @@ func runPasteLogin(server string) error {
 		}
 		raw = line
 	}
-	token := strings.TrimSpace(raw)
+	token, reshaped := sanitizeToken(raw)
 	if token == "" {
 		return errNoTokenOnStdin(server)
 	}
-	return finishLogin(server, token)
+	err := finishLogin(server, token)
+	if err == nil {
+		return nil
+	}
+	// A REFUSED TOKEN THAT WENT THROUGH A PIPE HAS A SECOND SUSPECT.
+	//
+	// `token validation failed: 401` describes the answer, not the cause, and on
+	// Windows the cause is frequently the pipeline rather than the token: see
+	// sanitizeToken's header. Name what we found, and name the one route that
+	// has no encoding in it at all.
+	//
+	// ONLY when the server actually REFUSED the token. A dead host, a DNS
+	// failure or a wrong --server produce the same `err` here, and blaming the
+	// encoding for those is a hint that sends the reader somewhere the fix is
+	// not — the exact defect every other message in this file was written to
+	// remove.
+	if !tokenWasRefused(err) {
+		return err
+	}
+	if reshaped != "" {
+		return fmt.Errorf("%w\n      the token arrived %s and was decoded before use — "+
+			"if it is definitely correct, run `bk login --token` with NO pipe and paste it at the prompt",
+			err, reshaped)
+	}
+	if !term.IsTerminal(fd) {
+		return fmt.Errorf("%w\n      if that token is definitely correct, the pipeline may have re-encoded it "+
+			"(PowerShell's $OutputEncoding does) — run `bk login --token` with NO pipe and paste it at the prompt", err)
+	}
+	return err
+}
+
+// tokenWasRefused distinguishes "the server said no" from "there was no
+// server". Only the first says anything about the token.
+func tokenWasRefused(err error) bool {
+	var ae *client.APIError
+	if !errors.As(err, &ae) {
+		return false
+	}
+	return ae.Status == http.StatusUnauthorized || ae.Status == http.StatusForbidden
+}
+
+// sanitizeToken makes a piped token survive a shell that re-encodes the
+// pipeline, and reports what it had to undo.
+//
+// ---------------------------------------------------------------------------
+// WHY, AND WHAT IS ACTUALLY VERIFIED HERE
+// ---------------------------------------------------------------------------
+// `echo <token> | bk login --token` is what this CLI tells everyone to run, and
+// it was written and tested on macOS. In PowerShell `echo` is `Write-Output`,
+// and the pipeline to a native binary is encoded with `$OutputEncoding` — which
+// in Windows PowerShell 5.1 is not UTF-8, and which several common
+// configurations make UTF-16 or BOM-prefixed. `strings.TrimSpace` does not strip
+// a byte-order mark, so a correct token could arrive with three invisible bytes
+// on the front and be refused as invalid with nothing on screen explaining it.
+//
+// **This was reasoned about, not observed** — nobody on this project has a
+// Windows machine, and the phase report says so rather than claiming otherwise.
+// That is precisely why the fix is one that cannot be wrong anywhere: a NUL byte
+// and a U+FEFF are both impossible inside a real token on every platform, so
+// removing them changes nothing that was working and rescues something that was
+// not.
+//
+// Deliberately NOT done: guessing at code pages. Mojibake of a non-ASCII string
+// is a different failure with a different fix (`bk guide platform/encoding`),
+// tokens are ASCII, and a decoder that guesses is a decoder that corrupts.
+//
+// The second return value is a fragment for an error message ("with a UTF-8
+// byte-order mark"), empty when the input needed nothing.
+func sanitizeToken(raw string) (token, reshaped string) {
+	b := []byte(raw)
+	notes := []string{}
+
+	switch {
+	case len(b) >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF:
+		b = b[3:]
+		notes = append(notes, "with a UTF-8 byte-order mark")
+	case len(b) >= 2 && b[0] == 0xFF && b[1] == 0xFE:
+		b = decodeUTF16(b[2:], true)
+		notes = append(notes, "UTF-16 encoded (little-endian, with a byte-order mark)")
+	case len(b) >= 2 && b[0] == 0xFE && b[1] == 0xFF:
+		b = decodeUTF16(b[2:], false)
+		notes = append(notes, "UTF-16 encoded (big-endian, with a byte-order mark)")
+	case bytes.IndexByte(b, 0x00) >= 0:
+		// BOM-LESS UTF-16, which is what a `$OutputEncoding` set to
+		// `[Text.Encoding]::Unicode` produces. A NUL byte cannot occur in a real
+		// token on any platform, so its presence is the whole detection: no
+		// heuristic threshold, nothing to tune. Endianness is decided by which
+		// side of each pair the NULs are on.
+		//
+		// The truncation case matters: the caller reads with ReadString('\n'),
+		// which stops ON the 0x0A byte and leaves its trailing 0x00 in the pipe,
+		// so the buffer here has ODD length. decodeUTF16 drops the stray byte
+		// rather than refusing, which is why this is not an even-length check.
+		b = decodeUTF16(b, zerosAreOnOddIndices(b))
+		notes = append(notes, "UTF-16 encoded (no byte-order mark)")
+	}
+
+	s := string(b)
+	// A U+FEFF anywhere else — a BOM that survived a decode, or one pasted in.
+	if strings.Contains(s, "\ufeff") {
+		s = strings.ReplaceAll(s, "\ufeff", "")
+		if len(notes) == 0 {
+			notes = append(notes, "with a byte-order mark inside it")
+		}
+	}
+	// Control characters. TrimSpace handles the edges; this catches an embedded
+	// one, which no token has and which is invisible on screen.
+	if strings.ContainsFunc(s, isControl) {
+		s = strings.Map(func(r rune) rune {
+			if isControl(r) {
+				return -1
+			}
+			return r
+		}, s)
+		if len(notes) == 0 {
+			notes = append(notes, "with invisible control characters in it")
+		}
+	}
+	return strings.TrimSpace(s), strings.Join(notes, " and ")
+}
+
+func isControl(r rune) bool {
+	// Not unicode.IsControl: that is true for \n, \r and \t, which are the
+	// ordinary end of a piped line and are TrimSpace's job.
+	if r == '\n' || r == '\r' || r == '\t' {
+		return false
+	}
+	return r < 0x20 || r == 0x7F
+}
+
+// zerosAreOnOddIndices reports whether a BOM-less UTF-16 buffer is
+// little-endian, by counting which side of each 2-byte pair the NULs sit on.
+// Counting rather than sampling: a buffer truncated mid-pair, or one that
+// happens to start with a non-ASCII character, breaks a single-byte test.
+func zerosAreOnOddIndices(b []byte) bool {
+	odd, even := 0, 0
+	for i, c := range b {
+		if c != 0x00 {
+			continue
+		}
+		if i%2 == 1 {
+			odd++
+		} else {
+			even++
+		}
+	}
+	return odd >= even
+}
+
+// decodeUTF16 reads 2-byte code units and returns UTF-8. A trailing odd byte is
+// dropped — see the truncation note in sanitizeToken.
+func decodeUTF16(b []byte, littleEndian bool) []byte {
+	units := make([]uint16, 0, len(b)/2)
+	for i := 0; i+1 < len(b); i += 2 {
+		if littleEndian {
+			units = append(units, uint16(b[i])|uint16(b[i+1])<<8)
+		} else {
+			units = append(units, uint16(b[i])<<8|uint16(b[i+1]))
+		}
+	}
+	return []byte(string(utf16.Decode(units)))
 }
 
 func runBrowserLogin(server string) error {

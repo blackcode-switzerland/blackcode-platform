@@ -41,6 +41,21 @@ For a Python wrapper, set `PYTHONUTF8=1`.
 - Never re-feed a decoded string: reading with `--json`, mangling it in a
   non-UTF-8 shell, and writing it back is how corruption spreads.
 
+## The one place `bk` does transcode: a piped token
+
+`echo <token> | bk login --token` is the documented headless form, and in
+PowerShell that pipeline is encoded with `$OutputEncoding` — which can put a
+byte-order mark in front of the token, or send it as UTF-16. `bk login` strips a
+BOM and decodes UTF-16 before validating, and if the server still refuses the
+token it says that the pipeline reshaped it.
+
+This is the exception, not a change of policy: a token is ASCII and a NUL byte or
+a U+FEFF can never be part of one, so undoing them cannot damage a correct token.
+Body text is still passed through unchanged — use `--body-file`.
+
+If a token you are sure of is refused, take the pipeline out: run
+`bk login --token` with no pipe and paste it at the prompt.
+
 ## Repairing damage you already have
 
 It is deterministic and reversible — re-encode the visible string to the wrong

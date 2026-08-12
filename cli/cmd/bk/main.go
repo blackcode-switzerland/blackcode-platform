@@ -186,6 +186,15 @@ func hintFor(err error, resolved *cobra.Command) string {
 		}
 		switch ae.Status {
 		case 401:
+			// TELLING `bk login` TO RUN `bk login` IS A LOOP, NOT A RECOVERY.
+			// A 401 from the login command is the server refusing the token that
+			// was just supplied, and the generic advice sends the caller back to
+			// the command they are already in. Measured on a fake 401 server on
+			// 2026-08-12, before this branch existed.
+			if commandPath == "bk login" {
+				return "the server refused that token — mint a fresh one in the web UI at " +
+					"Settings → API Tokens, or run `bk login` with no flags to mint one in a browser"
+			}
 			return "not authenticated — run `bk login`. New here? run `bk guide`"
 		case 400, 404, 422:
 			// The strongest drift signals: a shape or resource that used to work.

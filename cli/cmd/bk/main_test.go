@@ -644,3 +644,38 @@ func TestDriftStatusesNameSkillSync(t *testing.T) {
 		t.Errorf("a 403 was told the surface may have changed: %q", hint)
 	}
 }
+
+// A 401 FROM `bk login` MUST NOT SAY "run `bk login`".
+//
+// The generic 401 hint is right everywhere else and is a loop here: the server
+// has just refused the token this very command supplied, and the caller is
+// already inside `bk login`. Measured against a fake 401 server on 2026-08-12,
+// where the output was `error: token validation failed: invalid token (401)`
+// followed by `hint: not authenticated — run bk login`.
+//
+// Both halves are asserted. Checking only that the login hint changed would
+// pass against a change that broke the generic one, which is the whole reason
+// the generic one exists.
+func TestUnauthorizedHintDoesNotSendLoginBackToLogin(t *testing.T) {
+	unauthorized := &client.APIError{Status: 401, ErrorMsg: "invalid token"}
+
+	login := hintFor(unauthorized, findCmd(t, "login"))
+	// The bare spelling is the loop. `bk login` may still be NAMED here — the
+	// browser flow is a real alternative to a token that was refused — but only
+	// qualified into a different invocation from the one that just failed.
+	if strings.Contains(login, "run `bk login`.") || strings.Contains(login, "run `bk login` to") {
+		t.Errorf("the hint on `bk login` tells the caller to run `bk login`, unqualified:\n  %s", login)
+	}
+	if strings.Contains(login, "run `bk login`") && !strings.Contains(login, "with no flags") {
+		t.Errorf("the hint on `bk login` names `bk login` without saying how it differs:\n  %s", login)
+	}
+	if !strings.Contains(login, "Settings") {
+		t.Errorf("the hint on `bk login` names no way to get a working token:\n  %s", login)
+	}
+
+	// The generic case, unchanged: anywhere else, `bk login` IS the recovery.
+	other := hintFor(unauthorized, findCmd(t, "issues", "issue", "list"))
+	if !strings.Contains(other, "run `bk login`") {
+		t.Errorf("the generic 401 hint stopped naming `bk login`:\n  %s", other)
+	}
+}

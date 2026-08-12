@@ -69,6 +69,42 @@ Two more installer fixes in the same pass:
   It now says to close the shells that have run `bk` and retry. `EACCES` names
   `npm config set prefix` instead.
 
+### A piped token survives a shell that re-encodes the pipeline
+
+`echo <token> | bk login --token` is what this CLI tells everyone to run, and it
+was written and tested on macOS. In PowerShell `echo` is `Write-Output`, and the
+pipeline to a native binary is encoded with `$OutputEncoding` — which can prefix
+a byte-order mark or send the whole thing as UTF-16. `strings.TrimSpace` does not
+strip a BOM, so a correct token could arrive with three invisible bytes on the
+front and be refused as invalid with nothing on screen explaining it.
+
+`bk login --token` now strips a UTF-8 BOM, decodes UTF-16 (either endianness,
+with or without a mark, including the buffer truncated mid-code-unit by reading
+to the newline) and drops embedded control characters — then, if the server still
+returns 401, says the pipeline reshaped the token and names the route with no
+encoding in it:
+
+```
+error: token validation failed: invalid token (401)
+      the token arrived with a UTF-8 byte-order mark and was decoded before use —
+      if it is definitely correct, run `bk login --token` with NO pipe and paste it at the prompt
+```
+
+**This was reasoned about, not observed on Windows.** It is deliberately limited
+to transformations that cannot damage a correct token anywhere: a NUL byte and a
+U+FEFF are impossible inside one. No code-page guessing — that is a different
+failure with a different fix (`bk guide platform/encoding`).
+
+The encoding note fires only on a genuine **401/403**. An unreachable host or a
+wrong `--server` produces the same Go error and says nothing about encoding.
+
+### A 401 from `bk login` no longer answers "run `bk login`"
+
+Every 401 got the same hint, and inside `bk login` it is a loop: the server has
+just refused the token this command supplied. It now names the two ways to get a
+working one — mint it in the web UI at Settings → API Tokens, or run `bk login`
+with no flags for the browser flow. The hint is unchanged everywhere else.
+
 ## 2026-08-12 — every app's active workspace is visible in one command, and `bk link`'s dead code is gone
 
 **Not breaking.** Two things, both closing the same finding: what crosses an app
