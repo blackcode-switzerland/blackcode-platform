@@ -145,7 +145,13 @@ var deprecations = map[string]string{
 	// apps, which needed one shared entity index; that index is now written by
 	// one app, so the feature has no honest implementation. Say what to do
 	// instead, because there is no new spelling to name.
-	"link": "`bk link` was removed on 2026-08-10 — it recorded a relation between two apps' entities in a shared index, and the apps no longer share one. Put the other end's URN (`bc:sales:<ws>/prospect/12`) in the description or a comment instead; `bk <app> search` finds a URN.",
+	//
+	// "not replaced" is load-bearing (added 2026-08-12, when cross-app
+	// references were decided against outright and the rest of the feature's
+	// code was deleted). Without it an agent reads "removed" as "moved, and I
+	// have not found where yet" and keeps looking — which is the failure this
+	// whole table exists to prevent, one step further on.
+	"link": "`bk link` was removed on 2026-08-10 and is NOT replaced — cross-app references are not a supported feature. It recorded a relation between two apps' entities in a shared index, and the apps no longer share one. Put the other end's URN (`bc:sales:<ws>/prospect/12`) in the description or a comment instead — that is the design, not a workaround; `bk <app> search` prints a URN. See `bk guide platform/cross-app`.",
 
 	// --- 1.12.0 (2026-08-05): `bk undo` removed ---
 	//
