@@ -234,6 +234,28 @@ func hintFor(err error, resolved *cobra.Command) string {
 			"your shell history. Run: echo <token> | bk login --token"
 	}
 
+	// ─────────────────────────────────────────────────────────────────────────
+	// `bk changelog` IS DELIBERATELY NOT IN THE DRIFT HINT BELOW. DECIDED
+	// 2026-08-12; READ THIS BEFORE ADDING IT.
+	// ─────────────────────────────────────────────────────────────────────────
+	// Issue #18 closes with *"the error hints are decent but don't point at the
+	// changelog as step 1"*. It was weighed, not waved off:
+	//
+	//   FOR — the changelog is the one surface that explains WHY something
+	//   changed rather than only what to run now.
+	//
+	//   AGAINST, and it won — `bk skill sync` is strictly more actionable for
+	//   the caller standing here. It refreshes the agent's own instructions AND
+	//   reports whether the binary is behind, which is the actual cause in every
+	//   case #18 lists. The drift hint already names three things (`<group>
+	//   --help`, `bk guide`, `bk skill sync`); a fourth makes it a menu, and
+	//   this repo's rule is that a hint names ONE recovery. `bk changelog` is
+	//   already in `bk --help` under "When something that used to work stops
+	//   working" — the moment it genuinely is the right command — so it is
+	//   reachable without spending the hint's one line on it.
+	//
+	// If this is revisited it belongs on the DRIFT branch only, never on the
+	// deprecation hints, which already name the exact replacement.
 	if strings.Contains(msg, "unknown flag") ||
 		strings.Contains(msg, "unknown command") ||
 		strings.Contains(msg, "unknown shorthand") {

@@ -125,6 +125,24 @@ It lives in [`/cli`](../cli) as a standalone Go module — separate from the web
 > Versions published before the rename still reference the old URL and keep
 > working via the redirect.
 
+> **`cli/npm/install.js` is the only code that runs on the user's machine at
+> install time, and on Windows that is where two of the four failures in a real
+> first login happen.** PowerShell resolves npm's `bk.ps1` shim before `bk.cmd`,
+> and the default execution policy on a Windows client refuses it; a
+> half-finished install then holds the shim so the retry dies on `EBUSY`. The
+> script detects the policy and prints both recoveries — **detect, never
+> change**, and print anyway when the policy cannot be read, because a printed
+> line costs nothing and a dead end costs a user.
+>
+> Two constraints on editing it. The download must stay behind
+> `if (require.main === module)`: `packages/platform-testing/test/cli-npm-install.test.ts`
+> `require()`s the file to assert the guidance, and a top-level download would
+> hit the network on every `npm test`. And the guidance must stay a **pure
+> function of (platform, policy)** — that is the only way it can be tested at
+> all, since nobody here has a Windows machine. That test proves the advice is
+> REACHED in the states it was written for; it cannot prove the advice is correct
+> on Windows, and it says so in its own header.
+
 The CLI mirrors the web app's capabilities: workspaces, projects, members, issues, comments, attachments, tasks, labels, invitations, an inbox, the activity feed, analytics, moving/copying items between workspaces, and — for super admins — platform-wide administration (members, access whitelist, error logs). Output defaults to a human-readable table; `--json` and `--yaml` produce machine-friendly formats with stable shapes.
 
 A typical session:
@@ -303,6 +321,27 @@ Guarded by `internal/commands/login_token_test.go` and
 `TestTokenValueHintNamesTheStdinForm` / `TestTokenHintDoesNotFireForOtherBooleanFlags`
 in `cmd/bk/main_test.go`.
 
+**The pipeline itself is the fourth suspect, and it is Windows-specific.** In
+PowerShell the pipe to a native binary is encoded with `$OutputEncoding`, which
+can prefix a BOM or send UTF-16; `TrimSpace` does not strip a BOM, so a correct
+token could arrive with three invisible bytes on the front and be refused as
+invalid. `sanitizeToken` (`internal/commands/platform/login.go`) strips a UTF-8
+BOM, decodes UTF-16 in either endianness with or without a mark — including the
+odd-length buffer `ReadString('\n')` leaves, since the newline's trailing NUL
+stays in the pipe — and drops embedded control characters. On a **401/403 only**,
+the error names what was undone and points at `bk login --token` with no pipe.
+
+It is limited on purpose to transformations that cannot damage a correct token on
+any platform: a NUL byte and a U+FEFF are impossible inside one. **No code-page
+guessing** — mojibake is a different failure with a different fix. Nobody on this
+project has a Windows machine; the bytes are constructed from the encodings in
+`internal/commands/platform/login_encoding_test.go`, which proves the decoding
+and does not prove PowerShell emits them.
+
+A 401 from `bk login` itself no longer answers "run `bk login`" — that is a loop.
+It names the web UI's token page and the browser flow instead
+(`TestUnauthorizedHintDoesNotSendLoginBackToLogin`).
+
 ### An unknown flag names the near miss
 
 `hintFor()` receives the command **cobra resolved**, not just its path, because
@@ -363,7 +402,7 @@ bk issues issue view 234 --ws acme                     # view by the #seq shown 
 | Flag | Purpose |
 |---|---|
 | `--ws <slug\|id>` | Target a workspace for this command only; does not change the active one. |
-| `-v`, `--verbose` | Log each HTTP request/response (method, URL, status, body) to stderr. Same as `BK_DEBUG=1`. Use this instead of dropping to `curl` when the CLI's view disagrees with reality. |
+| `-v`, `--verbose` | Trace the run to stderr: the config file in use, the resolved command, the app/server/workspace and where each came from, then the request (method, URL, JSON body) and response (status, size, duration, body). Same as `BK_DEBUG=1`. The first block prints even for commands that make no request. Use this instead of dropping to `curl` when the CLI's view disagrees with reality. **Headers are never printed** — `Authorization` carries the token, and `internal/client/verbose_test.go` fails the build if it appears. |
 | `-o`, `--json`, `--yaml` | Output format (see [Output formats](#output-formats)). |
 
 ---
@@ -910,7 +949,16 @@ Non-numeric refs trigger a `GET /api/users` lookup the first time they're resolv
 
 ### Config file
 
-`~/.config/bk/config.json` (mode `0600`, directory mode `0700`):
+`~/.config/bk/config.json` on macOS/Linux, `C:\Users\<you>\.config\bk\config.json`
+on Windows (mode `0600`, directory mode `0700`, where the OS has them):
+
+> **No help string, error or doc may spell that path itself.**
+> `config.DisplayPath()` returns the real path for the running OS and follows
+> `BK_CONFIG_DIR`; `cli/internal/config/display_path_test.go` parses every Go
+> file in the CLI and fails on a string literal containing `.config/bk`. Three
+> user-facing messages had the literal, and on Windows every one of them named a
+> file that does not exist. `bk meta`'s `routing.note` prints the live answer.
+
 
 ```json
 {
@@ -952,7 +1000,7 @@ Override the directory with `BK_CONFIG_DIR` (the file is always `config.json` in
 
 | Variable | Effect |
 |---|---|
-| `BK_CONFIG_DIR` | Override the config directory (default `~/.config/bk`). |
+| `BK_CONFIG_DIR` | Override the config directory (default `~/.config/bk`, or `%USERPROFILE%\.config\bk` on Windows). |
 | `BK_NO_PROMPT=1` | Skip all interactive confirmations (recommended for CI / agents). |
 
 ### Server selection — one binary, several deployments (D-1)
