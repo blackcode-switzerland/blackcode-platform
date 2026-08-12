@@ -137,6 +137,34 @@ A non-JSON request body — an upload — is described, not dumped.
 The `-v` line in `bk --help`, `bk guide platform/output`, and the agent skill
 file all say what it now shows.
 
+### `bk guide platform/output` described a pagination that does not exist
+
+**Documentation only — no command changed.** The topic said three feeds paginate
+(`bk <app> activity`, `bk <app> trash list`, `bk super-admin errors list`) and
+told agents to *"follow `next_cursor` until it is `null`"*. Measured: `trash
+list` has **no `--limit` and no `--cursor`**, and its client method reads only
+`data` and discards `next_cursor` entirely — the instruction could not be carried
+out. It also missed three commands that DO paginate: `bk sales prospect list`,
+`bk sales meeting list`, `bk sales comm list`.
+
+The same paragraph claimed every list command prints
+`{ "data": …, "next_cursor": … }`. Measured against a local server: `bk issues
+label list`, `bk issues project list`, `bk issues workspace list` and
+`bk <app> trash list` print a **bare JSON array**, while `bk issues issue list`
+and `bk issues inbox list` print the envelope. Both shapes are documented now,
+with the one-line `jq` that handles either:
+
+```bash
+jq 'if type == "array" then . else .data end'
+```
+
+**No output shape changed** — this is the doc catching up with the binary. A new
+guard (`cli/internal/guide/pagination_claim_test.go`) derives the paginating set
+from the real command tree and fails the build if the topic's list disagrees; the
+inconsistency in the shapes themselves is recorded as owed work rather than fixed
+on the eve of a forced release, because unwrapping is a breaking change for
+anything already parsing it.
+
 ### A 401 from `bk login` no longer answers "run `bk login`"
 
 Every 401 got the same hint, and inside `bk login` it is a loop: the server has

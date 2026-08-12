@@ -45,17 +45,28 @@ carries your token and this output goes into bug reports. A non-JSON request bod
 
 ## Shapes
 
-A **list** command prints `{ "data": [ … ], "next_cursor": <id|null> }`.
-`bk issues issue list` adds `"total"`. A **single-item** command prints the bare object.
+A **single-item** command prints the bare object.
 
-Most lists return everything in one response and `next_cursor` is `null`. Only
-three feeds paginate: `bk issues activity`, `bk issues trash list`, and
-`bk super-admin errors list`. They take `--limit` / `--cursor`; follow
-`next_cursor` until it is `null`. Page size defaults and caps are in `bk meta`
-under `limits.page_size_default` / `limits.page_size_max`.
+A **list** command prints one of two shapes, and you should not assume which:
 
-In table mode a paginated command prints `next page: --cursor=<id>` to **stderr**
-when more rows remain, so `--json` stdout stays clean.
+- a **bare JSON array** — the common case. The CLI unwraps the server's envelope
+  when there is nothing else in it. `bk issues label list`,
+  `bk issues project list`, `bk issues workspace list`, `bk <app> trash list`.
+- **`{ "data": [ … ], "next_cursor": <id|null> }`** — when the command carries
+  something alongside the rows. `bk issues issue list` (which also adds
+  `"total"`) and `bk issues inbox list`.
+
+Handle both: `jq 'if type == "array" then . else .data end'`. Run the command
+once with `--json` to see which you are getting; it does not change under you.
+
+**These commands paginate**, and no others: `bk <app> activity`,
+`bk super-admin errors list`, `bk sales prospect list`, `bk sales meeting list`,
+`bk sales comm list`. They are exactly the commands with `--limit` / `--cursor`
+— everything else returns the whole list in one response. Page size defaults and
+caps are in `bk meta` under `limits.page_size_default` / `limits.page_size_max`.
+
+In table mode those two print `next page: --cursor=<id>` to **stderr** when more
+rows remain, so `--json` stdout stays clean.
 
 ## Exit codes — branch on these, not on stderr text
 
@@ -109,4 +120,4 @@ bk issues issue list --project 1 --status todo --json \
   | xargs -n1 -I{} bk issues issue edit {} --status in_progress --assignee me
 ```
 
-Related commands: every command; see `bk issues activity`, `bk issues trash list`, `bk super-admin errors list` for pagination
+Related commands: every command; see `bk issues activity` and `bk super-admin errors list` for pagination
