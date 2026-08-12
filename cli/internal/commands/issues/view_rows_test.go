@@ -58,7 +58,10 @@ func TestIssueViewPrintsLabelsAndAttachmentsUnconditionally(t *testing.T) {
 	// story: three reports concluded `edit-comment` and `delete-comment` did not
 	// exist, and both have all along — nothing on this page mentioned comments,
 	// so there was nothing to lead a reader to them.
-	for _, want := range []string{"Labels:", "Attachments:", "Comments:"} {
+	// "Task:" joined on the same day for the same reason, found by running
+	// `issue edit --project none` and watching the row disappear: "not grouped"
+	// and "this app has no such concept" printed identically.
+	for _, want := range []string{"Labels:", "Attachments:", "Comments:", "Task:"} {
 		if !unconditional[want] {
 			t.Errorf("`issue view` does not print a %q row unconditionally. Either it was removed, "+
 				"or it moved inside an `if` — and a row that disappears when the value is empty is "+

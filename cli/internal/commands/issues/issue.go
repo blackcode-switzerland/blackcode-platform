@@ -306,7 +306,7 @@ func newIssueViewCmd() *cobra.Command {
 			return output.Render(format, iss, func(w io.Writer) error {
 				fmt.Fprintf(w, "Issue:       %s\n", issueRef(iss))
 				fmt.Fprintf(w, "Title:       %s\n", iss.Title)
-				fmt.Fprintf(w, "Project:     #%d %s\n", iss.ProjectID, cmdutil.DerefOr(iss.ProjectName, ""))
+				fmt.Fprintf(w, "Project:     %s\n", projectRefLabel(iss))
 				fmt.Fprintf(w, "Status:      %s\n", iss.Status)
 				fmt.Fprintf(w, "Priority:    P%d\n", iss.Priority)
 				fmt.Fprintf(w, "Assignees:   %s\n", issueAssigneeLabel(iss.Assignees))
@@ -332,9 +332,12 @@ func newIssueViewCmd() *cobra.Command {
 				// existed the whole time. Nothing on this page mentioned comments
 				// at all, so there was nothing to lead a reader to them.
 				fmt.Fprintf(w, "Comments:    %s\n", issueCommentLabel(iss))
-				if iss.TaskName != nil {
-					fmt.Fprintf(w, "Task:        %s\n", taskRefLabel(iss))
-				}
+				// Unconditional, like the three rows above and for the same
+				// reason. It used to vanish when the issue was in no task, so
+				// "not grouped" and "this app has no such concept" printed
+				// identically — and `issue edit --project` makes the ungrouped
+				// state something a caller reaches on purpose now.
+				fmt.Fprintf(w, "Task:        %s\n", taskRefLabel(iss))
 				if iss.DueDate != nil {
 					fmt.Fprintf(w, "Due:         %s\n", *iss.DueDate)
 				}
@@ -1352,11 +1355,22 @@ func issueCommentLabel(iss *client.Issue) string {
 // this app is printed. It used to be the bare name, which is not something a
 // caller can pass to `task view`.
 func taskRefLabel(iss *client.Issue) string {
-	name := cmdutil.DerefOr(iss.TaskName, "")
-	if iss.TaskID == nil {
-		return name
+	if iss.TaskID == nil || *iss.TaskID == 0 {
+		return "—"
 	}
-	return fmt.Sprintf("#%d %s", *iss.TaskID, name)
+	return strings.TrimSpace(fmt.Sprintf("#%d %s", *iss.TaskID, cmdutil.DerefOr(iss.TaskName, "")))
+}
+
+// projectRefLabel is the same for the project, and it exists because of what
+// `--project none` made visible: an unscoped issue printed `Project:     #0 `.
+// Zero is not a #number in this app — the seq counter starts at 1 — so it was
+// a null rendered as a reference, and a caller reading it would go looking for
+// project #0.
+func projectRefLabel(iss *client.Issue) string {
+	if iss.ProjectID == 0 {
+		return "— (not in a project)"
+	}
+	return strings.TrimSpace(fmt.Sprintf("#%d %s", iss.ProjectID, cmdutil.DerefOr(iss.ProjectName, "")))
 }
 
 // issueLabelLabel formats labels for one-line display.
