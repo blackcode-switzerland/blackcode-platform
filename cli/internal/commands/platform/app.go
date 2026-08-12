@@ -52,7 +52,7 @@ func newAppCmd() *cobra.Command {
 		Long: `The app address book: which Blackcode apps exist, the server this
 binary sends each one's commands to, and whether that server answers for you.
 
-  bk app list          apps, their servers, reachability
+  bk app list          apps, their servers, their active workspace, reachability
   bk app use <slug>    switch the home app (where the bare identity verbs go)
 
 The registry is LEARNED, never typed: ` + "`bk login`" + ` and ` + "`bk meta`" + ` write it from
@@ -94,7 +94,13 @@ A REACHABLE app you have no workspace in is a normal state, not an error: you ca
 sign in there and it will tell you so in its own words. Run "bk meta" to refresh
 the registry if an app is missing or its address has moved.
 
---no-probe skips the reachability check (no network calls at all).`,
+WORKSPACE is that app's ACTIVE workspace — where "bk <app> …" writes when you
+pass no --ws. Each app keeps its own, because two apps' workspace tables have
+overlapping ids and one shared setting meant switching one silently switched the
+others. "(none)" means you have not chosen one there yet.
+
+--no-probe skips the reachability check (no network calls at all), which makes
+this the whole local answer to "where am I, in every app?" with zero requests.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -106,10 +112,17 @@ the registry if an app is missing or its address has moved.
 			}
 
 			type row struct {
-				Slug      string `json:"slug" yaml:"slug"`
-				Server    string `json:"server" yaml:"server"`
-				Reachable string `json:"reachable,omitempty" yaml:"reachable,omitempty"`
-				IsHome    bool   `json:"is_home" yaml:"is_home"`
+				Slug   string `json:"slug" yaml:"slug"`
+				Server string `json:"server" yaml:"server"`
+				// The workspace `bk <app> …` will use when no --ws is given.
+				// Local state, read from the config — this app's, never another
+				// app's, because two apps' workspace tables have overlapping
+				// ids and one shared field is the bug that made them per-app.
+				// Empty means no workspace has been chosen for that app yet,
+				// which is a real state and not an error.
+				ActiveWorkspace string `json:"active_workspace" yaml:"active_workspace"`
+				Reachable       string `json:"reachable,omitempty" yaml:"reachable,omitempty"`
+				IsHome          bool   `json:"is_home" yaml:"is_home"`
 			}
 
 			slugs := make([]string, 0, len(cfg.AppServers))
@@ -128,7 +141,12 @@ the registry if an app is missing or its address has moved.
 
 			rows := make([]row, 0, len(slugs))
 			for _, slug := range slugs {
-				r := row{Slug: slug, Server: cfg.AppServers[slug], IsHome: slug == cfg.HomeApp}
+				r := row{
+					Slug:            slug,
+					Server:          cfg.AppServers[slug],
+					ActiveWorkspace: cfg.ActiveWorkspaceFor(slug).Slug,
+					IsHome:          slug == cfg.HomeApp,
+				}
 				if p, ok := probes[slug]; ok {
 					r.Reachable = p
 				}
@@ -137,7 +155,7 @@ the registry if an app is missing or its address has moved.
 
 			return output.Render(format, rows, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "\tAPP\tSERVER\tREACHABLE")
+				fmt.Fprintln(tw, "\tAPP\tSERVER\tWORKSPACE\tREACHABLE")
 				for _, a := range rows {
 					home := " "
 					if a.IsHome {
@@ -147,7 +165,14 @@ the registry if an app is missing or its address has moved.
 					if reach == "" {
 						reach = "—"
 					}
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", home, a.Slug, a.Server, reach)
+					// "(none)", not "—". An em dash here would sit in the same
+					// column as the reachability dash and read as "unknown",
+					// and this one IS known: nothing has been chosen.
+					ws := a.ActiveWorkspace
+					if ws == "" {
+						ws = "(none)"
+					}
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", home, a.Slug, a.Server, ws, reach)
 				}
 				if err := tw.Flush(); err != nil {
 					return err
@@ -162,7 +187,9 @@ the registry if an app is missing or its address has moved.
 				}
 				fmt.Fprintf(cmd.ErrOrStderr(),
 					"\n* = home app: where the bare identity verbs go (`bk app use <slug>` to switch).\n"+
-						"`bk <app> …` always pins its own app, whatever the home app is.\n")
+						"`bk <app> …` always pins its own app, whatever the home app is.\n"+
+						"WORKSPACE = that app's active workspace, set by `bk <app> workspace use <slug>`.\n"+
+						"Each app keeps its own; the slugs are resolved per app and may collide.\n")
 				return nil
 			})
 		},

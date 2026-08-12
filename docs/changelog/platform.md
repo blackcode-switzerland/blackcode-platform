@@ -7,6 +7,80 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-12 — every app's active workspace is visible in one command, and `bk link`'s dead code is gone
+
+**Not breaking.** Two things, both closing the same finding: what crosses an app
+boundary, and where you currently are in each app.
+
+### "Which workspace is each app on?" — answered locally, in commands you already run
+
+The active workspace has been **per app** since 2026-08-10, and until today
+nothing printed more than one of them. `bk meta`'s `active:` line is the
+workspace of the app that *answered*, and no deployment can report another app's
+— each app's membership lives in its own schema. So the question took one
+`bk <app> workspace list` per app: N round trips to read state that sits in
+`~/.config/bk/config.json`.
+
+Two existing commands now carry it. **There is no new command**, and no new
+route:
+
+```bash
+bk app list --no-probe        # zero network calls — the whole local answer
+   APP     SERVER                       WORKSPACE   REACHABLE
+*  issues  https://issues.blackcode.ch  acme        ok
+   sales   https://sales.blackcode.ch   acme-sales  ok
+   scaffold …                           (none)      —
+
+bk meta                       # the routing block, per app
+       * bk issues …  → https://issues.blackcode.ch  [ws acme]
+         bk sales …   → https://sales.blackcode.ch   [ws acme-sales]
+```
+
+- `bk app list` gained a **`WORKSPACE`** column and an `active_workspace` field
+  under `--json`. `(none)` / `""` means no workspace has been chosen for that
+  app — a normal state, not an error.
+- `bk meta`'s `routing` block gained **`active_workspaces`**, a map of app slug
+  to workspace slug. An app with no chosen workspace is **absent** from the map
+  rather than present with an empty string: "not chosen" and "chosen, and its
+  slug is empty" are different claims and only the first is reachable.
+
+`routing` is CLIENT state — the server cannot see it, which is why it is worth
+printing and why this needs no network.
+
+### `bk link`'s dead code is removed
+
+The command went on 2026-08-10. What it stood on did not, and one piece of it
+was **making a false claim in the shipped binary**: `bk sales prospect show`'s
+`--help` promised "every cross-app LINK touching this prospect, each with an
+absolute URL", and the sales route had stopped serving `links` that same day —
+so the section it described could not appear.
+
+Removed: `linksRoute` (a shared route factory mounted by no app), platform-db's
+`createLink`/`deleteLink`/`listLinks`, the `LINK_RELATIONS` vocabulary
+(`/api/meta` stopped serving it on 2026-08-10), and the CLI's `SalesLink` type,
+`Prospect.Links` field and `LINKED` output section.
+
+**`platform.links` — the TABLE — still exists and is unread.** Dropping it is a
+migration with a rollback and its own decision, not a side effect of this
+cleanup. Its schema declaration is kept for one reason: removing it would make
+the next `drizzle-kit generate` emit a `DROP TABLE` nobody asked for.
+
+**Nothing about this changes what you should do.** Cross-app references are not
+a supported feature, and putting the far end's URN in the record's own text is
+the design rather than a workaround — it is a fact one app holds, it cannot
+drift from the thing it points at, and it survives being read by a person:
+
+```bash
+bk sales prospect show 8            # prints bc:sales:acme/prospect/8
+bk issues issue create --title "Export fails for Helvetia" \
+  --description "Prospect: bc:sales:acme/prospect/8"
+```
+
+`bk link`'s deprecation row stays, so a stale script still gets a sentence it
+can act on. `bk guide platform/cross-app` now walks a full two-app session,
+including what is per app **by design** (documents, labels, uploads, inboxes,
+workspaces) and what is genuinely shared (the account, the password, the token).
+
 ## 2026-08-12 — the inbox narrows by type, person, time, project and task
 
 **Not breaking.** The inbox is still **global by default** — every filter is

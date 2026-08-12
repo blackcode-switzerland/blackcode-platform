@@ -213,17 +213,38 @@ func sortedKeys(m map[string]string) []string {
 }
 
 // routingBlock is the local half of `bk meta`: where each verb tier will send
-// its next request. It answers "where will this command go?" without an agent
-// having to run one and find out.
+// its next request, AND which workspace each app will write into. It answers
+// "where will this command go?" without an agent having to run one and find out.
 //
 // It is CLIENT state, not server state — the whole reason it is worth printing
 // is that the server cannot see it.
+//
+// ---------------------------------------------------------------------------
+// WHY `active_workspaces` IS HERE AND NOT IN A `bk status` COMMAND
+// ---------------------------------------------------------------------------
+// The active workspace has been PER APP since 2026-08-10, and until 2026-08-12
+// nothing printed more than one of them: `bk meta`'s `active:` line is the
+// workspace of the app that ANSWERED, and one deployment cannot report another
+// app's. So "which workspace is each app on?" took one `bk <app> workspace list`
+// per app — three commands and three round trips to read local state.
+//
+// It belongs in `routing` because it is the same kind of fact as `app_servers`:
+// where the next command lands. `bk <app> …` pins its server by name and its
+// workspace by this map, and neither is visible in the command you typed.
+//
+// It needs no network, which is the other half of why there is no `bk status`.
+// `bk app list --no-probe` prints the same two columns with zero requests.
 type routingBlock struct {
 	HomeApp    string            `json:"home_app" yaml:"home_app"`
 	HomeServer string            `json:"home_server" yaml:"home_server"`
 	AppServers map[string]string `json:"app_servers" yaml:"app_servers"`
-	Tiers      map[string]string `json:"tiers" yaml:"tiers"`
-	Note       string            `json:"note" yaml:"note"`
+	// Active workspace slug per app slug. An app with none is ABSENT from the
+	// map rather than present with an empty string: "not chosen yet" and
+	// "chosen, and its slug is empty" are different states, and only the first
+	// one is reachable.
+	ActiveWorkspaces map[string]string `json:"active_workspaces" yaml:"active_workspaces"`
+	Tiers            map[string]string `json:"tiers" yaml:"tiers"`
+	Note             string            `json:"note" yaml:"note"`
 }
 
 func buildRoutingBlock(cfg *config.Config) routingBlock {
@@ -232,17 +253,36 @@ func buildRoutingBlock(cfg *config.Config) routingBlock {
 		home = "(not set — run `bk login`)"
 	}
 	return routingBlock{
-		HomeApp:    cfg.HomeApp,
-		HomeServer: cfg.HomeServer,
-		AppServers: cfg.AppServers,
+		HomeApp:          cfg.HomeApp,
+		HomeServer:       cfg.HomeServer,
+		AppServers:       cfg.AppServers,
+		ActiveWorkspaces: activeWorkspaceSlugs(cfg),
 		Tiers: map[string]string{
 			"neutral":   home,
 			"cross_app": home,
 			"app_owned": "app_servers[<app>] — `bk <app> …` always resolves through the map, never falls back",
 		},
 		Note: "local to this machine (~/.config/bk/config.json); refreshed by `bk login` and `bk meta`, " +
-			"switched by `bk app use <slug>`, overridden for one command by `--app-server <slug>`",
+			"switched by `bk app use <slug>` and `bk <app> workspace use <slug>`, overridden for one " +
+			"command by `--app-server <slug>` and `--ws <slug>`",
 	}
+}
+
+// activeWorkspaceSlugs reads the remembered workspace of every app in the
+// registry, through `ActiveWorkspaceFor` — the only supported accessor, because
+// it is what folds a pre-4.x config's single active workspace onto the home app.
+//
+// The key set is the REGISTRY, not the workspace map: an app the binary knows
+// but has never been pointed at a workspace in is a normal state worth seeing,
+// and reading the workspace map alone would hide it.
+func activeWorkspaceSlugs(cfg *config.Config) map[string]string {
+	out := map[string]string{}
+	for slug := range cfg.AppServers {
+		if ws := cfg.ActiveWorkspaceFor(slug); ws.Slug != "" {
+			out[slug] = ws.Slug
+		}
+	}
+	return out
 }
 
 func printRouting(w io.Writer, cfg *config.Config) {
@@ -252,12 +292,20 @@ func printRouting(w io.Writer, cfg *config.Config) {
 		fmt.Fprintf(w, "  (home app: %s)", cfg.HomeApp)
 	}
 	fmt.Fprintln(w)
+	active := activeWorkspaceSlugs(cfg)
 	for _, slug := range sortedKeys(cfg.AppServers) {
 		mark := " "
 		if slug == cfg.HomeApp {
 			mark = "*"
 		}
-		fmt.Fprintf(w, "       %s bk %s …  → %s\n", mark, slug, cfg.AppServers[slug])
+		// The workspace is printed on the same line as the server because they
+		// are the two halves of one question — where does `bk <app> …` land —
+		// and neither is visible in the command you typed.
+		ws := "(none — run `bk " + slug + " workspace use <slug>`)"
+		if s, ok := active[slug]; ok {
+			ws = "ws " + s
+		}
+		fmt.Fprintf(w, "       %s bk %s …  → %s  [%s]\n", mark, slug, cfg.AppServers[slug], ws)
 	}
 	if len(cfg.AppServers) == 0 {
 		fmt.Fprintln(w, "         (no app registry yet — this `bk meta` run has just written one)")
