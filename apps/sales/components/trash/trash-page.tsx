@@ -38,8 +38,8 @@ export function TrashPage({ ws }: { ws: string }) {
     <div className="space-y-3">
       <p className="px-1 text-xs text-muted-foreground">
         Deleted records are kept for {RETENTION_DAYS} days, then purged
-        automatically. Restore one with{' '}
-        <code className="rounded bg-muted px-1.5 py-0.5">bk sales trash restore</code>.
+        automatically. Restoring one is the agent&rsquo;s job — ask for it by
+        name and number.
       </p>
 
       <div className="overflow-x-auto">

@@ -31,6 +31,17 @@ export const PROSPECT_NAME_MAX = 120
 export const CONTACT_NAME_MAX = 120
 /** Meeting `title`. */
 export const MEETING_TITLE_MAX = 200
+/**
+ * Meeting `meeting_url` — the online-meeting link.
+ *
+ * The COLUMN is `text` and stays `text` (migration 0007): this number is a
+ * paste-accident bound, not a schema fact, and it is deliberately generous.
+ * A Teams join link carrying a tenant id, a thread id and a base64 context blob
+ * runs past 400 characters as a matter of course, so a tighter cap would refuse
+ * ordinary real links — and the failure mode of refusing one is that somebody
+ * cannot record where their meeting is.
+ */
+export const MEETING_URL_MAX = 2048
 /** Communication `subject` — an email subject line, mostly. */
 export const COMM_SUBJECT_MAX = 300
 /** Product `name`. */
@@ -53,6 +64,7 @@ export const LENGTH_LIMITS = {
   prospect_name_max: PROSPECT_NAME_MAX,
   contact_name_max: CONTACT_NAME_MAX,
   meeting_title_max: MEETING_TITLE_MAX,
+  meeting_url_max: MEETING_URL_MAX,
   comm_subject_max: COMM_SUBJECT_MAX,
   product_name_max: PRODUCT_NAME_MAX,
   template_name_max: TEMPLATE_NAME_MAX,

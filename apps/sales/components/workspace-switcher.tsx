@@ -37,6 +37,48 @@ export interface SwitcherWorkspace {
   name: string
   slug: string
   member_role: 'owner' | 'member'
+  /**
+   * Who owns it — a name, or an email when they have no name, or null when the
+   * owner row cannot be resolved. Only read for workspaces that are not yours.
+   */
+  owner_label?: string | null
+}
+
+/**
+ * The second line under a workspace name.
+ *
+ * ── IT SAYS WHOSE, NOT WHAT YOUR ROLE IS ────────────────────────────────────
+ * This was `Your workspace` / `Member` until 2026-08-12, and `Member` answers
+ * the wrong question. A person with two workspaces is looking at a list like:
+ *
+ *     My Workspace                 ✓
+ *     Member
+ *     Balathanusan 1's worksp…
+ *     Your workspace
+ *
+ * and "My Workspace" is somebody ELSE'S — named in the first person by whoever
+ * made it, so it reads as yours. Knowing you are a "Member" of it does not tell
+ * you which of the two is which; knowing Priya owns it does.
+ *
+ * ── THE FALLBACK CHAIN, AND WHY IT ENDS AT `Member` ─────────────────────────
+ * name → email → `Member`. The last step matters: an owner who cannot be
+ * resolved (a hard-deleted account) must not render as a blank line or the word
+ * "null". Blank is strictly worse than the label this replaces, so the old
+ * label is what it falls back TO rather than what it replaces unconditionally.
+ *
+ * The middle step is not theoretical either, and it is the one a `??` would get
+ * wrong: `platform.users.name` is nullable AND can hold whitespace. Both cases
+ * were driven through the real switcher on 2026-08-12 (name set to NULL, then
+ * to "   ") and both render the email.
+ *
+ * Your OWN workspace keeps `Your workspace` rather than becoming your own name.
+ * "Owned by Balathanusan Chandrasekaram" on your own row is both longer and
+ * less clear than the two words it would replace.
+ */
+function ownershipLine(ws: SwitcherWorkspace): string {
+  if (ws.member_role === 'owner') return 'Your workspace'
+  const owner = ws.owner_label?.trim()
+  return owner ? `Owned by ${owner}` : 'Member'
 }
 
 function Mark({ name, size }: { name: string; size: number }) {
@@ -154,11 +196,14 @@ export function WorkspaceSwitcher({
                 <Mark name={ws.name} size={20} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px]">{ws.name}</span>
-                  {/* Owner vs member is the difference between "yours" and
-                      "somebody invited you", which is the question a person
-                      actually has when two names look alike. */}
+                  {/* WHOSE it is — see `ownershipLine`. `truncate` is
+                      load-bearing here and was already needed for the name
+                      above it: this sidebar is narrow enough that
+                      "Balathanusan 1's worksp…" clips, so an owner line
+                      carrying a full name clips too, and it must degrade to an
+                      ellipsis rather than wrap the row to two lines. */}
                   <span className="block truncate text-[11px] text-muted-foreground">
-                    {ws.member_role === 'owner' ? 'Your workspace' : 'Member'}
+                    {ownershipLine(ws)}
                   </span>
                 </span>
                 {pending === ws.slug ? (

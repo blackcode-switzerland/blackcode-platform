@@ -131,14 +131,18 @@ no drizzle client reaches the browser bundle — what survives is that a change 
 fetch renders the error, never the empty state: rendering "you have no prospects"
 when the API is down is the most reassuring wrong answer this app could give.
 
-**`ticks()` lives here too** (2026-08-11), and every `EmptyState hint` and
-`WriteGate note` passes through it: it turns `` `bk sales comm log` `` into a
-`<code>` chip. Thirteen strings printed literal backticks before it — beside
+**`ticks()` lives here too** (2026-08-11) and every `EmptyState hint` and
+`WriteGate note` passes through it: it turns a backticked span into a `<code>`
+chip. Thirteen strings printed literal backticks before it — beside
 `forms.tsx`'s `AgentOnly`, which builds the same sentence out of JSX and always
 got a chip, so the prospect page showed both treatments at once. It handles one
 delimiter and is deliberately not markdown; an unbalanced backtick renders as
-itself, which is the visible failure. Put a command in backticks and let the
-component render it, rather than hand-building a fragment at the call site.
+itself, which is the visible failure.
+
+It is **kept but no longer used for commands** (2026-08-12, §6 below): no string
+in this app's ordinary copy names a `bk` command any more. It costs nothing on a
+string containing no backtick, and deleting it is how the literal-backtick bug
+comes back the day somebody writes one.
 
 ## 4. The shell
 
@@ -311,6 +315,68 @@ Three conventions they all share, each of which is a decision:
   served live by `bk meta` and can gain a value without a deploy, at which point
   the list quietly stops being "every". A page must not enumerate a vocabulary in
   either direction: not as a label it looked up, and not as an English list.
+
+### 7.0 The filter bar — `components/filters.tsx` (2026-08-12)
+
+Every listing that filters composes this module. Before it there were three
+idioms: `prospects-page.tsx` built a bar inline, `ledger-pages.tsx` had a private
+`FilterBar` that took exactly one select, and the catalog pages had none and
+rendered their document kinds as a legend with a comment explaining that a
+control there "would out-weigh what it filters". Adding the filters this change
+asks for to each would have produced a fourth and a fifth.
+
+| Export | What it is |
+|---|---|
+| `useFilterParam(key)` | one URL parameter, `[value, set]`. `router.replace`, `scroll: false` |
+| `useFilterList(key)` | a repeatable one, held as `?tag=a,b` — the encoding the route's `parseList` and `bk … --tag` both use |
+| `FilterSelect` | one dropdown. `PropertySelect` underneath, compact styling, `allLabel` as the empty option |
+| `FilterInput` | the free-text box |
+| `TagFilterChip` | a toggleable free-text tag, `aria-pressed` |
+| `ClearFilters` | shown only when something is set; `keep` preserves non-filter params |
+| `FilteredEmpty` | **the point of the file** — see below |
+
+Three rules it makes structural rather than remembered:
+
+- **"No records" and "no matches" are different sentences.** A workspace with
+  fifty meetings, filtered to `cancelled`, said "No meetings" — indistinguishable
+  from the data being gone. `FilteredEmpty` takes `filtered` and says one or the
+  other. This is `states.tsx`'s "most reassuring wrong answer" rule applied to
+  filtering.
+- **The bar stays on screen when the result is empty.** The control that caused
+  the emptiness is the one thing that must not vanish with the rows.
+- **`Clear` keeps what is not a filter.** `?view=board` on prospects and
+  `?focus=` on the ledgers survive it. Both pages previously did
+  `router.replace(pathname)`, which threw the reader out of the board or lost
+  the row they had arrived at.
+
+### 7.0.1 No native `<select>` anywhere
+
+All six are gone (2026-08-12), onto `PropertySelect` from
+`@blackcode/platform-ui/ui/property-select` — the searchable Linear-style picker
+**both apps** share. There is no shadcn `select` in this repo; a request that
+assumed one was mistaken about that, and `PropertySelect` is the consistency it
+was actually after.
+
+It is built for detail-page sidebars, so the open question was whether it
+survives a compact filter bar. It does, through `buttonClassName`, which is the
+same escape hatch `apps/issues`' listings already use to render it icon-only
+inside a table row. No new variant and no new dependency.
+
+**What it did need was accessibility, and this is the part worth reading before
+reusing it.** A native `<select>` announces its role, its expanded state, its
+options and its selection for free. `PropertySelect` did none of that, and in
+`noSearch` mode it could be opened from the keyboard and then not operated —
+Enter, arrows and Escape all did nothing, because the key handling lived on the
+search input that mode does not render. Swapping one for the other would have
+been a regression dressed as consistency. So the shared component gained
+`aria-haspopup` / `aria-expanded` / `aria-controls`, `role="listbox"` +
+`role="option"` + `aria-selected`, `aria-activedescendant`, focus into the list
+when there is no search box, focus back to the trigger on close, and
+ArrowDown-to-open. Both apps get that.
+
+`FilterSelect` requires a `label`: on a filter bar the visible text is the VALUE
+("All stages"), so without it a screen reader is told the answer and never the
+question.
 
 ### 7.1 Today
 
@@ -527,6 +593,31 @@ have this switched off" and "nothing switches this on" are different facts, and
 collapsing them is how somebody spends an afternoon looking for the setting that
 would let them edit the catalogue. **Both always say something** — a control that
 is simply absent reads as a feature that does not exist.
+
+#### They stopped naming CLI commands (2026-08-12)
+
+`AgentOnly` took a `command` prop and rendered *"Products are maintained through
+`bk sales product create | edit`"*; `WriteGate`'s notes were the same sentence in
+prose. **The prop is gone and no ordinary UI copy in this app names a `bk`
+command.** Two reasons, and the first is the one that decides it:
+
+- **The audience is wrong.** This is the web surface, whose readers are the
+  humans the doctrine says SUPERVISE. Somebody looking at a customer record is
+  not going to install a Go binary, authenticate it and run
+  `bk sales template create` — they are going to ask the agent. A command here is
+  an instruction addressed to somebody who is not in the room.
+- **It went stale where nothing could see it.** `bk sales doc create` was printed
+  on the documents page for months and has never existed (the verb is `add`).
+  Prose naming a spelling is covered by no other check in this repo —
+  `cli-parity` reads routes, not sentences.
+
+What was KEPT is the distinction, which is real: both components still say
+something, neither says it in shell. `lib/ui-commands.test.ts` now enforces
+both halves — ordinary copy names **no** command, and the two pages that are
+legitimately about the CLI (the landing page's quickstart, the tokens page's
+`bk login`) name only real ones. The bare URN chip on the prospect header went in
+the same change: `bc:sales:acme/prospect/11` is an agent's address, and an agent
+does not read that page.
 
 ### 8.3 How a REVIEWER checks it, without reading every component
 

@@ -22,8 +22,8 @@
 import { useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { X } from 'lucide-react'
 import { BlockSkeleton, EmptyState, ErrorState } from '@/components/states'
+import { ClearFilters, FilterBar, FilterSelect } from '@/components/filters'
 import { useActivity, type ActivityEvent } from '@/lib/hooks'
 import { recordHref } from '@/lib/record-href'
 import { dateTimeShort } from '@/lib/format'
@@ -185,8 +185,9 @@ export function ActivityPage({ ws }: { ws: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <FilterBar>
         <Select
+          label="Record type"
           value={entityType}
           onChange={setEntityType}
           allLabel="Everything"
@@ -194,25 +195,15 @@ export function ActivityPage({ ws }: { ws: string }) {
           render={typeNoun}
         />
         <Select
+          label="Change"
           value={action}
           onChange={setAction}
           allLabel="Any change"
           options={options.actions}
           render={actionPhrase}
         />
-        {filtered && (
-          <button
-            onClick={() => {
-              setEntityType('')
-              setAction('')
-            }}
-            className="flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <X size={14} />
-            Clear
-          </button>
-        )}
-      </div>
+        <ClearFilters active={filtered} />
+      </FilterBar>
 
       {feed.isPending ? (
         <BlockSkeleton rows={6} />
@@ -224,7 +215,7 @@ export function ActivityPage({ ws }: { ws: string }) {
           hint={
             filtered
               ? 'Clear the filter to see the whole feed.'
-              : 'Every change the agent makes through `bk sales` is recorded here, in the same transaction as the change itself.'
+              : 'Every change the agent makes is recorded here, in the same transaction as the change itself.'
           }
         />
       ) : (
@@ -245,9 +236,8 @@ export function ActivityPage({ ws }: { ws: string }) {
         // `--app` was removed in the same release — it selected among the apps
         // writing one shared feed, and each app keeps its own now.
         <p className="text-xs text-muted-foreground">
-          Showing the most recent 100 events. Run{' '}
-          <code className="rounded bg-muted px-1 py-0.5">bk sales activity</code> to page through
-          the rest.
+          Showing the most recent 100 events. There are older ones — the agent
+          can page back through them.
         </p>
       )}
     </div>
@@ -283,13 +273,28 @@ function EventRow({ ws, event }: { ws: string; event: ActivityEvent }) {
   )
 }
 
+/**
+ * The feed's own filter dropdown.
+ *
+ * A thin wrapper over the shared `FilterSelect` rather than a call site of it,
+ * because this page's options are bare STRINGS with a `render` function — the
+ * entity types and actions come from the events themselves, not from a
+ * vocabulary in `lib/pipeline.ts`, and they are deliberately not enumerated
+ * anywhere (this file's header: `bk meta` can add an action without a deploy,
+ * so a feed that hid unrecognised ones would hide exactly the new thing).
+ *
+ * `label` is required by `FilterSelect` for the accessible name; the two call
+ * sites pass "Type" and "Action".
+ */
 function Select({
+  label,
   value,
   onChange,
   options,
   allLabel,
   render,
 }: {
+  label: string
   value: string
   onChange: (v: string) => void
   options: string[]
@@ -297,17 +302,12 @@ function Select({
   render: (v: string) => string
 }) {
   return (
-    <select
+    <FilterSelect
+      label={label}
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-9 rounded-lg border border-input bg-card px-2.5 text-sm capitalize outline-none focus:border-ring"
-    >
-      <option value="">{allLabel}</option>
-      {options.map((o) => (
-        <option key={o} value={o}>
-          {render(o)}
-        </option>
-      ))}
-    </select>
+      onChange={onChange}
+      options={options.map((o) => ({ value: o, label: render(o) }))}
+      allLabel={allLabel}
+    />
   )
 }

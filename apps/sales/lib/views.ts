@@ -212,6 +212,7 @@ export function publicMeeting(
     attendees: string[] | null
     agenda: string | null
     outcome: string | null
+    meeting_url: string | null
     created_at: Date
     deleted_at: Date | null
   },
@@ -229,6 +230,12 @@ export function publicMeeting(
     attendees: m.attendees ?? [],
     agenda: m.agenda,
     outcome: m.outcome,
+    // Null on most rows — this ledger is mostly calls and in-person meetings —
+    // and served as null rather than "" so a reader can tell "no link" from
+    // "a link that is the empty string". Every renderer omits the field
+    // entirely when it is absent; a "Link: —" line on every past phone call is
+    // noise, which is rule 3 of this file (no rendering) pointed at absence.
+    meeting_url: m.meeting_url,
     urn: entityUrnOrNull(workspaceSlug, 'meeting', m.seq),
     created_at: iso(m.created_at)!,
     deleted_at: iso(m.deleted_at),

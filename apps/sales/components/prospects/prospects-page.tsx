@@ -20,98 +20,87 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { LayoutGrid, Rows3, X } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
+import { LayoutGrid, Rows3 } from 'lucide-react'
 import { STAGES, nextActionTypeLabel } from '@/lib/pipeline'
 import { StageChip } from '@/components/chips'
-import { BlockSkeleton, EmptyState, ErrorState } from '@/components/states'
+import { BlockSkeleton, ErrorState } from '@/components/states'
+import {
+  ClearFilters,
+  FilterBar,
+  FilterInput,
+  FilterSelect,
+  FilteredEmpty,
+  useFilterParam,
+} from '@/components/filters'
 import { useProspects } from '@/lib/hooks'
 import { money, relativeDay } from '@/lib/format'
 import type { PublicProspect } from '@/lib/views'
 
 export function ProspectsPage({ ws }: { ws: string }) {
   const params = useSearchParams()
-  const router = useRouter()
-  const pathname = usePathname()
+  const [stage, setStage] = useFilterParam('stage')
+  const [q, setQ] = useFilterParam('q')
+  const [, setView] = useFilterParam('view')
 
   const view = params?.get('view') === 'board' ? 'board' : 'table'
-  const stage = params?.get('stage') ?? ''
-  const q = params?.get('q') ?? ''
 
   const list = useProspects(ws, { stage: stage || undefined, q: q || undefined })
   const rows = list.data?.data ?? []
-
-  const setParam = (key: string, value: string) => {
-    const next = new URLSearchParams(params?.toString() ?? '')
-    if (value) next.set(key, value)
-    else next.delete(key)
-    router.replace(`${pathname}?${next.toString()}`, { scroll: false })
-  }
+  const filtered = Boolean(q || stage)
 
   return (
     <div className="space-y-4">
       {/* The filter bar. Stage and free text today; owner and date range arrive
           with the ledgers, which are where a date range means something. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <input
+      <FilterBar>
+        <FilterInput
+          label="Company name"
           value={q}
-          onChange={(e) => setParam('q', e.target.value)}
+          onChange={setQ}
           placeholder="Filter by name…"
-          className="h-9 w-56 rounded-lg border border-input bg-card px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
         />
-        <select
+        {/* Built from `lib/pipeline.ts`, never a hand-written list — a stage
+            added there appears here with no second edit. */}
+        <FilterSelect
+          label="Stage"
           value={stage}
-          onChange={(e) => setParam('stage', e.target.value)}
-          className="h-9 rounded-lg border border-input bg-card px-2.5 text-sm outline-none focus:border-ring"
-        >
-          {/* Built from `lib/pipeline.ts`, never a hand-written list — a stage
-              added there appears here with no second edit. */}
-          <option value="">All stages</option>
-          {STAGES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
+          onChange={setStage}
+          options={STAGES}
+          allLabel="All stages"
+        />
 
-        {(q || stage) && (
-          <button
-            onClick={() => router.replace(pathname ?? '', { scroll: false })}
-            className="flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <X size={14} />
-            Clear
-          </button>
-        )}
+        {/* `view` survives Clear: which layout you are looking at is not a
+            filter, and clearing the filters used to silently throw a reader
+            off the board and back onto the table. */}
+        <ClearFilters active={filtered} keep={['view']} />
 
         <div className="ml-auto flex items-center rounded-lg border border-border p-0.5">
           <ViewButton
             active={view === 'table'}
-            onClick={() => setParam('view', '')}
+            onClick={() => setView('')}
             icon={<Rows3 size={14} />}
             label="Table"
           />
           <ViewButton
             active={view === 'board'}
-            onClick={() => setParam('view', 'board')}
+            onClick={() => setView('board')}
             icon={<LayoutGrid size={14} />}
             label="Board"
           />
         </div>
-      </div>
+      </FilterBar>
 
       {list.isPending ? (
         <BlockSkeleton rows={6} />
       ) : list.error ? (
         <ErrorState error={list.error} />
       ) : rows.length === 0 ? (
-        <EmptyState
-          title={q || stage ? 'No prospect matches this filter' : 'No prospects yet'}
-          hint={
-            q || stage
-              ? undefined
-              : 'A prospect appears here when the agent creates one with `bk sales prospect create`.'
-          }
+        <FilteredEmpty
+          filtered={filtered}
+          noun="prospects"
+          emptyTitle="No prospects yet"
+          emptyHint="A prospect appears here when the agent creates one."
         />
       ) : view === 'board' ? (
         <Board ws={ws} rows={rows} />

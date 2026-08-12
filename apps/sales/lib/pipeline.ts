@@ -165,10 +165,27 @@ export const CHANNEL_VALUES = CHANNELS.map((c) => c.value)
 export const channelLabel = (v?: string | null) => labelOf(CHANNELS, v)
 export const channelColor = (v?: string | null) => colorOf(CHANNELS, v)
 
-/** `out` = we → them, `in` = them → us. */
+/**
+ * `out` = we → them, `in` = them → us.
+ *
+ * ── THE LABELS ARE "Sent" AND "Received", NOT "Outbound"/"Inbound" ──────────
+ * Changed 2026-08-12. The VALUES are untouched — `out` and `in` are the wire,
+ * and `cli-vocabulary.test.ts` / `vocab_test.go` hold the CLI to those, not to
+ * these strings — so nothing an agent sends or a route validates moves.
+ *
+ * What moves is the word a person reads. "Outbound" is CRM vocabulary; "Sent"
+ * is what somebody actually did, and it is the word they would use out loud
+ * about the email in front of them. The label is the only part of a vocabulary
+ * that exists for humans, so it is the part that should be in their words.
+ *
+ * This is also the third rendering of this field to be deleted rather than
+ * added to: `ledger-pages.tsx` and `prospect-detail.tsx` both carried a private
+ * `direction === 'out' ? … : …` ternary, and both now read `commDirectionLabel`.
+ * A vocabulary with one label and three renderings is a vocabulary in name only.
+ */
 export const COMM_DIRECTIONS: Option[] = [
-  { value: 'out', label: 'Outbound', color: '#10a37f' },
-  { value: 'in', label: 'Inbound', color: '#8b5cf6' },
+  { value: 'out', label: 'Sent', color: '#10a37f' },
+  { value: 'in', label: 'Received', color: '#8b5cf6' },
 ]
 export const COMM_DIRECTION_VALUES = COMM_DIRECTIONS.map((d) => d.value)
 export const commDirectionLabel = (v?: string | null) => labelOf(COMM_DIRECTIONS, v)

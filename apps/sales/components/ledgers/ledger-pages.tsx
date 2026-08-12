@@ -24,17 +24,41 @@
 
 import { useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { X } from 'lucide-react'
-import { CHANNELS, MEETING_STATUSES } from '@/lib/pipeline'
+import { useSearchParams } from 'next/navigation'
+import { Video } from 'lucide-react'
+import { CHANNELS, COMM_DIRECTIONS, MEETING_STATUSES, commDirectionLabel } from '@/lib/pipeline'
 import { ChannelChip, MeetingTypeChip, VocabDot } from '@/components/chips'
-import { BlockSkeleton, EmptyState, ErrorState } from '@/components/states'
+import { BlockSkeleton, ErrorState } from '@/components/states'
+import {
+  ClearFilters,
+  FilterBar,
+  FilterSelect,
+  FilteredEmpty,
+  useFilterParam,
+} from '@/components/filters'
 import { WriteGate } from '@/components/forms'
 import { MeetingForm, RemoveCommunicationButton } from './ledger-forms'
 import { useCanWrite } from '@/lib/ui-mode'
-import { useCommunications, useMeetings } from '@/lib/hooks'
+import { useCommunications, useMeetings, useProspects } from '@/lib/hooks'
 import { dateTimeShort } from '@/lib/format'
 import { meetingStatusColor } from '@/lib/pipeline'
+
+/**
+ * Every prospect as a picker option, by #number.
+ *
+ * The ledgers filter by prospect #number — that is what the route takes — so
+ * the option VALUE is the number as a string and the label is the company. It
+ * reads the same `['prospects', ws, …]` cache entry the Prospects page fills,
+ * so opening a ledger after the listing costs no request.
+ */
+function useProspectOptions(ws: string) {
+  const prospects = useProspects(ws)
+  return useMemo(
+    () =>
+      (prospects.data?.data ?? []).map((p) => ({ value: String(p.number), label: p.name })),
+    [prospects.data]
+  )
+}
 
 /** A row the URL asked to focus: highlighted, and scrolled into view once. */
 function useFocus(focus: number | null) {
@@ -45,78 +69,44 @@ function useFocus(focus: number | null) {
   return ref
 }
 
-function FilterBar({
-  value,
-  onChange,
-  options,
-  allLabel,
-}: {
-  value: string
-  onChange: (v: string) => void
-  options: { value: string; label: string }[]
-  allLabel: string
-}) {
-  const params = useSearchParams()
-  const router = useRouter()
-  const pathname = usePathname()
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-9 rounded-lg border border-input bg-card px-2.5 text-sm outline-none focus:border-ring"
-      >
-        <option value="">{allLabel}</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      {(value || params?.get('focus')) && (
-        <button
-          onClick={() => router.replace(pathname ?? '', { scroll: false })}
-          className="flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <X size={14} />
-          Clear
-        </button>
-      )}
-    </div>
-  )
-}
-
-function useParam(key: string) {
-  const params = useSearchParams()
-  const router = useRouter()
-  const pathname = usePathname()
-  const set = (v: string) => {
-    const next = new URLSearchParams(params?.toString() ?? '')
-    if (v) next.set(key, v)
-    else next.delete(key)
-    router.replace(`${pathname}?${next.toString()}`, { scroll: false })
-  }
-  return [params?.get(key) ?? '', set] as const
-}
-
 export function MeetingsPage({ ws }: { ws: string }) {
-  const [status, setStatus] = useParam('status')
+  const [status, setStatus] = useFilterParam('status')
+  const [prospect, setProspect] = useFilterParam('prospect')
   const params = useSearchParams()
   const focus = params?.get('focus') ? Number(params.get('focus')) : null
   const focusRef = useFocus(focus)
   const canWrite = useCanWrite(ws)
+  const prospectOptions = useProspectOptions(ws)
 
-  const meetings = useMeetings(ws, { status: status || undefined })
+  const meetings = useMeetings(ws, {
+    status: status || undefined,
+    prospect: prospect ? Number(prospect) : undefined,
+  })
+  const filtered = Boolean(status || prospect)
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <FilterBar
-          value={status}
-          onChange={setStatus}
-          options={MEETING_STATUSES}
-          allLabel="All meetings"
-        />
+        <FilterBar>
+          <FilterSelect
+            label="Status"
+            value={status}
+            onChange={setStatus}
+            options={MEETING_STATUSES}
+            allLabel="All meetings"
+          />
+          <FilterSelect
+            label="Prospect"
+            value={prospect}
+            onChange={setProspect}
+            options={prospectOptions}
+            allLabel="All prospects"
+          />
+          {/* `focus` is kept: arriving from ⌘K at one meeting and then
+              narrowing the list should not silently discard which row you
+              came for. */}
+          <ClearFilters active={filtered} keep={['focus']} />
+        </FilterBar>
         {/*
           NO "record a meeting" BUTTON HERE, and the reason is the route rather
           than the mode: a meeting always belongs to one deal, and this page is
@@ -124,13 +114,9 @@ export function MeetingsPage({ ws }: { ws: string }) {
           the prospect page, one click away and already open in the case where
           somebody is recording one. The prospect's Meetings tab has the form.
         */}
-        <WriteGate
-          ws={ws}
-          note="Meetings are recorded with `bk sales meeting schedule | log | outcome`."
-        >
+        <WriteGate ws={ws} note="Meetings are maintained by the agent.">
           <p className="text-xs text-muted-foreground">
-            Record a meeting from the prospect it belongs to, or with{' '}
-            <code className="rounded bg-muted px-1 py-0.5">bk sales meeting schedule</code>.
+            Record a meeting from the prospect it belongs to.
           </p>
         </WriteGate>
       </div>
@@ -140,9 +126,11 @@ export function MeetingsPage({ ws }: { ws: string }) {
       ) : meetings.error ? (
         <ErrorState error={meetings.error} />
       ) : meetings.data.length === 0 ? (
-        <EmptyState
-          title="No meetings"
-          hint="A meeting appears here when the agent records one with `bk sales meeting schedule` or `meeting log`."
+        <FilteredEmpty
+          filtered={filtered}
+          noun="meetings"
+          emptyTitle="No meetings"
+          emptyHint="A meeting appears here when the agent records one."
         />
       ) : (
         <div className="space-y-2">
@@ -174,6 +162,7 @@ export function MeetingsPage({ ws }: { ws: string }) {
               {m.attendees.length > 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">{m.attendees.join(', ')}</p>
               )}
+              <MeetingLink url={m.meeting_url} />
               {m.agenda && <p className="mt-1.5 text-sm text-foreground">{m.agenda}</p>}
               {m.outcome && (
                 <p className="mt-1.5 rounded-lg bg-muted px-3 py-2 text-sm text-foreground">
@@ -188,14 +177,50 @@ export function MeetingsPage({ ws }: { ws: string }) {
   )
 }
 
+/**
+ * The join link, when there is one — and NOTHING at all when there is not.
+ *
+ * Most rows in this ledger are phone calls and in-person meetings. A "Link: —"
+ * line on every one of them is noise that makes the rows which DO carry a link
+ * harder to find, which is the opposite of what the field is for. So the
+ * absence renders as absence.
+ *
+ * `rel="noopener noreferrer"` is not boilerplate here: this URL was typed by
+ * one member of a workspace and is clicked by another, so the tab it opens must
+ * not get a handle on this one. The route additionally refuses any scheme that
+ * is not http(s), which is what keeps `javascript:` out of this href.
+ */
+export function MeetingLink({ url }: { url: string | null }) {
+  if (!url) return null
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-1.5 inline-flex max-w-full items-center gap-1.5 text-xs text-primary hover:underline"
+    >
+      <Video size={12} className="shrink-0" aria-hidden />
+      <span className="truncate">Join the meeting</span>
+    </a>
+  )
+}
+
 export function CommunicationsPage({ ws }: { ws: string }) {
-  const [channel, setChannel] = useParam('channel')
+  const [channel, setChannel] = useFilterParam('channel')
+  const [dir, setDir] = useFilterParam('dir')
+  const [prospect, setProspect] = useFilterParam('prospect')
   const params = useSearchParams()
   const focus = params?.get('focus') ? Number(params.get('focus')) : null
   const focusRef = useFocus(focus)
   const canWrite = useCanWrite(ws)
+  const prospectOptions = useProspectOptions(ws)
 
-  const comms = useCommunications(ws, { channel: channel || undefined })
+  const comms = useCommunications(ws, {
+    channel: channel || undefined,
+    dir: dir || undefined,
+    prospect: prospect ? Number(prospect) : undefined,
+  })
+  const filtered = Boolean(channel || dir || prospect)
 
   // "3 emails, 2 WhatsApp, 1 call" at a glance — rule 3, counted over whatever
   // the current filter returned rather than fetched separately, so the strip
@@ -212,18 +237,40 @@ export function CommunicationsPage({ ws }: { ws: string }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <FilterBar
-          value={channel}
-          onChange={setChannel}
-          options={CHANNELS}
-          allLabel="All channels"
-        />
+        <FilterBar>
+          <FilterSelect
+            label="Channel"
+            value={channel}
+            onChange={setChannel}
+            options={CHANNELS}
+            allLabel="All channels"
+          />
+          {/* Sent / Received — the user's words. The vocabulary labels them,
+              never this page: `lib/pipeline.ts` is the one place that maps
+              `out` to a phrase, and the row below reads the same helper, so
+              the filter and the rows cannot disagree about what `out` is
+              called. */}
+          <FilterSelect
+            label="Direction"
+            value={dir}
+            onChange={setDir}
+            options={COMM_DIRECTIONS}
+            allLabel="Sent and received"
+          />
+          <FilterSelect
+            label="Prospect"
+            value={prospect}
+            onChange={setProspect}
+            options={prospectOptions}
+            allLabel="All prospects"
+          />
+          <ClearFilters active={filtered} keep={['focus']} />
+        </FilterBar>
         {/* Logging, like recording a meeting, belongs to a deal — the form is on
             the prospect's Communications tab. */}
-        <WriteGate ws={ws} note="Exchanges are logged with `bk sales comm log`.">
+        <WriteGate ws={ws} note="Exchanges are logged by the agent.">
           <p className="text-xs text-muted-foreground">
-            Log an exchange from the prospect it is with, or with{' '}
-            <code className="rounded bg-muted px-1 py-0.5">bk sales comm log</code>.
+            Log an exchange from the prospect it is with.
           </p>
         </WriteGate>
       </div>
@@ -252,15 +299,17 @@ export function CommunicationsPage({ ws }: { ws: string }) {
       ) : comms.error ? (
         <ErrorState error={comms.error} />
       ) : comms.data.length === 0 ? (
-        <EmptyState
-          title="No exchanges logged"
+        <FilteredEmpty
+          filtered={filtered}
+          noun="exchanges"
+          emptyTitle="No exchanges logged"
           // "Every email, WhatsApp, call and internal note …" until 2026-08-11,
           // which spelled four of the six values of the `channels` vocabulary
           // into prose. That vocabulary is `lib/pipeline.ts`'s, served live by
           // `bk meta`, and it can gain a channel without a deploy — at which
           // point this sentence is a list that silently stops being "every".
           // The same reasoning `labelOf`'s header sets out for the third time.
-          hint="Every exchange the agent records with `bk sales comm log` appears here, whichever channel it came through."
+          emptyHint="Every exchange the agent records appears here, whichever channel it came through."
         />
       ) : (
         <div className="space-y-2">
@@ -281,8 +330,15 @@ export function CommunicationsPage({ ws }: { ws: string }) {
                 >
                   {c.prospect_name}
                 </Link>
+                {/* `commDirectionLabel`, not a ternary on the raw value. The
+                    ternary that was here read `out` and `in` directly and
+                    rendered "we → them" / "them → us" — a THIRD wording of a
+                    vocabulary `lib/pipeline.ts` already labels, and one that
+                    silently called every unrecognised direction "them → us"
+                    because it was the else branch. `bk meta` can add a
+                    direction without a deploy. */}
                 <span className="text-xs text-muted-foreground">
-                  {c.direction === 'out' ? 'we → them' : 'them → us'}
+                  {commDirectionLabel(c.direction)}
                 </span>
                 {c.contact && <span className="text-xs text-muted-foreground">· {c.contact}</span>}
                 <span className="ml-auto text-xs text-muted-foreground">

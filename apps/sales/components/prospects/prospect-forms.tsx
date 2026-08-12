@@ -163,10 +163,11 @@ function StageFields({ ws, p, close }: { ws: string; p: ProspectDetail; close: (
           hint="The stage it is in now is not offered — re-posting it would append a journey step for a move that did not happen, and the route refuses it."
         >
           <VocabSelect
+            label="New stage"
             options={STAGES.filter((s) => s.value !== p.stage)}
             placeholder="Choose…"
             value={stage}
-            onChange={(e) => setStage(e.target.value)}
+            onChange={setStage}
           />
         </Field>
         <Field label="Note" hint="What moved it. Written onto the journey step.">
@@ -221,10 +222,11 @@ function NextActionFields({ ws, p, close }: { ws: string; p: ProspectDetail; clo
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="What is owed">
           <VocabSelect
+            label="What is owed"
             options={NEXT_ACTION_TYPES}
             placeholder="Nothing"
             value={type}
-            onChange={(e) => setType(e.target.value)}
+            onChange={setType}
           />
         </Field>
         <Field label="Due">
@@ -470,10 +472,11 @@ function ObjectionFields({
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Type">
           <VocabSelect
+            label="Type"
             options={OBJECTION_TYPES}
             placeholder="Choose…"
             value={form.type}
-            onChange={(e) => set('type', e.target.value)}
+            onChange={(v) => set('type', v)}
           />
         </Field>
         <Field label="Raised by">
@@ -502,9 +505,10 @@ function ObjectionFields({
               hint="A counter does not settle an objection. Moving this to resolved is a separate judgement, which is why they are two fields and not one."
             >
               <VocabSelect
+                label="Status"
                 options={OBJECTION_STATUSES}
                 value={form.status}
-                onChange={(e) => set('status', e.target.value)}
+                onChange={(v) => set('status', v)}
               />
             </Field>
           </>

@@ -424,6 +424,22 @@ export const meetings = salesSchema.table(
     agenda: text('agenda'),
     /** BLOB-REF (scan). */
     outcome: text('outcome'),
+    /**
+     * Where an online meeting happens — Teams, Meet, Zoom, Whereby, an internal
+     * hostname. NULL for the phone calls and in-person meetings that are most of
+     * this ledger, and it stays that way: a "Link: —" row on every past call is
+     * noise, so the readers render it only when present.
+     *
+     * BLOB-REF (exact). Migration 0007 says why a conferencing link is
+     * triggered: it is `documents.external_url`'s argument unchanged — nothing
+     * stops somebody pasting an uploaded recording's blob url here, and `exact`
+     * mode costs nothing on a real Teams link.
+     *
+     * `text`, deliberately. Conferencing links are long; the length bound is
+     * MEETING_URL_MAX in `lib/limits.ts`, where a caller gets a 400 that names
+     * it.
+     */
+    meeting_url: text('meeting_url'),
 
     external_ref: jsonb('external_ref'),
 

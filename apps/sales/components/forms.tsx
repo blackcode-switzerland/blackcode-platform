@@ -21,10 +21,40 @@
 //
 // **Both always SAY something.** A control that is simply absent teaches
 // nothing: the reader concludes the feature does not exist, or that they are not
-// allowed, and neither is true. Naming the command turns a wall into a mode.
+// allowed, and neither is true. Saying who maintains it turns a wall into a mode.
+//
+// ===========================================================================
+// THEY STOPPED NAMING CLI COMMANDS ON 2026-08-12
+// ===========================================================================
+// Both components used to print a command — `AgentOnly` took a `command` prop
+// and rendered "Products are maintained through `bk sales product create |
+// edit`", and `WriteGate`'s notes were the same sentence in prose. It read as
+// helpful and it was not:
+//
+//   - THE AUDIENCE IS WRONG. This is the web UI, whose users are the humans the
+//     doctrine says SUPERVISE. The person reading a sales page is not going to
+//     open a terminal, install a Go binary, authenticate it and run
+//     `bk sales template create`; they are going to ask the agent. A command on
+//     this screen is an instruction addressed to somebody who is not there.
+//
+//   - IT WENT STALE WHERE NOTHING COULD SEE IT. `bk sales doc create` was
+//     printed on the documents page for months and has never existed (the verb
+//     is `add`), and `bk link` survived in a comment after the command was
+//     removed. Prose naming a spelling is covered by no test in this repo —
+//     `cli-parity` reads routes, not sentences — so every one of these strings
+//     was an unguarded claim about another program's surface.
+//
+// What was kept is the DISTINCTION, which is real and load-bearing: "you have
+// this switched off" and "nothing switches this on" are different facts, and a
+// reader has to be able to tell them apart. Both still say something; neither
+// says it in shell.
+//
+// The commands themselves did not go anywhere — they are `bk sales --help` and
+// `bk guide`, which is where a caller who can run them is standing.
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Pencil, Plus, Terminal, X } from 'lucide-react'
+import { PropertySelect } from '@blackcode/platform-ui/ui/property-select'
 import { useCanWrite } from '@/lib/ui-mode'
 import { ticks } from '@/components/states'
 import type { Option } from '@/lib/pipeline'
@@ -36,8 +66,9 @@ import type { Option } from '@/lib/pipeline'
 /**
  * Editing that exists, when the reader has it switched on.
  *
- * `note` overrides the default line for a block that wants to name a specific
- * command — `bk sales prospect stage` rather than the generic one.
+ * `note` overrides the default line for a block that wants to say what it is
+ * about — "The deal is edited by the agent" rather than the generic sentence.
+ * It must not name a CLI command; see this file's header.
  */
 export function WriteGate({
   ws,
@@ -52,11 +83,12 @@ export function WriteGate({
   if (canWrite) return <>{children}</>
   return (
     <CommandNote>
-      {/* `ticks` because every `note` this app passes names a command inside
-          backticks, and until 2026-08-11 they rendered as literal backticks —
-          directly beside `AgentOnly` below, which builds the same sentence in
-          JSX and gets a proper chip. Same screen, same sentence, two
-          treatments. */}
+      {/* `ticks` is still applied even though no note in this app names a
+          command any more. It is a two-line renderer for a delimiter that costs
+          nothing when a string contains none, and the alternative — deleting it
+          and re-discovering on the day somebody writes one that the backticks
+          render literally — is the bug it was written for in the first place
+          (2026-08-11, thirteen strings). */}
       {ticks(note ?? 'Editing is hidden — this browser is in read-only mode (Settings → Preferences).')}
     </CommandNote>
   )
@@ -72,12 +104,8 @@ export function WriteGate({
  * the agent writes it. Editing those here would double this app's surface for
  * cases nobody has.
  */
-export function AgentOnly({ command, what }: { command: string; what: string }) {
-  return (
-    <CommandNote>
-      {what} are maintained through <code className="rounded bg-muted px-1 py-0.5">{command}</code>.
-    </CommandNote>
-  )
+export function AgentOnly({ what }: { what: string }) {
+  return <CommandNote>{what} are maintained by the agent.</CommandNote>
 }
 
 function CommandNote({ children }: { children: React.ReactNode }) {
@@ -181,21 +209,61 @@ export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
  * pass a hand-written list of values through this component, which is what
  * keeps "the vocabulary lives in one place" true of the forms as well as of the
  * chips. A value the vocabulary gains appears in every form with no edit here.
+ *
+ * ── IT WAS A NATIVE <select> UNTIL 2026-08-12 ──────────────────────────────
+ * Now `PropertySelect`, the picker both apps share, so a dropdown in a sales
+ * form and one in an issues sidebar are the same control. The KEPT part is the
+ * signature: it still takes `Option[]` and nothing else.
+ *
+ * The props narrowed from `React.SelectHTMLAttributes` to what a picker
+ * actually has, and that is a feature rather than a cost — the old type
+ * advertised `multiple`, `size` and `onBlur`, none of which this ever
+ * supported. `name`/`required` went with it; every form here is controlled
+ * React state read on submit, not a `<form>` the browser serialises, so neither
+ * did anything.
  */
 export function VocabSelect({
   options,
   placeholder,
-  ...props
-}: { options: Option[]; placeholder?: string } & React.SelectHTMLAttributes<HTMLSelectElement>) {
+  value,
+  onChange,
+  label,
+  disabled,
+}: {
+  options: Option[]
+  placeholder?: string
+  value: string
+  onChange: (v: string) => void
+  /** The accessible name. `Field` renders the visible one; this is what a
+   *  screen reader hears, and a picker whose only text is its current value
+   *  needs it. */
+  label?: string
+  disabled?: boolean
+}) {
+  const opts = useMemo(
+    () => [
+      ...(placeholder !== undefined ? [{ value: '', label: placeholder }] : []),
+      ...options.map((o) => ({ value: o.value, label: o.label })),
+    ],
+    [options, placeholder]
+  )
   return (
-    <select {...props} className={INPUT}>
-      {placeholder !== undefined && <option value="">{placeholder}</option>}
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <PropertySelect
+      label={label}
+      value={value}
+      options={opts}
+      onChange={(v) => {
+        if (!disabled) onChange(v)
+      }}
+      placeholder={placeholder ?? 'Select…'}
+      buttonClassName={
+        INPUT +
+        ' flex items-center gap-2 text-left' +
+        (disabled ? ' pointer-events-none opacity-50' : '')
+      }
+      chevron
+      noSearch={opts.length <= 8}
+    />
   )
 }
 

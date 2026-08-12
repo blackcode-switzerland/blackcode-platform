@@ -114,6 +114,8 @@ export interface CreateMeetingInput {
   attendees?: string[] | null
   agenda?: string | null
   outcome?: string | null
+  /** The online-meeting link. Null for a call or an in-person meeting. */
+  meetingUrl?: string | null
 }
 
 export async function createMeeting(input: CreateMeetingInput): Promise<Meeting> {
@@ -134,6 +136,7 @@ export async function createMeeting(input: CreateMeetingInput): Promise<Meeting>
         attendees: input.attendees ?? null,
         agenda: input.agenda ?? null,
         outcome: input.outcome ?? null,
+        meeting_url: input.meetingUrl ?? null,
         created_by: input.actor.userId,
       })
       .returning()
@@ -171,6 +174,8 @@ export async function updateMeeting(
     startsAt?: Date
     durationMin?: number | null
     attendees?: string[] | null
+    /** `null` CLEARS the link; `undefined` leaves it alone. */
+    meetingUrl?: string | null
   },
   actor: Actor
 ): Promise<MeetingRow | null> {
@@ -185,6 +190,7 @@ export async function updateMeeting(
     if (input.startsAt !== undefined) values.starts_at = input.startsAt
     if (input.durationMin !== undefined) values.duration_min = input.durationMin
     if (input.attendees !== undefined) values.attendees = input.attendees
+    if (input.meetingUrl !== undefined) values.meeting_url = input.meetingUrl
     if (input.outcome !== undefined) {
       values.outcome = input.outcome
       if (input.status === undefined && input.outcome) values.status = 'done'

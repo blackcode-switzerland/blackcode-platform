@@ -365,6 +365,26 @@ export async function listDocuments(opts: {
   kind?: string
   /** Only documents linked to this prospect #number. */
   prospectSeq?: number
+  /** Only documents linked to this product #number. */
+  productSeq?: number
+  /**
+   * Only documents carrying at least ONE of these tags.
+   *
+   * ── OR, NOT AND, AND THE CHOICE IS DELIBERATE ────────────────────────────
+   * `?tag=deck&tag=pricing` returns documents tagged `deck` OR `pricing`. That
+   * is what a row of tag CHIPS means everywhere a person has met one: clicking
+   * a second chip widens the result, and a filter bar whose second click can
+   * only ever empty the list reads as broken.
+   *
+   * It is also the safe direction for this data. Tags here are free text on a
+   * small library; AND over two of them is empty for almost every pair, so the
+   * common outcome of the other choice is a blank page with no explanation.
+   * Somebody who genuinely wants the intersection can pass one tag and read.
+   *
+   * Case-insensitive, because `tags` is free text with no vocabulary behind it
+   * — `Deck` and `deck` are one tag to everybody except a database.
+   */
+  tags?: string[]
   q?: string
   includeDeleted?: boolean
   limit?: number
@@ -380,6 +400,42 @@ export async function listDocuments(opts: {
       JOIN ${prospects} p ON p.id = dp.prospect_id
       WHERE dp.document_id = ${documents.id} AND p.seq = ${opts.prospectSeq}
         AND p.workspace_id = ${opts.workspaceId})`)
+  }
+  // The product filter is the prospect filter's twin, over the other link
+  // table, and it exists for the same D-8 reason: a product's documents are a
+  // FILTERED VIEW into the one library, never a per-product store.
+  if (opts.productSeq != null) {
+    where.push(sql`EXISTS (
+      SELECT 1 FROM ${documentProducts} dpr
+      JOIN ${products} pr ON pr.id = dpr.product_id
+      WHERE dpr.document_id = ${documents.id} AND pr.seq = ${opts.productSeq}
+        AND pr.workspace_id = ${opts.workspaceId})`)
+  }
+  const tags = opts.tags?.map((t) => t.trim().toLowerCase()).filter(Boolean)
+  if (tags?.length) {
+    // ── EXISTS + unnest, NOT the `&&` array-overlap operator ────────────────
+    // The obvious spelling is `<stored tags> && ${tags}::text[]`, and it 500s.
+    // Drizzle interpolates a JS array in a `sql` template as a PARENTHESISED
+    // PARAMETER LIST — the shape `IN (…)` wants — so `${tags}::text[]` reaches
+    // Postgres as `('pricing','demo')::text[]` and fails with "cannot cast type
+    // record to text[]". With ONE tag it fails differently ("malformed array
+    // literal"), which is worse: the two errors look unrelated, so a single-tag
+    // test would send you looking in the wrong place.
+    //
+    // This is `sql.join`, the idiom `listMeetings` and `listCommunications`
+    // already use for their `IN` lists in this same file's neighbours, and every
+    // tag is a bound parameter — a tag containing a quote or a percent sign is
+    // data, never syntax.
+    //
+    // `lower()` on the stored side, with `tags` already lowercased above, is the
+    // case-insensitivity the route promises: `Deck` and `deck` are one tag to
+    // everybody except a database.
+    //
+    // OR, not AND: a row matching ANY tag qualifies. See the parameter's docs.
+    where.push(sql`EXISTS (
+      SELECT 1 FROM unnest(coalesce(${documents.tags}, ARRAY[]::text[])) AS t
+      WHERE lower(t) IN (${sql.join(tags.map((t) => sql`${t}`), sql`, `)})
+    )`)
   }
   const rows = await db
     .select()

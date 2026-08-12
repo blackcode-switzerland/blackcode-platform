@@ -251,6 +251,7 @@ somebody was still using, with no undo.
 | `contacts` | `notes` | scan |
 | `stage_entries` | `note` | scan |
 | `meetings` | `title`, `agenda`, `outcome` | scan |
+| `meetings` | `meeting_url` | **exact** |
 | `communications` | `subject`, `body` | scan |
 | `objections` | `spoken`, `real_fear`, `counter` | scan |
 | `products` | `description`, `pitch` | scan |
@@ -259,9 +260,10 @@ somebody was still using, with no undo.
 | `documents` | `title`, `description` | scan |
 | `matches` | `why` | scan |
 
-**Twenty-two columns across ten tables.** §5.4 of the plan lists thirteen while
-its own prose says fourteen; the rule above produces twenty-two, and the count is
-a consequence rather than a target.
+**Twenty-three columns across ten tables.** §5.4 of the plan lists thirteen while
+its own prose says fourteen; the rule above produces twenty-three, and the count
+is a consequence rather than a target. It was twenty-two until migration 0007
+added `meetings.meeting_url` (2026-08-12).
 
 Four of the twenty-two are length-capped **labels** — `meetings.title`,
 `communications.subject`, `templates.subject`, `documents.title` — and they are
@@ -276,6 +278,22 @@ nothing — but nothing stops a caller putting a blob URL there, and the CHECK
 (exactly one of the two URL columns) then forbids the correct one. A file
 referenced only from an untriggered column is invisible to the delete gate.
 `exact` mode filters non-uploads out for free, so covering it costs nothing.
+
+`meetings.meeting_url` is the SECOND application of that argument, and it is
+worth reading as a worked example rather than a list entry. The column holds a
+Teams/Meet/Zoom join link, so the instinct is that it is exempt — and the
+asymmetry says otherwise: somebody uploads a recording or a dial-in card with
+`bk sales upload` and pastes its blob URL into the field the screen labels
+"Meeting link", because that is what the field is called. A wrongly-included
+column costs one no-op recogniser call per row; a wrongly-excluded one costs a
+file somebody is still using, with no undo. Both directions were measured on
+2026-08-12 against a real database: a Teams URL produces **no** index row, a
+`*.public.blob.vercel-storage.com` URL produces one, and clearing the column
+removes it.
+
+**A table can hold only one trigger of a given name**, so `meetings` carries
+`trg_blob_refs` (scan) and `trg_blob_refs_url` (exact) — the same pairing
+`documents` uses, for the same reason.
 
 **Every triggered table also carries `workspace_id`, even when its parent has
 one.** `platform.blob_references.workspace_id` is copied from the source row by
@@ -475,7 +493,7 @@ records is what is specific to this app.
 | `PATCH \| DELETE …/prospects/{n}/objections/{oid}` | `objection counter \| resolve \| rm` |
 | `GET \| POST \| DELETE …/prospects/{n}/matches` | `match list \| set \| clear` |
 | `GET \| POST …/prospects/{n}/labels`, `DELETE …/{lid}` | `label attach \| detach` |
-| `GET \| POST …/meetings`, `GET \| PATCH \| DELETE …/meetings/{n}` | `meeting …` |
+| `GET \| POST …/meetings`, `GET \| PATCH \| DELETE …/meetings/{n}` | `meeting …` (incl. `edit`, 2026-08-12) |
 | `GET \| POST …/communications`, `GET \| DELETE …/communications/{n}` | `comm …` |
 | `GET \| POST …/products`, `GET \| PATCH \| DELETE …/products/{n}` | `product …` |
 | `GET \| POST …/templates`, `GET \| PATCH \| DELETE …/templates/{n}` | `template …` |
@@ -787,6 +805,78 @@ resolves to no `platform.workspaces` row, so the file lands under the
 `unattributed` prefix with a NULL `workspace_id` in the ledger. That is the
 documented, lossless behaviour of that path (`platform-storage/src/attribution.ts`
 never throws) and it resolves when `sales.uploads` takes over.
+
+### 7.4.4 The meeting link (migration 0007, 2026-08-12)
+
+`sales.meetings.meeting_url` — nullable `text`, the join URL of an online
+meeting. Four things about it are contracts rather than choices:
+
+- **It is optional on every meeting type, including `call` and `in_person`.** A
+  room with a dial-in bridge is both, and gating the field on `type` would be the
+  app having an opinion about how people meet.
+- **`text`, not `varchar(n)`.** A Teams link carrying a tenant id, a thread id
+  and a base64 context blob runs past 400 characters routinely. The bound is
+  `MEETING_URL_MAX` in `lib/limits.ts` (served by `bk meta`), and it is a
+  paste-accident guard rather than a schema fact.
+- **Only `http:` and `https:` are accepted, and that is a security control, not
+  fussiness.** The web app renders the value as `<a href>`, and
+  `javascript:alert(1)` is a perfectly well-formed URL — a stored XSS wearing the
+  shape of a meeting link, written by one workspace member and clicked by
+  another. `new URL()` alone accepts it. Allowlisting two schemes also excludes
+  `data:` and `vbscript:` without enumerating what is dangerous. Nothing else is
+  validated: people paste Teams, Meet, Zoom, Whereby, Jitsi and internal
+  hostnames, and a pattern that tried to recognise "a conferencing link" would
+  refuse a real one the week a customer changed provider.
+- **`{"meeting_url": null}` CLEARS it**, via `nullableStr` — a meeting that moves
+  from Teams to a phone call has to be able to lose its link. On the CLI that is
+  `bk sales meeting edit <n> --clear-link`, spelled as its own flag rather than
+  `--link ""`, because an empty `--link` is far more often an unexpanded shell
+  variable than a deliberate erasure.
+
+`bk sales meeting edit` was added in the same change and is the first CLI reach
+into `PATCH …/meetings/{n}` beyond `outcome` and `cancel`. The route has always
+accepted title/agenda/at/duration/attendees — the web app's meeting form writes
+them — so the CLI could do strictly less than the browser, which is backwards
+for a product whose doctrine is that the agent writes. A pasted URL is the most
+typo-prone value in this app, and without an edit path the only recovery from a
+wrong one was to bin the meeting and re-record it, destroying its #number and its
+place in the feed to fix a character.
+
+### 7.4.5 Filtering the document library (2026-08-12)
+
+`GET …/documents` takes `kind`, `prospect`, `q` and, since 2026-08-12, `product`
+and `tag`. **Nothing about this added a tagging system.** `sales.documents.tags`
+is a `text[]` written since migration 0001 by `bk sales doc add --tag`, and
+`sales.document_products` has been written by `doc link --product` just as long;
+only the READ path was missing, so both were stored and unreachable.
+
+- **`tag` matches with OR, and the choice is written into the route.**
+  `?tag=deck,pricing` returns documents carrying either. That is what a row of
+  tag chips means everywhere a person has met one — clicking a second chip
+  widens the result — and a filter bar whose second click can only ever empty the
+  list reads as broken. It is also the safe direction for this data: tags here
+  are free text on a small library, so AND over any two of them is empty almost
+  always, and the common outcome of the other choice would be a blank page with
+  no explanation.
+- **Case-insensitive**, because `tags` is free text with no vocabulary behind it.
+  `Deck` and `deck` are one tag to everybody except a database.
+- **An unknown tag is not an error.** Unlike `kind`, which is validated against
+  `DOCUMENT_KIND_VALUES` and 400s, there is no vocabulary to check a tag against.
+  A tag nothing carries is a filter that matches nothing, which is a true answer.
+- **The SQL is `EXISTS` + `unnest`, not the `&&` array-overlap operator**, and
+  the reason is a trap worth recording: drizzle interpolates a JS array in a
+  `sql` template as a parenthesised PARAMETER LIST — the shape `IN (…)` wants —
+  so `${tags}::text[]` reaches Postgres as `('a','b')::text[]` and fails with
+  *cannot cast type record to text[]*. With a single tag it fails differently
+  (*malformed array literal*), which is worse, because the two errors look
+  unrelated and a one-tag test sends you looking in the wrong place. The working
+  form uses `sql.join`, the same idiom `listMeetings` and `listCommunications`
+  already use for their `IN` lists.
+- **`--prospect`/`--product` are `int` on `doc list` and `ints` on `doc add` /
+  `doc link`, and that asymmetry is correct.** On the filter they name one thing
+  to filter BY; on the write they name things to attach TO, repeatably. Unifying
+  them would make `doc list --prospect 3 --prospect 7` look meaningful when the
+  route has no answer for it.
 
 ### 7.5 What is not built yet
 

@@ -22,6 +22,104 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-12 — meetings carry a link, documents filter by tag and product, and `meeting edit` exists
+
+**Not breaking. Every route, flag and spelling that worked yesterday still
+works**; everything below is additive except one display label, noted at the end.
+
+### Meetings have an optional link
+
+`sales.meetings` gained a nullable `meeting_url` (migration 0007). It is the join
+URL of an online meeting — Teams, Meet, Zoom, Whereby, an internal room.
+
+```
+bk sales meeting schedule 3 --at 2026-08-20T10:00:00Z --type video \
+    --title "Platform demo" --link https://meet.google.com/abc-defg-hij
+bk sales meeting log … --link …
+bk sales meeting edit 12 --link https://zoom.us/j/123456789   # change it
+bk sales meeting edit 12 --clear-link                          # remove it
+```
+
+`meeting show` prints a `link` row when there is one and **omits it entirely
+when there is not** — most rows in this ledger are phone calls, and a `link —`
+line on every one of them buries the rows that do have one. `meeting list`'s
+columns are unchanged; `--json` and `--yaml` carry `meeting_url` on every meeting
+(`null` when unset), so a client that reads the field positionally should read it
+by name instead.
+
+On the wire: `POST …/meetings` and `PATCH …/meetings/{n}` accept `meeting_url`,
+and every meeting response carries it. **`{"meeting_url": null}` clears it.**
+
+**Only `http`/`https` are accepted.** A `javascript:` or `data:` URL is a
+well-formed URL and would become a stored XSS in the link the web app renders, so
+those are refused with `invalid_meeting_url`. Nothing else is validated — a
+provider you have never heard of and an internal hostname both work.
+
+### `bk sales meeting edit`
+
+New verb, on the `PATCH …/meetings/{n}` route that already existed. Takes
+`--title`, `--agenda`, `--at`, `--link` and `--clear-link`; only the flags you
+pass are sent. Until now the CLI reached that route through exactly two keyholes
+(`outcome` writes an outcome, `cancel` writes a status), so the web app could fix
+a meeting's details and an agent could not.
+
+To record how a meeting WENT, keep using `meeting outcome` — that also marks it
+as having happened, which `edit` deliberately does not. `edit` with no flags is
+an error rather than a silent no-op.
+
+### Documents filter by tag and by product
+
+```
+bk sales doc list --tag pricing              # any document tagged pricing
+bk sales doc list --tag pricing --tag demo   # either — OR, so this WIDENS
+bk sales doc list --product 4                # linked to product #4
+```
+
+**Nothing here added a tagging system.** `--tag` has been writable on
+`bk sales doc add` since the app shipped and `doc link --product` just as long;
+only the read path was missing, so both were stored and unreachable.
+
+- **Multiple tags match with OR**, not AND. A second `--tag` returns MORE, not
+  fewer. Free-text tags on a small library almost never intersect, so AND would
+  return nothing for most pairs.
+- **Tags are case-insensitive.** `--tag Deck` and `--tag deck` are the same
+  filter.
+- **An unknown tag is not an error** — there is no vocabulary to check against,
+  so it is a filter that matches nothing. `--kind` still 400s on an unknown
+  value, because that one has a vocabulary.
+- On the wire: `GET …/documents?tag=a,b&product=4`.
+
+`--prospect`/`--product` are single values on `doc list` (a thing to filter BY)
+and repeatable on `doc add`/`doc link` (things to attach TO). That difference is
+deliberate.
+
+### The web app
+
+Filters on Meetings (prospect, status), Communications (channel, direction,
+prospect), Templates (channel, category) and Documents (kind, prospect, product,
+tag) — all held in the URL, so a filtered view is a link you can send. A filtered
+listing that matches nothing now says *"No meetings match this filter"* rather
+than *"No meetings"*, which previously read as data loss. Templates gained a copy
+button for the body and, separately, the subject; `{{placeholders}}` are copied
+verbatim. The workspace switcher names the OWNER of a workspace that is not yours
+instead of labelling it "Member". Every native `<select>` was replaced with the
+picker both apps share.
+
+**The web UI no longer prints `bk` commands at its readers**, and the bare URN
+chip is off the prospect header. Neither capability changed: the URN is still on
+the wire and still what `bk sales prospect show` prints, and the commands are
+still `bk sales --help` and `bk guide`. See `docs/changelog/platform.md` for the
+invitation change, which is shared by every app.
+
+### One display label changed: `out`/`in` read as "Sent"/"Received"
+
+The `comm_directions` vocabulary's LABELS changed from `Outbound`/`Inbound` to
+`Sent`/`Received`. **The values are untouched** — `--dir out` and `--dir in` are
+what they always were, and nothing an agent sends or a route validates moves.
+Only the human-facing label in `bk meta` and the web UI changed.
+
+---
+
 ## 2026-08-12 — every vocabulary flag names its values, and "which prospect" takes either shape
 
 **Not breaking. Nothing was renamed and no route changed** — every spelling that

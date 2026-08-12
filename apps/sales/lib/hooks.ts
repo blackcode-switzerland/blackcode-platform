@@ -87,6 +87,9 @@ export interface Meeting {
   attendees: string[]
   agenda: string | null
   outcome: string | null
+  /** The join URL. Null on the calls and in-person meetings that are most of
+   *  this ledger — renderers show nothing at all rather than an em dash. */
+  meeting_url: string | null
   urn: string | null
   created_at: string
   deleted_at: string | null
@@ -342,7 +345,7 @@ export function useMeetings(ws: string, opts: { prospect?: number; status?: stri
 
 export function useCommunications(
   ws: string,
-  opts: { prospect?: number; channel?: string } = {}
+  opts: { prospect?: number; channel?: string; dir?: string } = {}
 ) {
   return useQuery({
     queryKey: ['communications', ws, opts],
@@ -363,11 +366,12 @@ export function useProducts(ws: string) {
   })
 }
 
-export function useTemplates(ws: string) {
+export function useTemplates(ws: string, opts: { channel?: string; category?: string } = {}) {
   return useQuery({
-    queryKey: ['templates', ws],
+    queryKey: ['templates', ws, opts],
     queryFn: async () =>
-      (await apiGet<ListPage<Template>>(wsPath(ws, '/templates') + query({ limit: 100 }))).data,
+      (await apiGet<ListPage<Template>>(wsPath(ws, '/templates') + query({ ...opts, limit: 100 })))
+        .data,
   })
 }
 
@@ -377,7 +381,19 @@ export function useTemplates(ws: string) {
  * than a parallel store** (D-8, the fix UPDATE-6 was written to make). Same
  * route, same rows, one `where`.
  */
-export function useDocuments(ws: string, opts: { prospect?: number; kind?: string; q?: string } = {}) {
+export function useDocuments(
+  ws: string,
+  opts: {
+    prospect?: number
+    product?: number
+    kind?: string
+    q?: string
+    /** Documents carrying ANY of these — OR, matching the route and the CLI.
+     *  Sent as one comma-separated `tag` parameter, which is the encoding all
+     *  three sides agree on. */
+    tag?: string
+  } = {}
+) {
   return useQuery({
     queryKey: ['documents', ws, opts],
     queryFn: async () =>

@@ -121,23 +121,47 @@ its own members.`,
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Invitation sent to %s.\n", res.Invitation.Email)
-			if res.InviteeHasAccount {
-				fmt.Fprintln(cmd.OutOrStdout(), "They'll see it in their inbox immediately.")
-			} else {
-				// The link a human clicks. It must point at THIS app's server, not
-				// the home one: the invitation is into this app's workspace, and
-				// the accept page resolves the token against the deployment that
-				// holds it. Built from the home server until 2026-08-10, when an
-				// invitation stopped being platform-level.
+			// ── WHAT WAS WRITTEN, THEN WHETHER THE EMAIL WENT ────────────────
+			// These are two facts and they used to be one sentence. "Invitation
+			// sent to x." was printed unconditionally, and for somebody who
+			// already had an account it was followed by "They'll see it in their
+			// inbox immediately" — a promise about delivery, made without
+			// reading the delivery result the server returns. Email is
+			// best-effort here (the invitation is valid whether or not it
+			// arrives), so an agent or a person acting on that line had no way
+			// to know they needed to send the link themselves.
+			fmt.Fprintf(cmd.OutOrStdout(), "Invitation created for %s.\n", res.Invitation.Email)
+
+			// The link a human clicks. It must point at THIS app's server, not
+			// the home one: the invitation is into this app's workspace, and
+			// the accept page resolves the token against the deployment that
+			// holds it. Built from the home server until 2026-08-10, when an
+			// invitation stopped being platform-level.
+			inviteURL := res.AcceptURL
+			if inviteURL == "" {
 				server, err := cmdutil.ServerForApp(cfg, acfg.App)
 				if err != nil {
 					return err
 				}
-				inviteURL := fmt.Sprintf("%s/invitations/%s",
+				inviteURL = fmt.Sprintf("%s/invitations/%s",
 					strings.TrimRight(server, "/"), res.Invitation.Token)
-				fmt.Fprintf(cmd.OutOrStdout(), "Share this link:\n  %s\n", inviteURL)
 			}
+
+			if res.EmailSent {
+				fmt.Fprintln(cmd.OutOrStdout(), "The invitation email was sent.")
+				if res.InviteeHasAccount {
+					fmt.Fprintln(cmd.OutOrStdout(), "They already have an account, so it is waiting for them now.")
+				}
+			} else {
+				// Not an error and not a non-zero exit: the invitation EXISTS
+				// and is valid, so failing here would make a caller think it
+				// had to retry and produce a second one. What it needs is the
+				// recovery, which is the link.
+				fmt.Fprintln(cmd.OutOrStdout(), "The invitation email was NOT sent — deliver this link yourself:")
+			}
+			// Printed in BOTH cases. When the email went it is still the thing
+			// to paste into a chat; when it did not, it is the only way in.
+			fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", inviteURL)
 			fmt.Fprintf(cmd.OutOrStdout(),
 				"On accept they become a member of this %s workspace.\n", acfg.App)
 			return nil

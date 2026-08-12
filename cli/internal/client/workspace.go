@@ -144,6 +144,23 @@ type WorkspaceInvitation struct {
 type CreateInvitationResponse struct {
 	Invitation        WorkspaceInvitation `json:"invitation"`
 	InviteeHasAccount bool                `json:"invitee_has_account"`
+	// EmailSent is the REAL result of trying to deliver the invitation, and it
+	// was not read by this client until 2026-08-12 — `bk … invite send` printed
+	// "Invitation sent to x." and, for an existing account, "They'll see it in
+	// their inbox immediately", both of which are delivery claims made without
+	// looking. Sending is best-effort by design (the row is written and valid
+	// either way), so the two outcomes are genuinely different and the caller
+	// has to be told which one happened.
+	//
+	// A bool, so an older server that omits the field decodes as `false` — the
+	// safe direction: it produces "we could not confirm delivery, here is the
+	// link" rather than a promise nothing checked.
+	EmailSent bool `json:"email_sent"`
+	// AcceptURL is the server's own link, which knows the deployment's public
+	// origin (NEXTAUTH_URL behind a proxy). Preferred over the one this client
+	// builds from its configured server address; the local build stays as the
+	// fallback for a server that does not send it.
+	AcceptURL string `json:"accept_url"`
 }
 
 // SendInvitation invites `email` to a workspace. `app` is optional: empty means

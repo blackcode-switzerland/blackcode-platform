@@ -17,8 +17,14 @@ import { resolveActor } from '@/lib/actor'
 import { createMeeting, listMeetings } from '@/lib/db/queries/ledger'
 import { prospectIdBySeq } from '@/lib/db/queries/prospect-children'
 import { publicMeeting } from '@/lib/views'
-import { MEETING_TITLE_MAX } from '@/lib/limits'
-import { numberOr, parseList, requireMaxLength, str } from '@/lib/http-input'
+import { MEETING_TITLE_MAX, MEETING_URL_MAX } from '@/lib/limits'
+import {
+  numberOr,
+  parseList,
+  requireMaxLength,
+  requireMeetingUrl,
+  str,
+} from '@/lib/http-input'
 import { MEETING_STATUS_VALUES, MEETING_TYPE_VALUES } from '@/lib/pipeline'
 
 interface Params {
@@ -121,6 +127,15 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     ? (body.attendees as unknown[]).map(String).filter(Boolean)
     : null
 
+  // Optional on every meeting type, including `call` and `in_person`: a room
+  // with a dial-in bridge is both, and refusing the link for an in-person
+  // meeting would be the app having an opinion about how people meet.
+  const meetingUrl = str(body?.meeting_url) ?? null
+  if (meetingUrl) {
+    requireMaxLength(meetingUrl, MEETING_URL_MAX, 'meeting_url')
+    requireMeetingUrl(meetingUrl)
+  }
+
   const actor = await resolveActor(getDb(), req, ctx.user)
   const row = await createMeeting({
     workspaceId: ctx.workspace.id,
@@ -134,6 +149,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     attendees,
     agenda: str(body?.agenda) ?? null,
     outcome,
+    meetingUrl,
   })
   return NextResponse.json(
     publicMeeting(

@@ -48,6 +48,7 @@ import {
   MeetingForm,
   RemoveCommunicationButton,
 } from '@/components/ledgers/ledger-forms'
+import { MeetingLink } from '@/components/ledgers/ledger-pages'
 import { useCanWrite } from '@/lib/ui-mode'
 import { usePageTitle } from '@/components/sales-shell'
 import {
@@ -63,6 +64,7 @@ import {
 } from '@/lib/hooks'
 import { dateTimeShort, dayLabel, money, relativeDay } from '@/lib/format'
 import {
+  commDirectionLabel,
   nextActionTypeLabel,
   stageColor,
   stageEntryStatusColor,
@@ -114,17 +116,24 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
             <span key={v}>{v}</span>
           ))}
           <span>Owner: {p.owner?.name ?? p.owner?.email ?? '—'}</span>
-          {/* The URN, because this row is addressable from every other app and
-              somebody about to reference it elsewhere needs to be able to copy
-              it.
+          {/*
+            THE BARE URN CHIP IS GONE (2026-08-12).
 
-              This said "about to write `bk link`" until 2026-08-11. That command
-              was REMOVED in Phase 4 and its route is unmounted everywhere; the
-              URN goes into the other record's own text now. The comment was the
-              last thing in this app still naming it — found by probing every
-              `bk …` spelling the sales UI mentions against the real binary, not
-              by reading. (Every other one of the fifteen is still real.) */}
-          {p.urn && <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{p.urn}</code>}
+            It rendered `bc:sales:acme/prospect/11` in a monospace box on the
+            header line of every deal, between the sector and the summary. The
+            argument for it was that the row is addressable from other apps and
+            somebody referencing it needs to copy it — which is true of an
+            AGENT, and an agent does not read this page. To the human looking at
+            a customer record it is a string of punctuation that reads as debug
+            output left switched on, sitting in the most valuable space on the
+            page.
+
+            It is not lost: the URN is on the wire (`lib/views.ts`), it is what
+            `bk sales prospect show` prints, and it is derivable by anybody who
+            knows the workspace slug and the #number, both of which are in the
+            URL of this page. Nothing that could resolve it has stopped being
+            able to.
+          */}
         </div>
         {p.summary && <p className="text-sm leading-relaxed text-foreground">{p.summary}</p>}
 
@@ -137,11 +146,10 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
         */}
         {/* Both gates on this page carried the DEFAULT note until 2026-08-11,
             so a read-only reader met the identical sentence twice inside 150px
-            — the header's and the next-action strip's. Every other block on the
-            page already names its own command; these two now do the same, which
-            keeps `forms.tsx`'s "both always SAY something" rule while saying two
-            different things. */}
-        <WriteGate ws={ws} note="The deal is edited with `bk sales prospect edit` and moved with `bk sales prospect stage`.">
+            — the header's and the next-action strip's. Each says what it is
+            about instead, which keeps `forms.tsx`'s "both always SAY
+            something" rule while saying two different things. */}
+        <WriteGate ws={ws} note="The deal and its stage are maintained by the agent.">
           <div className="flex flex-wrap gap-2">
             <EditProspectForm ws={ws} p={p} />
             <MoveStageForm ws={ws} p={p} />
@@ -177,7 +185,7 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
           ) : (
             <p className="mt-1 text-sm text-muted-foreground">Nothing owed.</p>
           )}
-          <WriteGate ws={ws} note="What is owed is set with `bk sales prospect next`.">
+          <WriteGate ws={ws} note="What is owed next is set by the agent.">
             <div className="mt-2">
               <NextActionForm ws={ws} p={p} />
             </div>
@@ -270,7 +278,7 @@ function Overview({
       */}
       <Section
         title="Deal journey"
-        action={<AgentOnly what="Journey steps" command="bk sales journey add" />}
+        action={<AgentOnly what="Journey steps" />}
       >
         {journey.length === 0 ? (
           <EmptyState title="No journey recorded" />
@@ -305,7 +313,7 @@ function Overview({
       <Section
         title="Contacts"
         action={
-          <WriteGate ws={ws} note="Contacts are edited with `bk sales contact add | edit | rm`.">
+          <WriteGate ws={ws} note="Contacts are maintained by the agent.">
             <AddContactForm ws={ws} n={n} />
           </WriteGate>
         }
@@ -358,7 +366,7 @@ function Overview({
         action={
           <WriteGate
             ws={ws}
-            note="Objections are recorded with `bk sales objection raise | counter | resolve`."
+            note="Objections are recorded by the agent."
           >
             <RaiseObjectionForm ws={ws} n={n} />
           </WriteGate>
@@ -430,7 +438,7 @@ function Overview({
       */}
       <Section
         title="Triangulation — matched products"
-        action={<AgentOnly what="Matches" command="bk sales match set" />}
+        action={<AgentOnly what="Matches" />}
       >
         {matches.isPending ? (
           <BlockSkeleton rows={2} />
@@ -439,7 +447,7 @@ function Overview({
         ) : matches.data.length === 0 ? (
           <EmptyState
             title="No match computed yet"
-            hint="Matches are written by the agent with `bk sales match set` — they are never derived here."
+            hint="Matches are written by the agent — they are never derived here."
           />
         ) : (
           <div className="space-y-2">
@@ -502,7 +510,7 @@ function Overview({
 function CommunicationsTab({ ws, n }: { ws: string; n: number }) {
   const comms = useCommunications(ws, { prospect: n })
   const gate = (
-    <WriteGate ws={ws} note="Exchanges are logged with `bk sales comm log`.">
+    <WriteGate ws={ws} note="Exchanges are logged by the agent.">
       <LogCommunicationForm ws={ws} prospect={n} />
     </WriteGate>
   )
@@ -523,8 +531,11 @@ function CommunicationsTab({ ws, n }: { ws: string; n: number }) {
         <article key={c.number} className="rounded-xl border border-border bg-card px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <ChannelChip value={c.channel} />
+            {/* The vocabulary's label, not a ternary on the wire value — see
+                `COMM_DIRECTIONS` in lib/pipeline.ts. This was the second of the
+                two copies. */}
             <span className="text-xs text-muted-foreground">
-              {c.direction === 'out' ? 'we → them' : 'them → us'}
+              {commDirectionLabel(c.direction)}
             </span>
             <span className="text-xs text-muted-foreground">{dateTimeShort(c.occurred_at)}</span>
             {c.contact && <span className="text-xs text-muted-foreground">· {c.contact}</span>}
@@ -551,7 +562,7 @@ function MeetingsTab({ ws, n }: { ws: string; n: number }) {
   const meetings = useMeetings(ws, { prospect: n })
   const canWrite = useCanWrite(ws)
   const gate = (
-    <WriteGate ws={ws} note="Meetings are recorded with `bk sales meeting schedule | log | outcome`.">
+    <WriteGate ws={ws} note="Meetings are recorded by the agent.">
       <MeetingForm ws={ws} prospect={n} />
     </WriteGate>
   )
@@ -581,6 +592,9 @@ function MeetingsTab({ ws, n }: { ws: string; n: number }) {
           {m.attendees.length > 0 && (
             <p className="mt-1 text-xs text-muted-foreground">{m.attendees.join(', ')}</p>
           )}
+          {/* The same component the cross-prospect ledger uses, so the two
+              views of one meeting cannot render its link differently. */}
+          <MeetingLink url={m.meeting_url} />
           {m.agenda && <p className="mt-1.5 text-sm text-foreground">{m.agenda}</p>}
           {/* The outcome is the point of a meetings LEDGER as against a calendar
               (§1.2 rule 4): what was discussed, not when it is. */}
@@ -634,7 +648,7 @@ function DocumentsTab({ ws, n }: { ws: string; n: number }) {
           CHECK requires exactly one of upload_url/external_url, and swapping
           one for the other silently changes whether the blob-delete gate can
           see it), and nobody independently learns the library changed. */}
-      <AgentOnly what="Documents" command="bk sales doc add | link" />
+      <AgentOnly what="Documents" />
       <DocumentList docs={docs.data} />
     </div>
   )

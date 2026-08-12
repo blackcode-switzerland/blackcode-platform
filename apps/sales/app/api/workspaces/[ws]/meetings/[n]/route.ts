@@ -8,8 +8,14 @@ import { getDb } from '@/lib/db/client'
 import { resolveActor } from '@/lib/actor'
 import { getMeetingBySeq, softDeleteMeeting, updateMeeting } from '@/lib/db/queries/ledger'
 import { publicMeeting } from '@/lib/views'
-import { MEETING_TITLE_MAX } from '@/lib/limits'
-import { nullableStr, requireMaxLength, requireNumberParam, str } from '@/lib/http-input'
+import { MEETING_TITLE_MAX, MEETING_URL_MAX } from '@/lib/limits'
+import {
+  nullableStr,
+  requireMaxLength,
+  requireMeetingUrl,
+  requireNumberParam,
+  str,
+} from '@/lib/http-input'
 import { MEETING_STATUS_VALUES } from '@/lib/pipeline'
 
 interface Params {
@@ -59,6 +65,16 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
     )
   }
 
+  // `nullableStr`, so `{"meeting_url": null}` CLEARS the link and omitting the
+  // key leaves it alone — the three-way distinction that file's header exists
+  // for. A meeting moved from Teams to a phone call has to be able to lose its
+  // link, and a PATCH that could only ever set one would make that impossible.
+  const meetingUrl = nullableStr(body?.meeting_url)
+  if (meetingUrl) {
+    requireMaxLength(meetingUrl, MEETING_URL_MAX, 'meeting_url')
+    requireMeetingUrl(meetingUrl)
+  }
+
   const actor = await resolveActor(getDb(), req, ctx.user)
   const row = await updateMeeting(
     ctx.workspace.id,
@@ -73,6 +89,7 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
       attendees: Array.isArray(body?.attendees)
         ? (body.attendees as unknown[]).map(String).filter(Boolean)
         : undefined,
+      meetingUrl,
     },
     actor
   )

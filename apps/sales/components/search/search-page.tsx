@@ -49,6 +49,7 @@ import { Search as SearchIcon, X } from 'lucide-react'
 import { STAGES, stageLabel } from '@/lib/pipeline'
 import { StageChip } from '@/components/chips'
 import { BlockSkeleton, EmptyState, ErrorState } from '@/components/states'
+import { FilterBar, FilterSelect } from '@/components/filters'
 import { useProspectsByNumber, useSalesSearch, type SearchHit, type SearchType } from '@/lib/hooks'
 import { recordHref } from '@/lib/record-href'
 import type { PublicProspect } from '@/lib/views'
@@ -246,9 +247,7 @@ export function SearchPage({ ws }: { ws: string }) {
       <p className="text-xs text-muted-foreground">
         Searching <strong className="font-medium text-foreground">inside b/sales records</strong> —
         call summaries, meeting outcomes, contact details, template copy. Each app is searched on
-        its own:{' '}
-        <code className="rounded bg-muted px-1 py-0.5">bk sales search</code> here,{' '}
-        <code className="rounded bg-muted px-1 py-0.5">bk issues search</code> there.
+        its own, so issues and tasks are not reachable from here.
       </p>
 
       {!q.trim() ? (
@@ -278,31 +277,21 @@ export function SearchPage({ ws }: { ws: string }) {
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <select
+          <FilterBar>
+            <FilterSelect
+              label="Stage"
               value={stage}
-              onChange={(e) => setParam('stage', e.target.value)}
-              className="h-9 rounded-lg border border-input bg-card px-2.5 text-sm outline-none focus:border-ring"
-            >
-              <option value="">Any stage</option>
-              {STAGES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-            <select
+              onChange={(v) => setParam('stage', v)}
+              options={STAGES}
+              allLabel="Any stage"
+            />
+            <FilterSelect
+              label="Owner"
               value={owner}
-              onChange={(e) => setParam('owner', e.target.value)}
-              className="h-9 rounded-lg border border-input bg-card px-2.5 text-sm outline-none focus:border-ring"
-            >
-              <option value="">Any owner</option>
-              {owners.map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setParam('owner', v)}
+              options={owners.map(([key, label]) => ({ value: key, label }))}
+              allLabel="Any owner"
+            />
             {dealFiltered && (
               <span className="text-xs text-muted-foreground">
                 {/*
@@ -315,7 +304,7 @@ export function SearchPage({ ws }: { ws: string }) {
                 {hiddenCatalog > 0 && ` — ${hiddenCatalog} catalog result${hiddenCatalog === 1 ? '' : 's'} hidden`}
               </span>
             )}
-          </div>
+          </FilterBar>
 
           {search.isPending || (dealFiltered && prospects.isPending) ? (
             <BlockSkeleton rows={5} />
@@ -487,9 +476,8 @@ function NoResults({
         catalog. Two things worth trying: a shorter term — matching is by whole word with a prefix
         on the last one, so <code className="rounded bg-muted px-1 py-0.5">roch</code> finds Roches
         but <code className="rounded bg-muted px-1 py-0.5">oches</code> does not — or, if the
-        record you want lives in another app,{' '}
-        <code className="rounded bg-muted px-1 py-0.5">bk issues search {q}</code>. There is no
-        one command that searches both.
+        record you want is an issue or a task rather than a deal, search for it in b/issues. Each
+        app is searched on its own; nothing here reaches across.
       </p>
     </div>
   )

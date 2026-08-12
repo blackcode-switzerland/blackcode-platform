@@ -97,7 +97,7 @@ export function TodayPage({ ws }: { ws: string }) {
         ) : upcoming.data.meetings.length === 0 ? (
           <EmptyState
             title="Nothing scheduled"
-            hint="Meetings appear here when the agent records one with `bk sales meeting schedule`."
+            hint="Meetings appear here when the agent records one."
           />
         ) : (
           <div className="overflow-hidden rounded-2xl border border-border bg-card">

@@ -6,9 +6,15 @@
 // `sales/{ws}/` path prefix — OR an external link. The CHECK enforces exactly
 // one, and this route refuses both or neither before the database has to.
 //
-// `--prospect` filters the library rather than listing a separate per-prospect
-// set: the many-to-many tables are what make the per-prospect Documents tab a
-// FILTERED VIEW into one library rather than a silo with copies in it.
+// `--prospect` and `--product` filter the library rather than listing a separate
+// per-prospect or per-product set: the many-to-many tables are what make the
+// per-prospect Documents tab a FILTERED VIEW into one library rather than a silo
+// with copies in it.
+//
+// `--tag` filters on the `tags text[]` column the library has stored since
+// 0001 and never exposed to a reader. Nothing here adds a tagging system —
+// `bk sales doc add --tag` has always written these — it adds the read path
+// that was missing.
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors, jsonList } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
@@ -17,7 +23,7 @@ import { resolveActor } from '@/lib/actor'
 import { addDocument, listDocuments } from '@/lib/db/queries/catalog'
 import { publicDocument } from '@/lib/views'
 import { DOCUMENT_TITLE_MAX } from '@/lib/limits'
-import { numberOr, requireMaxLength, str } from '@/lib/http-input'
+import { numberOr, parseList, requireMaxLength, str } from '@/lib/http-input'
 import { DOCUMENT_KIND_VALUES } from '@/lib/pipeline'
 
 interface Params {
@@ -36,10 +42,21 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
       'run `bk meta` for the current kinds'
     )
   }
+  // `?tag=deck,pricing` matches a document carrying EITHER — OR, not AND. The
+  // reasoning is on `listDocuments`' `tags` parameter; the short version is that
+  // a row of tag chips whose second click can only ever empty the list reads as
+  // broken, and free-text tags on a small library intersect almost never.
+  //
+  // Tags are NOT validated against a vocabulary, unlike `kind` above, because
+  // there is no vocabulary: `sales.documents.tags` is free text an agent writes
+  // with `--tag`. An unknown tag is not an error — it is a filter that matches
+  // nothing, which is a true answer and the one the caller asked for.
   const rows = await listDocuments({
     workspaceId: ctx.workspace.id,
     kind,
     prospectSeq: numberOr(q.get('prospect')),
+    productSeq: numberOr(q.get('product')),
+    tags: parseList(q.get('tag')),
     q: str(q.get('q')),
     includeDeleted: q.get('include_deleted') === 'true',
     limit: numberOr(q.get('limit')),

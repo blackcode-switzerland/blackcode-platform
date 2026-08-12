@@ -101,6 +101,47 @@ export function requireMaxLength(value: string, max: number, field: string): voi
   }
 }
 
+/**
+ * Reject a meeting link that is not an http(s) URL.
+ *
+ * ---------------------------------------------------------------------------
+ * DELIBERATELY ALMOST NO VALIDATION, WITH ONE HARD EDGE
+ * ---------------------------------------------------------------------------
+ * People paste Teams, Meet, Zoom, Whereby, Jitsi, a Webex tenant, and internal
+ * hostnames that resolve only on the office network. A pattern that tried to
+ * recognise "a conferencing link" would refuse a real one the week a customer
+ * moved provider, and the cost of refusing is that somebody cannot record where
+ * their meeting is. So: anything the URL parser accepts.
+ *
+ * The SCHEME check is not fussiness and is the reason this function exists
+ * rather than being skipped entirely. The web app renders this value as
+ * `<a href={…}>`, and `javascript:alert(1)` is a perfectly well-formed URL —
+ * a stored XSS wearing the shape of a meeting link, typed by one member of a
+ * workspace and clicked by another. `new URL()` alone would pass it. Allowing
+ * exactly `http:` and `https:` also excludes `data:` and `vbscript:` without
+ * needing to enumerate what is dangerous, which is the direction that stays
+ * correct as browsers add schemes.
+ */
+export function requireMeetingUrl(value: string): void {
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    throw Errors.badRequest(
+      'invalid_meeting_url',
+      `${JSON.stringify(value)} is not a URL`,
+      'pass the full join link including https:// — e.g. --link https://meet.google.com/abc-defg-hij'
+    )
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw Errors.badRequest(
+      'invalid_meeting_url',
+      `a meeting link must be http or https, got ${JSON.stringify(parsed.protocol)}`,
+      'pass the full join link including https://'
+    )
+  }
+}
+
 /** Reject a deal value that is not a plain decimal amount. */
 export function requireMoney(value: string): void {
   if (!/^-?\d+(\.\d{1,2})?$/.test(value)) {

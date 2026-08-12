@@ -55,13 +55,38 @@ export class ReadOnlyModeError extends Error {
   }
 }
 
-interface RecordMutationOptions<TVars> {
+interface RecordMutationOptions<TVars, TData = unknown> {
   /** The request, in terms of `ws` and the caller's variables. */
-  send: (vars: TVars) => Promise<unknown>
+  send: (vars: TVars) => Promise<TData>
   /** Query keys to invalidate on success. The record's page, its listings. */
   invalidate: (vars: TVars) => QueryKey[]
-  /** What the toast says. A write nobody can see land is a write nobody trusts. */
-  success: (vars: TVars) => string
+  /**
+   * What the toast says. A write nobody can see land is a write nobody trusts.
+   *
+   * ── THE SECOND PARAMETER IS THE SERVER'S ANSWER, AND IT IS OPTIONAL ───────
+   * `success` took only `vars` — what the client SENT — so every toast in this
+   * app could report the request and never the result. That is fine for
+   * "Prospect updated" and it was wrong for exactly one call site: sending an
+   * invitation, where the server returns `email_sent` saying whether the email
+   * actually went out, and the UI said "Invitation created for x@y.ch" whether
+   * it had or not. The route's own comment calls that out — "a client that
+   * cannot tell 'sent' from 'not attempted' will assume the first one" — and
+   * the web app was that client.
+   *
+   * Widened as an OPTIONAL second parameter rather than a required one, so the
+   * dozen `success: () => 'Contact updated'` call sites keep working untouched.
+   * A required parameter would have meant editing every one of them to ignore
+   * a value they have no use for.
+   *
+   * ── RETURNING `{ message, ok: false }` MAKES IT A WARNING, NOT A TICK ─────
+   * A write can succeed and still have a half that did not, and the invitation
+   * is the case: the row is written, the email bounced. Rendering that through
+   * `toast.success` would put a green checkmark next to the sentence "the email
+   * could not be sent", which is a success message pretending — the reader
+   * takes the icon and not the words. So a caller that knows better can say so,
+   * and the plain string stays the shorthand for "it worked".
+   */
+  success: (vars: TVars, data: TData) => string | { message: string; ok: boolean }
 }
 
 /**
@@ -73,7 +98,10 @@ interface RecordMutationOptions<TVars> {
  * fails on a second one — not because a second would necessarily be ungated, but
  * because the moment there are two nobody can tell by looking.
  */
-function useRecordMutation<TVars>(ws: string, opts: RecordMutationOptions<TVars>) {
+function useRecordMutation<TVars, TData = unknown>(
+  ws: string,
+  opts: RecordMutationOptions<TVars, TData>
+) {
   const canWrite = useCanWrite(ws)
   const qc = useQueryClient()
 
@@ -82,9 +110,19 @@ function useRecordMutation<TVars>(ws: string, opts: RecordMutationOptions<TVars>
       if (!canWrite) throw new ReadOnlyModeError()
       return opts.send(vars)
     },
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
       for (const key of opts.invalidate(vars)) qc.invalidateQueries({ queryKey: key })
-      toast.success(opts.success(vars))
+      // `data` was `_data` — named as unused while carrying the server's
+      // answer. See `RecordMutationOptions.success`.
+      const result = opts.success(vars, data)
+      if (typeof result === 'string') toast.success(result)
+      else if (result.ok) toast.success(result.message)
+      // `toast.warning`, not `toast.error`: the write DID land, and an error
+      // toast would tell the reader to try again when there is nothing to
+      // retry. The longer duration is because this one asks them to do
+      // something — the default four seconds is not enough to read a sentence
+      // and act on it.
+      else toast.warning(result.message, { duration: 10_000 })
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -257,6 +295,8 @@ export interface MeetingInput {
   agenda?: string | null
   outcome?: string | null
   status?: string
+  /** `null` clears the link; omitting the key leaves it alone. */
+  meeting_url?: string | null
 }
 
 export function useScheduleMeeting(ws: string) {
@@ -360,11 +400,51 @@ const teamKeys = (ws: string): QueryKey[] => [
   ['invite-candidates', ws],
 ]
 
+/** What `POST …/invitations` answers with. `email_sent` is the half that matters. */
+interface InvitationCreated {
+  invitee_has_account?: boolean
+  email_sent?: boolean
+  accept_url?: string
+}
+
+/**
+ * Invite somebody, and SAY WHETHER THE EMAIL WENT.
+ *
+ * ---------------------------------------------------------------------------
+ * THE FALSE BRANCH IS THE POINT
+ * ---------------------------------------------------------------------------
+ * This said `Invitation created for x@y.ch` unconditionally. The invitation is
+ * always created — that part was true — and it said nothing at all about
+ * delivery, so the person inviting had no way to know whether they also needed
+ * to send the link by hand. The server has always answered the question:
+ * `email_sent` is the real result of `sendInvitationEmail`, and the route's own
+ * comment says it is reported rather than omitted precisely because "a client
+ * that cannot tell 'sent' from 'not attempted' will assume the first one".
+ *
+ * Email here is BEST-EFFORT BY DESIGN. A bounce does not fail the request,
+ * because the invitation is written and valid either way — so a toast that
+ * always claims the email was sent is a claim larger than the check that
+ * produced it, which is the defect this project keeps finding written down in
+ * CLAUDE.md. If it did not send, say so, and point at the copy-link affordance
+ * the members page already has.
+ *
+ * `email_sent === false` and a MISSING `email_sent` are deliberately the same
+ * branch: an older deployment that does not return the field cannot be claimed
+ * to have sent anything. The only sentence that promises delivery is the one
+ * behind an explicit `true`.
+ */
 export function useInviteMember(ws: string) {
-  return useRecordMutation<{ email: string }>(ws, {
-    send: ({ email }) => apiSend('POST', wsPath(ws, '/invitations'), { email }),
+  return useRecordMutation<{ email: string }, InvitationCreated>(ws, {
+    send: ({ email }) =>
+      apiSend('POST', wsPath(ws, '/invitations'), { email }) as Promise<InvitationCreated>,
     invalidate: () => teamKeys(ws),
-    success: ({ email }) => `Invitation created for ${email}`,
+    success: ({ email }, data) =>
+      data?.email_sent === true
+        ? { ok: true, message: `Invited ${email} — invitation email sent` }
+        : {
+            ok: false,
+            message: `Invited ${email} — but the email could not be sent. Copy the invite link and send it yourself.`,
+          },
   })
 }
 

@@ -114,13 +114,15 @@ function WorkspacePreferences({
                     )}
                   </span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {/* `ticks` so the fallback's `bk meta` renders as a chip
-                        rather than as two literal backticks. It is the branch
-                        nobody sees until the vocabulary gains a mode, which is
-                        exactly why it was the one left unrendered. */}
+                    {/* `ticks` is kept even though no string here names a
+                        command any more: it costs nothing on a string with no
+                        backticks, and removing it is how the literal-backtick
+                        bug of 2026-08-11 comes back. The fallback is the branch
+                        nobody sees until the vocabulary gains a mode — which is
+                        exactly why it was the one left unrendered then. */}
                     {ticks(
                       DESCRIPTIONS[m.value] ??
-                        'Run `bk meta` for what this mode means — this app has not been told.'
+                        'This build does not know what this mode means — it was added after the app was deployed.'
                     )}
                   </span>
                 </span>
@@ -135,16 +137,18 @@ function WorkspacePreferences({
         same type size as the option descriptions.
       */}
       <p className="rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+        {/*
+          D-7's whole point survives without naming the binary. The claim that
+          matters is "this is a display preference, not a permission", and the
+          evidence for it is that the agent writes regardless — which is a fact
+          about who can change your data, not a command anybody reading this
+          page is going to type.
+        */}
         <strong className="font-medium text-foreground">Read-only hides editing in this browser.
-        It is not a permission</strong> — anyone who can open this app can still write through{' '}
-        <code className="rounded bg-muted px-1 py-0.5">bk</code>. What you may do is decided by your
+        It is not a permission</strong> — the agent still writes to this workspace either way, and
+        anyone who can open this app can switch the toggle back. What you may do is decided by your
         access to b/sales and your role in this workspace, and this setting changes neither. If
         somebody must genuinely be unable to write, that is a role, not a toggle — ask an owner.
-      </p>
-
-      <p className="text-xs text-muted-foreground">
-        The same setting from a terminal:{' '}
-        <code className="rounded bg-muted px-1 py-0.5">bk sales preferences show</code>.
       </p>
     </Section>
   )

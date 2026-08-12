@@ -85,6 +85,11 @@ export const SURFACES = [
   { type: 'template', columns: ['subject', 'body'], mode: 'scan' },
   { type: 'document', columns: ['title', 'description'], mode: 'scan' },
   { type: 'document_url', columns: ['upload_url', 'external_url'], mode: 'exact' },
+  // Migration 0007. A conferencing link is a url column, so it is matched
+  // exactly rather than scanned — and it is covered for `external_url`'s reason
+  // (see this file's header): nothing stops a caller pasting an uploaded
+  // recording's blob url into the field the UI calls "link".
+  { type: 'meeting_url', columns: ['meeting_url'], mode: 'exact' },
   { type: 'match', columns: ['why'], mode: 'scan' },
 ] as const satisfies ReadonlyArray<{
   type: string
@@ -125,6 +130,7 @@ export const RETRIGGER_SQL: Record<string, (id: number) => SQL> = {
     sql`UPDATE ${documents} SET title = title, description = description WHERE id = ${id}`,
   document_url: (id) =>
     sql`UPDATE ${documents} SET upload_url = upload_url, external_url = external_url WHERE id = ${id}`,
+  meeting_url: (id) => sql`UPDATE ${meetings} SET meeting_url = meeting_url WHERE id = ${id}`,
   match: (id) => sql`UPDATE ${matches} SET why = why WHERE id = ${id}`,
 }
 
@@ -147,7 +153,7 @@ export const salesReferenceScanner: ReferenceScanner = {
         db.execute(sql`SELECT id, seq, name, summary, next_action_note, closed_reason, deleted_at FROM ${prospects} WHERE workspace_id = ${workspaceId}`),
         db.execute(sql`SELECT id, name, notes, deleted_at FROM ${contacts} WHERE workspace_id = ${workspaceId}`),
         db.execute(sql`SELECT id, note FROM ${stageEntries} WHERE workspace_id = ${workspaceId}`),
-        db.execute(sql`SELECT id, seq, title, agenda, outcome, deleted_at FROM ${meetings} WHERE workspace_id = ${workspaceId}`),
+        db.execute(sql`SELECT id, seq, title, agenda, outcome, meeting_url, deleted_at FROM ${meetings} WHERE workspace_id = ${workspaceId}`),
         db.execute(sql`SELECT id, seq, subject, body, deleted_at FROM ${communications} WHERE workspace_id = ${workspaceId}`),
         db.execute(sql`SELECT id, type, spoken, real_fear, counter FROM ${objections} WHERE workspace_id = ${workspaceId}`),
         db.execute(sql`SELECT id, seq, name, description, pitch, deleted_at FROM ${products} WHERE workspace_id = ${workspaceId}`),
@@ -173,6 +179,11 @@ export const salesReferenceScanner: ReferenceScanner = {
       scan(r.title, ref)
       scan(r.agenda, ref)
       scan(r.outcome, ref)
+      // `meeting_url` IS a url rather than prose containing one, so it is
+      // matched exactly — same treatment as the two document url columns below.
+      if (typeof r.meeting_url === 'string' && r.meeting_url && isUploadedAsset(r.meeting_url)) {
+        add(r.meeting_url, { ...ref, type: 'meeting_url' })
+      }
     }
     for (const r of commRows.rows as Row[]) {
       const ref: ScannedReference = { type: 'communication', id: Number(r.id), seq: r.seq as number | null, label: (r.subject as string) ?? null, trashed: r.deleted_at != null }
@@ -234,6 +245,7 @@ export const salesReferenceScanner: ReferenceScanner = {
         SELECT 1 FROM ${meetings}     WHERE strpos(coalesce(title, ''), ${url}) > 0
                                          OR strpos(coalesce(agenda, ''), ${url}) > 0
                                          OR strpos(coalesce(outcome, ''), ${url}) > 0
+                                         OR meeting_url = ${url}
         UNION ALL
         SELECT 1 FROM ${communications} WHERE strpos(coalesce(subject, ''), ${url}) > 0
                                            OR strpos(coalesce(body, ''), ${url}) > 0

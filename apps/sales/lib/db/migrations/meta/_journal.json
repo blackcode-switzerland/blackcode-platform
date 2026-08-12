@@ -43,6 +43,13 @@
       "when": 1786061100000,
       "tag": "0006_sales_remembers_a_workspace",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786061160000,
+      "tag": "0007_meetings_carry_a_link",
+      "breakpoints": true
     }
   ]
 }

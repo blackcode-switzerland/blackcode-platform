@@ -1,7 +1,40 @@
-// Does every `bk …` command this app's UI NAMES actually exist in the binary?
+// The UI names no `bk` commands — and where it deliberately does, they are real.
 //
 // ===========================================================================
-// WHY: ONE OF THEM DID NOT, AND NOTHING COULD SEE IT
+// THE RULE CHANGED ON 2026-08-12, AND SO DID THIS FILE
+// ===========================================================================
+// This test used to assert one thing: every `bk …` spelling printed by this
+// app's UI is a command the binary actually has. That was the right check while
+// the UI's whole idiom was to name a command — empty states, write gates and
+// `AgentOnly` notes all ended in one, fifteen at the last count.
+//
+// The idiom is gone. Naming a CLI command at a HUMAN reading a sales page was
+// an instruction addressed to somebody who is not there: they supervise the
+// agent, they do not install a Go binary. `components/forms.tsx`' header has
+// the full argument.
+//
+// So the property is now TWO properties, and the second is stronger than
+// anything this file checked before:
+//
+//   1. ORDINARY UI COPY NAMES NO COMMAND AT ALL. Not "names only real ones" —
+//      names none. This is the §6 rule, and it is enforced rather than trusted
+//      because prose is the one surface in this repo nothing else reads.
+//
+//   2. THE TWO PAGES THAT ARE *ABOUT* THE CLI still name real commands. The
+//      landing page's quickstart and the token page's `bk login` are legitimate
+//      — they exist to tell somebody how to start using the tool — so they keep
+//      the original existence check.
+//
+// ── AND THE SCANNER GOT WIDER, WHICH CLOSES A STATED HOLE ──────────────────
+// It matched backticked spellings only. `landing-page.tsx` prints its quickstart
+// inside a `<pre>` as a template literal, so NONE of those four commands were
+// ever checked — and the file says so in a comment: "the page is not covered by
+// any check in this repo". It is now. The scan reads any `bk <verb>` in
+// non-comment source, which is what makes rule 1 enforceable at all: a command
+// smuggled into prose without backticks was invisible to the old pattern.
+//
+// ===========================================================================
+// WHY THE ORIGINAL CHECK EXISTED: ONE OF THEM DID NOT, AND NOTHING SAW IT
 // ===========================================================================
 // The Documents page told people documents were "linked with
 // `bk sales doc create --url`". There is no `doc create` — the verb is `add`.
@@ -10,10 +43,7 @@
 //
 // It passed typecheck, lint, every test and the build, because **a string in
 // JSX is prose and nothing in this repo checks prose.** That is the same hole
-// `bk undo` sat in on `apps/issues`' landing page for months, and this app is
-// unusually exposed to it: it is a READ-ONLY surface by design, so its empty
-// states and its write gates name a CLI command as the way to do the thing —
-// fifteen of them, at the last count. Every one is a claim about a spelling.
+// `bk undo` sat in on `apps/issues`' landing page for months.
 //
 // ===========================================================================
 // THE INSTRUMENT, AND HOW IT DISCRIMINATES
@@ -43,10 +73,9 @@
 // ===========================================================================
 //   1. **FLAGS.** `bk sales doc add --title` is real; a UI string naming
 //      `--titel` would pass. Only the command path is verified.
-//   2. **Commands built by interpolation.** The scan reads literal backticked
-//      spellings out of the source. `` `bk sales ${noun} list` `` is invisible
-//      to it, and that is deliberate — a pattern that guessed would produce
-//      false failures, which is worse than a stated gap.
+//   2. **Commands built by interpolation.** `` `bk sales ${noun} list` `` is
+//      invisible to the scan, and that is deliberate — a pattern that guessed
+//      would produce false failures, which is worse than a stated gap.
 //   3. **Prose that names no command.** "the agent records it" is unfalsifiable
 //      by any instrument, and is the reason the marketing rule is "write
 //      benefits, not capabilities".
@@ -54,10 +83,14 @@
 //      found. A test may not reach into another app; that app needs its own
 //      copy of this file.
 //
-// D-26 step 3, watched failing on the fixed tree (2026-08-11):
-//   - `bk sales doc add` changed back to `bk sales doc create` in
-//     `components/catalog/catalog-pages.tsx` → RED, naming the file and the
-//     spelling. Restored.
+// WATCHED FAILING on the finished tree (2026-08-12), all three checks:
+//   - `bk sales meeting schedule` put back into `today-page.tsx`'s empty state
+//     → RED on rule 1, naming the file. Restored.
+//   - the landing page's `bk sales prospect list` changed to `… listt`
+//     → RED on rule 2, naming the spelling and the file. Restored.
+//   - both scan patterns replaced with one that matches nothing
+//     → RED on the premise. Restored.
+// And on 2026-08-11, for the version this replaces:
 //   - the `EXPECT_REAL` control changed to a bogus verb → RED.
 //   - the `EXPECT_GONE` control changed to a real one → RED.
 //
@@ -93,12 +126,45 @@ const CLI_DIR = join(REPO_ROOT, 'cli')
 const SCAN_DIRS = ['components']
 
 /**
- * A backticked `bk …` spelling, as this app's UI writes one.
+ * The files that are legitimately ABOUT the CLI, with the reason each is
+ * allowed to name one. Every entry needs a reason, as an exclusion in
+ * `cli-parity.test.ts` does — an unexplained one is how a rule rots into a
+ * list of whatever happened to be there.
+ */
+const CLI_PAGES: Record<string, string> = {
+  'components/landing-page.tsx':
+    'The marketing page, whose subject IS the agent surface — its quickstart ' +
+    'block is how somebody installs and authenticates the tool in the first ' +
+    'place. A page explaining the CLI is the one page that may name it.',
+  'components/settings/token-settings.tsx':
+    'The API tokens page. A token exists to be pasted into `bk login`; naming ' +
+    'the command it is FOR is what makes the page usable, and the reader here ' +
+    'has already decided to use the CLI.',
+}
+
+/**
+ * A `bk …` spelling anywhere in non-comment source.
  *
- * Anchored to a backtick on both ends so it reads the same literals a reader
- * sees rendered. Stops at a flag or a `|`, because the app writes
- * `bk sales contact add | edit | rm` — three commands sharing a prefix — and
- * each half is expanded below rather than probed as one impossible string.
+ * ── WIDER THAN THE BACKTICKED PATTERN IT REPLACES ──────────────────────────
+ * It was ``/`(bk [a-z0-9 |-]+?)`/`` — backticks on both ends — which matched the
+ * idiom the UI happened to use and nothing else. Two things escaped it: the
+ * landing page's `<pre>` quickstart (a template literal, four commands, checked
+ * by nothing) and any command written into prose without backticks, which is
+ * precisely how rule 1 would be broken by somebody not thinking about it.
+ *
+ * Bounded at two words after the app segment, which covers every real spelling
+ * (`bk login`, `bk sales prospect list`) without swallowing the rest of a
+ * sentence. A stray match in prose is a FALSE POSITIVE THAT IS STILL RIGHT: it
+ * means a sentence reads as if it names a command, which rule 1 forbids anyway.
+ */
+const BK_COMMAND = /(?<![\w`-])bk (?:sales |issues )?[a-z][a-z0-9-]*(?: [a-z][a-z0-9-]*)?/g
+
+/**
+ * The backticked form, kept for the `a | b | c` expansion below.
+ *
+ * The app wrote `bk sales contact add | edit | rm` — three commands sharing a
+ * prefix — and each half has to be probed as its own spelling rather than as
+ * one impossible string.
  */
 const BK_IN_BACKTICKS = /`(bk [a-z0-9 |-]+?)`/g
 
@@ -122,15 +188,15 @@ function sourceFiles(dir: string): string[] {
 }
 
 /**
- * Backticks inside `//` and `/* *​/` comments are NOT scanned.
+ * Text inside `//` and slash-star comments is NOT scanned.
  *
  * D-42, the fifth instance on this project: a guard that matches text will match
  * the text that explains it. Half this app's files carry a header discussing the
- * commands they name, including — after 2026-08-11 — the note in
- * `catalog-pages.tsx` recording that `bk sales doc create` never existed. Left
- * in, that comment would fail this test forever, and the "fix" somebody would
- * reach for is an allowance naming the file, which is an entry that keeps itself
- * alive. `lib/palette.test.ts` solved the same problem the same way.
+ * commands they used to name — including this change's own notes about what was
+ * removed and why. Left in, those comments would fail this test forever, and the
+ * "fix" somebody would reach for is an allowance naming the file, which is an
+ * entry that keeps itself alive. `lib/palette.test.ts` solved the same problem
+ * the same way.
  */
 function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '')
@@ -141,20 +207,41 @@ interface Claim {
   file: string
 }
 
+/**
+ * Every (command, file) pair — deduped PER FILE, not per command.
+ *
+ * ── THE KEY IS THE POINT ───────────────────────────────────────────────────
+ * The first version of this deduped on the command alone and kept whichever
+ * file it was seen in first. `bk login` appears in BOTH `landing-page.tsx` and
+ * `token-settings.tsx`, so the second occurrence vanished — and that is exactly
+ * the shape that would defeat rule 1: a command printed on an allowed page AND
+ * on an ordinary one would be attributed to the allowed page and reported as
+ * fine. Found by this file's own premise assertion, which noticed
+ * `token-settings.tsx` had contributed nothing.
+ *
+ * A command in two ordinary files is now two offenders, which is right: they
+ * are two strings to fix.
+ */
 function claimsInApp(): Claim[] {
-  const found = new Map<string, string>()
+  const found = new Map<string, Claim>()
+  const add = (command: string, file: string) => {
+    const key = `${file} ${command}`
+    if (!found.has(key)) found.set(key, { command, file })
+  }
   for (const dir of SCAN_DIRS) {
     for (const file of sourceFiles(join(APP_ROOT, dir))) {
+      const rel = file.slice(APP_ROOT.length + 1)
       const src = stripComments(readFileSync(file, 'utf8'))
+      // The backticked form first, so a `a | b | c` list expands into its parts
+      // before the bare scan sees the same text as one truncated command.
       for (const m of src.matchAll(BK_IN_BACKTICKS)) {
-        for (const cmd of expand(m[1])) {
-          if (!found.has(cmd)) found.set(cmd, file.slice(APP_ROOT.length + 1))
-        }
+        for (const cmd of expand(m[1])) add(cmd, rel)
       }
+      for (const m of src.matchAll(BK_COMMAND)) add(m[0], rel)
     }
   }
-  return [...found].map(([command, file]) => ({ command, file })).sort((a, b) =>
-    a.command.localeCompare(b.command)
+  return [...found.values()].sort(
+    (a, b) => a.command.localeCompare(b.command) || a.file.localeCompare(b.file)
   )
 }
 
@@ -200,12 +287,50 @@ describe('every bk command the UI names is a command bk has', () => {
   })
 
   it('THE PREMISE: the scan found commands to check', () => {
-    // Finding #5's assertion. A rename of `components/`, a regex that stopped
-    // matching, or a refactor into interpolated strings would otherwise leave
-    // this file green while checking nothing.
-    expect(claimsInApp().length).toBeGreaterThan(8)
+    // Finding #5's assertion, repointed. It used to demand more than EIGHT
+    // commands app-wide, which was true while every empty state named one and
+    // became false the moment §6 removed them — the assertion went red for the
+    // right reason and had to be re-aimed rather than relaxed.
+    //
+    // What it asserts now is that the scanner still WORKS: the two CLI-facing
+    // pages do name commands, so a rename of `components/`, a regex that
+    // stopped matching, or a quickstart refactored into a variable would leave
+    // this at zero and be caught. Aimed at files that are SUPPOSED to have
+    // matches, which is the only place a positive assertion can live once the
+    // rest of the app is required to have none.
+    const claims = claimsInApp()
+    expect(
+      claims.length,
+      'the scanner found no `bk …` spelling anywhere, including in the pages ' +
+        `that exist to name them (${Object.keys(CLI_PAGES).join(', ')}). The ` +
+        'scan is broken, and both checks below are vacuous.'
+    ).toBeGreaterThan(3)
+    for (const page of Object.keys(CLI_PAGES)) {
+      expect(
+        claims.some((c) => c.file === page),
+        `${page} is listed as a page that names CLI commands and the scan found ` +
+          'none in it. Either it stopped naming them — in which case delete its ' +
+          'CLI_PAGES entry — or the scanner cannot see them.'
+      ).toBe(true)
+    }
   })
 
+  // ── RULE 1, THE NEW ONE ──────────────────────────────────────────────────
+  it('ordinary UI copy names no bk command at all', () => {
+    const offenders = claimsInApp().filter((c) => !(c.file in CLI_PAGES))
+    expect(
+      offenders,
+      'These files print a `bk` command at a human reading the web app.\n' +
+        'The reader of a sales page supervises the agent; they are not going to\n' +
+        'open a terminal, and a command here is an instruction addressed to\n' +
+        'somebody who is not there. Say WHO maintains the thing instead — see\n' +
+        "components/forms.tsx' header.\n" +
+        'If the page is genuinely about the CLI, add it to CLI_PAGES with a reason:\n' +
+        offenders.map((c) => `  ${c.command}   (${c.file})`).join('\n')
+    ).toEqual([])
+  })
+
+  // ── RULE 2, THE ORIGINAL ONE ─────────────────────────────────────────────
   it('names no command that does not exist', () => {
     const bad = claimsInApp().filter((c) => !commandExists(c.command))
     expect(
@@ -215,5 +340,14 @@ describe('every bk command the UI names is a command bk has', () => {
         'the feature or the sentence is wrong. Fix the string, or add the command:\n' +
         bad.map((c) => `  ${c.command}   (${c.file})`).join('\n')
     ).toEqual([])
+  })
+
+  // The exclusion list is load-bearing, so it cannot name a file that no longer
+  // exists: a stale entry silently exempts nothing while reading as a decision.
+  it('every CLI_PAGES entry names a real file, with a reason', () => {
+    for (const [file, reason] of Object.entries(CLI_PAGES)) {
+      expect(() => statSync(join(APP_ROOT, file)), `CLI_PAGES names ${file}, which is gone`).not.toThrow()
+      expect(reason.length, `the CLI_PAGES entry for ${file} has no reason`).toBeGreaterThan(40)
+    }
   })
 })

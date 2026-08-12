@@ -547,8 +547,12 @@ type SalesMeeting struct {
 	Attendees      []string `json:"attendees" yaml:"attendees"`
 	Agenda         string   `json:"agenda" yaml:"agenda"`
 	Outcome        string   `json:"outcome" yaml:"outcome"`
-	URN            string   `json:"urn" yaml:"urn"`
-	DeletedAt      string   `json:"deleted_at" yaml:"deleted_at"`
+	// Where an online meeting happens. Empty on the calls and in-person
+	// meetings that are most of this ledger; renderers omit the row entirely
+	// rather than printing an em dash on every one of them.
+	MeetingURL string `json:"meeting_url" yaml:"meeting_url"`
+	URN        string `json:"urn" yaml:"urn"`
+	DeletedAt  string `json:"deleted_at" yaml:"deleted_at"`
 }
 
 type ListMeetingsOpts struct {
@@ -618,6 +622,7 @@ type CreateMeetingRequest struct {
 	Attendees   []string `json:"attendees,omitempty"`
 	Agenda      string   `json:"agenda,omitempty"`
 	Outcome     string   `json:"outcome,omitempty"`
+	MeetingURL  string   `json:"meeting_url,omitempty"`
 }
 
 func (c *Client) CreateMeeting(ws string, req CreateMeetingRequest) (*SalesMeeting, error) {
@@ -636,6 +641,11 @@ type UpdateMeetingRequest struct {
 	At          string      `json:"at,omitempty"`
 	DurationMin *int        `json:"duration_min,omitempty"`
 	Attendees   []string    `json:"attendees,omitempty"`
+	// *NullString, like Outcome and Agenda: a meeting that moves from Teams to
+	// a phone call has to be able to LOSE its link, and a plain string with
+	// omitempty cannot express "set this to null" — the empty value and the
+	// absent one would serialise identically.
+	MeetingURL *NullString `json:"meeting_url,omitempty"`
 }
 
 func (c *Client) UpdateMeeting(ws string, n int, req UpdateMeetingRequest) (*SalesMeeting, error) {
@@ -981,19 +991,49 @@ type DocumentRequest struct {
 	Tags        []string `json:"tags,omitempty"`
 }
 
-func (c *Client) ListDocuments(ws, kind, query string, prospect, limit int) ([]SalesDocument, error) {
+// ListDocsOpts — the document library's filters.
+//
+// A STRUCT rather than more positional parameters. `ListDocuments` took
+// (ws, kind, query, prospect, limit) and the next two filters would have made it
+// seven positionals of which four are int-or-string, where transposing `prospect`
+// and `limit` is a silent wrong answer rather than a compile error. Every other
+// list in this file that grew past three filters is already shaped this way —
+// `ListMeetingsOpts`, `ListCommsOpts`.
+type ListDocsOpts struct {
+	Kind  string
+	Query string
+	// Prospect and Product are FILTERS here — "documents linked to #n" — not
+	// link targets. `doc add --prospect` and `doc link --prospect` name a thing
+	// to attach TO and are `ints`; these name one thing to filter BY. Same word,
+	// different job, deliberately different shape.
+	Prospect int
+	Product  int
+	// Tags match with OR: a document carrying ANY of them. Sent as one
+	// comma-separated `tag` parameter, which is the shape `parseList` reads on
+	// the server and the same one `--status` uses on `meeting list`.
+	Tags  []string
+	Limit int
+}
+
+func (c *Client) ListDocuments(ws string, opts ListDocsOpts) ([]SalesDocument, error) {
 	q := url.Values{}
-	if kind != "" {
-		q.Set("kind", kind)
+	if opts.Kind != "" {
+		q.Set("kind", opts.Kind)
 	}
-	if query != "" {
-		q.Set("q", query)
+	if opts.Query != "" {
+		q.Set("q", opts.Query)
 	}
-	if prospect > 0 {
-		q.Set("prospect", strconv.Itoa(prospect))
+	if opts.Prospect > 0 {
+		q.Set("prospect", strconv.Itoa(opts.Prospect))
 	}
-	if limit > 0 {
-		q.Set("limit", strconv.Itoa(limit))
+	if opts.Product > 0 {
+		q.Set("product", strconv.Itoa(opts.Product))
+	}
+	if len(opts.Tags) > 0 {
+		q.Set("tag", strings.Join(opts.Tags, ","))
+	}
+	if opts.Limit > 0 {
+		q.Set("limit", strconv.Itoa(opts.Limit))
 	}
 	path := salesPath(ws, "documents")
 	if len(q) > 0 {

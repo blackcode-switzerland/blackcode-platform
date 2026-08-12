@@ -7,6 +7,47 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-12 — `bk <app> invite send` says whether the email actually went
+
+**Not breaking. Same route, same arguments, same exit code.** What changed is
+what it prints, and it stopped making a claim it had never checked.
+
+It printed `Invitation sent to x@y.ch.` unconditionally, and — when the invitee
+already had an account — `They'll see it in their inbox immediately`. Both are
+statements about delivery, and neither read the `email_sent` field the route has
+been returning since email landed on 2026-08-11. Sending is **best-effort by
+design**: the invitation row is written and valid whether or not the mail
+arrives, so a bounce does not fail the request and the caller was never told.
+
+Now:
+
+```
+Invitation created for colleague@blackcode.ch.
+The invitation email was sent.
+  https://sales.blackcode.ch/invitations/<token>
+```
+
+or, when it did not:
+
+```
+Invitation created for colleague@blackcode.ch.
+The invitation email was NOT sent — deliver this link yourself:
+  https://sales.blackcode.ch/invitations/<token>
+```
+
+- **The link is printed in BOTH cases now.** It used to appear only when the
+  invitee had no account; it is the thing you paste into a chat either way.
+- **The exit code stays 0 when the email fails.** The invitation exists — a
+  non-zero exit would make a caller retry and issue a second one.
+- The link now prefers the server's own `accept_url`, which knows the
+  deployment's public origin; the locally-built URL remains the fallback.
+- A server too old to return `email_sent` decodes as `false`, so it produces
+  "not sent, here is the link" rather than a promise nothing verified.
+
+The same change reached the **web app's** invite toast, which said
+`Invitation created for x@y.ch` in every case and now reports delivery — as a
+warning, not a green tick, when the email did not go.
+
 ## 2026-08-12 — `bk meta --vocab <key>`: one vocabulary, as a flat list
 
 **Not breaking. `bk meta` with no flag is unchanged**, byte for byte, in every

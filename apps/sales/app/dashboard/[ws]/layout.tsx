@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
-import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { listWorkspacesWithOwnerForUser } from '@/lib/db/queries/workspaces'
 import { SalesShell } from '@/components/sales-shell'
 
 /**
@@ -41,18 +41,24 @@ export default async function WorkspaceLayout({
   const user = await getValidatedSessionUser()
   if (!user) redirect('/login')
 
-  const memberships = await listWorkspacesForUser(user.id)
+  const memberships = await listWorkspacesWithOwnerForUser(user.id)
   if (!memberships.some((w) => w.slug === ws)) notFound()
 
   // The switcher's list comes from HERE rather than a client fetch: this layout
   // already had to load the memberships to decide the 404 above, so the sidebar
   // renders with the right names on the first paint instead of popping in. It
   // also means the list and the 404 can never disagree — they are one query.
+  //
+  // `owner_label` is mapped here rather than added to the shared
+  // `WorkspaceMembershipRef` — the reasoning is on
+  // `listWorkspacesWithOwnerForUser`. This is the seam the query's header names
+  // as "the smaller change": one app's layout, one extra column.
   const workspaces = memberships.map((w) => ({
     id: w.id,
     name: w.name,
     slug: w.slug,
     member_role: w.member_role,
+    owner_label: w.owner_label,
   }))
 
   return (

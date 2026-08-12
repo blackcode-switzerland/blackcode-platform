@@ -100,6 +100,82 @@ export async function listWorkspacesForUser(userId: number): Promise<WorkspaceMe
   return rows.map(({ role, ...ws }) => ({ ...ws, member_role: role as 'owner' | 'member' }))
 }
 
+/** A membership, plus WHO owns the workspace. */
+export type WorkspaceMembershipWithOwner = WorkspaceMembershipRef & {
+  /** The owner's display name, their email if they have no name, or null if
+   *  the owner row cannot be resolved at all (a deleted account, `owner_id`
+   *  null). Never the empty string — see the switcher for why. */
+  owner_label: string | null
+}
+
+/**
+ * The same list, with each workspace's OWNER resolved to something readable.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS IS A SECOND FUNCTION AND NOT A WIDER `WorkspaceMembershipRef`
+ * ---------------------------------------------------------------------------
+ * `WorkspaceMembershipRef` lives in `@blackcode/platform-api` and `apps/issues`
+ * implements it too. Adding a required `owner_label` to it would make every
+ * caller in both apps produce a field that exists for one label in one sales
+ * sidebar — a platform change to serve a UI copy decision. So this app asks its
+ * own question with its own query and maps the answer where it is used
+ * (`app/dashboard/[ws]/layout.tsx`), which is the smaller change and the one
+ * that does not reach across the boundary.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE OWNER AND NOT THE ROLE
+ * ---------------------------------------------------------------------------
+ * The switcher said `Your workspace` / `Member`, and `Member` does not answer
+ * the question people actually have. Real screenshot, 2026-08-12:
+ *
+ *     My Workspace                 ✓
+ *     Member
+ *     Balathanusan 1's worksp…
+ *     Your workspace
+ *
+ * "My Workspace" is somebody ELSE'S — it is named in the first person by
+ * whoever created it, so it reads as yours, and the line under it says
+ * "Member", which describes YOUR ROLE rather than WHOSE it is. The one label
+ * that disambiguates two similarly-named workspaces is the owner's name.
+ *
+ * LEFT JOIN, not inner. `sales.workspaces.owner_id` is NOT NULL — checked in
+ * `information_schema`, not inferred from the schema file — so the join cannot
+ * miss for a null pointer. It can still miss on a HARD-deleted `platform.users`
+ * row, and the FK has no cascade that would clean the workspace up with it.
+ *
+ * An inner join would then silently drop a workspace the person is a member of,
+ * which is infinitely worse than an unlabelled row: they would lose the ability
+ * to switch into it, and the layout above uses this same list to decide a 404.
+ * The unresolved case renders as `Member`, which is what it said before this
+ * change — never blank.
+ */
+export async function listWorkspacesWithOwnerForUser(
+  userId: number
+): Promise<WorkspaceMembershipWithOwner[]> {
+  const rows = await getDb()
+    .select({
+      ...WS_COLUMNS,
+      role: salesWorkspaceMembers.role,
+      owner_name: users.name,
+      owner_email: users.email,
+    })
+    .from(salesWorkspaceMembers)
+    .innerJoin(salesWorkspaces, eq(salesWorkspaces.id, salesWorkspaceMembers.workspace_id))
+    .leftJoin(users, eq(users.id, salesWorkspaces.owner_id))
+    .where(eq(salesWorkspaceMembers.user_id, userId))
+    .orderBy(asc(salesWorkspaces.updated_at))
+
+  return rows.map(({ role, owner_name, owner_email, ...ws }) => ({
+    ...ws,
+    member_role: role as 'owner' | 'member',
+    // Name, then email, then null. `?.trim() ||` rather than `??` on purpose:
+    // `platform.users.name` is nullable AND can hold an empty string, and a
+    // person whose name is "" would otherwise render as a blank line where the
+    // label used to say something. Blank is worse than "Member".
+    owner_label: owner_name?.trim() || owner_email?.trim() || null,
+  }))
+}
+
 /**
  * Remember which workspace this person is working in.
  *

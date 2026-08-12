@@ -14,18 +14,35 @@
 // component is what stops the two rendering differently.
 
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Check, Copy } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   DocumentKindChip,
   ProductCategoryChip,
   TemplateCategoryChip,
 } from '@/components/chips'
 import { BlockSkeleton, EmptyState, ErrorState } from '@/components/states'
+import {
+  ClearFilters,
+  FilterBar,
+  FilterSelect,
+  FilteredEmpty,
+  TagFilterChip,
+  useFilterList,
+  useFilterParam,
+} from '@/components/filters'
 import { AgentOnly } from '@/components/forms'
 import { DocumentList } from '@/components/prospects/prospect-detail'
-import { useDocuments, useProducts, useTemplates } from '@/lib/hooks'
+import { useDocuments, useProducts, useProspects, useTemplates } from '@/lib/hooks'
 import { money } from '@/lib/format'
-import { stageLabel, templateChannelLabel } from '@/lib/pipeline'
+import {
+  DOCUMENT_KINDS,
+  TEMPLATE_CATEGORIES,
+  TEMPLATE_CHANNELS,
+  stageLabel,
+  templateChannelLabel,
+} from '@/lib/pipeline'
 
 // Generic in the element: products and templates focus an <article>, documents
 // focus the <a> that IS the row. `scrollIntoView` is on Element, so nothing here
@@ -55,14 +72,14 @@ export function ProductsPage({ ws }: { ws: string }) {
     return (
       <EmptyState
         title="Nothing in the catalog"
-        hint="Products are maintained by the agent with `bk sales product create`."
+        hint="Products are maintained by the agent."
       />
     )
   }
 
   return (
     <div className="space-y-2">
-      <AgentOnly what="Products" command="bk sales product create | edit" />
+      <AgentOnly what="Products" />
       {products.data.map((p) => (
         <article
           key={p.number}
@@ -107,25 +124,101 @@ export function ProductsPage({ ws }: { ws: string }) {
   )
 }
 
+/**
+ * Copy one field to the clipboard.
+ *
+ * ── BOTH OUTCOMES GET A TOAST ───────────────────────────────────────────────
+ * `navigator.clipboard.writeText` is permission-gated, unavailable on an
+ * insecure origin, and rejects when the document is not focused. It FAILS, and a
+ * copy button that fails silently is worse than none: the reader pastes whatever
+ * was on the clipboard before — the previous template, very often — into an
+ * email to a customer. So the rejection is caught and said out loud, which is
+ * the same rule every mutation in this app follows.
+ *
+ * The checkmark is a two-second acknowledgement on top of the toast, because the
+ * button is the thing the eye is on when it is clicked.
+ */
+function CopyButton({ label, text, what }: { label: string; text: string; what: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 2000)
+          toast.success(`${what} copied`)
+        } catch {
+          // No `err.message` in the toast: the browser's own wording here is
+          // "Document is not focused", which tells a person nothing they can
+          // act on. Say what to do instead.
+          toast.error(`Could not copy the ${what.toLowerCase()} — select it and press ⌘C`)
+        }
+      }}
+      className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    >
+      {copied ? <Check size={12} aria-hidden /> : <Copy size={12} aria-hidden />}
+      {label}
+    </button>
+  )
+}
+
 export function TemplatesPage({ ws }: { ws: string }) {
-  const templates = useTemplates(ws)
+  const [channel, setChannel] = useFilterParam('channel')
+  const [category, setCategory] = useFilterParam('category')
+  const templates = useTemplates(ws, {
+    channel: channel || undefined,
+    category: category || undefined,
+  })
   const focus = useFocus()
   const focusRef = useFocusRef<HTMLDivElement>(focus)
+  const filtered = Boolean(channel || category)
+
+  const bar = (
+    <FilterBar>
+      <FilterSelect
+        label="Channel"
+        value={channel}
+        onChange={setChannel}
+        options={TEMPLATE_CHANNELS}
+        allLabel="All channels"
+      />
+      <FilterSelect
+        label="Category"
+        value={category}
+        onChange={setCategory}
+        options={TEMPLATE_CATEGORIES}
+        allLabel="All categories"
+      />
+      <ClearFilters active={filtered} keep={['focus']} />
+    </FilterBar>
+  )
 
   if (templates.isPending) return <BlockSkeleton rows={4} />
   if (templates.error) return <ErrorState error={templates.error} />
   if (templates.data.length === 0) {
     return (
-      <EmptyState
-        title="No templates"
-        hint="Templates are maintained by the agent with `bk sales template create`."
-      />
+      <div className="space-y-3">
+        {/* The bar stays on screen when the result is empty. Without it a
+            filtered-to-nothing page offers no way back — the control that
+            caused the emptiness is the one thing that must not disappear
+            with the rows. */}
+        {bar}
+        <FilteredEmpty
+          filtered={filtered}
+          noun="templates"
+          emptyTitle="No templates"
+          emptyHint="Templates are maintained by the agent."
+        />
+      </div>
     )
   }
 
   return (
-    <div className="space-y-2">
-      <AgentOnly what="Templates" command="bk sales template create | edit" />
+    <div className="space-y-3">
+      {bar}
+      <AgentOnly what="Templates" />
       {templates.data.map((t) => (
         <article
           key={t.number}
@@ -141,6 +234,23 @@ export function TemplatesPage({ ws }: { ws: string }) {
             <span className="text-xs text-muted-foreground">
               {templateChannelLabel(t.channel)}
               {t.stage && ` · ${stageLabel(t.stage)}`}
+            </span>
+            {/*
+              THE SUBJECT AND THE BODY COPY SEPARATELY, and they are not
+              concatenated into one button. A subject line and a message body go
+              into two different fields of a mail client; a single "Copy" that
+              produced "Re: your quote\n\nHi {{first_name}}…" gives a person
+              something they have to edit before it is usable anywhere, which is
+              most of the work the button was meant to save.
+
+              `{{placeholders}}` are copied VERBATIM. They are the point — the
+              template declares what it needs and `bk sales template render`
+              fills them; a browser silently blanking them would hand somebody a
+              letter addressed to nobody.
+            */}
+            <span className="ml-auto flex items-center gap-1.5">
+              {t.subject && <CopyButton label="Subject" what="Subject" text={t.subject} />}
+              {t.body && <CopyButton label="Copy" what="Message" text={t.body} />}
             </span>
           </div>
           {t.subject && (
@@ -178,30 +288,111 @@ export function TemplatesPage({ ws }: { ws: string }) {
 }
 
 export function DocumentsPage({ ws }: { ws: string }) {
-  const docs = useDocuments(ws)
+  const [kind, setKind] = useFilterParam('kind')
+  const [prospect, setProspect] = useFilterParam('prospect')
+  const [product, setProduct] = useFilterParam('product')
+  const [tags, toggleTag] = useFilterList('tag')
+
+  const docs = useDocuments(ws, {
+    kind: kind || undefined,
+    prospect: prospect ? Number(prospect) : undefined,
+    product: product ? Number(product) : undefined,
+    tag: tags.length ? tags.join(',') : undefined,
+  })
   // A document is addressable — `bc:sales:{ws}/document/{n}` — and this listing
   // is where that URN resolves, so it has to honour ?focus= like every other
   // listing. It did not until 2026-08-07; see lib/dashboard-paths.test.ts.
   const focus = useFocus()
+  const filtered = Boolean(kind || prospect || product || tags.length)
+
+  const prospects = useProspects(ws)
+  const products = useProducts(ws)
+  const prospectOptions = useMemo(
+    () => (prospects.data?.data ?? []).map((p) => ({ value: String(p.number), label: p.name })),
+    [prospects.data]
+  )
+  const productOptions = useMemo(
+    () => (products.data ?? []).map((p) => ({ value: String(p.number), label: p.name })),
+    [products.data]
+  )
+
+  // ── THE TAG VOCABULARY COMES FROM AN UNFILTERED READ, DELIBERATELY ────────
+  // Building the chip row out of `docs.data` — the FILTERED result — is the
+  // obvious thing and it is a trap: selecting `pricing` narrows the list to the
+  // documents tagged `pricing`, whose tags are then the only chips left, so
+  // every other tag vanishes the moment you use one and there is no way back
+  // except Clear. The row of available filters must not be a function of the
+  // filter. This is a second read of the same route with no parameters, which
+  // TanStack caches under its own key and shares with the prospect Documents
+  // tab.
+  const allDocs = useDocuments(ws)
+  const allTags = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const d of allDocs.data ?? []) {
+      // Case-insensitive, matching the route: `Deck` and `deck` are one tag to
+      // everybody except a database. The first spelling seen is the one shown.
+      for (const t of d.tags) if (!seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t)
+    }
+    return [...seen.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  }, [allDocs.data])
+
+  const bar = (
+    <div className="space-y-2">
+      <FilterBar>
+        <FilterSelect
+          label="Kind"
+          value={kind}
+          onChange={setKind}
+          options={DOCUMENT_KINDS}
+          allLabel="All kinds"
+        />
+        <FilterSelect
+          label="Prospect"
+          value={prospect}
+          onChange={setProspect}
+          options={prospectOptions}
+          allLabel="All prospects"
+        />
+        <FilterSelect
+          label="Product"
+          value={product}
+          onChange={setProduct}
+          options={productOptions}
+          allLabel="All products"
+        />
+        <ClearFilters active={filtered} keep={['focus']} />
+      </FilterBar>
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Tags match with OR — clicking a second one WIDENS the result. That
+              is what a row of chips means everywhere a person has met one, and
+              it is what the route does; see `listDocuments`. */}
+          {allTags.map(([lower, shown]) => (
+            <TagFilterChip
+              key={lower}
+              tag={shown}
+              active={tags.some((t) => t.toLowerCase() === lower)}
+              onToggle={() => toggleTag(shown)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   if (docs.isPending) return <BlockSkeleton rows={4} />
   if (docs.error) return <ErrorState error={docs.error} />
   if (docs.data.length === 0) {
     return (
-      <EmptyState
-        title="The library is empty"
-        // ── A COMMAND THAT DOES NOT EXIST, ON THE ONLY SCREEN THAT NAMES IT ──
-        // This said `bk sales doc create --url` until 2026-08-11. There is no
-        // `doc create`: the verb is `add`, and it takes `--title` and `--kind`
-        // as well, so somebody following this line got "unknown command" and had
-        // no way to tell whether the feature or the sentence was wrong.
-        //
-        // It is the `bk undo` defect at app scale — prose naming a spelling,
-        // covered by nothing. Found by probing every `bk …` string in this app's
-        // components against the real binary; it was the only false one of the
-        // fifteen. If you add another, run it first.
-        hint="Documents are uploaded with `bk sales upload` and added to the library with `bk sales doc add`."
-      />
+      <div className="space-y-3">
+        {bar}
+        <FilteredEmpty
+          filtered={filtered}
+          noun="documents"
+          emptyTitle="The library is empty"
+          emptyHint="Documents are uploaded and added to the library by the agent."
+        />
+      </div>
     )
   }
 
@@ -211,11 +402,13 @@ export function DocumentsPage({ ws }: { ws: string }) {
         One library. A prospect&rsquo;s Documents tab and a template&rsquo;s
         attachments are filtered views of these rows, never separate stores.
       </p>
-      <AgentOnly what="Documents" command="bk sales upload | doc create" />
+      {bar}
+      <AgentOnly what="Documents" />
       <DocumentList docs={docs.data} focus={focus} />
       <div className="flex flex-wrap gap-1.5 px-1">
-        {/* The kinds present, as a legend rather than a filter — the library is
-            small and a second control here would out-weigh what it filters. */}
+        {/* The kinds present in the CURRENT result, as a legend. Unlike the tag
+            row above this one is meant to describe what you are looking at
+            rather than offer a filter — the Kind control does that. */}
         {[...new Set(docs.data.map((d) => d.kind))].map((k) => (
           <DocumentKindChip key={k} value={k} />
         ))}

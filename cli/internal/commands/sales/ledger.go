@@ -49,10 +49,104 @@ and did not happen is a fact about the deal. "rm" bins the record itself.`,
 		newMeetingShowCmd(),
 		newMeetingScheduleCmd(),
 		newMeetingLogCmd(),
+		newMeetingEditCmd(),
 		newMeetingOutcomeCmd(),
 		newMeetingCancelCmd(),
 		newMeetingRemoveCmd(),
 	)
+	return cmd
+}
+
+// newMeetingEditCmd — `bk sales meeting edit <n>`.
+//
+// ---------------------------------------------------------------------------
+// WHY THIS VERB EXISTS NOW AND DID NOT BEFORE
+// ---------------------------------------------------------------------------
+// `PATCH …/meetings/{n}` has always accepted title, agenda, at, duration and
+// attendees — the web app's MeetingForm writes all of them — and the CLI
+// reached that route through exactly two keyholes: `outcome` (writes an
+// outcome) and `cancel` (writes a status). So the WEB could fix a meeting's
+// details and the agent could not, which is backwards for a product whose
+// doctrine is that the agent writes and the human supervises.
+//
+// It became load-bearing with `--link`. A join URL is PASTED, and a pasted URL
+// is the single most typo-prone value in this app; without an edit path the
+// only recovery from a wrong one is to bin the meeting and record it again,
+// which destroys its #number, its URN and its place in the feed to fix a
+// character. A flag you can set once and never correct is not a finished flag.
+//
+// It claims no new route — the annotation is the PATCH `outcome` and `cancel`
+// already name.
+func newMeetingEditCmd() *cobra.Command {
+	var req client.UpdateMeetingRequest
+	var title, agenda, at, link string
+	var clearLink bool
+	cmd := &cobra.Command{
+		Use:         "edit <n>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/meetings/{n}"},
+		Short:       "Change a meeting's details",
+		Long: `Change the details of a meeting that is already recorded.
+
+Only the flags you pass are sent; everything else is left alone.
+
+To record how a meeting WENT use "bk sales meeting outcome" — that also marks it
+as having happened, which this command deliberately does not do. To say it did
+not happen at all, use "bk sales meeting cancel".
+
+--link takes the join URL; --clear-link removes one. They are two flags rather
+than one that treats the empty string as "remove", because "--link ''" is far
+more often a shell variable that did not expand than a deliberate erasure.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			n, err := entityNumber(args[0], "meeting")
+			if err != nil {
+				return err
+			}
+			if clearLink && cmd.Flags().Changed("link") {
+				return fmt.Errorf("--link and --clear-link contradict each other — pass one")
+			}
+			// A PATCH with no fields is a no-op that reports success, which is
+			// the shape of "the flag did nothing" an agent cannot debug. Refuse
+			// it and name what this command can change.
+			if !cmd.Flags().Changed("title") && !cmd.Flags().Changed("agenda") &&
+				!cmd.Flags().Changed("at") && !cmd.Flags().Changed("link") && !clearLink {
+				return fmt.Errorf("nothing to change — pass at least one of " +
+					"--title, --agenda, --at, --link or --clear-link")
+			}
+			req.Title = title
+			req.At = at
+			if cmd.Flags().Changed("agenda") {
+				req.Agenda = client.Set(agenda)
+			}
+			if cmd.Flags().Changed("link") {
+				req.MeetingURL = client.Set(link)
+			} else if clearLink {
+				req.MeetingURL = client.Clear()
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			m, err := c.UpdateMeeting(ws, n, req)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, m, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "updated meeting #%d with %s (#%d): %s\n",
+					m.Number, m.ProspectName, m.ProspectNumber, m.Title)
+				return err
+			})
+		},
+	}
+	cmd.Flags().StringVar(&title, "title", "", "What the meeting is")
+	cmd.Flags().StringVar(&agenda, "agenda", "", "What it is for")
+	cmd.Flags().StringVar(&at, "at", "", "When, ISO 8601")
+	cmd.Flags().StringVar(&link, "link", "", "Where the online meeting is — the join URL")
+	cmd.Flags().BoolVar(&clearLink, "clear-link", false, "Remove the meeting's link")
 	return cmd
 }
 
@@ -159,6 +253,12 @@ func newMeetingShowCmd() *cobra.Command {
 				if len(m.Attendees) > 0 {
 					fmt.Fprintf(tw, "attendees\t%s\n", strings.Join(m.Attendees, ", "))
 				}
+				// Only when there is one. Most rows in this ledger are phone
+				// calls, and a `link  —` line on every one of them is noise
+				// that makes the rows that DO carry a link harder to spot.
+				if m.MeetingURL != "" {
+					fmt.Fprintf(tw, "link\t%s\n", m.MeetingURL)
+				}
 				if err := tw.Flush(); err != nil {
 					return err
 				}
@@ -244,6 +344,12 @@ func newMeetingCreateCmd(use, defaultStatus, long string) *cobra.Command {
 	cmd.Flags().StringVar(&req.Title, "title", "", "What the meeting is (required)")
 	cmd.Flags().StringSliceVar(&attendees, "attendee", nil, "Who was there (repeatable; plain names)")
 	cmd.Flags().StringVar(&req.Agenda, "agenda", "", "What it is for")
+	// Not a vocabulary — a URL. It is deliberately absent from
+	// `cli/internal/commands/sales/vocab.go`, and `vocab_test.go` asserts every
+	// entry in that map is used by a flag, so adding one for a free-form value
+	// would go red for the right reason.
+	cmd.Flags().StringVar(&req.MeetingURL, "link", "",
+		"Where the online meeting is — the join URL (Teams, Meet, Zoom, …)")
 	if use == "log" {
 		cmd.Flags().StringVar(&req.Outcome, "outcome", "", "What came of it (required)")
 	}

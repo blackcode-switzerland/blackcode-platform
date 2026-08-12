@@ -526,15 +526,23 @@ func newDocCmd() *cobra.Command {
 
 func newDocListCmd() *cobra.Command {
 	var kind, query string
-	var prospect, limit int
+	var tags []string
+	var prospect, product, limit int
 	cmd := &cobra.Command{
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/documents"},
 		Short:       "List documents",
 		Long: `List the library.
 
---prospect FILTERS it rather than listing a separate per-prospect set: a document
-attached to three prospects is one row with three links, never three copies.`,
+--prospect and --product FILTER it rather than listing a separate per-prospect or
+per-product set: a document attached to three prospects is one row with three
+links, never three copies.
+
+--tag matches a document carrying ANY of the tags given, not all of them, and it
+is case-insensitive. Tags are free text with no vocabulary behind them — whatever
+was written with "bk sales doc add --tag" — so an unknown one is not an error,
+just a filter that matches nothing. Run "bk sales doc list --json" to see which
+tags are in use.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -545,7 +553,14 @@ attached to three prospects is one row with three links, never three copies.`,
 			if err != nil {
 				return err
 			}
-			rows, err := c.ListDocuments(ws, kind, query, prospect, limit)
+			rows, err := c.ListDocuments(ws, client.ListDocsOpts{
+				Kind:     kind,
+				Query:    query,
+				Prospect: prospect,
+				Product:  product,
+				Tags:     splitAll(tags),
+				Limit:    limit,
+			})
 			if err != nil {
 				return err
 			}
@@ -570,7 +585,15 @@ attached to three prospects is one row with three links, never three copies.`,
 	}
 	cmd.Flags().StringVar(&kind, "kind", "", "Filter by kind — "+vocab("document_kinds"))
 	cmd.Flags().StringVar(&query, "q", "", "Substring match on the title")
+	// `--prospect` and `--product` are `int` here and `ints` on `doc add` /
+	// `doc link`, and that difference is correct rather than an oversight: there
+	// they name things to ATTACH TO and repeat; here they name one thing to
+	// FILTER BY. Unifying them would make `doc list --prospect 3 --prospect 7`
+	// look meaningful, and the route has no answer for it.
 	cmd.Flags().IntVar(&prospect, "prospect", 0, "Only documents linked to this prospect (its #number)")
+	cmd.Flags().IntVar(&product, "product", 0, "Only documents linked to this product (its #number)")
+	cmd.Flags().StringSliceVar(&tags, "tag", nil,
+		"Only documents carrying any of these tags (repeatable; case-insensitive)")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Max documents to return")
 	return cmd
 }

@@ -104,6 +104,7 @@ function MeetingFields({
     agenda: meeting?.agenda ?? '',
     outcome: meeting?.outcome ?? '',
     status: meeting?.status ?? '',
+    meeting_url: meeting?.meeting_url ?? '',
   })
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -134,9 +135,10 @@ function MeetingFields({
         </Field>
         <Field label="Type">
           <VocabSelect
+            label="Type"
             options={MEETING_TYPES}
             value={form.type}
-            onChange={(e) => set('type', e.target.value)}
+            onChange={(v) => set('type', v)}
           />
         </Field>
         <Field label="When">
@@ -158,6 +160,29 @@ function MeetingFields({
         <Field label="Attendees" hint="Comma separated.">
           <TextInput value={form.attendees} onChange={(e) => set('attendees', e.target.value)} />
         </Field>
+        {/*
+          Offered on EVERY meeting type, not just `video`. A room with a dial-in
+          bridge is both in-person and online, and hiding the field behind the
+          type would mean somebody who picked "call" first has to work out why
+          the box disappeared. The field is optional; most rows leave it empty.
+
+          Clearing the box CLEARS the link: `|| null` below sends JSON null,
+          which the PATCH route reads as "remove it" (`nullableStr`). A form
+          that could only ever set one would leave a stale Teams link on a
+          meeting that moved to a phone call.
+        */}
+        <Field
+          label="Meeting link"
+          hint="Teams, Meet, Zoom, an internal room — whatever an attendee opens. Leave empty for a call or an in-person meeting."
+        >
+          <TextInput
+            type="url"
+            inputMode="url"
+            placeholder="https://…"
+            value={form.meeting_url}
+            onChange={(e) => set('meeting_url', e.target.value)}
+          />
+        </Field>
         <Field label="Agenda">
           <TextArea value={form.agenda} onChange={(e) => set('agenda', e.target.value)} />
         </Field>
@@ -176,9 +201,10 @@ function MeetingFields({
         {meeting && (
           <Field label="Status">
             <VocabSelect
+              label="Status"
               options={MEETING_STATUSES}
               value={form.status}
-              onChange={(e) => set('status', e.target.value)}
+              onChange={(v) => set('status', v)}
             />
           </Field>
         )}
@@ -208,6 +234,7 @@ function MeetingFields({
               attendees,
               agenda: form.agenda.trim() || null,
               outcome: form.outcome.trim() || null,
+              meeting_url: form.meeting_url.trim() || null,
             }
             meeting
               ? edit.mutate({ ...shared, status: form.status }, { onSuccess: close })
@@ -261,16 +288,18 @@ function CommunicationFields({
             from a hand-written list that would have started with email.
           */}
           <VocabSelect
+            label="Channel"
             options={CHANNELS}
             value={form.channel}
-            onChange={(e) => set('channel', e.target.value)}
+            onChange={(v) => set('channel', v)}
           />
         </Field>
         <Field label="Direction">
           <VocabSelect
+            label="Direction"
             options={COMM_DIRECTIONS}
             value={form.direction}
-            onChange={(e) => set('direction', e.target.value)}
+            onChange={(v) => set('direction', v)}
           />
         </Field>
         <Field label="When">
