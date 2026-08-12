@@ -19,11 +19,26 @@ export function publicProject(input: object): Row {
   return base(input as Row)
 }
 
+// A task's `status` on the wire is the DERIVED one (`progress_status`), never
+// the vestigial `issues.tasks.status` column. Callers see one field with one
+// meaning; the column is not exposed under any name. See lib/work-items.ts →
+// "tasks" for why, and lib/db/queries/tasks.ts → taskProgressSql for how.
+//
+// The fallback exists for the one caller that can hand us a bare insert row
+// (POST …/tasks, if its re-fetch returns nothing). A row with no issues joined
+// is `empty`, which is what a task one statement old actually is.
 export function publicTask(input: object): Row {
-  const { project_seq, project_id: _g, ...rest } = base(input as Row) as Row & {
+  const {
+    project_seq,
+    project_id: _g,
+    progress_status,
+    status: _dead,
+    ...rest
+  } = base(input as Row) as Row & {
     project_seq?: number | null
+    progress_status?: string
   }
-  return { ...rest, project_id: project_seq ?? null }
+  return { ...rest, project_id: project_seq ?? null, status: progress_status ?? 'empty' }
 }
 
 export function publicIssue(input: object): Row {

@@ -42,6 +42,7 @@ import {
   PROJECT_STATUSES,
   PROJECT_PRIORITIES,
   PROJECT_UPDATE_STATUSES,
+  TASK_PROGRESS_STATUSES,
 } from '@/lib/work-items'
 import { META_LIMITS, META_MEDIA } from '@/lib/agent-meta'
 import { ENTITY_TYPES } from '@/lib/entity-address'
@@ -56,6 +57,11 @@ const APP_VOCABULARY = {
   project_statuses: PROJECT_STATUSES,
   project_priorities: PROJECT_PRIORITIES,
   project_update_health: PROJECT_UPDATE_STATUSES,
+  // A task's status is DERIVED from its issues and cannot be written — it is
+  // here because an agent still has to know what the values MEAN when it reads
+  // one back, and because `bk guide` may not restate a vocabulary. See
+  // lib/work-items.ts → "tasks".
+  task_progress_statuses: TASK_PROGRESS_STATUSES,
 } as const
 
 export const GET = apiHandler(async (request: NextRequest) => {

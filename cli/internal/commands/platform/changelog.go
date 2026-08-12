@@ -125,8 +125,8 @@ command that used to work now fails, run ` + "`bk skill sync`" + `, then check h
 	cmd.Flags().StringVar(&app, "app", "",
 		"Only this section's entries: an app slug, or \"platform\" for shared changes")
 	cmd.Flags().BoolVar(&full, "full", false, "Print every dated entry in full")
-	cmd.Flags().BoolVar(&reference, "reference", false, "Retired — the platform reference is now `bk guide`")
-	_ = cmd.Flags().MarkDeprecated("reference", "the platform reference is now the embedded guide: run `bk guide`")
+	cmd.Flags().BoolVar(&reference, "reference", false, "Retired — the platform reference is now the embedded guide: bk guide")
+	_ = cmd.Flags().MarkDeprecated("reference", "the platform reference is now the embedded guide: run bk guide")
 	cmd.Flags().StringVar(&serverFlag, "server", "", "Server base URL (default: your logged-in server, else "+defaultChangelogServer+")")
 	return cmd
 }

@@ -7,6 +7,37 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-12 — seven flags stopped advertising a bogus argument in `--help`
+
+**Not breaking — help text only. Every flag parsed exactly as it always did.**
+
+pflag reads the **first backquoted word of a usage string as the flag's value
+placeholder**, strips the backquotes, and prints the placeholder after the flag
+name. So a usage string that used backticks as Markdown renamed its own
+argument:
+
+```
+      --app-server bk <app> …   Send this invocation's BARE (identity) verbs …
+      --token echo <token> | bk login --token   Read a pre-existing token …
+      --type bk meta   Filter by entity type …
+      --body issue comment   Alias for --description …
+```
+
+A caller reading that sees a flag taking two or more words, and one following
+the shape types `--body issue comment`. The placeholder *is* the type as far as
+`--help` is concerned, and it was the only type information these flags carried.
+
+Seven flags across five packages were affected, including **`--app-server`,
+which is a persistent root flag** — so every `--help` screen in the binary
+rendered it wrong. They now show `string` (or nothing, for switches).
+
+This was found and fixed by hand in `bk sales` on 2026-08-12 and recurred in
+`bk issues` the next day, because that fix was manual, package-local, and
+nothing held it. It is now guarded binary-wide:
+`cli/internal/commands/flag_placeholder_test.go` walks every command's flags and
+fails on any placeholder containing whitespace. It was watched failing on all
+seven before they were fixed.
+
 ## 2026-08-12 — `bk <app> inbox list --ws` scopes the inbox to one workspace
 
 **Not breaking. The default is unchanged and stays GLOBAL.**

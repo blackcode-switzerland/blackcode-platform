@@ -16,6 +16,7 @@ import { softDeleteProject, type DeleteMode } from './deletion'
 import { setProjectMembers } from './project-relations'
 import { allocateNextProjectSeq } from './workspaces'
 import { toRichTextHtml } from '@/lib/rich-text'
+import { assertProjectVocabulary } from './project-vocabulary'
 
 export interface ProjectListItem extends Project {
   issue_count: number
@@ -150,6 +151,7 @@ export interface CreateProjectInput {
 }
 
 export async function createProject(input: CreateProjectInput): Promise<Project> {
+  assertProjectVocabulary(input)
   return await db.transaction(async (tx) => {
     const seq = await allocateNextProjectSeq(tx, input.workspaceId)
     const [row] = await tx
@@ -228,6 +230,7 @@ export async function updateProject(
   patch: UpdateProjectInput,
   actorUserId: number
 ): Promise<Project | null> {
+  assertProjectVocabulary(patch)
   return await db.transaction(async (tx) => {
     const beforeRows = await tx
       .select()

@@ -161,6 +161,12 @@ export const tasks = issuesSchema.table(
     name: varchar('name', { length: 100 }).notNull(),
     description: text('description'),
     due_date: date('due_date'),
+    // VESTIGIAL — DO NOT READ. A task's status is DERIVED from its issues
+    // (lib/db/queries/tasks.ts → taskProgressSql), and the wire field named
+    // `status` on a task is that derived value, never this column. Every row
+    // here is 'active'; no write path in this repo has ever set another value.
+    // Kept only because dropping a live column buys nothing. The full reasoning
+    // and the two edge cases are in lib/work-items.ts → "tasks".
     status: varchar('status', { length: 50 }).default('active'),
     // Workspace-scoped human number (the #N shown in UI + URL). Allocated via
     // workspace_counters.last_task_seq. Nullable only during the backfill window.

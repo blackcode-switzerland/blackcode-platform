@@ -361,7 +361,7 @@ func newIssueCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&project, "project", "", "Project — "+projectFlagHelp+" (required)")
 	cmd.Flags().StringVar(&title, "title", "", "Issue title (required)")
 	cmd.Flags().StringVar(&description, "description", "", "Description — Markdown or HTML (use \"-\" for stdin; --description-file for multi-line to avoid escaping newlines). --body is an alias")
-	cmd.Flags().StringVar(&bodyAlias, "body", "", "Alias for --description (`issue comment` and `project updates add` call it --body)")
+	cmd.Flags().StringVar(&bodyAlias, "body", "", "Alias for --description (issue comment and project updates add call it --body)")
 	cmd.Flags().StringVar(&descriptionFile, "description-file", "", "Read description (Markdown or HTML) from file")
 	cmd.Flags().StringVar(&status, "status", "", "Status: "+vocab("issue_statuses"))
 	cmd.Flags().StringVar(&priority, "priority", "", "Priority: "+vocabPriority("issue"))

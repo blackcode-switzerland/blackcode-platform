@@ -82,7 +82,8 @@ this.`,
 		},
 	}
 	cmd.Flags().StringVar(&server, "server", "", "Server base URL of any Blackcode app (default: "+config.DefaultServer+")")
-	cmd.Flags().BoolVar(&pasteToken, "token", false, "Read a pre-existing token from STDIN instead of opening a browser — a switch, not a value: `echo <token> | bk login --token`")
+	cmd.Flags().BoolVar(&pasteToken, "token", false, "Read a pre-existing token from STDIN instead of opening a browser. A "+
+			"switch, not a value: echo <token> | bk login --token")
 	return cmd
 }
 

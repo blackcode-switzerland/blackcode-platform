@@ -10,6 +10,48 @@ import { and, eq, isNull, sql } from 'drizzle-orm'
 import { searchClause } from './search'
 import { db } from '../client'
 import { issues, projects, tasks, type Task, users } from '../schema'
+import { ISSUE_CANCELLED_STATUS, ISSUE_DONE_STATUS } from '@/lib/work-items'
+
+// ---------------------------------------------------------------------------
+// TASK PROGRESS — DERIVED HERE, IN SQL, AND NOWHERE ELSE
+// ---------------------------------------------------------------------------
+// Every task query below selects this block. It is one fragment rather than
+// five copies because five copies is how `completed_issues` came to mean
+// `i.status = 'done'` in five places while lib/work-items.ts was the file that
+// claimed to own the vocabulary.
+//
+// It must stay in SQL. A caller that computed progress by listing a task's
+// issues would be wrong the moment paging truncated the list, and wrong
+// silently: a count is indistinguishable from a correct count.
+//
+// `status` is DERIVED, never read from the column. See the long note at
+// lib/work-items.ts → "tasks" for why, and for the two edge cases (`empty`,
+// and cancelled-is-not-done) that the CASE below encodes.
+const doneCount = sql`COUNT(i.id) FILTER (WHERE i.status = ${ISSUE_DONE_STATUS})`
+const cancelledCount = sql`COUNT(i.id) FILTER (WHERE i.status = ${ISSUE_CANCELLED_STATUS})`
+// IS DISTINCT FROM, not NOT IN: `issues.status` is nullable, and an issue with
+// a NULL status is open work, not excluded work. COUNT(i.id) already ignores
+// the all-NULL row a LEFT JOIN produces for a task with no issues.
+const openCount = sql`COUNT(i.id) FILTER (
+    WHERE i.status IS DISTINCT FROM ${ISSUE_DONE_STATUS}
+      AND i.status IS DISTINCT FROM ${ISSUE_CANCELLED_STATUS}
+  )`
+
+// The CASE alone — reusable in HAVING, where the alias does not exist yet.
+const taskProgressStatusSql = sql`
+  CASE
+    WHEN COUNT(i.id) = 0 THEN 'empty'
+    WHEN ${openCount} > 0 THEN 'active'
+    WHEN ${doneCount} > 0 THEN 'done'
+    ELSE 'cancelled'
+  END`
+
+const taskProgressSql = sql`
+  COUNT(i.id)::int AS issue_count,
+  ${doneCount}::int AS completed_issues,
+  ${cancelledCount}::int AS cancelled_issues,
+  ${openCount}::int AS open_issues,
+  ${taskProgressStatusSql} AS progress_status`
 import { recordEvent, UPDATE_COALESCE_WINDOW_MS } from './events'
 import { projectEntity } from './entities'
 import { softDeleteTask, type DeleteMode } from './deletion'
@@ -26,10 +68,16 @@ export interface TaskListItem extends Task {
   lead_avatar: string | null
   issue_count: number
   completed_issues: number
+  cancelled_issues: number
+  open_issues: number
+  // Derived — see taskProgressSql. Overrides the dead `status` column on the
+  // wire (lib/api/serialize.ts → publicTask).
+  progress_status: string
 }
 
 export interface ListTasksOptions {
   projectId?: number | null
+  /** Filters on the DERIVED status (empty|active|done|cancelled), not the column. */
   status?: string
   search?: string
 }
@@ -48,8 +96,7 @@ export async function listTasksInWorkspace(
       lead.name AS lead_name,
       lead.email AS lead_email,
       lead.avatar_url AS lead_avatar,
-      COUNT(i.id)::int AS issue_count,
-      COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
+      ${taskProgressSql}
     FROM ${tasks} m
     LEFT JOIN ${projects} p ON p.id = m.project_id AND p.deleted_at IS NULL
     LEFT JOIN ${users} lead ON lead.id = m.lead_id
@@ -63,9 +110,13 @@ export async function listTasksInWorkspace(
             ? sql`AND m.project_id = ${opts.projectId}`
             : sql``
       }
-      ${opts.status ? sql`AND m.status = ${opts.status}` : sql``}
       ${searchClause(opts.search, { text: [sql`m.name`, sql`m.description`], seq: sql`m.seq` })}
     GROUP BY m.id, p.name, p.icon, p.color, p.seq, lead.name, lead.email, lead.avatar_url
+    ${
+      // HAVING, not WHERE: the derived status is an aggregate over the joined
+      // issues, so it does not exist yet at WHERE time.
+      opts.status ? sql`HAVING ${taskProgressStatusSql} = ${opts.status}` : sql``
+    }
     ORDER BY m.due_date ASC NULLS LAST, m.id DESC
   `)
   return result.rows as unknown as TaskListItem[]
@@ -85,8 +136,7 @@ export async function getTaskInWorkspace(
       lead.name AS lead_name,
       lead.email AS lead_email,
       lead.avatar_url AS lead_avatar,
-      COUNT(i.id)::int AS issue_count,
-      COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
+      ${taskProgressSql}
     FROM ${tasks} m
     LEFT JOIN ${projects} p ON p.id = m.project_id AND p.deleted_at IS NULL
     LEFT JOIN ${users} lead ON lead.id = m.lead_id
@@ -102,7 +152,6 @@ export interface CreateTaskInput {
   name: string
   description?: string | null
   due_date?: string | null
-  status?: string
   projectId?: number | null
   lead_user_id?: number | null
   actorUserId: number
@@ -120,9 +169,14 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
         name: input.name,
         description: toRichTextHtml(input.description) ?? null,
         due_date: input.due_date ?? null,
-        status: input.status ?? 'active',
+        // The column is vestigial — status is derived from the task's issues.
+        // Written once so the NOT NULL-ish default is explicit rather than
+        // implied, and never read. See lib/work-items.ts → "tasks".
+        status: 'active',
         // Mirror projects: default the lead to the creator.
-        lead_id: input.lead_user_id ?? input.actorUserId,
+        // ?? would fold an explicit null back into the creator. Omitted and
+        // "explicitly nobody" are different requests — see the route.
+        lead_id: input.lead_user_id === undefined ? input.actorUserId : input.lead_user_id,
       })
       .returning()
     if (!row) throw new Error('task insert returned nothing')
@@ -154,12 +208,15 @@ export interface UpdateTaskInput {
   name?: string
   description?: string | null
   due_date?: string | null
-  status?: string
   project_id?: number | null
   lead_user_id?: number | null
+  // `status` is deliberately absent. A task's status is derived from its
+  // issues (see taskProgressSql); accepting a write here would put a value in
+  // a column nothing reads, and the caller would see it come back derived and
+  // different. updateTask throws `task_status_derived` if one is passed.
 }
 
-const TASK_DIFF_KEYS = ['name', 'description', 'due_date', 'status', 'project_id'] as const
+const TASK_DIFF_KEYS = ['name', 'description', 'due_date', 'project_id'] as const
 
 export async function updateTask(
   workspaceId: number,
@@ -167,6 +224,11 @@ export async function updateTask(
   patch: UpdateTaskInput,
   actorUserId: number
 ): Promise<Task | null> {
+  // Loud, not ignored: a caller that thinks it can set a task's status has a
+  // wrong model of what a task is, and silently dropping the field would leave
+  // it believing the write landed.
+  if ('status' in patch) throw new Error('task_status_derived')
+
   return await db.transaction(async (tx) => {
     const beforeRows = await tx
       .select()
@@ -180,7 +242,6 @@ export async function updateTask(
     if (patch.name !== undefined) updates.name = patch.name
     if (patch.description !== undefined) updates.description = toRichTextHtml(patch.description)
     if (patch.due_date !== undefined) updates.due_date = patch.due_date
-    if (patch.status !== undefined) updates.status = patch.status
     if (patch.project_id !== undefined) updates.project_id = patch.project_id
     if (patch.lead_user_id !== undefined) updates.lead_id = patch.lead_user_id
 
@@ -194,16 +255,6 @@ export async function updateTask(
       .returning()
     if (!after) return null
 
-    if (patch.status !== undefined && before.status !== after.status) {
-      await recordEvent(tx, {
-        workspaceId,
-        actorUserId,
-        entityType: 'task',
-        entityId: id,
-        action: 'status_changed',
-        meta: { from: before.status, to: after.status, title: after.name },
-      })
-    }
     if (patch.due_date !== undefined && String(before.due_date) !== String(after.due_date)) {
       await recordEvent(tx, {
         workspaceId,
@@ -241,9 +292,7 @@ export async function updateTask(
         afterSnap[k] = (after as Record<string, unknown>)[k]
       }
     }
-    const remainingKeys = Object.keys(beforeSnap).filter(
-      (k) => !['status', 'due_date'].includes(k)
-    )
+    const remainingKeys = Object.keys(beforeSnap).filter((k) => k !== 'due_date')
     if (remainingKeys.length > 0) {
       await recordEvent(tx, {
         workspaceId,
@@ -286,8 +335,7 @@ export async function deleteTask(
 export async function getTasks(projectId: number) {
   const result = await db.execute(sql`
     SELECT m.*,
-      COUNT(i.id)::int AS issue_count,
-      COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
+      ${taskProgressSql}
     FROM ${tasks} m
     LEFT JOIN ${issues} i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.project_id = ${projectId} AND m.deleted_at IS NULL
@@ -300,8 +348,7 @@ export async function getTasks(projectId: number) {
 export async function getAllTasks() {
   const result = await db.execute(sql`
     SELECT m.*, p.name AS project_name,
-      COUNT(i.id)::int AS issue_count,
-      COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
+      ${taskProgressSql}
     FROM ${tasks} m
     LEFT JOIN ${projects} p ON p.id = m.project_id AND p.deleted_at IS NULL
     LEFT JOIN ${issues} i ON i.task_id = m.id AND i.deleted_at IS NULL
@@ -315,8 +362,7 @@ export async function getAllTasks() {
 export async function getTaskWithDetails(id: number) {
   const result = await db.execute(sql`
     SELECT m.*, p.name AS project_name,
-      COUNT(i.id)::int AS issue_count,
-      COUNT(i.id) FILTER (WHERE i.status = 'done')::int AS completed_issues
+      ${taskProgressSql}
     FROM ${tasks} m
     LEFT JOIN ${projects} p ON p.id = m.project_id AND p.deleted_at IS NULL
     LEFT JOIN ${issues} i ON i.task_id = m.id AND i.deleted_at IS NULL

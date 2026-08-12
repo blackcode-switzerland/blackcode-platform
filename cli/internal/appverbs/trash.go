@@ -172,7 +172,7 @@ func newTrashListCmd(cfg Config) *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&typ, "type", "", "Filter by entity type (run `bk meta` for this app's types)")
+	cmd.Flags().StringVar(&typ, "type", "", "Filter by entity type (run bk meta for this app's types)")
 	return cmd
 }
 

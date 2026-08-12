@@ -40,13 +40,56 @@ grant that would let it.
 |-------|---------------------------|
 | `projects` | `workspace_id`, `seq` (workspace-scoped #number, unique per workspace), `name`, `status`, `priority` (`P0`–`P4`), `owner_id` (lead), `color`, `icon`, `start_date`, `due_date` |
 | `project_updates` | status-update feed; `status` ∈ `on_track`/`at_risk`/`off_track`, rich-text `body`, `author_id`. Latest row = project's current health |
-| `tasks` | `workspace_id`, `seq` (workspace-scoped #number, unique per workspace — mirrors `issues.seq`), optional `project_id` (ON DELETE SET NULL — tasks can be standalone), `due_date`, `status`, `lead_id` (task lead, ON DELETE SET NULL — mirrors `projects.owner_id`) |
+| `tasks` | `workspace_id`, `seq` (workspace-scoped #number, unique per workspace — mirrors `issues.seq`), optional `project_id` (ON DELETE SET NULL — tasks can be standalone), `due_date`, `lead_id` (task lead, ON DELETE SET NULL — mirrors `projects.owner_id`). **`status` is VESTIGIAL — do not read it.** A task's status is derived from its issues (see below); every row in the column is `active` |
 | `issues` | `workspace_id`, `seq` (unique per workspace), optional `project_id`/`task_id`, `title`, `status`, `priority` (int 1–5, checked), `reporter_id`, `start_date`/`due_date`, `estimated_hours`, `completed_at`/`cancelled_at`. **No `assignee_id` — see `issue_assignees`** |
 | `issue_assignees` | many-to-many junction: `(issue_id, user_id)` composite PK; `assigned_at`. Replaces the old single `assignee_id` column so issues can have multiple assignees. Both FKs cascade on delete |
 | `attachments` | `issue_id`, `filename`, `file_url`, `file_size`, `mime_type`, `uploaded_by`. Issues-only; written via API/CLI (`bk issues issue attach`) |
 | `issue_labels` / `project_labels` | join tables (composite PKs) linking workspace labels to issues / projects |
 | `project_members` | the project's "people working on it" list (not access control); `(project_id, user_id)` unique |
 | `issue_watchers` | `(issue_id, user_id)` PK; `reason` ∈ `manual`/`assigned`/`reporter`. Auto-watchers are pruned when their reason no longer applies (unless `manual`) |
+
+### A task's status is derived, and the column is dead
+
+`issues.tasks.status` exists, defaults to `'active'`, and **has never held
+another value** — 12/12 rows in local dev on 2026-08-12, and no write path in
+the product ever set one. It was read in three places that disagreed with each
+other: the schema default, a listing that counted `status === 'done'`, and a
+detail view that suppressed an overdue badge on `'completed'`. Two of those
+comparisons were permanently false.
+
+Since 2026-08-12 the status is **computed from the task's issues**, in SQL, in
+one shared fragment (`lib/db/queries/tasks.ts` → `taskProgressSql`) selected by
+every task query. It is exposed on the wire as `status`; the column is not
+exposed under any name (`lib/api/serialize.ts` → `publicTask`).
+
+| Wire field | Meaning |
+|---|---|
+| `issue_count` | attached issues, excluding soft-deleted |
+| `completed_issues` | issues in the `done` status |
+| `cancelled_issues` | issues in the `cancelled` status |
+| `open_issues` | everything else — a NULL status counts as open |
+| `status` | `empty` \| `active` \| `done` \| `cancelled`, derived |
+
+Two edge cases are encoded deliberately, both documented at length in
+`lib/work-items.ts` → "tasks":
+
+1. **A task with no issues is `empty`, not `done`.** "No issues are open" is
+   vacuously true of a task with nothing in it, so the naive `open === 0 → done`
+   reports a brand-new task as finished.
+2. **Cancelled is not done.** A task whose issues were all cancelled is
+   `cancelled`. A task with one done and one cancelled issue is `done`, because
+   nothing is still open.
+
+`updateTask` **throws `task_status_derived`** if a caller passes `status`, and
+both routes map it to a 400 with a suggestion. Silently dropping the field would
+leave the caller believing the write landed and then reading back something
+else.
+
+It must stay in SQL: a client that computed progress by listing a task's issues
+would be wrong the moment paging truncated the list, and wrong *silently* — a
+bad count is indistinguishable from a good one. Guarded by
+`lib/db/queries/task-progress.integration.test.ts`, which asserts exact tuples
+rather than "a number appeared".
 
 **Where the app boundary actually falls.** `comments` and `labels` look like
 issue-tracker tables and are not: comments are already polymorphic

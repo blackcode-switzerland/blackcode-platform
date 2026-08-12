@@ -172,7 +172,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/issues/{id}",
-      "command": "bk issues issue view",
+      "command": "bk issues issue view, bk issues task attach, bk issues task detach",
       "app": "issues"
     },
     {
@@ -220,7 +220,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/members",
-      "command": "bk issues member list",
+      "command": "bk issues member list, bk issues task create, bk issues task edit",
       "app": "issues"
     },
     {
@@ -304,7 +304,7 @@
     {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/issues/{id}",
-      "command": "bk issues issue assign, bk issues issue edit, bk issues issue unassign",
+      "command": "bk issues issue assign, bk issues issue edit, bk issues issue unassign, bk issues task attach, bk issues task detach",
       "app": "issues"
     },
     {

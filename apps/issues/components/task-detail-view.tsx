@@ -222,10 +222,16 @@ export function TaskDetailView({ taskId, workspaceSlug }: { taskId: number; work
 
   const data = task.data
   const due = data.due_date ? new Date(data.due_date) : null
-  const overdue = due ? isPast(due) && !isToday(due) && data.status !== 'completed' : false
+  // `data.status` is DERIVED from the task's issues and its vocabulary is
+  // empty|active|done|cancelled (lib/work-items.ts → TASK_PROGRESS_STATUSES).
+  // This compared against 'completed' until 2026-08-12 — a value nothing in
+  // this repo has ever produced, so the badge showed on finished tasks too.
+  const overdue = due ? isPast(due) && !isToday(due) && data.status === 'active' : false
   const total = data.issue_count
   const done = data.completed_issues
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0
+  // null, not 0, when there are no issues: 0% reads as "nothing done" when the
+  // truth is "nothing here". Renderers below show — instead.
+  const pct = total > 0 ? Math.round((done / total) * 100) : null
 
   const mentionItems: MentionItem[] = (members.data ?? []).map((m) => ({
     id: m.user_id,
@@ -334,12 +340,19 @@ export function TaskDetailView({ taskId, workspaceSlug }: { taskId: number; work
               />
             </div>
 
-            {/* Progress summary */}
+            {/* Progress summary. An empty task shows no ring and no percentage
+                — see the note on `pct` above. */}
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <ProgressRing pct={pct} size={16} />
-              <span>
-                {done} of {total} issues completed
-              </span>
+              {pct === null ? (
+                <span>No issues yet</span>
+              ) : (
+                <>
+                  <ProgressRing pct={pct} size={16} />
+                  <span>
+                    {done} of {total} issues completed
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Issues */}

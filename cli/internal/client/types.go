@@ -242,12 +242,21 @@ type Task struct {
 	ProjectID       int     `json:"project_id" yaml:"project_id"`
 	Name            string  `json:"name" yaml:"name"`
 	Description     *string `json:"description" yaml:"description"`
-	DueDate         *string `json:"due_date" yaml:"due_date"`
+	DueDate *string `json:"due_date" yaml:"due_date"`
+	// DERIVED from the task's issues, never stored: empty|active|done|cancelled.
+	// The server computes it (apps/issues/lib/db/queries/tasks.ts) precisely so
+	// that a client cannot arrive at a different answer by counting a page of
+	// issues. Do not compute it here, and do not send it — the route answers
+	// `task_status_derived` with a 400.
 	Status          *string `json:"status,omitempty" yaml:"status,omitempty"`
 	LeadID          *int    `json:"lead_id" yaml:"lead_id"`
+	LeadName        *string `json:"lead_name,omitempty" yaml:"lead_name,omitempty"`
+	LeadEmail       *string `json:"lead_email,omitempty" yaml:"lead_email,omitempty"`
 	ProjectName     *string `json:"project_name,omitempty" yaml:"project_name,omitempty"`
 	IssueCount      *int    `json:"issue_count,omitempty" yaml:"issue_count,omitempty"`
 	CompletedIssues *int    `json:"completed_issues,omitempty" yaml:"completed_issues,omitempty"`
+	CancelledIssues *int    `json:"cancelled_issues,omitempty" yaml:"cancelled_issues,omitempty"`
+	OpenIssues      *int    `json:"open_issues,omitempty" yaml:"open_issues,omitempty"`
 	CreatedAt       *string `json:"created_at,omitempty" yaml:"created_at,omitempty"`
 	UpdatedAt       *string `json:"updated_at,omitempty" yaml:"updated_at,omitempty"`
 	Issues          []Issue `json:"issues,omitempty" yaml:"issues,omitempty"`
@@ -361,17 +370,26 @@ type AddMemberRequest struct {
 	Role  string `json:"role,omitempty"`
 }
 
+// No Status field on either request, deliberately: a task's status is derived
+// from its issues. Both routes answer `task_status_derived` if one is sent.
 type CreateTaskRequest struct {
 	ProjectID   int     `json:"project_id"`
 	Name        string  `json:"name"`
 	Description string  `json:"description,omitempty"`
 	DueDate     *string `json:"due_date,omitempty"`
+	// RawMessage so `--lead none` can send an explicit JSON null. Omitted and
+	// null are DIFFERENT requests here: omitted defaults the lead to you,
+	// null means the task has no lead. A *int could not express the second.
+	LeadUserID json.RawMessage `json:"lead_user_id,omitempty"`
 }
 
 type UpdateTaskRequest struct {
 	Name        *string         `json:"name,omitempty"`
 	Description *string         `json:"description,omitempty"`
 	DueDate     json.RawMessage `json:"due_date,omitempty"`
+	// RawMessage, not *int: `--lead none` must send an explicit JSON null to
+	// clear it, and omitempty would drop a *int(nil) rather than sending null.
+	LeadUserID json.RawMessage `json:"lead_user_id,omitempty"`
 }
 
 type CreateCommentRequest struct {

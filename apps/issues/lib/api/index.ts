@@ -27,5 +27,6 @@ export {
   publicAttachment,
   publicProjectUpdate,
 } from './serialize'
+export { projectVocabularyError } from './project-vocabulary'
 export { parseAnalyticsParams } from './analytics-params'
 export type { ParsedAnalyticsParams } from './analytics-params'

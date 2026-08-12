@@ -195,7 +195,8 @@ func NewRoot() *cobra.Command {
 	// Found by the two-server routing test, which is the only thing that could
 	// have found it. This name says which of the two it is.
 	root.PersistentFlags().StringVar(&cmdutil.AppOverride, "app-server", "",
-		"Send this invocation's BARE (identity) verbs to <app>'s server (`bk <app> …` ignores it — it pins its own app; `bk app use` changes it permanently)")
+		"Send this invocation's BARE (identity) verbs to <app>'s server. A pinned "+
+			"invocation (bk <app> …) ignores it; bk app use changes it permanently")
 	// Tiers 1 and 2 (D-11): the verbs that stay bare because no app can be the
 	// wrong one to ask, and the ones whose job is to cross the boundary.
 	root.AddCommand(platform.NewCommands()...)

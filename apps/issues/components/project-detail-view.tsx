@@ -602,7 +602,10 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
                   {tasks.data.map((m) => {
                     const t = m.issue_count ?? 0
                     const d = m.completed_issues ?? 0
-                    const p = t > 0 ? Math.round((d / t) * 100) : 0
+                    // null, not 0, for a task with no issues: "0/0" beside an
+                    // empty ring reads as "none of them are done" when the
+                    // truth is that there are none. Rendered as — below.
+                    const p = t > 0 ? Math.round((d / t) * 100) : null
                     return (
                       <li key={m.id} className="group -mx-2 flex items-center gap-1 rounded-md px-2 transition-colors hover:bg-secondary/50">
                         <Link
@@ -624,8 +627,14 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
                             </span>
                           ) : null}
                           <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-                            <ProgressRing pct={p} size={13} />
-                            {d}/{t}
+                            {p === null ? (
+                              <>—</>
+                            ) : (
+                              <>
+                                <ProgressRing pct={p} size={13} />
+                                {d}/{t}
+                              </>
+                            )}
                           </span>
                         </Link>
                         <button
@@ -848,6 +857,10 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
             </div>
             {(tasks.data?.length ?? 0) > 0 ? (() => {
               const mTotal = tasks.data!.length
+              // `m.status` is DERIVED from each task's issues since 2026-08-12
+              // (lib/work-items.ts → TASK_PROGRESS_STATUSES). Before that the
+              // column was always 'active', so this counted zero, always. A
+              // task with no issues is `empty` and correctly counts as not done.
               const mDone = tasks.data!.filter((m) => m.status === 'done').length
               const mPct = mTotal > 0 ? Math.round((mDone / mTotal) * 100) : 0
               return (

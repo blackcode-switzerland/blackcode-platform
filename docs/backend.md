@@ -1171,10 +1171,10 @@ these; they never write SQL inline.
 | `invitations.ts` | accept/decline (Tier 2). Create, revoke, list, the token generator and pre-signup materialization are re-exports from `platform-db` — an invitation is to a WORKSPACE, not to an app |
 | `invite-candidates.ts` | suggested invitees — members of the owner's other workspaces (with shared-workspace context), plus all platform users for super admins; flags `already_member` / `invited` |
 | `users.ts` | password sign-up, and this app's bindings to `platform-db` for the rest: `getVisibleUsers` (workspace-mates only — privacy guard), the account reads/writes behind `/api/me`, and the four sign-in callbacks |
-| `projects.ts` | project CRUD; list joins lead + latest update health |
+| `projects.ts` | project CRUD; list joins lead + latest update health. `status` and `priority` are validated against `lib/work-items.ts` before the transaction (`project-vocabulary.ts`), throwing `invalid_status`/`invalid_priority` for the route to map — the column is a `varchar` with no CHECK, so this is the only thing standing between `--priority urgent` and a row that reads as unprioritised everywhere |
 | `project-relations.ts` | project ↔ member and project ↔ label sets |
 | `project-updates.ts` | status-update feed (on_track/at_risk/off_track) |
-| `tasks.ts` | task CRUD (project optional); list/get join the task lead; PATCH `lead_user_id` writes `lead_id` and records an `assigned`/`unassigned` event |
+| `tasks.ts` | task CRUD (project optional); list/get join the task lead; PATCH `lead_user_id` writes `lead_id` and records an `assigned`/`unassigned` event. **Progress and status are DERIVED from the task's issues** in one shared SQL fragment (`taskProgressSql`); the `status` column is vestigial and `updateTask` throws `task_status_derived` rather than writing it. See `apps/issues/docs/backend.md` |
 | `issues.ts` | issue CRUD, seq allocation, field-level events, auto-watchers |
 | `comments.ts` | polymorphic comments + `@email` mention resolution. **`createComment` resolves mentions; `updateComment` does not** — an `@mention` added by editing an existing comment renders and notifies nobody. Deliberate (an edit would otherwise re-notify on every save) and stated in `bk issues issue edit-comment --help`; `apps/issues/lib/mention-help.test.ts` keeps the two in step |
 | `labels.ts` | workspace labels; case-insensitive unique names |

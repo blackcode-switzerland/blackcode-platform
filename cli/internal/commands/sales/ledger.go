@@ -626,7 +626,7 @@ The prospect may be given as --prospect <n> or as the first argument.`,
 	cmd.Flags().StringVar(&req.At, "at", "", "When it happened, ISO 8601 (default now)")
 	cmd.Flags().StringVar(&req.Subject, "subject", "", "Subject line, where there is one")
 	cmd.Flags().StringVar(&req.Body, "body", "", "What was said")
-	cmd.Flags().IntVar(&contact, "contact", 0, "Which contact (the ID from `bk sales contact list`)")
+	cmd.Flags().IntVar(&contact, "contact", 0, "Which contact (the ID from bk sales contact list)")
 	// See the note on `meeting schedule`: "prospect" may arrive positionally, so
 	// resolveProspect enforces it rather than cobra.
 	for _, f := range []string{"channel", "dir"} {

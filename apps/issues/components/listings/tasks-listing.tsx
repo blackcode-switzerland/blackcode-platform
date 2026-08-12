@@ -46,6 +46,8 @@ interface TaskRow {
   lead_avatar: string | null
   issue_count: number
   completed_issues: number
+  cancelled_issues?: number
+  open_issues?: number
   created_at?: string
   updated_at?: string
 }
@@ -65,15 +67,21 @@ interface Member {
 }
 
 // Tasks are split into two sections by completion, mirroring the issues
-// listing's status accordion — a task is "Done" once every issue in it is
-// resolved (and it has at least one issue), otherwise it's "In Progress".
+// listing's status accordion: "Done" is a task with no open issues left,
+// "In Progress" is everything else — including a task with no issues at all,
+// which has not finished anything, it just has nothing to finish.
+//
+// THE SPLIT READS THE SERVER'S DERIVED STATUS. It used to recompute it here as
+// `done >= total`, which is a SECOND derivation and disagreed with the first:
+// a task with one done and one CANCELLED issue has done=1, total=2, so this
+// called it in-progress while the server called it done. Two answers to one
+// question, and the listing was the one people looked at. See
+// lib/work-items.ts → "tasks".
 const PROGRESS_GROUP_ORDER = ['in_progress', 'done'] as const
 const PROGRESS_GROUP_LABELS: Record<string, string> = { in_progress: 'In Progress', done: 'Done' }
 
 function taskGroupKey(m: TaskRow): 'in_progress' | 'done' {
-  const total = m.issue_count ?? 0
-  const done = m.completed_issues ?? 0
-  return total > 0 && done >= total ? 'done' : 'in_progress'
+  return m.status === 'done' || m.status === 'cancelled' ? 'done' : 'in_progress'
 }
 
 // Searchable fields per task, weighted by relevance — identifier and name
@@ -497,9 +505,14 @@ function TaskRowItem({
 
   const total = m.issue_count ?? 0
   const done = m.completed_issues ?? 0
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0
+  // null, not 0: a task with no issues has no percentage, and 0% reads as
+  // "nothing done" rather than "nothing here".
+  const pct = total > 0 ? Math.round((done / total) * 100) : null
   const due = m.due_date ? new Date(m.due_date) : null
-  const overdue = due ? isPast(due) && !isToday(due) && m.status !== 'completed' : false
+  // `m.status` is the DERIVED status (empty|active|done|cancelled). This
+  // compared against 'completed' — a value nothing has ever produced — so the
+  // overdue badge showed on finished tasks too.
+  const overdue = due ? isPast(due) && !isToday(due) && m.status === 'active' : false
 
   const patch = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
@@ -621,10 +634,16 @@ function TaskRowItem({
           {total}
         </span>
 
-        {/* Progress */}
+        {/* Progress. A task with no issues shows — rather than 0%. */}
         <span className="flex w-20 shrink-0 items-center gap-1.5">
-          <ProgressRing pct={pct} size={15} />
-          <span className="text-xs tabular-nums text-muted-foreground">{pct}%</span>
+          {pct === null ? (
+            <span className="text-xs text-muted-foreground">—</span>
+          ) : (
+            <>
+              <ProgressRing pct={pct} size={15} />
+              <span className="text-xs tabular-nums text-muted-foreground">{pct}%</span>
+            </>
+          )}
         </span>
       </div>
     </li>

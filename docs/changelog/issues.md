@@ -35,6 +35,118 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-08-12 — tasks become the grouping layer: `--lead`, `attach`/`detach`, and a status derived from the issues
+
+**One breaking change**, at the bottom of this entry: sending `status` on a task
+is now a 400 instead of being accepted.
+
+A task is the layer between a project and its issues — `project → task → issues`
+— and the CLI now supports it as one, and says when to use it.
+
+**`--lead` on `task create` and `task edit`.** `issues.tasks.lead_id` has always
+existed and the web UI has always set it; no CLI flag did. It takes the same
+user references as everything else — an id, an email, a display name, or `me` —
+and `none` clears it:
+
+```bash
+bk issues task create --project 4 --name "Key rotation" --lead ana@blackcode.ch
+bk issues task edit 7 --lead me
+bk issues task edit 7 --lead none
+```
+
+On `create`, omitting `--lead` still defaults the lead to you, as before.
+`--lead none` now means *nobody* rather than *you*: the route distinguishes an
+absent field from an explicit `null`, which it previously did not.
+
+**Attaching issues from the task side.**
+
+```bash
+bk issues task attach 7 12 13 14
+bk issues task detach 7 13
+```
+
+Both are repeatable and both write `issues.task_id` — the same field
+`bk issues issue create --task` and `bk issues issue edit --task` have always
+written. There is no new table and no many-to-many: **an issue belongs to at
+most one task.**
+
+Attaching an issue that is already in *another* task is **refused**, naming the
+task it is in. Pass `--force` to move it, which prints each move and where it
+came from. Nothing is written until every issue in the batch has been checked,
+so a refusal leaves all of them where they were. A silent bulk reparent changes
+two tasks' progress numbers and reports only a count — that is the failure this
+refusal exists to prevent.
+
+`detach` leaves the issue **in its project**, open and otherwise untouched; it
+only un-groups it. Detaching an issue that is not in the named task is an error
+rather than a no-op, so a mistyped task id cannot look like success.
+
+**`task view` lists the task's issues by default.** `--include-issues` now
+defaults to true — the group is the only thing a task has that an issue does
+not, and it rode along on the same request either way. Pass
+`--include-issues=false` for the header alone. `task view` and `task list` also
+show the lead and the status.
+
+**A task's status is DERIVED from its issues, and is no longer stored.**
+
+`issues.tasks.status` was a real column that nothing ever wrote: every row in it
+is `active`, and no write path in the product — web UI, route or CLI — has ever
+set another value. Two readers disagreed about what they were looking at (one
+compared against `done`, one against `completed`) and both comparisons were
+permanently false.
+
+It is now computed from the attached issues, so the two cannot disagree. Run
+`bk meta` for the values and their labels; `bk issues task view` explains them
+inline. Two behaviours worth knowing before reading a number:
+
+- A task with **no issues** reports having none, rather than `0%` — which reads
+  as "nothing done" when the truth is "nothing here".
+- A **cancelled** issue is neither finished nor outstanding work, and is counted
+  separately rather than folded into either side of the ratio. A task whose
+  issues were all cancelled is not a completed task.
+
+**BREAKING: `status` on `POST /api/workspaces/{ws}/tasks` and
+`PATCH …/tasks/{id}` is now a 400** (`task_status_derived`) instead of being
+accepted. No `bk` command ever sent it, so no CLI workflow changes. A direct
+HTTP caller that sent it was writing a column nothing read — the write appeared
+to succeed and the value never came back. To adapt, change the issues:
+`bk issues issue edit <id> --status done`, or attach/detach.
+
+Progress fields on the wire: `issue_count` and `completed_issues` are unchanged;
+`cancelled_issues` and `open_issues` are new; `status` is now the derived value.
+
+## 2026-08-12 — the server refuses an out-of-vocabulary project priority or status
+
+**Breaking for a request that was already corrupting data.**
+
+`POST /api/workspaces/{ws}/projects` and `PATCH …/projects/{id}` passed
+`priority` and `status` through untouched. `issues.projects.priority` is a
+`varchar(10)` with no CHECK, so `--priority urgent` — the spelling the CLI's own
+help instructed, in every version of the CLI that has ever shipped — stored the
+literal string `urgent`. The real vocabulary is `P0`–`P4`, and
+`projectPriorityLabel` falls through to **"No priority"** for anything else, so
+the project read as unprioritised in the listing, the detail page, `bk meta` and
+analytics. Nothing errored anywhere.
+
+The previous entry fixed the CLI. That was never sufficient: every older binary
+already installed keeps writing corrupt rows until the forced release lands, and
+a direct HTTP call always would. Both values are now validated where `issues`
+already validates its own — in the query layer, surfaced as a 400 naming the
+accepted values:
+
+```
+invalid_priority: priority must be one of: P4, P0, P1, P2, P3
+hint: P0 is the highest — P0=Urgent, P1=High, P2=Medium, P3=Low, P4=No priority
+```
+
+`status` on the same routes was equally unvalidated and is now checked against
+`backlog, planned, in_progress, completed, cancelled`.
+
+**Existing rows were not migrated.** Deciding what a corrupt value should become
+needs production access and a product decision; one such row exists in local dev
+as of this date. A `PATCH` that sets a valid priority fixes a row; a `PATCH` that
+does not mention priority is unaffected.
+
 ## 2026-08-12 — `--priority` takes the same words on issues and projects, and `project --priority` stopped corrupting data
 
 **One BREAKING change, and it is a bug fix.** No route changed.

@@ -50,7 +50,19 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
     body.project_id = await resolveEntityId(ctx.workspace.id, 'project', String(body.project_id))
   }
 
-  const updated = await updateTask(ctx.workspace.id, id, body, ctx.user.id)
+  let updated
+  try {
+    updated = await updateTask(ctx.workspace.id, id, body, ctx.user.id)
+  } catch (err) {
+    if ((err as Error)?.message === 'task_status_derived') {
+      throw Errors.badRequest(
+        'task_status_derived',
+        "a task's status is derived from its issues and cannot be set",
+        'change the issues instead — bk issues issue edit <id> --status done'
+      )
+    }
+    throw err
+  }
   if (!updated) throw Errors.notFound('task')
   const full = await getTaskInWorkspace(ctx.workspace.id, id)
   return NextResponse.json(publicTask(full ?? updated))

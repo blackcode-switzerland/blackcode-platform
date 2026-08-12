@@ -48,6 +48,61 @@ listing every match with its id — it never picks one for you. A project litera
 *named* `12` cannot be reached by name, for the same reason a label named `58`
 cannot: the bare integer is read as an id first.
 
+## When to make a task
+
+A task is the **grouping layer** between a project and its issues:
+
+```
+project  →  task  →  issues
+```
+
+**Issues come first, always.** One, two or three related issues are fine on
+their own — create each and stop. A task earns its existence when *several*
+related issues want grouping under one name. A task per issue is the failure
+mode: it doubles the records and groups nothing.
+
+The order is: create the issues, create the task, attach them.
+
+```bash
+bk issues issue create --project 4 --title "Rotate the signing key"     # → #12
+bk issues issue create --project 4 --title "Re-issue client tokens"     # → #13
+bk issues issue create --project 4 --title "Update the runbook"         # → #14
+
+bk issues task create --project 4 --name "Key rotation" --lead me       # → #7
+bk issues task attach 7 12 13 14
+```
+
+Either direction works — `bk issues issue create --task 7` and
+`bk issues issue edit 12 --task 7` link from the issue side, and
+`task attach` / `task detach` from the task side. They write the same field.
+
+An issue belongs to **at most one task**. Attaching one that is already in
+another task is refused, naming the task it is in; `--force` moves it and
+prints what moved. Detaching leaves the issue in its project, open and
+untouched — it only un-groups it.
+
+A task carries no priority and no labels: the issues carry those. What it has
+that an issue does not is the group, so `bk issues task view` lists it.
+
+### A task's status is derived, not set
+
+There is no `--status` on a task. Its status and its progress are computed from
+the issues attached to it, so the two can never disagree — run
+`bk issues task view <id>`, and `bk meta` for what the values mean.
+
+Two consequences worth knowing before you read a number:
+
+- A task with **no issues** is not "0% done" — it reports having none at all.
+  That state usually means the task should have been an issue.
+- A **cancelled** issue is neither finished work nor outstanding work, so it is
+  counted separately rather than folded into either side of the ratio.
+
+To move a task forward, move its issues:
+
+```bash
+bk issues issue edit 12 --status done
+```
+
 ## Vocabularies — always fetch, never assume
 
 Status, priority and project-health values come from `bk meta`:
@@ -60,8 +115,8 @@ bk meta --json | jq '.vocabulary'
 the same words. An issue's priority is stored as an integer and a project's as a
 `P0`–`P4` string; `--priority` on either takes the word, and each writes what its
 own table holds. The raw form still works on both. Do not hardcode a vocabulary —
-`bk meta` is authoritative, and a value outside it is refused by the CLI rather
-than stored.
+`bk meta` is authoritative, and a value outside it is refused **by the server as
+well as the CLI**, so an older binary cannot store one either.
 
 ## What a write echoes back
 

@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, Errors, resolveWorkspace, resolveEntityId, publicProject } from '@/lib/api'
+import {
+  apiHandler,
+  Errors,
+  resolveWorkspace,
+  resolveEntityId,
+  publicProject,
+  projectVocabularyError,
+} from '@/lib/api'
 import {
   deleteProject,
   getProjectInWorkspace,
@@ -48,7 +55,12 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
     await setProjectMembers(db, id, ids)
   }
 
-  const updated = await updateProject(ctx.workspace.id, id, body, ctx.user.id)
+  let updated
+  try {
+    updated = await updateProject(ctx.workspace.id, id, body, ctx.user.id)
+  } catch (err) {
+    throw projectVocabularyError(err)
+  }
   if (!updated) throw Errors.notFound('project')
   const members = await listProjectMembers(id)
   return NextResponse.json({ ...publicProject(updated), members })

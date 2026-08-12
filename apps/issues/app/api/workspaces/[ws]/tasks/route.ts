@@ -37,6 +37,15 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   if (!body || typeof body !== 'object') {
     throw Errors.badRequest('invalid_body', 'expected JSON object')
   }
+  // Symmetric with PATCH: a task's status is derived from its issues. Accepting
+  // and ignoring the field would let a caller believe it had set one.
+  if ('status' in body) {
+    throw Errors.badRequest(
+      'task_status_derived',
+      "a task's status is derived from its issues and cannot be set",
+      'create the task, then attach issues — bk issues task attach <task> <issue…>'
+    )
+  }
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   if (!name) throw Errors.badRequest('invalid_name', 'name is required')
   if (name.length > TASK_NAME_MAX)
@@ -57,7 +66,16 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     name,
     description: typeof body.description === 'string' ? body.description : null,
     due_date: typeof body.due_date === 'string' ? body.due_date : null,
-    lead_user_id: typeof body.lead_user_id === 'number' ? body.lead_user_id : ctx.user.id,
+    // Absent → default the lead to the creator (mirrors projects). An EXPLICIT
+    // null → genuinely no lead. Those are different requests and used to
+    // collapse into the same one, so `--lead none` on create silently made the
+    // caller the lead — the opposite of what it says.
+    lead_user_id:
+      body.lead_user_id === null
+        ? null
+        : typeof body.lead_user_id === 'number'
+          ? body.lead_user_id
+          : ctx.user.id,
     actorUserId: ctx.user.id,
   })
   // Re-fetch the joined row so project_id (FK) serializes to the project seq.
