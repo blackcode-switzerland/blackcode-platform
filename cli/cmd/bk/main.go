@@ -80,6 +80,7 @@ func main() {
 
 	// On success or any other error, print the throttled soft update notice
 	// before doing the normal error/exit handling.
+	maybeNotifyUpgrade()
 	maybeNotifyUpdate()
 
 	if err != nil {
@@ -317,6 +318,66 @@ func groupFromUsageError(msg string) string {
 		return ""
 	}
 	return m[1]
+}
+
+// maybeNotifyUpgrade says, ONCE, that this binary is not the one that ran last
+// time — and names the command that lists what changed in between.
+//
+// ── THE GAP THIS CLOSES ────────────────────────────────────────────────────
+// `maybeNotifyUpdate` below answers "am I behind?" from a server header. Until
+// 2026-08-12 that was the ONLY thing the CLI could say about its own version,
+// so moving FORWARD was completely silent: `npm install -g …@latest` replaced
+// the tool and the next command behaved differently with no announcement.
+//
+// The cost is measurable. An agent upgraded 2.3.0 -> 3.0.0 and then filed six
+// already-fixed behaviours as still broken, because its knowledge was a version
+// old and nothing told it. One of the six it "confirmed" by running the OLD
+// spelling successfully and concluding the NEW one did not exist.
+//
+// So: a single stderr line, on the first command after an upgrade, naming the
+// jump and the one command that answers "what changed for me". Offline — no
+// request, no latency, nothing that can fail.
+//
+// It stays quiet for a FRESH install (nothing to have missed) and for a
+// DOWNGRADE that is really a rollback, which is a deliberate act by someone who
+// already knows what they did.
+func maybeNotifyUpgrade() {
+	if !version.Parsable(version.Version) {
+		return
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return // no config yet: a fresh install has no previous version to miss
+	}
+	if cfg.LastVersion == version.Version {
+		return
+	}
+
+	previous, previousAt := cfg.LastVersion, cfg.LastVersionAt
+	cfg.LastVersion = version.Version
+	cfg.LastVersionAt = time.Now().Format("2006-01-02")
+	_ = config.Save(cfg) // best-effort: a failed save costs a repeated notice, nothing more
+
+	// First time we have ever recorded a version — say nothing, but remember.
+	if previous == "" {
+		return
+	}
+	// A rollback is deliberate; the person doing it is not out of date.
+	if version.Parsable(previous) && version.Less(version.Version, previous) {
+		return
+	}
+
+	since := previousAt
+	if since == "" {
+		fmt.Fprintf(os.Stderr,
+			"note: bk was upgraded %s -> %s. What changed: bk changelog\n",
+			previous, version.Version)
+		return
+	}
+	fmt.Fprintf(os.Stderr,
+		"note: bk was upgraded %s -> %s. What changed while you were on %s:\n"+
+			"      bk changelog --since %s\n",
+		previous, version.Version, previous, since)
 }
 
 // maybeNotifyUpdate prints a once-per-24h "update available" notice to STDERR

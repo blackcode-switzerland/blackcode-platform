@@ -7,6 +7,53 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-12 — the binary tells you when it changed under you
+
+**Not breaking. Adds a one-line notice, a `--since` flag, and a few lines to
+`bk skill sync`.**
+
+**The problem.** Upgrading was silent. `maybeNotifyUpdate` could only answer
+*"am I behind?"* from a server header — nothing answered *"you just moved
+forward, and here is what is different."* So `npm install -g …@latest` replaced
+the tool and the next command behaved differently with no announcement.
+
+The cost is measured, not theoretical: an agent upgraded 2.3.0 → 3.0.0 and then
+filed **six already-fixed behaviours as still broken.** One of them it
+"confirmed" by running the OLD spelling successfully and concluding the NEW one
+did not exist. Its knowledge was one version stale and nothing told it.
+
+**Four changes:**
+
+- **A first-run notice.** The config now remembers the version that last ran and
+  the date it was first seen. On the first command after an upgrade, once, on
+  stderr:
+
+  ```
+  note: bk was upgraded 2.3.0 -> 3.0.1. What changed while you were on 2.3.0:
+        bk changelog --since 2026-08-11
+  ```
+
+  Offline — no request, nothing that can fail. Silent on a fresh install
+  (nothing was missed) and on a rollback (deliberate, and the person knows).
+
+- **`bk changelog --since <YYYY-MM-DD>`.** Inclusive of the boundary day,
+  because the date you are handed is the day you *started* on the version you
+  are leaving. `--since 2.3.0` is the natural guess and cannot be honoured —
+  entries are dated and nothing maps a version to a day — so it is refused with
+  a message that says why rather than a parse error.
+
+- **`bk skill sync` lists what changed**, not just "synced". It is the command
+  named in every drift hint and in the exit-8 upgrade message, so it is the
+  moment of highest attention the CLI gets, and it was spending that moment on
+  one uninformative line. Best-effort and after the success line: a changelog
+  fetch that fails cannot turn a completed sync into an error.
+
+- **The agent skill file** now reads *"Discover flags with `bk <group> <command>
+  --help` before calling — **and before concluding something does not exist**."*
+  Four words, aimed at the specific reasoning error above.
+
+Run `bk skill sync` after upgrading to pick up the new skill text.
+
 ## 2026-08-12 — a moved hostname stops logging you out
 
 **Fixes a live authentication failure.** If `bk` reported *"Authentication

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/skill"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/version"
@@ -398,6 +399,58 @@ func orNone(s string) string {
 	return s
 }
 
+// printWhatChanged lists the dated changes since the version this config last
+// recorded — best-effort, after the sync has already succeeded.
+//
+// ── WHY `skill sync` OF ALL COMMANDS ───────────────────────────────────────
+// This is the one command an agent is ever told to run when something drifts:
+// it is named in every deprecation hint, in the generic drift hint, and in the
+// exit-8 upgrade message. So it is the moment of HIGHEST ATTENTION the CLI
+// gets — and until 2026-08-12 it spent that moment on one line saying "synced",
+// which answers a question nobody asked. The caller ran it because something
+// changed. Tell them what.
+//
+// Best-effort, and deliberately AFTER the success line: the sync has already
+// happened and its exit code is already earned. A changelog fetch that fails
+// (offline, an old server, a timeout) must not turn a completed sync into an
+// error — so every failure path here is a silent return.
+//
+// Bounded to a handful of titles. The full text is one command away and a wall
+// of markdown on an unrelated command is how a useful notice becomes noise.
+func printWhatChanged(cmd *cobra.Command) {
+	cfg, err := config.Load()
+	if err != nil || cfg.LastVersionAt == "" {
+		return
+	}
+	cl, err := changelogClient("").Changelog("")
+	if err != nil {
+		return
+	}
+	var recent []client.ChangelogEntry
+	for _, e := range cl.Entries {
+		if e.Date != "" && e.Date >= cfg.LastVersionAt {
+			recent = append(recent, e)
+		}
+	}
+	if len(recent) == 0 {
+		return
+	}
+
+	const maxShown = 5
+	w := cmd.ErrOrStderr()
+	fmt.Fprintf(w, "\nChanged since %s:\n", cfg.LastVersionAt)
+	for i, e := range recent {
+		if i == maxShown {
+			// Say what was dropped. A truncated list that does not admit it is
+			// a list that reads as complete.
+			fmt.Fprintf(w, "  … and %d more\n", len(recent)-maxShown)
+			break
+		}
+		fmt.Fprintf(w, "  %s  %s%s\n", e.Date, appTag(e.App), e.Title)
+	}
+	fmt.Fprintf(w, "Full text: bk changelog --since %s --full\n", cfg.LastVersionAt)
+}
+
 func newSkillSyncCmd() *cobra.Command {
 	var dirFlag string
 	cmd := &cobra.Command{
@@ -512,6 +565,7 @@ func newSkillSyncCmd() *cobra.Command {
 			fmt.Fprintln(cmd.OutOrStdout(), st.Path)
 			fmt.Fprintf(cmd.ErrOrStderr(),
 				"skill synced from bk %s. Read `bk guide` for current usage.\n", version.Version)
+			printWhatChanged(cmd)
 			return nil
 		},
 	}

@@ -3,9 +3,12 @@ package platform
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
 	"github.com/spf13/cobra"
@@ -30,7 +33,7 @@ const defaultChangelogServer = config.DefaultServer
 // that redirects, rather than vanishing into "unknown flag".
 func newChangelogCmd() *cobra.Command {
 	var full, reference bool
-	var serverFlag, app string
+	var serverFlag, app, since string
 
 	cmd := &cobra.Command{
 		Use:         "changelog",
@@ -67,6 +70,13 @@ command that used to work now fails, run ` + "`bk skill sync`" + `, then check h
 			cl, err := c.Changelog(app)
 			if err != nil {
 				return err
+			}
+			if since != "" {
+				kept, sErr := entriesSince(cl.Entries, since)
+				if sErr != nil {
+					return sErr
+				}
+				cl.Entries = kept
 			}
 
 			return output.Render(format, cl, func(w io.Writer) error {
@@ -124,12 +134,56 @@ command that used to work now fails, run ` + "`bk skill sync`" + `, then check h
 
 	cmd.Flags().StringVar(&app, "app", "",
 		"Only this section's entries: an app slug, or \"platform\" for shared changes")
+	cmd.Flags().StringVar(&since, "since", "",
+		"Only entries dated on or after this day, YYYY-MM-DD — \"what changed while I was away\"")
 	cmd.Flags().BoolVar(&full, "full", false, "Print every dated entry in full")
 	cmd.Flags().BoolVar(&reference, "reference", false, "Retired — the platform reference is now the embedded guide: bk guide")
 	_ = cmd.Flags().MarkDeprecated("reference", "the platform reference is now the embedded guide: run bk guide")
 	cmd.Flags().StringVar(&serverFlag, "server", "", "Server base URL (default: your logged-in server, else "+defaultChangelogServer+")")
 	return cmd
 }
+
+// entriesSince keeps the entries dated on or after `since`, INCLUSIVE.
+//
+// ── WHY A DATE AND NOT A VERSION ───────────────────────────────────────────
+// `--since 2.3.0` is the spelling everyone reaches for, and it cannot be
+// answered here: changelog entries are dated, and nothing maps a CLI version to
+// the day it shipped. Rather than invent that map — a second copy of a fact,
+// which is how this repo gets into trouble — the CONFIG remembers the date each
+// version was first seen and the upgrade notice prints it for you. So the
+// version-shaped question is answered without a version-shaped filter.
+//
+// A version passed here is therefore a usage error, and it says so rather than
+// failing as an unparseable date.
+//
+// INCLUSIVE, because the date a caller is handed is the day they STARTED on the
+// version they are leaving, and an entry from that day is one they were present
+// for but had no reason to read.
+func entriesSince(entries []client.ChangelogEntry, since string) ([]client.ChangelogEntry, error) {
+	if _, err := time.Parse("2006-01-02", since); err != nil {
+		if versionish.MatchString(since) {
+			return nil, cmdutil.Usagef(
+				"--since takes a DATE (YYYY-MM-DD), not a version — changelog entries are "+
+					"dated and nothing maps %s to a day. bk prints the right date for you "+
+					"when it notices an upgrade; otherwise pick one from `bk changelog`", since)
+		}
+		return nil, cmdutil.Usagef("--since must be a date as YYYY-MM-DD, got %q", since)
+	}
+	kept := make([]client.ChangelogEntry, 0, len(entries))
+	for _, e := range entries {
+		// An undated entry is KEPT. Dropping it would hide it from every
+		// filtered view, and "carries no date" is a property of the entry, not
+		// evidence that it is old.
+		if e.Date == "" || e.Date >= since {
+			kept = append(kept, e)
+		}
+	}
+	return kept, nil
+}
+
+// versionish matches 1.2.3 / v1.2.3 / 2.3 — enough to tell "you passed a
+// version" from "you passed nonsense", so each gets its own message.
+var versionish = regexp.MustCompile(`^v?\d+(\.\d+)+$`)
 
 // tagged reports whether the server tagged its entries with an app — false
 // against anything older than 2026-08-04, where the field does not exist.

@@ -107,6 +107,27 @@ type Config struct {
 	// LastUpdateCheck is the unix timestamp (seconds) of the last time the CLI
 	// printed the "update available" soft notice. Throttles it to once/24h.
 	LastUpdateCheck int64 `json:"last_update_check,omitempty"`
+
+	// LastVersion / LastVersionAt are the binary version that last ran, and the
+	// date it was first seen.
+	//
+	// ── WHY THE BINARY HAD TO LEARN THIS (2026-08-12) ─────────────────────────
+	// `LastUpdateCheck` is a TIMESTAMP, so the only question the CLI could
+	// answer about itself was "am I behind?" — never "did I just move forward?".
+	// An upgrade therefore changed the tool silently: a v3.0.0 binary told a
+	// caller nothing about the fact that it was not the v2.3.0 they had learned.
+	//
+	// Measured cost: an agent upgraded 2.3.0 -> 3.0.0, then reported six fixed
+	// behaviours as still broken — including one it "confirmed" by running the
+	// OLD spelling successfully and concluding the new one was absent. Its
+	// knowledge was a version out of date and nothing said so.
+	//
+	// LastVersionAt is the date this version was FIRST seen, so the notice can
+	// offer `bk changelog --since <that date>` — everything that changed while
+	// the caller was on the version they are leaving, which is exactly the set
+	// they have not read.
+	LastVersion   string `json:"last_version,omitempty"`
+	LastVersionAt string `json:"last_version_at,omitempty"`
 }
 
 // ActiveWorkspace is one app's remembered workspace.

@@ -25,7 +25,8 @@ All access goes through the `bk` CLI. There is no supported HTTP API.
 - Set `BK_NO_PROMPT=1` for unattended runs.
 - When an answer looks wrong, re-run with `-v`: it traces the config, the app,
   the server, the workspace, the request body and the response to stderr.
-- Discover flags with `bk <group> <command> --help` before calling.
+- Discover flags with `bk <group> <command> --help` before calling — and
+  before concluding something does not exist.
 - Address records by the workspace #number shown in the app.
 
 ## Keeping current
