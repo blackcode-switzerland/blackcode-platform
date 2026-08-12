@@ -239,7 +239,7 @@
 | `bk sales prospect edit` | Edit a prospect's details, or reassign it | PATCH /api/workspaces/{ws}/prospects/{n} |
 | `bk sales prospect list` | List prospects in the active workspace | GET /api/workspaces/{ws}/prospects |
 | `bk sales prospect next` | Set (or clear) what this prospect is owed next | PATCH /api/workspaces/{ws}/prospects/{n}/next-action |
-| `bk sales prospect show` | Show one prospect, its deal journey and its cross-app links | GET /api/workspaces/{ws}/prospects/{n} |
+| `bk sales prospect show` | Show one prospect, its deal journey and its URN | GET /api/workspaces/{ws}/prospects/{n} |
 | `bk sales prospect stage` | Move a deal to another stage and record the journey step | POST /api/workspaces/{ws}/prospects/{n}/stage |
 | `bk sales search` | Full-text search INSIDE this app's records | GET /api/workspaces/{ws}/sales-search |
 | `bk sales template create` | Add a template | POST /api/workspaces/{ws}/templates |

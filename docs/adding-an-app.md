@@ -1053,6 +1053,11 @@ cheaper than pretending otherwise.
    end's URN in the record's own text, and `bk <app> search` finds it. Kept
    struck through rather than deleted because D-18 is quotable and somebody will
    otherwise re-derive the feature from it.
+
+   **Settled 2026-08-12: cross-app references are NOT supported and nothing
+   replaces them.** Every remaining piece of `bk link` was deleted that day. Do
+   not build a link table, a `--ref` flag or a resolver into a new app — see
+   `bk guide platform/cross-app`, which is what a new app's users will read.
 3. **`platform.events.actor_token_id` is NULL, everywhere, and always has been.**
    `AppContext.resolveUser` returns WHO, not BY WHAT MEANS, so no app can record
    which token a request arrived on. Sales works around it by matching

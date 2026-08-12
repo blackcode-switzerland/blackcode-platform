@@ -911,6 +911,21 @@ omission.
 
 ## 8. The north star, run from a sales login (2026-08-07)
 
+> **DATED LOG — read it as history, not as instructions (note added 2026-08-12).**
+> The transcript below is what ran on 2026-08-07 and it is left as it ran. Four
+> of its spellings no longer exist: `bk workspace use` is `bk sales workspace
+> use`, `bk search` is `bk <app> search`, `bk app list` no longer has ENABLED or
+> ACCESS columns (both tables were dropped on 2026-08-10) and it now has a
+> WORKSPACE one, and **`bk link create` was removed on 2026-08-10** — so the
+> `LINKED` block in the `bk sales prospect show` output below cannot appear, and
+> the command that printed it was deleted on 2026-08-12.
+>
+> **The north star itself still holds** and is the part worth keeping: one
+> login, one token, one binary, no re-auth, no server switch. What changed is
+> how the two records point at each other — the far end's URN goes in the
+> record's own text, which is the design and not a workaround. Current
+> practice: `bk guide platform/cross-app`.
+
 > **DATED. Read §7.4.3 first — the script below no longer runs as written.**
 > Phase 3 (2026-08-10) unmounted `bk search` and `bk link` from this deployment
 > and retires `bk link` outright, so steps that cross the boundary through the

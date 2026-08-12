@@ -22,6 +22,36 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-12 — `prospect show` stops promising a LINKED section it cannot print
+
+**Not breaking**, and the visible output is unchanged for everyone — because the
+section being removed had not appeared since 2026-08-10.
+
+`bk sales prospect show <n>` rendered a `LINKED` block listing every cross-app
+link touching the prospect, and its `--help` said so: *"every cross-app LINK
+touching this prospect, each with an absolute URL you can follow into the other
+app."* `GET /api/workspaces/{ws}/prospects/{n}` stopped serving the `links` field
+on 2026-08-10, when this app stopped reading `platform.links`. So the block was
+already unreachable and the help was already wrong — the CLI decoded an absent
+key into an empty slice on every call and printed nothing.
+
+Removed: the `LINKED` section, the `SalesLink` type and the `Prospect.Links`
+field. `--help` now describes what the command actually prints — the deal
+journey, and **the prospect's URN**.
+
+**The URN is the mechanism, and it is not a consolation prize.** To relate a
+prospect to a record in another app, put the far end's URN in the record's own
+text:
+
+```bash
+bk sales prospect show 8            # prints bc:sales:acme/prospect/8
+bk sales prospect edit 8 --summary "Blocked on bc:issues:acme/issue/512 — SSO"
+```
+
+Write it into BOTH records, or it is findable from one side only. There is no
+command that records the relation for you and there is not going to be one:
+`bk guide sales/cross-app` and `bk guide platform/cross-app`.
+
 ## 2026-08-12 — meetings carry a link, documents filter by tag and product, and `meeting edit` exists
 
 **Not breaking. Every route, flag and spelling that worked yesterday still

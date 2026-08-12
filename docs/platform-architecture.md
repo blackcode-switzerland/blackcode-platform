@@ -391,8 +391,10 @@ exposed.
 app's own workspace slug and #number, so any app can build and print one without
 consulting anything shared.
 
-**`platform.entities`** — still the index behind `bk search` and `bk link`, and
-since 2026-08-10 **`apps/issues` is its only writer**. Every issue, task and
+**`platform.entities`** — the index behind `bk <app> search`, and since
+2026-08-10 **`apps/issues` is its only writer**. It was also `bk link`'s storage;
+that command went on 2026-08-10 and its route factory, query helpers and relation
+vocabulary on 2026-08-12. Every issue, task and
 project is projected into it in the same transaction as its source write; a
 projection that can drift is worse than no projection. Read the header of
 `apps/issues/lib/db/queries/entities.ts` before touching a write path;
@@ -523,6 +525,12 @@ by *whether two deployments would answer differently*.
 
 `bk link` was **removed**: its two ends could live in different apps, which
 needed one entity index every app wrote into, and there is no such index now.
+**Cross-app references are not a supported feature** (decided 2026-08-12, and
+nothing replaces them): the far end's URN goes in the record's own text. All of
+`bk link`'s dead code — `linksRoute`, `createLink`/`listLinks`/`deleteLink`,
+`LINK_RELATIONS`, the CLI types and client methods — was deleted that day. The
+`platform.links` table remains, unread; dropping it is a migration and its own
+decision.
 
 **The test is unchanged and is still "would two deployments answer differently?",
 never "is it shared code?"** (D-28). What changed is the answers, and it is worth

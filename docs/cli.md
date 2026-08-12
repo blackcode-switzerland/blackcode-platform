@@ -753,11 +753,12 @@ Phase 4 of multiAppFinalRefactor ended both premises.
 | Command | Backend call | Notes |
 |---|---|---|
 | `bk <app> search <query> [--type T] [--limit N] [--include-deleted]` | `GET /api/workspaces/:ws/search` | **One app's** entities. Matches **titles and #numbers only** — for descriptions or status/assignee/label filters, use the app's own listing. `--app` is gone: the app is the command. Mounted only where the app has the route; `apps/sales` has its own `bk sales search` over `/sales-search` instead. |
-| `bk link …` | — | **REMOVED.** `deprecations.go` names the workaround: put the far end's URN in the record's own text. `platform.links` and `linksRoute` still exist and no app mounts the route; re-mounting for INTRA-app links is a five-line change if it is ever wanted (PLAN.md §4b). |
+| `bk link …` | — | **REMOVED**, and not coming back — cross-app references are not a supported feature (decided 2026-08-12). `deprecations.go` names what to do instead: put the far end's URN in the record's own text, which is the design and not a workaround. `linksRoute`, `LINK_RELATIONS` and the client methods were **deleted 2026-08-12**; the `platform.links` TABLE still exists, unread, because dropping it is a migration with its own decision. |
 
-The relation vocabulary that `bk meta` served under `links.relations` is now read
-by nothing in the CLI. It is left on the server rather than removed here, because
-that is a route change and this was a CLI phase — flagged for Phase 5.
+The relation vocabulary that `bk meta` served under `links.relations` was dropped
+from the response on 2026-08-10 and from `packages/platform-db` on 2026-08-12.
+`/api/meta`'s `links` block now carries the URN format and nothing else, which is
+correct: the URN is the whole cross-app mechanism.
 
 URN shape: `bc:<app>:<workspace-slug>/<entity-type>/<number>`, where `<number>`
 is the workspace #number and never the row id. Do not hand-assemble one; take it
