@@ -16,7 +16,7 @@ func newUserCmd(acfg Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "user",
 		Aliases: []string{"users"},
-		Short:   "Read users",
+		Short:   "The people you share a workspace with in this app — list, view",
 	}
 	cmd.AddCommand(newUserListCmd(acfg), newUserViewCmd(acfg))
 	return cmd

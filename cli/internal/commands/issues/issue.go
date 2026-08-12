@@ -61,9 +61,9 @@ func newIssueListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&f.projectID, "project", 0, "Filter by project id")
-	cmd.Flags().StringVar(&f.status, "status", "", "Filter by status (client-side)")
-	cmd.Flags().StringVar(&f.assignee, "assignee", "", "Filter by assignee id, email, or 'me' (client-side)")
-	cmd.Flags().BoolVar(&f.mine, "mine", false, "Show only issues assigned to the current user")
+	cmd.Flags().StringVar(&f.status, "status", "", "Filter by status. CLIENT-SIDE: every issue in the workspace is fetched first, then filtered here — use --search to filter on the server")
+	cmd.Flags().StringVar(&f.assignee, "assignee", "", "Filter by assignee id, email, or 'me'. CLIENT-SIDE: every issue in the workspace is fetched first, then filtered here")
+	cmd.Flags().BoolVar(&f.mine, "mine", false, "Show only issues assigned to the current user. CLIENT-SIDE: every issue in the workspace is fetched first, then filtered here")
 	cmd.Flags().StringVar(&f.search, "search", "", "Search title/description, or the #id (e.g. 123 or #123); server-side")
 	return cmd
 }
@@ -621,7 +621,7 @@ func newIssueCommentCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "comment <id>",
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/issues/{id}/comments"},
-		Short:       "Post a comment on an issue (use --body \"-\" for stdin; --reply-to to reply; --file to attach)",
+		Short:       "Post a comment on an issue (--reply-to threads, --file attaches, @email notifies)",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			content, err := cmdutil.ReadBody(body, bodyFile)
@@ -661,7 +661,7 @@ func newIssueCommentCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&body, "body", "", "Comment text (use \"-\" for stdin)")
+	cmd.Flags().StringVar(&body, "body", "", "Comment text (use \"-\" for stdin). @mention someone by EMAIL (@ana@blackcode.ch) to notify them")
 	cmd.Flags().StringVar(&bodyFile, "body-file", "", "Read body from a file")
 	cmd.Flags().IntVar(&replyTo, "reply-to", 0, "Reply under an existing comment id (creates a threaded reply)")
 	cmdutil.AddFileFlag(cmd, &files)
@@ -711,7 +711,12 @@ func newIssueEditCommentCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&body, "body", "", "New comment text (\"-\" for stdin)")
+	// NOT the same sentence as `comment --body`, and the difference is a fact
+	// about the server: lib/db/queries/comments.ts resolves @mentions in
+	// createComment() and NOT in updateComment(), so an @mention added by an
+	// edit is rendered but notifies nobody. Saying "@mention to notify" here
+	// would be help text that is simply untrue.
+	cmd.Flags().StringVar(&body, "body", "", "New comment text (\"-\" for stdin). An @mention ADDED by an edit does not notify — post a new comment")
 	cmd.Flags().StringVar(&bodyFile, "body-file", "", "Read body from file")
 	return cmd
 }

@@ -56,6 +56,26 @@ Any `--description` / `--body` flag accepts:
 Prefer `--description-file` or stdin for multi-line content — it is the only way
 to be sure you send **real newlines**. See `bk guide platform/rich-text`.
 
+## Notifying someone: `@mention` takes an EMAIL
+
+A comment body is scanned for `@<email>`, and every match that is a member of
+the workspace gets an inbox notification. It is the only way to put something in
+another person's inbox from a comment.
+
+```bash
+bk issues issue comment 42 --body "@ana@blackcode.ch can you confirm the fix?"
+bk issues inbox list --unread          # where it lands for them
+```
+
+An `@username` — the spelling every other tracker uses — matches nothing and
+notifies nobody, silently. So does an email belonging to someone who is not a
+member of this workspace; `bk issues member list` is who can be reached.
+
+Mentions are resolved when a comment is **created**. Adding one by editing an
+existing comment renders fine and notifies nobody, so post a new comment
+instead. The same applies to comments on tasks and projects, which share one
+write path.
+
 ## Clearing a nullable field
 
 On `edit`, pass the literal `none` (also `null`, `unset`, `clear`;

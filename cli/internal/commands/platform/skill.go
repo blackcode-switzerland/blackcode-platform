@@ -50,12 +50,29 @@ func (e *UpdateAvailableError) Error() string {
 func newSkillCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "skill",
-		Short: "Install and keep the agent skill file current",
+		Short: "Install and keep the agent skill file current (install once, then sync)",
+		// THE LOOP, SPELLED OUT, because the report that prompted this ran a full
+		// session across two apps, used `install`, and never learned `check` or
+		// `sync` existed. Naming the three verbs in a list is what a reader who
+		// arrived here for `install` scrolls past; naming WHEN to run each is not.
 		Long: `Manage the agent skill file for blackcode.
+
+THE LOOP — three verbs, and you only ever need the first two:
+
+  bk skill install    ONCE per project. Writes ./.claude/skills/blackcode/SKILL.md
+  bk skill sync       WHENEVER something stops working, or after you upgrade bk.
+                      Rewrites the skill, and tells you if the binary is behind.
+  bk skill check      the same question, WITHOUT writing anything. Exit 9 means
+                      an update is available; 0 means you are current.
+
+` + "`bk skill sync`" + ` is the one command an agent is ever told to run, and it is
+what every "this may have been renamed" hint points at. It is NOT run
+automatically on every invocation — it is an HTTP call and a file write, and
+paying that on every command to solve a discovery problem is the wrong trade.
 
 The skill is a pointer, not a copy: it tells an agent to run ` + "`bk guide`" + ` for
 usage and ` + "`bk meta`" + ` for live data. That is why it never goes stale on its
-own — and why ` + "`bk skill sync`" + ` is the one command an agent is ever told to run.`,
+own, and why sync is cheap and safe to run at any time.`,
 	}
 	cmd.AddCommand(
 		newSkillInstallCmd(),

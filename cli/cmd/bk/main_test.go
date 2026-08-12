@@ -9,9 +9,26 @@ import (
 	"testing"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
+	"github.com/spf13/cobra"
 )
+
+// findCmd resolves a real command out of the real tree, so a test that needs
+// "the command cobra reached" gets the same object main() gets rather than a
+// hand-written path that can outlive the command it names.
+func findCmd(t *testing.T, path ...string) *cobra.Command {
+	t.Helper()
+	c, _, err := commands.NewRoot().Find(path)
+	if err != nil {
+		t.Fatalf("bk %s does not resolve: %v", strings.Join(path, " "), err)
+	}
+	if c.CommandPath() != "bk "+strings.Join(path, " ") {
+		t.Fatalf("bk %s resolved to %q instead", strings.Join(path, " "), c.CommandPath())
+	}
+	return c
+}
 
 // THE END-TO-END HALF OF THE DEPRECATION GUARD.
 //
@@ -78,7 +95,7 @@ func TestRemovedBareVerbsFailWithARecoverableHint(t *testing.T) {
 			if got := classify(err); got != exitUsage {
 				t.Errorf("exit code = %d, want %d (usage) for %v", got, exitUsage, err)
 			}
-			hint := hintFor(err, "")
+			hint := hintFor(err, nil)
 			if hint == "" {
 				t.Fatalf("no hint for `bk %s` — the run dead-ends here: %v", verb, err)
 			}
@@ -150,7 +167,7 @@ func TestUnrelatedUnknownCommandGetsNoNamedHint(t *testing.T) {
 	if err == nil {
 		t.Fatal("an unknown command must fail")
 	}
-	hint := hintFor(err, "")
+	hint := hintFor(err, nil)
 	for _, replacement := range removedBareVerbs {
 		if strings.Contains(hint, replacement) {
 			t.Errorf("an unrelated unknown command was told to run %q:\n  %s", replacement, hint)
@@ -174,10 +191,12 @@ func TestUnrelatedUnknownCommandGetsNoNamedHint(t *testing.T) {
 // is how this class of guard goes quiet.
 func TestGenericHintNamesTheRealCommand(t *testing.T) {
 	cases := []struct {
-		name        string
-		err         error
-		commandPath string
-		want        string
+		name string
+		err  error
+		// The resolved command, as ExecuteC hands it to main(): the path in
+		// `cmd` is a real one from the real tree, not a string written here.
+		cmd  *cobra.Command
+		want string
 	}{
 		{
 			// Unknown command: the path is inside the message.
@@ -187,10 +206,10 @@ func TestGenericHintNamesTheRealCommand(t *testing.T) {
 		},
 		{
 			// Unknown flag: the message names nothing; cobra's resolved command does.
-			name:        "unknown flag",
-			err:         errors.New("unknown flag: --badflag"),
-			commandPath: "bk sales prospect list",
-			want:        "bk sales prospect list --help",
+			name: "unknown flag",
+			err:  errors.New("unknown flag: --badflag"),
+			cmd:  findCmd(t, "sales", "prospect", "list"),
+			want: "bk sales prospect list --help",
 		},
 		{
 			// Neither source knows: the fallback must still be runnable.
@@ -202,7 +221,7 @@ func TestGenericHintNamesTheRealCommand(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			hint := hintFor(tc.err, tc.commandPath)
+			hint := hintFor(tc.err, tc.cmd)
 			if hint == "" {
 				t.Fatal("no hint at all — the caller is left with nothing to run")
 			}
@@ -221,7 +240,7 @@ func TestGenericHintNamesTheRealCommand(t *testing.T) {
 // asserted because the deprecation branch sits in the same function and a rewrite
 // there is exactly where this would be lost.
 func TestHintForPrefersNothingOverNoise(t *testing.T) {
-	if got := hintFor(errors.New("some runtime failure"), ""); got != "" {
+	if got := hintFor(errors.New("some runtime failure"), nil); got != "" {
 		t.Errorf("a plain runtime error should carry no hint, got %q", got)
 	}
 }
@@ -244,7 +263,7 @@ func TestRemovedStorageAttachmentsIsRedirected(t *testing.T) {
 	if got := classify(err); got != exitUsage {
 		t.Errorf("exit code = %d, want %d (usage) for %v", got, exitUsage, err)
 	}
-	hint := hintFor(err, "")
+	hint := hintFor(err, nil)
 	if !strings.Contains(hint, "bk issues attachment list") &&
 		!strings.Contains(hint, "bk issues storage") {
 		t.Errorf("`bk storage attachments` failed with %q and hint %q — it must name "+
@@ -269,7 +288,7 @@ func TestRemovedLinkNamesWhatToDoInstead(t *testing.T) {
 	if got := classify(err); got != exitUsage {
 		t.Errorf("exit code = %d, want %d (usage) for %v", got, exitUsage, err)
 	}
-	hint := hintFor(err, "")
+	hint := hintFor(err, nil)
 	if !strings.Contains(hint, "removed") {
 		t.Errorf("the hint for `bk link` does not say it was removed: %q", hint)
 	}
@@ -337,7 +356,7 @@ func TestNotServedHintOnlySuggestsAppsTheConfigKnows(t *testing.T) {
 		writeTestConfig(t, dir, `{"token":"t","home_app":"sales","home_server":"https://s",
 			"app_servers":{"sales":"https://s","issues":"https://i"}}`)
 
-		hint := hintFor(notServed, "")
+		hint := hintFor(notServed, nil)
 		if !strings.Contains(hint, "--app-server issues") {
 			t.Errorf("a config that knows issues must be told to try it:\n  %s", hint)
 		}
@@ -350,7 +369,7 @@ func TestNotServedHintOnlySuggestsAppsTheConfigKnows(t *testing.T) {
 		writeTestConfig(t, dir, `{"token":"t","home_app":"sales","home_server":"https://s",
 			"app_servers":{"sales":"https://s"}}`)
 
-		hint := hintFor(notServed, "")
+		hint := hintFor(notServed, nil)
 		if strings.Contains(hint, "--app-server") {
 			t.Errorf("a sales-only account was told to redirect to another app, which its "+
 				"registry does not have — the retry cannot work:\n  %s", hint)
@@ -391,7 +410,7 @@ func TestTokenValueHintNamesTheStdinForm(t *testing.T) {
 		t.Errorf("exit code = %d, want %d (usage) for %v", got, exitUsage, err)
 	}
 
-	hint := hintFor(err, "")
+	hint := hintFor(err, nil)
 	if hint == "" {
 		t.Fatalf("no hint — the caller is left with a strconv.ParseBool message: %v", err)
 	}
@@ -418,7 +437,201 @@ func TestTokenHintDoesNotFireForOtherBooleanFlags(t *testing.T) {
 	if err == nil {
 		t.Fatal("`--json=notabool` succeeded; expected a parse error")
 	}
-	if hint := hintFor(err, ""); strings.Contains(hint, "bk login --token") {
+	if hint := hintFor(err, nil); strings.Contains(hint, "bk login --token") {
 		t.Errorf("the --token recovery fired for --json: %q", hint)
+	}
+}
+
+// ── `bk --version` ─────────────────────────────────────────────────────────
+//
+// The flag was absent until 2026-08-12 and exited 2 with `unknown flag:
+// --version` — the spelling git, docker, npm, curl and python all accept, and
+// the one a first-contact agent probed inside its first ten commands.
+//
+// This asserts the OUTCOME (the bytes on stdout), not that the flag parses.
+// A version that merely registered the flag falls through to the root's
+// help screen, which also exits 0 and also writes to stdout — CLAUDE.md
+// finding #21's shape, and the reason this compares against `bk version`
+// rather than checking for a non-empty write.
+func versionOutput(t *testing.T, argv ...string) string {
+	t.Helper()
+	root := commands.NewRoot()
+	var out strings.Builder
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs(argv)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("bk %s failed: %v", strings.Join(argv, " "), err)
+	}
+	return out.String()
+}
+
+func TestVersionFlagPrintsExactlyWhatTheSubcommandPrints(t *testing.T) {
+	sub := versionOutput(t, "version")
+	flag := versionOutput(t, "--version")
+	if sub == "" {
+		t.Fatal("`bk version` printed nothing — this test cannot tell a match from two empties")
+	}
+	if flag != sub {
+		t.Errorf("`bk --version` and `bk version` disagree:\n  flag: %q\n  sub:  %q", flag, sub)
+	}
+	// The help screen is what an unhandled flag falls through to, and it is long.
+	if strings.Contains(flag, "Available Commands") {
+		t.Errorf("`bk --version` printed the help screen, not the version: %q", flag)
+	}
+}
+
+// `-v` IS `--verbose`, and cobra's InitDefaultVersionFlag claims the `v`
+// shorthand for --version whenever nothing else holds it. Nothing else holding
+// it is one refactor away, and the failure would be silent: `bk -v issues issue
+// list` would print a version and exit 0 instead of logging HTTP and failing on
+// auth.
+//
+// Asserted through an actual run rather than by looking the shorthand up in a
+// flag set: cobra only merges the persistent flags into Flags() as a SIDE
+// EFFECT of InitDefaultVersionFlag, so a lookup-based version of this test
+// reports "no -v at all" for a binary that has no version flag — the wrong
+// diagnosis, from a check that cannot see the thing it is about.
+func TestShorthandVIsStillVerbose(t *testing.T) {
+	t.Setenv("BK_CONFIG_DIR", t.TempDir())
+	cmdutil.VerboseFlag = false
+	err := runBK(t, "-v", "issues", "issue", "list")
+	if !errors.Is(err, config.ErrNotConfigured) {
+		t.Fatalf("`bk -v issues issue list` returned %v; want %v — `-v` no longer reaches the command",
+			err, config.ErrNotConfigured)
+	}
+	if !cmdutil.VerboseFlag {
+		t.Error("`-v` did not turn on --verbose")
+	}
+}
+
+// ── THE FLAG SUGGESTER (§5) ────────────────────────────────────────────────
+//
+// The reported session, verbatim: `--project` on a command that takes the
+// project as a positional, then `--health` on a command whose flag is
+// `--status`. Both hints said "run --help"; the caller had already run it.
+//
+// The errors here are NOT hand-written. They come from Execute() on the real
+// tree, so cobra's actual wording is part of what is tested — CLAUDE.md
+// finding #8's lesson, and the reason the `resolved` command is threaded
+// through rather than a path string.
+func hintForArgv(t *testing.T, argv ...string) string {
+	t.Helper()
+	t.Setenv("BK_CONFIG_DIR", t.TempDir())
+	root := commands.NewRoot()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs(argv)
+	resolved, err := root.ExecuteC()
+	if err == nil {
+		t.Fatalf("bk %s succeeded; expected a flag error", strings.Join(argv, " "))
+	}
+	return hintFor(err, resolved)
+}
+
+func TestUnknownFlagNamesTheNearMiss(t *testing.T) {
+	cases := []struct {
+		name string
+		argv []string
+		want string
+	}{
+		{
+			// THE REPORTED CASE, and the one a pure edit-distance suggester
+			// cannot reach: health→status is distance 5.
+			name: "health means status",
+			argv: []string{"issues", "project", "updates", "add", "12", "--health", "on_track"},
+			want: "--status",
+		},
+		{
+			// The other half of the same session: the value was right, the
+			// spelling was a flag, and the answer is a positional.
+			name: "project is a positional",
+			argv: []string{"issues", "project", "updates", "add", "--project", "12"},
+			want: "<project-id> is a positional argument",
+		},
+		{
+			// An ordinary typo.
+			name: "typo",
+			argv: []string{"issues", "issue", "list", "--stauts", "open"},
+			want: "--status",
+		},
+		{
+			// The global flag nobody guesses the abbreviation for.
+			name: "workspace means ws",
+			argv: []string{"issues", "issue", "list", "--workspace", "acme"},
+			want: "--ws",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hint := hintForArgv(t, tc.argv...)
+			if !strings.Contains(hint, tc.want) {
+				t.Errorf("hint does not name %q — the caller is sent back to a help page it has read:\n  %s",
+					tc.want, hint)
+			}
+		})
+	}
+}
+
+// THE CASE WHERE NO SUGGESTION SHOULD APPEAR.
+//
+// Required by the plan, and it is the half that keeps the suggester honest: a
+// matcher loose enough to answer everything answers wrongly, and a wrong
+// `did you mean` costs the round trip this exists to save. `--frobnicate` is
+// close to nothing on this command, so the generic recovery must be what fires.
+func TestUnknownFlagWithNoNearMissFallsBackToTheGenericHint(t *testing.T) {
+	hint := hintForArgv(t, "issues", "issue", "list", "--frobnicate")
+	if strings.Contains(hint, "did you mean") {
+		t.Errorf("invented a suggestion for --frobnicate: %q", hint)
+	}
+	if !strings.Contains(hint, "bk issues issue list --help") {
+		t.Errorf("the generic recovery stopped naming the real command: %q", hint)
+	}
+}
+
+// A tie must produce nothing rather than a coin flip. `bk issues issue edit`
+// has both --status and --start-date… — the property under test is that
+// closestFlag refuses when more than one candidate is equally close, and the
+// cheapest way to state it that cannot rot is to assert on the helper directly
+// with a set that is written here.
+func TestAmbiguousTypoSuggestsNothing(t *testing.T) {
+	if got := commands.ClosestFlagForTest("stat", []string{"status", "start", "state"}); got != "" {
+		t.Errorf("picked %q out of three equally close flags — that is picking by iteration order", got)
+	}
+	if got := commands.ClosestFlagForTest("stauts", []string{"status", "body"}); got != "status" {
+		t.Errorf("a single clear winner was not suggested: %q", got)
+	}
+}
+
+// ── THE DRIFT HINTS ALL NAME `bk skill sync` ───────────────────────────────
+//
+// §1 of the plan: "say it where a stale agent actually is. An agent does not
+// read help when things work. It reads an ERROR."
+//
+// The statuses here are the ones that mean "this used to work": a shape the
+// server no longer accepts (400/422), a resource or route that is gone (404),
+// and a route deliberately retired (410). 410 was the one branch that named
+// only `bk guide` — the strongest drift signal, with the weakest recovery.
+//
+// A server-supplied `suggestion` still wins over all of this, which is why the
+// APIErrors below carry none: that branch is asserted separately, and a case
+// with a suggestion would be testing the wrong thing.
+func TestDriftStatusesNameSkillSync(t *testing.T) {
+	for _, status := range []int{400, 404, 422, 410} {
+		hint := hintFor(&client.APIError{Status: status}, nil)
+		if !strings.Contains(hint, "bk skill sync") {
+			t.Errorf("a %d carries no `bk skill sync`, so a stale agent is not told how to get current: %q",
+				status, hint)
+		}
+		// The WHY, not just the what — a bare command is a thing to run, not a
+		// reason to run it.
+		if !strings.Contains(hint, "retired") && !strings.Contains(hint, "used to work") {
+			t.Errorf("the %d hint says what to run but not why: %q", status, hint)
+		}
+	}
+	// A status that is NOT a drift signal must not get the advice, or it means
+	// nothing when it appears. 403 is a permission answer: the surface is fine.
+	if hint := hintFor(&client.APIError{Status: 403}, nil); strings.Contains(hint, "skill sync") {
+		t.Errorf("a 403 was told the surface may have changed: %q", hint)
 	}
 }

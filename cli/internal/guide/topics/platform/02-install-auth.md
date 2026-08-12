@@ -11,6 +11,29 @@ A small npm launcher downloads the prebuilt binary for your platform
 (macOS Intel/Apple Silicon, Linux amd64/arm64, Windows x64/arm64 as `bk.exe`).
 Node 18+ required for the launcher.
 
+### `bk: command not found` after a successful install
+
+The install prints the path it wrote the binary to, and that path is INSIDE
+node_modules — it is not the one you run. `npm install -g` also creates a `bk`
+shim in npm's global bin directory, and that directory is what has to be on
+your PATH. Do not go looking for the binary under node_modules and run it
+directly: an agent that did burned six of its first ten commands on it.
+
+```bash
+npm ls -g --depth 0 @blackcode_sa/bc-issues   # is it installed at all?
+npm prefix -g                                  # the shim lives in <that>/bin
+export PATH="$(npm prefix -g)/bin:$PATH"       # for this shell
+```
+
+Add that `export` to your shell profile to make it stick. Two things that
+produce this and are not a PATH problem:
+
+- **`npm install` without `-g`.** A local install writes no global shim by
+  design. Either add `-g`, or run it as `npx bk …`.
+- **A version manager** (nvm, fnm, asdf) that switched Node after the install.
+  Each Node version has its own global prefix, so the shim is still sitting in
+  the previous one. Re-run the install under the Node you are using now.
+
 ## Authenticate
 
 ```bash

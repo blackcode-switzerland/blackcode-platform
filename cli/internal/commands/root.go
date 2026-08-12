@@ -12,6 +12,7 @@ import (
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/sales"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/scaffold"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -52,6 +53,10 @@ First run:
   bk meta                         # who am I + every app + where each goes
   bk <app> workspace use <slug>   # set THAT APP's active workspace
 
+When something that used to work stops working:
+  bk skill sync                   # refresh the skill; says if this binary is behind
+  bk changelog                    # what changed, dated, newest first
+
 Global flags:
   -o table|json|yaml|yml   output format (default: table)
   --json / --yaml / --yml  shortcuts; piping to jq/yq is intended
@@ -76,9 +81,12 @@ platform/apps" for the rule and the reasoning.
        meta        who am I + every app + where each command will go
        app         the address book: which apps exist and where they live
        guide       the embedded usage guide (--list, <topic>, --json)
-       skill       install, check, sync, path, uninstall the agent skill file
-       changelog   the dated record of what changed
-       version     print the version of this binary
+       skill       the agent skill file: "install" once, "sync" when something
+                   stops working or after an upgrade, "check" to ask without
+                   writing (exit 9 = an update exists). Also path, uninstall
+       changelog   the dated record of what changed — run it when a command
+                   you were using starts behaving differently
+       version     print the version of this binary ("bk --version" too)
        super-admin users, whitelist, errors (super admins only; platform-wide)
 
   2. APP-OWNED — "bk <app> <verb>", because the answer depends on the app.
@@ -119,11 +127,39 @@ Run "bk changelog".
 
 Discover flags before calling: bk <group> --help, then bk <group> <cmd> --help.`
 
+// versionTextAnnotation carries `bk version`'s exact output to the root's
+// version template. Not a `routes` annotation and not on a leaf, so
+// CollectRoutes never looks at it.
+const versionTextAnnotation = "bk.version_text"
+
 func NewRoot() *cobra.Command {
 	root := &cobra.Command{
-		Use:          "bk",
-		Short:        "Blackcode platform command-line interface",
-		Long:         rootLong,
+		Use:   "bk",
+		Short: "Blackcode platform command-line interface",
+		Long:  rootLong,
+		// `bk --version`, because `bk version` alone was a dead end for every
+		// caller who probes the way git/docker/npm/curl/python all answer: it
+		// exited 2 with `unknown flag: --version`, and a first-contact agent hit
+		// it inside its first ten commands.
+		//
+		// Cobra's own Version field rather than a hand-rolled bool flag, for two
+		// reasons. It short-circuits inside Command.execute() BEFORE args are
+		// validated or any RunE runs — including the one rejectUnknownSubcommands
+		// gives this root — so `bk --version` cannot fall through to the help
+		// screen. And its InitDefaultVersionFlag only claims the `-v` shorthand
+		// when nothing else has it; --verbose has, so `-v` keeps meaning verbose.
+		// `cmd/bk/main_test.go` asserts that, because it is one upstream line
+		// away from silently reversing.
+		//
+		// The VALUE is unused: the template below ignores {{.Version}} and calls
+		// version.Describe(), which is also what `bk version` prints. Cobra
+		// requires a non-empty Version to install the flag at all.
+		Version: version.Resolved(),
+		// The full stamp (version, commit, build date) goes through the annotation
+		// rather than the template body: cobra renders the version template with
+		// text/template, and a `{{` arriving from a build flag would be executed.
+		// Data interpolated through {{index}} never is.
+		Annotations:  map[string]string{versionTextAnnotation: version.Describe()},
 		SilenceUsage: true,
 		// main.go owns error output: it prints `error: <msg>` and, when the
 		// failure is one an agent can recover from, a `hint:` line under it.
@@ -137,6 +173,15 @@ func NewRoot() *cobra.Command {
 			}
 		},
 	}
+	root.SetVersionTemplate(`{{index .Annotations "` + versionTextAnnotation + `"}}`)
+	// Registered here only for the wording: cobra's InitDefaultVersionFlag skips
+	// a `version` flag that already exists, and its own usage string is the
+	// unhelpful "version for bk". It is a LOCAL flag on the root, like cobra's,
+	// so `bk issues --version` stays an error rather than a second spelling.
+	// (No backticks in the usage string: pflag reads the first backquoted word as
+	// the value PLACEHOLDER, so "same output as `bk version`" rendered the flag
+	// as `--version bk version` — a boolean advertised as taking an argument.)
+	root.Flags().Bool("version", false, "Print the bk CLI version and exit (same output as: bk version)")
 	output.RegisterFlags(root)
 	root.PersistentFlags().StringVar(&cmdutil.WSOverride, "ws", "", "Target workspace (slug or id) for this command only; does not change the active workspace")
 	root.PersistentFlags().BoolVarP(&cmdutil.VerboseFlag, "verbose", "v", false, "Log each HTTP request/response to stderr (or set BK_DEBUG=1)")
@@ -185,6 +230,7 @@ func NewRoot() *cobra.Command {
 	// spellings, which is what the caller should learn.
 	attachVerbSynonyms(root)
 	rejectUnknownSubcommands(root)
+	installCommandCountHeading(root)
 	return root
 }
 

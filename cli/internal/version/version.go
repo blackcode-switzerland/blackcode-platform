@@ -5,7 +5,10 @@
 // cycle (commands imports client, so client must not import commands).
 package version
 
-import "strings"
+import (
+	"runtime/debug"
+	"strings"
+)
 
 // Version, Commit, and BuildDate are overridden at build time by the
 // Makefile via -ldflags "-X .../internal/version.Version=..." etc.
@@ -14,6 +17,41 @@ var (
 	Commit    = ""
 	BuildDate = ""
 )
+
+// Resolved returns the version to print: the build stamp, or — for an unstamped
+// `go build`/`go install` — whatever the module build info knows.
+func Resolved() string {
+	v := Version
+	if v == "dev" {
+		if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+			v = info.Main.Version
+		}
+	}
+	return v
+}
+
+// Describe is THE version output of this binary, and there is exactly one of it.
+//
+// `bk version` (the subcommand) and `bk --version` (the flag, added 2026-08-12
+// because every other CLI accepts it) both print this string and neither
+// formats anything itself. Two renderings of the same fact drift — that is the
+// whole reason this function exists rather than the flag re-implementing the
+// subcommand's Fprintf calls. `cmd/bk/main_test.go` holds the two outputs
+// against each other.
+//
+// Trailing newline included, so callers write it verbatim.
+func Describe() string {
+	var b strings.Builder
+	b.WriteString(Resolved())
+	b.WriteString("\n")
+	if Commit != "" {
+		b.WriteString("commit: " + Commit + "\n")
+	}
+	if BuildDate != "" {
+		b.WriteString("built:  " + BuildDate + "\n")
+	}
+	return b.String()
+}
 
 // Parsable reports whether v looks like a real semver string we can compare.
 // It returns false for the empty string, the dev defaults ("dev", "(devel)"),

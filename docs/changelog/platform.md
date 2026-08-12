@@ -7,6 +7,56 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-12 — `bk --version`, and errors that name the flag you meant
+
+**Not breaking.** Nothing was renamed or removed. Five changes, all of which
+exist because a first-contact agent ran a full session across both apps and
+never found capabilities this binary already had.
+
+**`bk --version` now works.** It printed `error: unknown flag: --version` and
+exited 2 — the spelling git, docker, npm, curl and python all accept, and the
+one a script probes first. It prints exactly what `bk version` prints, from one
+implementation, so the two cannot drift. `-v` is unchanged and still means
+`--verbose`.
+
+**An unknown flag names the near miss.** The binary knows its own flag set at
+the moment it refuses, and it now uses it:
+
+```
+$ bk issues project updates add 12 --health on_track
+error: unknown flag: --health
+hint: did you mean `--status`? `bk issues project updates add --help` lists every flag
+
+$ bk issues project updates add --project 12
+error: unknown flag: --project
+hint: `--project` is not a flag here — <project-id> is a positional argument:
+      bk issues project updates add <project-id> [flags]
+```
+
+One suggestion or none: it answers only when it can name a flag that exists on
+that command, so an unrecognisable flag still gets the generic recovery advice.
+This is the same `hint:` line as before, not a second mechanism.
+
+**`bk skill sync` and `bk changelog` say when to run them.** Both were already
+listed in `bk --help`; what was missing was the trigger. `bk --help` now carries
+a "when something that used to work stops working" block, `bk skill --help`
+states the loop (`install` once, `sync` after an upgrade or a failure, `check`
+to ask without writing), and a **410 Gone** now names `bk skill sync` — it was
+the only 4xx that did not, despite being the strongest drift signal there is.
+It is still **not** run automatically: it is an HTTP call and a file write, and
+paying that on every command to solve a discovery problem is the wrong trade.
+
+**Group help counts what it lists** — `Available Commands (17):`. A reader
+hunting for flag lines slides past a block headed `Available Commands:`; one
+headed `(17)` says how much was skipped. The report missed six commands on one
+noun this way.
+
+**Install troubleshooting.** `bk guide platform/install-auth` now covers
+`bk: command not found` after a successful `npm install -g`: the path the
+installer prints is inside `node_modules` and is not the one you run — npm's
+global bin directory has to be on your PATH. The postinstall message says so
+too, and tells you to verify with `bk --version`.
+
 ## 2026-08-12 — `bk <app> invite send` says whether the email actually went
 
 **Not breaking. Same route, same arguments, same exit code.** What changed is

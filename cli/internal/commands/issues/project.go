@@ -177,8 +177,8 @@ func newProjectIssuesCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&status, "status", "", "Filter by status (client-side)")
-	cmd.Flags().StringVar(&assignee, "assignee", "", "Filter by assignee id, email, or 'me' (client-side)")
+	cmd.Flags().StringVar(&status, "status", "", "Filter by status. CLIENT-SIDE: every issue in the project is fetched first, then filtered here")
+	cmd.Flags().StringVar(&assignee, "assignee", "", "Filter by assignee id, email, or 'me'. CLIENT-SIDE: every issue in the project is fetched first, then filtered here")
 	return cmd
 }
 
@@ -692,7 +692,7 @@ func newProjectCommentCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&body, "body", "", "Comment text (\"-\" for stdin)")
+	cmd.Flags().StringVar(&body, "body", "", "Comment text (\"-\" for stdin). @mention someone by EMAIL (@ana@blackcode.ch) to notify them")
 	cmd.Flags().StringVar(&bodyFile, "body-file", "", "Read body from file")
 	return cmd
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/platform"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/config"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/version"
+	"github.com/spf13/cobra"
 )
 
 // Exit codes are stable so LLMs / scripts can branch on outcome:
@@ -53,10 +54,6 @@ func main() {
 	// the failure hintFor exists to prevent, so the path comes from cobra here
 	// instead of being guessed from the message.
 	resolved, err := commands.NewRoot().ExecuteC()
-	commandPath := ""
-	if resolved != nil {
-		commandPath = resolved.CommandPath()
-	}
 
 	// Hard floor: the API reported we're below the minimum supported version.
 	// Print the upgrade requirement and exit with a distinct code.
@@ -90,7 +87,7 @@ func main() {
 		// A one-line breadcrumb, but only at the moments an agent is actually
 		// stuck (auth, drift-smelling 4xx, a command/flag that no longer exists).
 		// stderr only, so --json stdout stays clean.
-		if h := hintFor(err, commandPath); h != "" {
+		if h := hintFor(err, resolved); h != "" {
 			fmt.Fprintln(os.Stderr, "hint:", h)
 		}
 		os.Exit(classify(err))
@@ -101,7 +98,16 @@ func main() {
 // a hint would just be noise (e.g. a plain permission denial). The goal is a
 // self-service loop: hit a wall -> follow the breadcrumb -> `bk changelog` /
 // /agent-updator -> get current -> retry.
-func hintFor(err error, commandPath string) string {
+// `resolved` is the command cobra actually reached — nil when it reached none.
+// It carries two things the error text does not: the command PATH (an `unknown
+// flag` message names no command anywhere) and the real FLAG SET, which is what
+// lets the unknown-flag branch below name the near miss instead of sending the
+// caller back to a help page they have already read.
+func hintFor(err error, resolved *cobra.Command) string {
+	commandPath := ""
+	if resolved != nil {
+		commandPath = resolved.CommandPath()
+	}
 	if errors.Is(err, config.ErrNotConfigured) {
 		return "run `bk login` to authenticate. New here? run `bk guide`"
 	}
@@ -185,7 +191,13 @@ func hintFor(err error, commandPath string) string {
 			// The strongest drift signals: a shape or resource that used to work.
 			return "if this used to work, the surface may have changed — run `bk skill sync`, then `bk guide` for current usage"
 		case 410:
-			return "that interface has been retired — run `bk guide` for the current way to do this"
+			// A 410 is the STRONGEST drift signal the server can send — it is the
+			// deployment saying "this used to be here and is deliberately gone" —
+			// and until 2026-08-12 it was the one 4xx branch that did not name
+			// `bk skill sync`. An agent on stale context that hits it has a stale
+			// skill by definition.
+			return "that interface has been retired — run `bk skill sync` to update your agent skill, " +
+				"then `bk guide` for the current way to do this"
 		}
 		return ""
 	}
@@ -221,6 +233,15 @@ func hintFor(err error, commandPath string) string {
 		if note := commands.DeprecationHint(msg); note != "" {
 			return note +
 				"\n      Run `bk guide` for current usage, or `bk skill sync` to update your agent skill."
+		}
+		// A NEAR MISS BEATS "GO READ THE HELP", because the caller who hits this
+		// has usually read it. commands.FlagHint answers only when it can name a
+		// flag that exists on THIS command (or a positional it mistook for one),
+		// and returns "" the rest of the time — so the generic advice below is
+		// still what an unrecognisable flag gets. Same `hint:` line either way;
+		// this is not a second mechanism.
+		if fh := commands.FlagHint(resolved, msg); fh != "" {
+			return fh
 		}
 		// NAME THE REAL GROUP. This used to print a literal `bk <group> --help`,
 		// with `<group>` never substituted — a hint whose recovery step the caller

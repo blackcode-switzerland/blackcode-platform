@@ -445,9 +445,18 @@ func (c *Client) ListIssues(opts ListIssuesOpts) (*IssuesPage, error) {
 	return &page, nil
 }
 
+// ListIssuesOpts is what the SERVER filters on, and that is the whole reason
+// `Status` is not here.
+//
+// It used to be — a field nobody set and ListIssues never put in the query
+// string. Read from this struct, `--status` looked server-side; it is applied
+// by filterIssues() after every issue in the workspace has been fetched, which
+// is what the flag's help now says out loud. A field that advertises a
+// capability the request does not have is how that help came to be wrong.
+// Removed 2026-08-12; `issues_list_filters_are_client_side_test.go` is what
+// keeps the two in step.
 type ListIssuesOpts struct {
 	ProjectID int
-	Status    string
 	Search    string
 }
 

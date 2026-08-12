@@ -35,6 +35,35 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-08-12 — `@mention` was always there, and now the help says so
+
+**Not breaking. No route changed.** Help text only — but it documents behaviour
+that has shipped for a long time and that a first-contact agent filed as a
+missing feature.
+
+**Mentions take an EMAIL.** A comment body is scanned for `@<email>`; every
+match that is a member of the workspace gets an inbox notification.
+
+```bash
+bk issues issue comment 42 --body "@ana@blackcode.ch can you confirm the fix?"
+```
+
+An `@username` — the spelling every other tracker uses — matches nothing and
+notifies nobody, silently, and so does the address of somebody who is not a
+member of that workspace. `bk issues member list` is who can be reached. This
+is the same for comments on **tasks and projects**: they share one write path.
+
+**A mention added by EDITING a comment notifies nobody.** Mentions are resolved
+when a comment is created and not when it is updated, so the text renders and
+no inbox row is written. `bk issues issue edit-comment --help` now says this;
+post a new comment instead. Unchanged behaviour, newly stated.
+
+**`--status` / `--assignee` / `--mine` now say what client-side costs.** They
+were labelled `(client-side)`, which named the mechanism and not the
+consequence: every issue in the workspace is fetched and then filtered locally.
+Correct at 50 issues, a cliff at 10,000. `--search` filters on the server.
+Moving these onto the server is a route change and is not in this release.
+
 ## 2026-08-11 — labelling an existing issue now takes a NAME, everywhere
 
 **Not breaking. CLI only — no HTTP surface changed.**

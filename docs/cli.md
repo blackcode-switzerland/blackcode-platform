@@ -169,7 +169,17 @@ Versions are stamped into the binary via `-ldflags` (into the `internal/version`
 - `version.Commit` — short git SHA
 - `version.BuildDate` — ISO-8601 UTC at build time
 
-`bk version` prints all three.
+`bk version` prints all three, and **`bk --version` prints the same bytes** —
+one implementation, `version.Describe()`, shared by the subcommand and by the
+root's version template. Two renderings of one fact drift, so there is one.
+
+`--version` is cobra's own `Version` field rather than a hand-rolled bool: it
+short-circuits inside `Command.execute()` before args are validated, so it
+cannot fall through to the help screen that `rejectUnknownSubcommands` gives the
+root. Cobra claims the `-v` shorthand for it **only when nothing else holds it**
+— `--verbose` does — and `TestShorthandVIsStillVerbose` in `cmd/bk/main_test.go`
+asserts that through an actual run, because it is one upstream change away from
+silently reversing.
 
 ---
 
@@ -293,6 +303,27 @@ Guarded by `internal/commands/login_token_test.go` and
 `TestTokenValueHintNamesTheStdinForm` / `TestTokenHintDoesNotFireForOtherBooleanFlags`
 in `cmd/bk/main_test.go`.
 
+### An unknown flag names the near miss
+
+`hintFor()` receives the command **cobra resolved**, not just its path, because
+an `unknown flag` message names no command anywhere in its text — and the
+resolved command is the only source of the real flag set.
+`commands.FlagHint()` (`internal/commands/flaghint.go`) turns that into one
+suggestion, in three rules tried in order:
+
+| Rule | Catches | Held against |
+|---|---|---|
+| positional | `--project 12` on `add <project-id>` | the command's own `Use` string |
+| synonym table | `--health` → `--status` (edit distance **5**) | the flag must exist on that command |
+| edit distance / prefix | `--stauts` → `--status`, `--workspace` → `--ws` | ditto; a tie suggests nothing |
+
+**One suggestion or none.** Two is a menu, which is what `--help` is for, and a
+confident wrong suggestion costs the round trip this exists to save. It is not a
+second hint mechanism: it feeds the same `hint:` line, after `DeprecationHint`
+(a named rename beats a guess) and before the generic advice. Guarded by
+`TestUnknownFlagNamesTheNearMiss`, `TestUnknownFlagWithNoNearMissFallsBackToTheGenericHint`
+and `TestAmbiguousTypoSuggestsNothing`.
+
 ### `bk logout`
 
 Deletes the local config file. The corresponding token row remains in the database — revoke it explicitly from **Settings → API Tokens** if you want it dead server-side.
@@ -389,7 +420,7 @@ See [The embedded guide & skill](#the-embedded-guide--skill) for how to maintain
 | `bk logout` | Clear local config. |
 | `bk whoami` | Show current user (id, email, name, role, via). |
 | `bk meta` | Agent bootstrap (`GET /api/meta`): current user, active workspace, and **every workspace you belong to** (id, name, slug, role, active marker). Run it first and pick your target by name/slug, not the numeric id. `--ws <slug\|id>` previews another workspace's context without switching. `--vocab <key>` prints ONE vocabulary flat (one value per line; a plain array under `--json`); `--vocab` with no key lists the keys, an unknown key errors naming them. A stray positional is now an error rather than silently ignored. |
-| `bk version` | Print version, commit, build date. |
+| `bk version` | Print version, commit, build date. `bk --version` is the same output. |
 | `bk changelog [--full] [--reference] [--server URL]` | What changed + the current CLI version floor (`GET /api/changelog`). **Public — works before `bk login`.** |
 
 `bk changelog` is public: it works without authentication. It targets the

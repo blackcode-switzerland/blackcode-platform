@@ -145,7 +145,7 @@ func newMetricsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "metrics",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/metrics"},
-		Short:       "How the last N days went",
+		Short:       "Closed deals, new deals and activity over a period (--period 30d)",
 		Long: `Closed deals, new deals and activity over a period.
 
 --period is a shape, not a list: 30d, 12w, 6m all work. It is not a vocabulary,

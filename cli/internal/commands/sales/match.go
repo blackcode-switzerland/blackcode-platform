@@ -27,7 +27,7 @@ import (
 func newMatchCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "match",
-		Short: "Triangulation — which product and message fit which prospect",
+		Short: "Which product and message fit a prospect, and why — set, list, clear",
 	}
 	cmd.AddCommand(newMatchListCmd(), newMatchSetCmd(), newMatchClearCmd())
 	return cmd

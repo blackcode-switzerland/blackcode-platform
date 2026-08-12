@@ -1176,7 +1176,7 @@ these; they never write SQL inline.
 | `project-updates.ts` | status-update feed (on_track/at_risk/off_track) |
 | `tasks.ts` | task CRUD (project optional); list/get join the task lead; PATCH `lead_user_id` writes `lead_id` and records an `assigned`/`unassigned` event |
 | `issues.ts` | issue CRUD, seq allocation, field-level events, auto-watchers |
-| `comments.ts` | polymorphic comments + `@email` mention resolution |
+| `comments.ts` | polymorphic comments + `@email` mention resolution. **`createComment` resolves mentions; `updateComment` does not** — an `@mention` added by editing an existing comment renders and notifies nobody. Deliberate (an edit would otherwise re-notify on every save) and stated in `bk issues issue edit-comment --help`; `apps/issues/lib/mention-help.test.ts` keeps the two in step |
 | `labels.ts` | workspace labels; case-insensitive unique names |
 | `attachments.ts` | issue attachments; `getWorkspaceAttachments` (owner-wide view) |
 | `uploads.ts` | this app's binding to the shared upload ledger — the queries live in `@blackcode/platform-storage`; what stays here is stamping `APP_SLUG` on every `recordUpload` |

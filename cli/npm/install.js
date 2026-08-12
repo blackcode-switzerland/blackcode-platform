@@ -56,7 +56,16 @@ function download(url, dest, redirects = 0) {
 download(url, binPath)
   .then(() => {
     if (!isWindows) fs.chmodSync(binPath, 0o755)
-    console.log(`bk installed to ${binPath}`)
+    // NAME THE COMMAND, NOT THE FILE. This used to print only `bk installed to
+    // <binPath>` — a path inside node_modules, which is the one place nobody
+    // should run it from. A first-contact agent read that line, went looking
+    // for the file, and spent six of its first ten commands on it. The shim
+    // npm writes into its global bin directory is what you actually run, and
+    // the only useful next step is to check that it resolves.
+    console.log(`bk installed. Verify with:  bk --version`)
+    console.log(`If that says "command not found", npm's global bin directory is not on your PATH:`)
+    console.log(`  export PATH="$(npm prefix -g)/bin:$PATH"`)
+    console.log(`(binary: ${binPath})`)
   })
   .catch((err) => {
     console.error(`Failed to download bk: ${err.message}`)
