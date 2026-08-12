@@ -325,8 +325,15 @@ func newIssueViewCmd() *cobra.Command {
 				// about it, so the only way to learn a file was there was to guess
 				// that `issue attachments` exists.
 				fmt.Fprintf(w, "Attachments: %s\n", issueAttachmentLabel(c, iss))
+				// ALWAYS printed, and it NAMES THE COMMAND. Same reasoning as the
+				// two lines above, one step further: three reports concluded there
+				// was no way to edit or delete a comment, and
+				// `bk issues issue edit-comment` / `delete-comment` have both
+				// existed the whole time. Nothing on this page mentioned comments
+				// at all, so there was nothing to lead a reader to them.
+				fmt.Fprintf(w, "Comments:    %s\n", issueCommentLabel(iss))
 				if iss.TaskName != nil {
-					fmt.Fprintf(w, "Task:   %s\n", *iss.TaskName)
+					fmt.Fprintf(w, "Task:        %s\n", taskRefLabel(iss))
 				}
 				if iss.DueDate != nil {
 					fmt.Fprintf(w, "Due:         %s\n", *iss.DueDate)
@@ -1324,6 +1331,32 @@ func issueAttachmentLabel(c *client.Client, iss *client.Issue) string {
 		names = append(names, fmt.Sprintf("%s (#%d)", a.Filename, a.ID))
 	}
 	return strings.Join(names, ", ")
+}
+
+// issueCommentLabel is the count PLUS the command that reads them.
+//
+// The count alone would repeat the mistake the attachments line was written to
+// fix: knowing there are four comments and not knowing how to see them is only
+// marginally better than not knowing. It costs no extra request — the listing
+// route already returns `comment_count` — and it is the one place a caller
+// standing in front of a comment thread will look.
+func issueCommentLabel(iss *client.Issue) string {
+	n := cmdutil.IntOr(iss.CommentCount, 0)
+	if n == 0 {
+		return fmt.Sprintf("— (bk issues issue comment %d --body \"…\")", iss.ID)
+	}
+	return fmt.Sprintf("%d (bk issues issue comments %d — edit-comment / delete-comment to change one)", n, iss.ID)
+}
+
+// taskRefLabel prints the task as `#12 name`, the way every other reference in
+// this app is printed. It used to be the bare name, which is not something a
+// caller can pass to `task view`.
+func taskRefLabel(iss *client.Issue) string {
+	name := cmdutil.DerefOr(iss.TaskName, "")
+	if iss.TaskID == nil {
+		return name
+	}
+	return fmt.Sprintf("#%d %s", *iss.TaskID, name)
 }
 
 // issueLabelLabel formats labels for one-line display.

@@ -35,6 +35,88 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-08-12 — `issue list` filters on the server, and an issue can move between projects
+
+**Two breaking changes**, both narrow, both listed at the bottom.
+
+### Four new filters on `bk issues issue list`
+
+```bash
+bk issues issue list --label bug --label regression   # OR: either matches
+bk issues issue list --priority urgent
+bk issues issue list --due-before 2026-08-14          # INCLUSIVE of the 14th
+bk issues issue list --task "Auth rewrite"            # #number or exact name
+bk issues issue list --assignee none                  # unassigned
+```
+
+- `--label` takes label **names** (like `issue create --label` always has).
+  Repeating it is an **OR**; there is no AND. Only labels this app owns are
+  matched, so a label another app created cannot select rows here.
+- `--priority` takes the same names as everywhere else (`urgent`/`high`/… or
+  1-5).
+- `--due-before` is **inclusive of the named day**. Issues with no due date are
+  never returned by it.
+- `--task` resolves a #number or an exact name, the same way `--project` does.
+  An ambiguous name is an error listing the matches, never a guess.
+- `--assignee` gained `none` / `unassigned`.
+
+`bk issues project issues <project>` now offers exactly the same set — the two
+listings are built from one flag constructor.
+
+### `--status`, `--assignee` and `--mine` are no longer client-side
+
+They fetched every issue in the workspace and filtered locally. They are part of
+the request now. `GET /api/workspaces/{ws}/issues` has accepted `status`,
+`assignee_id`/`assignee_ids`, `priority` and `task_id` since it was written — the
+CLI was the only thing not sending them. **No flag changed its spelling or its
+meaning**; the `CLIENT-SIDE` warning in their help is gone because it is no longer
+true, and `showing N of M` now compares two counts of the same filtered set
+rather than the filtered count against the unfiltered one.
+
+### Moving an issue between projects: `issue edit --project`
+
+```bash
+bk issues issue edit 42 --project "Website relaunch"
+bk issues issue edit 42 --project none       # out of any project
+```
+
+`bk issues move` is, and stays, **workspace → workspace**. Project reassignment is
+a field on the issue: `PATCH /api/workspaces/{ws}/issues/{id}` has always accepted
+`project_id`, and only the flag was missing.
+
+**A move that would leave the issue inside a task belonging to a different
+project is now refused**, with `400 task_project_mismatch` naming the task. Carry
+the link across and the task counts an issue that is no longer under it; detach it
+silently and a second record's numbers change from a command that never mentioned
+it. Clear it in the same call instead:
+
+```bash
+bk issues issue edit 42 --project 7 --task none
+```
+
+The rule fires **only when `project_id` is being changed**. `task attach` /
+`task detach` are unaffected, and rows that already cross projects stay editable.
+
+### `issue view` names its comments
+
+A `Comments:` row, always printed, carrying the count and the command that reads
+them (`issue comments`, `edit-comment`, `delete-comment`). All three commands
+already existed; nothing on the page mentioned comments, so three separate reports
+concluded editing one was not possible. The `Task:` row now prints `#12 name`
+rather than the bare name, so it can be passed to `task view`.
+
+### Breaking
+
+1. **`GET /api/workspaces/{ws}/issues` now rejects filter values it cannot
+   parse.** `?priority=urgent`, `?status=Done` and `?assignee_ids=alice` used to
+   be dropped silently, returning **every issue in the workspace** under a request
+   that had asked for a subset. They are `400`s now (`invalid_priority`,
+   `invalid_status`, `invalid_assignee_ids`) carrying the accepted values. A
+   client sending valid values is unaffected.
+2. **`PATCH …/issues/{id}` can refuse a `project_id` change** with
+   `400 task_project_mismatch`, as described above. Previously it always
+   succeeded and left the crossed link in place.
+
 ## 2026-08-12 — tasks become the grouping layer: `--lead`, `attach`/`detach`, and a status derived from the issues
 
 **One breaking change**, at the bottom of this entry: sending `status` on a task

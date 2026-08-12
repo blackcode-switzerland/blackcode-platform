@@ -7,6 +7,41 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-12 — the inbox narrows by type, person, time, project and task
+
+**Not breaking.** The inbox is still **global by default** — every filter is
+opt-in, and with none of them you get every workspace and every app that notifies
+you, exactly as before.
+
+```bash
+bk issues inbox list --type assigned
+bk issues inbox list --from someone@corp.ch      # id, email, name, or 'me'
+bk issues inbox list --since 2026-08-01          # at or after
+bk issues inbox list --ws acme --project 4       # the project, its tasks, its issues
+bk issues inbox list --ws acme --task 9          # the task and its issues
+```
+
+`GET /api/me/inbox` gained `type` (it already read it; only the flag was
+missing), `actor_id`, `since`, `project_id` and `task_id`. All applied
+server-side.
+
+Three things worth knowing:
+
+- **`--project` and `--task` require a workspace.** They take a #number, which
+  only means something inside one workspace, so without `--ws` the route answers
+  `400 workspace_required` rather than picking one.
+- **`--project` matches three things**, not one: notifications about the project
+  itself, about its tasks, and about its issues. An inbox row records
+  `entity_type` + `entity_id` and carries no project, so this is a reach through
+  to the source tables — and the narrow version of it (issues only) would
+  silently drop the other two and read as a quiet week.
+- **`Unread:` is now scoped to the same filters as the list it sits under.** It
+  used to honour only the workspace, so a filtered feed carried a count answering
+  a wider question.
+
+An empty result now distinguishes "nothing matched these filters" (and names
+them) from "your inbox is empty".
+
 ## 2026-08-12 — seven flags stopped advertising a bogus argument in `--help`
 
 **Not breaking — help text only. Every flag parsed exactly as it always did.**

@@ -54,7 +54,11 @@ func TestIssueViewPrintsLabelsAndAttachmentsUnconditionally(t *testing.T) {
 		}
 	}
 
-	for _, want := range []string{"Labels:", "Attachments:"} {
+	// "Comments:" joined them on 2026-08-12 for the third instance of the same
+	// story: three reports concluded `edit-comment` and `delete-comment` did not
+	// exist, and both have all along — nothing on this page mentioned comments,
+	// so there was nothing to lead a reader to them.
+	for _, want := range []string{"Labels:", "Attachments:", "Comments:"} {
 		if !unconditional[want] {
 			t.Errorf("`issue view` does not print a %q row unconditionally. Either it was removed, "+
 				"or it moved inside an `if` — and a row that disappears when the value is empty is "+

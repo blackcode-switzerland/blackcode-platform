@@ -64,7 +64,7 @@ you. That is deliberate — an inbox scoped to your active workspace would hide 
 invitation that arrived from somewhere else, and you would have no way to see
 that it had.
 
-`--ws` narrows it, and is the only thing that does:
+`--ws` narrows it to one workspace:
 
 ```bash
 bk issues inbox list --unread            # everything you have not read, anywhere
@@ -73,6 +73,33 @@ bk issues inbox list --unread --ws acme  # just that workspace
 
 It takes a slug or a workspace id. A slug that does not resolve is an error, not
 a quiet fall back to the unfiltered list.
+
+### The other inbox filters
+
+They are all applied by the server, and all opt-in — the default stays global.
+
+```bash
+bk issues inbox list --type assigned          # one kind of notification
+bk issues inbox list --from someone@corp.ch   # who caused it (id, email, name, me)
+bk issues inbox list --since 2026-08-01       # at or after
+bk issues inbox list --ws acme --project 4    # the project, its tasks, its issues
+bk issues inbox list --ws acme --task 9       # the task and its issues
+```
+
+`--project` and `--task` **require `--ws`**: they take a #number, and a #number
+only means something inside one workspace.
+
+Two things the filters deliberately do NOT do:
+
+- They do not search the message text. A notification that happens to mention a
+  name is not a notification about it.
+- `--project` does not mean "issues in that project" only — it also matches
+  notifications about the project itself and about its tasks. A narrower reading
+  would silently drop them and look like a quiet week.
+
+The `Unread:` line is scoped to whatever you filtered by, so it always counts the
+messages the command was asked about. An empty result says whether nothing
+matched or the inbox is genuinely empty.
 
 ## Membership IS access
 

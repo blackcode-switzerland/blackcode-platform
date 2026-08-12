@@ -31,6 +31,56 @@ bk issues issue list --project 4 --status todo --mine --json
 bk issues issue edit 42 --status in_progress --assignee me
 ```
 
+## Narrowing a listing
+
+`issue list` filters on the **server**. Every flag below becomes part of the
+request, so nothing fetches the workspace and sifts it locally — which matters
+once a workspace has more issues than you want to page through.
+
+```bash
+bk issues issue list --label bug --label regression   # OR: either label matches
+bk issues issue list --priority urgent --mine
+bk issues issue list --due-before 2026-08-14          # INCLUSIVE of the 14th
+bk issues issue list --task "Auth rewrite"            # #number or exact name
+bk issues issue list --assignee none                  # unassigned
+```
+
+Three things worth knowing, because each one is a place a filter can quietly
+mean something other than what you meant:
+
+- **`--label` takes NAMES**, and repeating it is an **OR** — an issue carrying
+  *any* of the names matches. There is no AND.
+- **`--due-before` is inclusive.** `--due-before 2026-08-14` returns issues due
+  *on* the 14th as well. Issues with no due date are never returned by it.
+- **`--task` and `--project` take a #number or an exact name**, resolved the
+  same way (see below). An ambiguous name is an error, never a guess.
+
+An empty result tells you which of the two things happened: with no filters it
+says the listing is empty, and with filters it names them back to you. A
+filtered listing that just said "no issues" reads as an empty project.
+
+`bk issues project issues <project>` offers exactly the same flags, scoped to
+one project.
+
+## Moving an issue between projects
+
+`bk issues move` is **workspace → workspace**. To move an issue to a different
+project inside one workspace, edit the field:
+
+```bash
+bk issues issue edit 42 --project "Website relaunch"
+bk issues issue edit 42 --project none        # out of any project
+```
+
+If the issue is grouped under a task belonging to a **different** project, the
+move is **refused** and the error names the task — moving it alone would leave
+that task counting an issue that is no longer under it. Clear the link in the
+same call:
+
+```bash
+bk issues issue edit 42 --project 7 --task none
+```
+
 ## Naming a project: an id or its name
 
 Every `--project` flag, and the positional on `project issues` / `project tasks`,
