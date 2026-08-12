@@ -33,6 +33,42 @@ open. `config.DisplayPath()` is the single source, and a guard
 (`cli/internal/config/display_path_test.go`) parses every Go file in the CLI and
 fails the build if a string literal spells the path itself again.
 
+### The npm installer says what will go wrong on Windows, before it does
+
+`npm install -g` writes three shims — `bk`, `bk.cmd` and `bk.ps1`. PowerShell
+resolves the `.ps1` first, and its default execution policy on Windows client
+machines refuses to run it: *"cannot be loaded because running scripts is
+disabled on this system"*. The package said nothing about this, and it is the
+first of the four failures issue #20 recorded before a successful login.
+
+The installer runs on the machine that has the problem, so it now looks and
+prints. On `win32` it reads `Get-ExecutionPolicy` and, unless the policy already
+permits the shim, names both ways through:
+
+```
+This machine's PowerShell execution policy is "restricted".
+PowerShell runs npm's "bk.ps1" shim before "bk.cmd", and that policy blocks unsigned
+scripts — so "bk" will fail with "cannot be loaded because running scripts is disabled
+on this system". Two ways through, pick one:
+  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # allow the shim, once (PowerShell)
+  cmd.exe /c bk --version                               # or bypass PowerShell entirely
+```
+
+**It detects; it does not change anything.** An installer does not get to alter a
+machine's execution policy. If the policy cannot be read at all, the guidance is
+printed anyway — a printed line costs nothing and a dead end costs a user.
+
+Two more installer fixes in the same pass:
+
+- **PATH advice is now the running shell's.** Every platform used to be told
+  `export PATH="$(npm prefix -g)/bin:$PATH"`, which is not a command on Windows.
+  PowerShell and `cmd.exe` get their own spellings, and `command not found`
+  becomes `is not recognized`.
+- **`EBUSY` on a retry says what to do.** A half-finished install still holds the
+  shim, so the obvious next step — run it again — died on a raw Node error.
+  It now says to close the shells that have run `bk` and retry. `EACCES` names
+  `npm config set prefix` instead.
+
 ## 2026-08-12 — every app's active workspace is visible in one command, and `bk link`'s dead code is gone
 
 **Not breaking.** Two things, both closing the same finding: what crosses an app
