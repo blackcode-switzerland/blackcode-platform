@@ -268,19 +268,60 @@ type InboxPage struct {
 // weeks, with no way to narrow it. Verified against a running route on
 // 2026-08-12: the request the CLI sent was `/api/me/inbox?limit=200` and
 // `--ws` changed nothing about it.
-func (c *Client) ListInbox(unreadOnly, includeArchived bool, workspaceID int) (*InboxPage, error) {
-	path := "/api/me/inbox?limit=200"
-	if unreadOnly {
-		path += "&unread=true"
+// InboxFilters is every narrowing the inbox listing can ask for. The zero value
+// is the GLOBAL inbox (decision Q3) — every field is opt-in.
+//
+// Project and Task are the raw #numbers as typed, resolved by the SERVER against
+// WorkspaceID: they are workspace-scoped, and the client has no business
+// guessing which workspace a bare #4 belongs to.
+type InboxFilters struct {
+	Unread          bool
+	IncludeArchived bool
+	WorkspaceID     int
+	Type            string
+	Project         string
+	Task            string
+	ActorID         int
+	Since           string
+}
+
+// InboxQuery is the filters → query-string translation, split out so it can be
+// asserted without a server. Same reason as `IssuesQuery`: a filter dropped here
+// widens the answer without widening the question, and the request still
+// succeeds.
+func InboxQuery(f InboxFilters) url.Values {
+	q := url.Values{}
+	q.Set("limit", "200")
+	if f.Unread {
+		q.Set("unread", "true")
 	}
-	if includeArchived {
-		path += "&include_archived=true"
+	if f.IncludeArchived {
+		q.Set("include_archived", "true")
 	}
-	if workspaceID > 0 {
-		path += "&workspace_id=" + strconv.Itoa(workspaceID)
+	if f.WorkspaceID > 0 {
+		q.Set("workspace_id", strconv.Itoa(f.WorkspaceID))
 	}
+	if s := strings.TrimSpace(f.Type); s != "" {
+		q.Set("type", s)
+	}
+	if s := strings.TrimSpace(f.Project); s != "" {
+		q.Set("project_id", s)
+	}
+	if s := strings.TrimSpace(f.Task); s != "" {
+		q.Set("task_id", s)
+	}
+	if f.ActorID > 0 {
+		q.Set("actor_id", strconv.Itoa(f.ActorID))
+	}
+	if s := strings.TrimSpace(f.Since); s != "" {
+		q.Set("since", s)
+	}
+	return q
+}
+
+func (c *Client) ListInboxFiltered(f InboxFilters) (*InboxPage, error) {
 	var page InboxPage
-	if err := c.get(path, &page); err != nil {
+	if err := c.get("/api/me/inbox?"+InboxQuery(f).Encode(), &page); err != nil {
 		return nil, err
 	}
 	return &page, nil

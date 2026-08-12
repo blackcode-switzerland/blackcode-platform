@@ -118,7 +118,7 @@
     {
       "method": "GET",
       "path": "/api/users",
-      "command": "bk issues issue assign, bk issues issue list, bk issues project issues, bk issues user list, bk issues user view",
+      "command": "bk issues inbox list, bk issues issue assign, bk issues issue list, bk issues project issues, bk issues user list, bk issues user view",
       "app": "issues"
     },
     {
@@ -226,7 +226,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/projects",
-      "command": "bk issues issue create, bk issues issue list, bk issues project issues, bk issues project list, bk issues project tasks, bk issues project updates add, bk issues task create, bk issues task list",
+      "command": "bk issues issue create, bk issues issue edit, bk issues issue list, bk issues project issues, bk issues project list, bk issues project tasks, bk issues project updates add, bk issues task create, bk issues task list",
       "app": "issues"
     },
     {
@@ -268,7 +268,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/tasks",
-      "command": "bk issues project tasks, bk issues task list",
+      "command": "bk issues issue list, bk issues project issues, bk issues project tasks, bk issues task list",
       "app": "issues"
     },
     {

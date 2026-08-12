@@ -159,25 +159,25 @@ func newProjectMembersCmd() *cobra.Command {
 }
 
 func newProjectIssuesCmd() *cobra.Command {
-	var status, assignee string
+	var f issueListFlags
 	cmd := &cobra.Command{
 		Use:         "issues <project>",
-		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues,GET /api/users,GET /api/workspaces/{ws}/projects"},
-		Short:       "List issues for a project, by id or name (optionally filter by status/assignee)",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues,GET /api/users,GET /api/workspaces/{ws}/projects,GET /api/workspaces/{ws}/tasks"},
+		Short:       "List issues for a project, by id or name (same filters as `issue list`)",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// The positional is handed to runIssueList as-is: it resolves it
 			// through resolveProjectRef, so `project issues "Website relaunch"`
 			// works here for the same reason `issue list --project` does.
-			return runIssueList(cmd, issueListFlags{
-				project:  args[0],
-				status:   status,
-				assignee: assignee,
-			})
+			f.project = args[0]
+			return runIssueList(cmd, f)
 		},
 	}
-	cmd.Flags().StringVar(&status, "status", "", "Filter by status: "+vocab("issue_statuses")+". CLIENT-SIDE: every issue in the project is fetched first, then filtered here")
-	cmd.Flags().StringVar(&assignee, "assignee", "", "Filter by assignee id, email, or 'me'. CLIENT-SIDE: every issue in the project is fetched first, then filtered here")
+	// The SAME flags as `issue list`, from one constructor. They used to be a
+	// hand-copied subset of two, which is how this command kept a "CLIENT-SIDE"
+	// label describing a mechanism `issue list` had already left behind.
+	addIssueFilterFlags(cmd, &f)
+	cmd.Flags().StringVar(&f.search, "search", "", "Search title/description, or the #id (e.g. 123 or #123)")
 	return cmd
 }
 

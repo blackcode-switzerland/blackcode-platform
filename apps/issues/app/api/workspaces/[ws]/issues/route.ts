@@ -7,9 +7,26 @@ import {
 } from '@/lib/db/queries/issues'
 import { getMembership } from '@/lib/db/queries/workspaces'
 import { ISSUE_TITLE_MAX, LABEL_NAME_MAX } from '@/lib/limits'
+import { ISSUE_STATUS_VALUES } from '@/lib/work-items'
 
 interface Params {
   params: Promise<{ ws: string }>
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+// A FILTER THIS ROUTE CANNOT UNDERSTAND IS A 400, NEVER A DROPPED CLAUSE.
+//
+// `?priority=urgent` used to `parseInt` to NaN, collapse to `undefined`, and
+// return EVERY issue in the workspace under a request that had asked for the
+// urgent ones. `?status=Done` matched nothing and read as an empty project.
+// Both are the two failure modes of a filter, and neither said a word — which is
+// why every parse below either produces a clause or throws.
+function filterInt(raw: string | null, code: string, msg: string, hint: string): number | undefined {
+  if (raw === null || raw === '') return undefined
+  const n = parseInt(raw, 10)
+  if (Number.isNaN(n) || String(n) !== raw.trim()) throw Errors.badRequest(code, msg, hint)
+  return n
 }
 
 // project_id / task_id query params are workspace #numbers (seq). 'null' filters
@@ -31,24 +48,69 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
 
   // Assignee filter: ?assignee_id=null (unassigned), ?assignee_id=1 (single),
   // or ?assignee_ids=1&assignee_ids=2 (multi). Assignees are user ids.
+  //
+  // Unparseable ids used to be dropped: `?assignee_ids=alice` filtered to the
+  // empty list, which the query reads as "no assignee filter", so a request
+  // naming one person came back with the whole workspace. They are a 400 now.
+  const badAssignee = 'assignee ids are user ids — `bk issues issue list --assignee <email>` resolves a name for you, or pass null for unassigned'
   let assigneeIds: number[] | null | undefined
   const assigneeIdRaw = sp.get('assignee_id')
   const assigneeIdsRaw = sp.getAll('assignee_ids')
   if (assigneeIdsRaw.length > 0) {
-    assigneeIds = assigneeIdsRaw.map(Number).filter((n) => !Number.isNaN(n))
+    assigneeIds = assigneeIdsRaw.map((raw) => {
+      const n = parseInt(raw, 10)
+      if (Number.isNaN(n)) throw Errors.badRequest('invalid_assignee_ids', `assignee_ids must be integers; got ${JSON.stringify(raw)}`, badAssignee)
+      return n
+    })
   } else if (assigneeIdRaw === 'null') {
     assigneeIds = null
-  } else if (assigneeIdRaw !== null) {
-    const n = parseInt(assigneeIdRaw)
-    if (!Number.isNaN(n)) assigneeIds = [n]
+  } else if (assigneeIdRaw !== null && assigneeIdRaw !== '') {
+    const n = parseInt(assigneeIdRaw, 10)
+    if (Number.isNaN(n)) throw Errors.badRequest('invalid_assignee_id', `assignee_id must be an integer or null; got ${JSON.stringify(assigneeIdRaw)}`, badAssignee)
+    assigneeIds = [n]
+  }
+
+  const status = sp.get('status') ?? undefined
+  if (status !== undefined && !ISSUE_STATUS_VALUES.includes(status as never)) {
+    throw Errors.badRequest(
+      'invalid_status',
+      `status must be one of: ${ISSUE_STATUS_VALUES.join(', ')}`,
+      'run `bk meta` for the current status values'
+    )
+  }
+
+  const priority = filterInt(
+    sp.get('priority'),
+    'invalid_priority',
+    'priority must be an integer 1-5 (1 = urgent)',
+    'the CLI takes names too — `bk issues issue list --priority urgent`'
+  )
+  if (priority !== undefined && (priority < 1 || priority > 5)) {
+    throw Errors.badRequest('invalid_priority', 'priority must be an integer 1-5 (1 = urgent)')
+  }
+
+  // Repeatable: ?label=bug&label=regression. An issue carrying ANY of them
+  // matches — the OR is stated in the CLI's help for the same reason it is
+  // stated here, because a caller cannot see which one a filter chose.
+  const labelNames = sp.getAll('label').map((s) => s.trim()).filter(Boolean)
+
+  const dueBefore = sp.get('due_before') ?? undefined
+  if (dueBefore !== undefined && !ISO_DATE.test(dueBefore)) {
+    throw Errors.badRequest(
+      'invalid_due_before',
+      'due_before must be a date in YYYY-MM-DD form',
+      'it is INCLUSIVE — due_before=2026-08-14 returns issues due ON the 14th as well'
+    )
   }
 
   const page = await listIssuesInWorkspace(ctx.workspace.id, {
     projectId: await seqFilter(ctx.workspace.id, 'project', sp.get('project_id')),
     taskId: await seqFilter(ctx.workspace.id, 'task', sp.get('task_id')),
     assigneeIds,
-    status: sp.get('status') ?? undefined,
-    priority: sp.get('priority') ? parseInt(sp.get('priority')!) || undefined : undefined,
+    status,
+    priority,
+    labels: labelNames.length > 0 ? labelNames : undefined,
+    dueBefore,
     search: sp.get('search') ?? undefined,
   })
   return NextResponse.json({ data: page.data.map(publicIssue), total: page.total })

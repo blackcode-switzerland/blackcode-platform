@@ -3,6 +3,7 @@ import { apiHandler, Errors, resolveWorkspace, resolveEntityId, publicIssue } fr
 import {
   deleteIssue,
   getIssueInWorkspace,
+  IssueTaskProjectMismatch,
   updateIssue,
 } from '@/lib/db/queries/issues'
 
@@ -69,6 +70,16 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
     const full = await getIssueInWorkspace(ctx.workspace.id, id)
     return NextResponse.json(publicIssue(full ?? updated))
   } catch (err) {
+    // The project move that would orphan a task link. See `updateIssue` for the
+    // decision; this is where the caller is told which task is in the way and
+    // what to type instead — a refusal nobody can act on is just a failure.
+    if (err instanceof IssueTaskProjectMismatch) {
+      throw Errors.badRequest(
+        'task_project_mismatch',
+        `issue is in task #${err.taskSeq} (${err.taskName}), which belongs to a different project — moving the issue alone would leave that link pointing across projects`,
+        'clear the link in the same call (`bk issues issue edit <id> --project <p> --task none`), or detach it first (`bk issues task detach <t> <id>`)'
+      )
+    }
     const m = (err as Error)?.message
     if (m === 'invalid_status') throw Errors.badRequest('invalid_status', 'invalid status value')
     if (m === 'invalid_priority') throw Errors.badRequest('invalid_priority', 'priority must be 1-5')

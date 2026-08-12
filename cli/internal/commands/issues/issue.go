@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
@@ -43,29 +44,64 @@ func newIssueCmd() *cobra.Command {
 }
 
 type issueListFlags struct {
-	project  string
-	status   string
-	assignee string
-	mine     bool
-	search   string
+	project   string
+	status    string
+	assignee  string
+	mine      bool
+	search    string
+	label     []string
+	priority  string
+	dueBefore string
+	task      string
 }
 
+// ---------------------------------------------------------------------------
+// EVERY FILTER ON THIS COMMAND IS SERVER-SIDE (2026-08-12)
+// ---------------------------------------------------------------------------
+// `--status`, `--assignee` and `--mine` used to fetch every issue in the
+// workspace and filter locally. That was never a route limitation: `GET
+// /api/workspaces/{ws}/issues` has read `status`, `assignee_id`/`assignee_ids`,
+// `priority` and `task_id` since it was written. The CLIENT was the only thing
+// not sending them, and `ListIssuesOpts` had a `Status` field that proved it —
+// set by nothing, sent by nothing, and read by the next person as evidence the
+// filter was already remote.
+//
+// So the four new filters are not three more local ones plus a route change;
+// they are one change of mind about where filtering happens, and the two old
+// ones came along. `--search` was already server-side and is unchanged.
+//
+// The only thing that survives locally is nothing at all — `filterIssues` is
+// gone. If you are about to add a filter here, add it to `ListIssuesOpts` and to
+// the route. A local filter on a listing with no pagination is a cliff with a
+// polite label on it.
 func newIssueListCmd() *cobra.Command {
 	var f issueListFlags
 	cmd := &cobra.Command{
 		Use:         "list",
-		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues,GET /api/users,GET /api/workspaces/{ws}/projects"},
-		Short:       "List issues",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues,GET /api/users,GET /api/workspaces/{ws}/projects,GET /api/workspaces/{ws}/tasks"},
+		Short:       "List issues (filter by project, task, status, assignee, label, priority, due date)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runIssueList(cmd, f)
 		},
 	}
+	addIssueFilterFlags(cmd, &f)
 	cmd.Flags().StringVar(&f.project, "project", "", "Filter by project — "+projectFlagHelp)
-	cmd.Flags().StringVar(&f.status, "status", "", "Filter by status: "+vocab("issue_statuses")+". CLIENT-SIDE: every issue in the workspace is fetched first, then filtered here — use --search to filter on the server")
-	cmd.Flags().StringVar(&f.assignee, "assignee", "", "Filter by assignee id, email, or 'me'. CLIENT-SIDE: every issue in the workspace is fetched first, then filtered here")
-	cmd.Flags().BoolVar(&f.mine, "mine", false, "Show only issues assigned to the current user. CLIENT-SIDE: every issue in the workspace is fetched first, then filtered here")
-	cmd.Flags().StringVar(&f.search, "search", "", "Search title/description, or the #id (e.g. 123 or #123); server-side")
+	cmd.Flags().StringVar(&f.search, "search", "", "Search title/description, or the #id (e.g. 123 or #123)")
 	return cmd
+}
+
+// addIssueFilterFlags mounts the filters shared by `issue list` and
+// `project issues`, so the two cannot drift in what they offer or in what their
+// help says. `project issues` pins --project from its positional and mounts the
+// rest of these unchanged.
+func addIssueFilterFlags(cmd *cobra.Command, f *issueListFlags) {
+	cmd.Flags().StringVar(&f.status, "status", "", "Filter by status: "+vocab("issue_statuses"))
+	cmd.Flags().StringVar(&f.assignee, "assignee", "", "Filter by assignee id, email, name, 'me', or 'none' for unassigned")
+	cmd.Flags().BoolVar(&f.mine, "mine", false, "Only issues assigned to you (same as --assignee me)")
+	cmd.Flags().StringArrayVar(&f.label, "label", nil, "Filter by label NAME (repeatable; several are an OR — an issue carrying ANY of them matches)")
+	cmd.Flags().StringVar(&f.priority, "priority", "", "Filter by priority: "+vocabPriority("issue"))
+	cmd.Flags().StringVar(&f.dueBefore, "due-before", "", "Only issues due on or INCLUDING this date, YYYY-MM-DD; issues with no due date are excluded")
+	cmd.Flags().StringVar(&f.task, "task", "", "Filter by task — its #number or its exact name")
 }
 
 func runIssueList(cmd *cobra.Command, f issueListFlags) error {
@@ -78,122 +114,170 @@ func runIssueList(cmd *cobra.Command, f issueListFlags) error {
 		return err
 	}
 
-	projectID, err := resolveProjectRef(c, f.project)
+	opts, err := buildIssueListOpts(c, cfg, f)
 	if err != nil {
 		return err
 	}
 
 	// The issues endpoint returns every matching issue in one response (no
-	// pagination); total is the server-side count for the current filter (before
-	// client-side --status/--assignee/--mine filtering).
-	page, err := c.ListIssues(client.ListIssuesOpts{ProjectID: projectID, Search: f.search})
+	// pagination), and `total` is the count for the filters actually sent — the
+	// same set that comes back. It used to be the count BEFORE local filtering,
+	// so "showing 3 of 214" was two different questions on one line.
+	page, err := c.ListIssues(opts)
 	if err != nil {
 		return err
 	}
+	rows := page.Data
 	total := page.Total
 
-	filtered, err := filterIssues(c, cfg, page.Data, f)
-	if err != nil {
-		return err
-	}
-
-	out := any(filtered)
+	out := any(rows)
 	if format != output.FormatTable {
 		out = struct {
 			Data  []client.Issue `json:"data" yaml:"data"`
 			Total *int           `json:"total,omitempty" yaml:"total,omitempty"`
-		}{filtered, total}
+		}{rows, total}
 	}
 
 	return output.Render(format, out, func(w io.Writer) error {
 		tw := output.Tabwriter(w)
 		fmt.Fprintln(tw, "#\tPRIORITY\tSTATUS\tTITLE\tASSIGNEE")
-		for _, i := range filtered {
+		for _, i := range rows {
 			fmt.Fprintf(tw, "%s\tP%d\t%s\t%s\t%s\n",
 				issueRef(&i), i.Priority, i.Status, cmdutil.Truncate(i.Title, 60), issueAssigneeLabel(i.Assignees))
 		}
 		if err := tw.Flush(); err != nil {
 			return err
 		}
-		if len(filtered) == 0 {
-			fmt.Fprintln(cmd.ErrOrStderr(), "(no issues)")
+		if len(rows) == 0 {
+			// "no issues" and "none matched what you asked for" are different
+			// facts, and a filtered listing that prints the first reads as an
+			// empty workspace. Naming the filters is also the fastest way to see
+			// a typo'd label that matched nothing.
+			if applied := describeIssueFilters(f); applied != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "(no issues match %s — drop a filter to widen the search)\n", applied)
+			} else {
+				fmt.Fprintln(cmd.ErrOrStderr(), "(no issues)")
+			}
 		}
 		if total != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "showing %d of %d\n", len(filtered), *total)
+			fmt.Fprintf(cmd.ErrOrStderr(), "showing %d of %d\n", len(rows), *total)
 		}
 		return nil
 	})
 }
 
-func filterIssues(c *client.Client, cfg *config.Config, issues []client.Issue, f issueListFlags) ([]client.Issue, error) {
-	status := strings.ToLower(strings.TrimSpace(f.status))
+// buildIssueListOpts turns the flags into the request. Every branch either
+// produces a query parameter or returns an error — a filter that is silently not
+// sent gives a wider answer than was asked for, with nothing to notice.
+func buildIssueListOpts(c *client.Client, cfg *config.Config, f issueListFlags) (client.ListIssuesOpts, error) {
+	var opts client.ListIssuesOpts
+
+	projectID, err := resolveProjectRef(c, f.project)
+	if err != nil {
+		return opts, err
+	}
+	opts.ProjectID = projectID
+	opts.Search = f.search
+	opts.Labels = f.label
+	opts.Status = strings.ToLower(strings.TrimSpace(f.status))
+
+	if opts.Status != "" && !isKnownVocabValue("issue_statuses", opts.Status) {
+		return opts, cmdutil.Usagef("invalid --status %q — use one of %s",
+			f.status, strings.Join(vocabularies["issue_statuses"], " | "))
+	}
+
+	priority, err := parseIssuePriority(f.priority)
+	if err != nil {
+		return opts, err
+	}
+	opts.Priority = priority
+
+	if d := strings.TrimSpace(f.dueBefore); d != "" {
+		if _, err := time.Parse("2006-01-02", d); err != nil {
+			return opts, cmdutil.Usagef("invalid --due-before %q — use YYYY-MM-DD (it is inclusive: 2026-08-14 includes issues due ON the 14th)", f.dueBefore)
+		}
+		opts.DueBefore = d
+	}
+
+	if strings.TrimSpace(f.task) != "" {
+		taskID, err := resolveTaskRef(c, f.task)
+		if err != nil {
+			return opts, err
+		}
+		opts.TaskID = taskID
+	}
+
 	assignee := strings.TrimSpace(f.assignee)
-
-	var assigneeID int
-	var assigneeEmail string
-	resolveAssignee := assignee != "" || f.mine
-	if resolveAssignee {
-		ref := assignee
-		if f.mine || strings.EqualFold(assignee, "me") {
-			assigneeID = cfg.UserID
-			ref = ""
+	if f.mine {
+		if assignee != "" && !strings.EqualFold(assignee, "me") {
+			return opts, cmdutil.Usagef("--mine and --assignee %q disagree — --mine is --assignee me", f.assignee)
 		}
-		if ref != "" {
-			if id, err := strconv.Atoi(ref); err == nil {
-				assigneeID = id
-			} else if strings.Contains(ref, "@") {
-				assigneeEmail = strings.ToLower(ref)
-				users, err := c.ListUsers()
-				if err != nil {
-					return nil, fmt.Errorf("resolve assignee email: %w", err)
-				}
-				for _, u := range users {
-					if strings.EqualFold(u.Email, assigneeEmail) {
-						assigneeID = u.ID
-						break
-					}
-				}
-				if assigneeID == 0 {
-					return nil, fmt.Errorf("no user found with email %q", ref)
-				}
-			} else {
-				users, err := c.ListUsers()
-				if err != nil {
-					return nil, fmt.Errorf("resolve assignee name: %w", err)
-				}
-				for _, u := range users {
-					if u.Name != nil && strings.EqualFold(*u.Name, ref) {
-						assigneeID = u.ID
-						break
-					}
-				}
-				if assigneeID == 0 {
-					return nil, fmt.Errorf("no user found matching %q", ref)
-				}
-			}
+		assignee = "me"
+	}
+	switch {
+	case assignee == "":
+		// no assignee filter
+	case strings.EqualFold(assignee, "none"), strings.EqualFold(assignee, "unassigned"):
+		opts.Unassigned = true
+	default:
+		uid, err := ResolveUserID(assignee, c, cfg)
+		if err != nil {
+			return opts, err
 		}
+		if uid <= 0 {
+			return opts, cmdutil.Usagef("could not resolve --assignee %q to a user", f.assignee)
+		}
+		opts.AssigneeIDs = []int{uid}
 	}
 
-	var out []client.Issue
-	for _, i := range issues {
-		if status != "" && !strings.EqualFold(i.Status, status) {
-			continue
+	return opts, nil
+}
+
+// describeIssueFilters renders the filters in play for the empty-result line.
+// Empty string means "no filter was applied", which is the one case where "(no
+// issues)" is the honest message.
+func describeIssueFilters(f issueListFlags) string {
+	var parts []string
+	add := func(name, value string) {
+		if strings.TrimSpace(value) != "" {
+			parts = append(parts, name+"="+value)
 		}
-		if resolveAssignee {
-			found := false
-			for _, a := range i.Assignees {
-				if a.ID == assigneeID {
-					found = true
-					break
-				}
-			}
-			if !found {
-				continue
-			}
-		}
-		out = append(out, i)
 	}
-	return out, nil
+	add("project", f.project)
+	add("task", f.task)
+	add("status", f.status)
+	add("priority", f.priority)
+	add("due-before", f.dueBefore)
+	add("search", f.search)
+	if f.mine {
+		parts = append(parts, "mine")
+	} else {
+		add("assignee", f.assignee)
+	}
+	for _, l := range f.label {
+		add("label", l)
+	}
+	return strings.Join(parts, " ")
+}
+
+// isClearWord: the four spellings this app has always accepted for "unset this
+// field". Extracted from `edit --assignee`, which is where they were established,
+// so `--project` clears with the same words rather than a fifth opinion.
+func isClearWord(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "none", "null", "clear", "unset":
+		return true
+	}
+	return false
+}
+
+func isKnownVocabValue(key, value string) bool {
+	for _, v := range vocabularies[key] {
+		if v == value {
+			return true
+		}
+	}
+	return false
 }
 
 func newIssueViewCmd() *cobra.Command {
@@ -397,15 +481,28 @@ func newIssueCreateCmd() *cobra.Command {
 // additions. If a field update fails, no label has moved yet; and doing removals
 // before additions means `--label-remove x --label x` ends with x attached
 // rather than depending on flag order.
+// MOVING AN ISSUE BETWEEN PROJECTS IS `edit --project`, NOT A `move` VERB.
+//
+// `bk issues move` already exists and means workspace → workspace ("Move items
+// from the active workspace into another workspace you belong to"). A second
+// `move` meaning project → project inside one workspace would be one word for
+// two operations with different blast radii, which is the shape of mistake that
+// only shows up after it has been made.
+//
+// `project_id` is a field on the issue and the PATCH route has always accepted
+// it — this flag is the missing spelling, not a new capability. What IS new is
+// the server's refusal when the move would leave the issue in a task belonging
+// to the old project; `--task none` in the same call is the recovery, and it
+// lands in the same PATCH, so nothing is half-moved.
 func newIssueEditCmd() *cobra.Command {
 	var status, title, description, descriptionFile string
 	var priority string
-	var assignee, task, startDate, dueDate string
+	var assignee, task, project, startDate, dueDate string
 	var addLabels, removeLabels []string
 	cmd := &cobra.Command{
 		Use:         "edit <id>",
-		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/issues/{id},POST /api/workspaces/{ws}/issues/{id}/labels,DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid},GET /api/workspaces/{ws}/issues/{id}/labels"},
-		Short:       "Edit an issue (status, title, priority, description, assignee, task, dates, labels)",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/issues/{id},POST /api/workspaces/{ws}/issues/{id}/labels,DELETE /api/workspaces/{ws}/issues/{id}/labels/{lid},GET /api/workspaces/{ws}/issues/{id}/labels,GET /api/workspaces/{ws}/projects"},
+		Short:       "Edit an issue, or move it to another project (--project)",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -449,7 +546,7 @@ func newIssueEditCmd() *cobra.Command {
 				req.Description = &resolved
 			}
 			if cmd.Flags().Changed("assignee") {
-				if strings.EqualFold(assignee, "none") || strings.EqualFold(assignee, "null") || strings.EqualFold(assignee, "clear") || strings.EqualFold(assignee, "unset") {
+				if isClearWord(assignee) {
 					req.AssigneeIDs = []byte("[]")
 				} else {
 					uid, err := ResolveUserID(assignee, c, cfg)
@@ -466,6 +563,20 @@ func newIssueEditCmd() *cobra.Command {
 					return err
 				}
 				req.TaskID = raw
+			}
+			if cmd.Flags().Changed("project") {
+				if isClearWord(project) {
+					req.ProjectID = []byte("null")
+				} else {
+					pid, err := resolveProjectRef(c, project)
+					if err != nil {
+						return err
+					}
+					if pid <= 0 {
+						return cmdutil.Usagef("invalid --project %q — run `bk issues project list` to see them", project)
+					}
+					req.ProjectID = []byte(strconv.Itoa(pid))
+				}
 			}
 			if cmd.Flags().Changed("start-date") {
 				req.StartDate = cmdutil.StringOrNullJSON(startDate)
@@ -519,6 +630,7 @@ func newIssueEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&priority, "priority", "", "New priority: "+vocabPriority("issue"))
 	cmd.Flags().StringVar(&assignee, "assignee", "", "Assignee (id, email, name, 'me', or 'none' to clear)")
 	cmd.Flags().StringVar(&task, "task", "", "Task id (or 'none' to clear)")
+	cmd.Flags().StringVar(&project, "project", "", "Move the issue to another project — "+projectFlagHelp+" (or 'none' to unscope it). Refused if the issue's task belongs elsewhere: add --task none to move it out of the task in the same call")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD (or 'none')")
 	cmd.Flags().StringVar(&dueDate, "due-date", "", "Due date YYYY-MM-DD (or 'none')")
 	cmd.Flags().StringArrayVar(&addLabels, "label", nil, "Attach a label by NAME, created if new (repeatable)")

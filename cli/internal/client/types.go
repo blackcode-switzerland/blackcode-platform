@@ -338,8 +338,13 @@ type UpdateIssueRequest struct {
 	Priority    *int            `json:"priority,omitempty"`
 	AssigneeIDs json.RawMessage `json:"assignee_ids,omitempty"`
 	TaskID      json.RawMessage `json:"task_id,omitempty"`
-	StartDate   json.RawMessage `json:"start_date,omitempty"`
-	DueDate     json.RawMessage `json:"due_date,omitempty"`
+	// ProjectID moves the issue between projects inside one workspace — the
+	// project's #number, or the literal `null` to unscope it. RawMessage, like
+	// TaskID, because `omitempty` on a *int cannot distinguish "not given" from
+	// "clear it" and both are meaningful here.
+	ProjectID json.RawMessage `json:"project_id,omitempty"`
+	StartDate json.RawMessage `json:"start_date,omitempty"`
+	DueDate   json.RawMessage `json:"due_date,omitempty"`
 }
 
 type CreateProjectRequest struct {

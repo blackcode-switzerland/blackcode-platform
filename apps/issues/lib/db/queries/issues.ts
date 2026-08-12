@@ -28,6 +28,27 @@ import { ISSUE_STATUS_VALUES, ISSUE_TERMINAL_STATUSES } from '@/lib/work-items'
 const TERMINAL_STATUSES = new Set(ISSUE_TERMINAL_STATUSES)
 const VALID_STATUSES = new Set(ISSUE_STATUS_VALUES)
 
+/**
+ * Thrown when a project move would leave the issue inside a task that belongs to
+ * a different project. See the block in `updateIssue` for why this is a refusal
+ * rather than a silent detach.
+ *
+ * It is a CLASS rather than `new Error('task_project_mismatch')` — the other
+ * refusals in this file are bare messages — because the route's message has to
+ * name the task that is in the way. A caller told "that would orphan the task
+ * link" with no #number cannot act on it, and the whole point of refusing rather
+ * than detaching is that the caller can act on it.
+ */
+export class IssueTaskProjectMismatch extends Error {
+  constructor(
+    readonly taskSeq: number | null,
+    readonly taskName: string
+  ) {
+    super('task_project_mismatch')
+    this.name = 'IssueTaskProjectMismatch'
+  }
+}
+
 export interface AssigneeInfo {
   id: number
   name: string | null
@@ -74,6 +95,27 @@ export interface ListIssuesOptions {
   assigneeIds?: number[] | null
   status?: string
   priority?: number
+  /**
+   * Label NAMES, matched case-insensitively. Several names are an OR — an issue
+   * carrying any of them matches. AND would need a second flag to ask for, and
+   * "show me the bugs and the regressions" is the question people actually have.
+   *
+   * Only labels this app can see are considered (`visibleToThisApp`): a name
+   * another app owns must not select rows here, or the filter would leak that
+   * app's label set through its results.
+   */
+  labels?: string[]
+  /**
+   * INCLUSIVE upper bound on `due_date`, as YYYY-MM-DD. An issue due exactly on
+   * this date MATCHES.
+   *
+   * `due_date` is a DATE column, so the boundary day is a whole day of work and
+   * the two readings of "before Friday" differ by all of it. Inclusive is chosen
+   * because the other reading fails silently: a caller asking for "due this
+   * week" and losing Friday sees a shorter list with nothing to tell them it is
+   * short. Issues with no due date are never returned by this filter.
+   */
+  dueBefore?: string
   search?: string
   /** Look up the single issue with this workspace-facing seq (the #number in the UI). */
   seq?: number
@@ -110,14 +152,27 @@ export async function listIssuesInWorkspace(
         ? sql`AND EXISTS (SELECT 1 FROM ${issueAssignees} ia WHERE ia.issue_id = i.id AND ia.user_id IN (${sql.join(opts.assigneeIds.map((id) => sql`${id}`), sql`, `)}))`
         : sql``
 
+  const labelNames = (opts.labels ?? []).map((n) => n.trim().toLowerCase()).filter(Boolean)
+  const labelFilter =
+    labelNames.length > 0
+      ? sql`AND EXISTS (
+          SELECT 1 FROM ${issueLabels} il
+          JOIN ${labels} lb ON lb.id = il.label_id
+          WHERE il.issue_id = i.id
+            AND ${visibleToThisApp('lb')}
+            AND lower(lb.name) IN (${sql.join(labelNames.map((n) => sql`${n}`), sql`, `)}))`
+      : sql``
+
   const whereClause = sql`
     WHERE i.workspace_id = ${workspaceId}
       AND i.deleted_at IS NULL
       ${projectFilter}
       ${taskFilter}
       ${assigneeFilter}
+      ${labelFilter}
       ${opts.status ? sql`AND i.status = ${opts.status}` : sql``}
       ${opts.priority ? sql`AND i.priority = ${opts.priority}` : sql``}
+      ${opts.dueBefore ? sql`AND i.due_date IS NOT NULL AND i.due_date <= ${opts.dueBefore}::date` : sql``}
       ${opts.seq !== undefined ? sql`AND i.seq = ${opts.seq}` : sql``}
       ${searchClause(opts.search, { text: [sql`i.title`, sql`i.description`], seq: sql`i.seq` })}
   `
@@ -340,6 +395,47 @@ export async function updateIssue(
       .limit(1)
     const before = beforeRows[0]
     if (!before) return null
+
+    // ---------- MOVING AN ISSUE BETWEEN PROJECTS: THE TASK LINK ----------
+    //
+    // THE DECISION (2026-08-12, phase 4 §2): a project move that would leave the
+    // issue in a task belonging to a DIFFERENT project is REFUSED. It is not
+    // silently detached and the task link is not silently carried across.
+    //
+    // The three candidate answers and why this one:
+    //
+    //   * carry the link across — the issue is then in project B while its task
+    //     says project A. `bk issues project issues B` and
+    //     `bk issues task view <t>` disagree about the same issue, and every
+    //     progress ratio on that task counts an issue that is no longer under it.
+    //   * detach silently — the issue leaves the task and NOTHING says so. The
+    //     task's numbers change from a command that never mentioned it. This is
+    //     the "silently orphaned reference" the plan names, and it is the one
+    //     nobody notices for a month.
+    //   * refuse — the caller is told, in one line, which task is in the way and
+    //     the exact recovery. Nothing is lost and nothing moved.
+    //
+    // Refusing also matches what `task attach` already does when an issue is
+    // already in another task (phase 3): the write that would quietly change a
+    // SECOND record's numbers is the one this app stops and names.
+    //
+    // SCOPE IS DELIBERATELY THE PROJECT MOVE, not (project, task) consistency in
+    // general. Rows predating this rule are not blocked from unrelated edits, and
+    // `task attach`'s own semantics — shipped and verified one commit ago — are
+    // untouched unless the same PATCH is also moving the project.
+    if (patch.project_id !== undefined) {
+      const resultingTaskId = patch.task_id !== undefined ? patch.task_id : before.task_id
+      if (resultingTaskId != null) {
+        const [linked] = await tx
+          .select({ seq: tasks.seq, name: tasks.name, project_id: tasks.project_id })
+          .from(tasks)
+          .where(and(eq(tasks.id, resultingTaskId), eq(tasks.workspace_id, workspaceId)))
+          .limit(1)
+        if (linked && linked.project_id != null && linked.project_id !== patch.project_id) {
+          throw new IssueTaskProjectMismatch(linked.seq, linked.name)
+        }
+      }
+    }
 
     const updates: Record<string, unknown> = {}
     if (patch.title !== undefined) updates.title = patch.title

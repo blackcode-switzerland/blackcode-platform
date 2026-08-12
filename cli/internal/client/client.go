@@ -422,19 +422,11 @@ func (c *Client) GetProject(id int) (*Project, error) {
 }
 
 func (c *Client) ListIssues(opts ListIssuesOpts) (*IssuesPage, error) {
-	q := url.Values{}
-	if opts.ProjectID > 0 {
-		q.Set("project_id", fmt.Sprint(opts.ProjectID))
-	}
-	if strings.TrimSpace(opts.Search) != "" {
-		q.Set("search", opts.Search)
-	}
-
 	path, err := c.wsPath("issues")
 	if err != nil {
 		return nil, err
 	}
-	if len(q) > 0 {
+	if q := IssuesQuery(opts); len(q) > 0 {
 		path += "?" + q.Encode()
 	}
 
@@ -445,19 +437,85 @@ func (c *Client) ListIssues(opts ListIssuesOpts) (*IssuesPage, error) {
 	return &page, nil
 }
 
-// ListIssuesOpts is what the SERVER filters on, and that is the whole reason
-// `Status` is not here.
+// ListIssuesOpts is what the SERVER filters on, and every field here reaches the
+// query string — `IssuesQuery` below is the whole of that translation and is
+// tested directly.
 //
-// It used to be — a field nobody set and ListIssues never put in the query
-// string. Read from this struct, `--status` looked server-side; it is applied
-// by filterIssues() after every issue in the workspace has been fetched, which
-// is what the flag's help now says out loud. A field that advertises a
-// capability the request does not have is how that help came to be wrong.
-// Removed 2026-08-12; `issues_list_filters_are_client_side_test.go` is what
-// keeps the two in step.
+// ---------------------------------------------------------------------------
+// THIS STRUCT IS A CLAIM ABOUT THE REQUEST, AND IT HAS BEEN WRONG BEFORE
+// ---------------------------------------------------------------------------
+// It carried a `Status` field that nothing ever set and `ListIssues` never sent.
+// Read from here, `--status` looked server-side; it was applied locally after
+// every issue in the workspace had been fetched. The field was deleted on
+// 2026-08-12 with a guard pinning the absence.
+//
+// On 2026-08-12 the filters MOVED — the route had accepted `status`,
+// `assignee_id`, `priority` and `task_id` the whole time, so the client was the
+// only thing standing between the flag and the server. The guard was inverted
+// with them: it now asserts these fields are PRESENT and that each one lands in
+// the query string, so the reverse regression (a field added, never sent) cannot
+// come back quietly. See `cli/internal/client/issues_query_test.go` and
+// `cli/internal/commands/issues/serverside_filters_test.go`.
 type ListIssuesOpts struct {
 	ProjectID int
 	Search    string
+	// Status is a single issue status. Empty = no filter.
+	Status string
+	// AssigneeIDs filters to issues assigned to any of these users.
+	AssigneeIDs []int
+	// Unassigned asks for issues with NO assignee. It is a separate field rather
+	// than a sentinel in AssigneeIDs because "nobody" and "no filter" are
+	// different requests and an empty slice already means the second.
+	Unassigned bool
+	// Priority is the stored 1-5 value. 0 = no filter.
+	Priority int
+	// TaskID is the task's #number. 0 = no filter.
+	TaskID int
+	// Labels are label NAMES; several are an OR on the server.
+	Labels []string
+	// DueBefore is YYYY-MM-DD and is INCLUSIVE on the server.
+	DueBefore string
+}
+
+// IssuesQuery is the opts → query-string translation, split out from ListIssues
+// so it can be asserted without a server.
+//
+// A filter that is dropped here fails in the direction nobody notices: the
+// request succeeds, the server applies no such filter, and the caller reads a
+// wider answer as the answer to their narrower question.
+func IssuesQuery(opts ListIssuesOpts) url.Values {
+	q := url.Values{}
+	if opts.ProjectID > 0 {
+		q.Set("project_id", fmt.Sprint(opts.ProjectID))
+	}
+	if opts.TaskID > 0 {
+		q.Set("task_id", fmt.Sprint(opts.TaskID))
+	}
+	if strings.TrimSpace(opts.Search) != "" {
+		q.Set("search", opts.Search)
+	}
+	if s := strings.TrimSpace(opts.Status); s != "" {
+		q.Set("status", s)
+	}
+	if opts.Priority > 0 {
+		q.Set("priority", fmt.Sprint(opts.Priority))
+	}
+	if opts.Unassigned {
+		q.Set("assignee_id", "null")
+	} else {
+		for _, id := range opts.AssigneeIDs {
+			q.Add("assignee_ids", fmt.Sprint(id))
+		}
+	}
+	for _, name := range opts.Labels {
+		if n := strings.TrimSpace(name); n != "" {
+			q.Add("label", n)
+		}
+	}
+	if d := strings.TrimSpace(opts.DueBefore); d != "" {
+		q.Set("due_before", d)
+	}
+	return q
 }
 
 func (c *Client) ListUsers() ([]User, error) {
