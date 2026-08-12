@@ -515,7 +515,7 @@ bk issues copy --to growth --project 42 --cascade-issues=false
 | `bk issues project list [--search TEXT]` | `GET /api/workspaces/:ws/projects` | Returns every project in one response (not paginated). `--search` is server-side (name/description, plus the #id when numeric — e.g. `123` or `#123`). |
 | `bk issues project view <id>` | `GET /api/workspaces/:ws/projects/:id` | |
 | `bk issues project members <id>` | `GET /api/workspaces/:ws/projects/:id/members` | |
-| `bk issues project issues <id> [--status S] [--assignee REF]` | `GET /api/workspaces/:ws/issues?project_id=:id` | Status/assignee filters applied client-side. |
+| `bk issues project issues <id> [same filters as `issue list`]` | `GET /api/workspaces/:ws/issues?project_id=:id` | Built from the same flag constructor as `issue list`, so the two cannot diverge. All server-side. |
 | `bk issues project tasks <id>` | `GET /api/workspaces/:ws/tasks?project_id=:id` | |
 | `bk issues project create --name N [--description D \| --description-file F] [--file F ...]` | `POST /api/workspaces/:ws/projects` | `--file` uploads + embeds inline (repeatable). |
 | `bk issues project edit <id> [--name] [--description \| --description-file] [--status]` | `PATCH /api/workspaces/:ws/projects/:id` | |
@@ -532,10 +532,10 @@ bk issues copy --to growth --project 42 --cascade-issues=false
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk issues issue list [--project N] [--status S] [--assignee REF ...] [--mine] [--search TEXT]` | `GET /api/workspaces/:ws/issues` | Returns every matching issue in one response (not paginated). `--mine` = assigned to the current user. `--assignee` is repeatable. `--search` is server-side (title/description, plus the #id when numeric — e.g. `123` or `#123`); status/assignee filters are client-side. Footer shows `showing X of N`. |
+| `bk issues issue list [--project N] [--task T] [--status S] [--assignee REF] [--mine] [--label NAME ...] [--priority P] [--due-before DATE] [--search TEXT]` | `GET /api/workspaces/:ws/issues` | Returns every matching issue in one response (not paginated). **Every filter is server-side** since 2026-08-12 — `--status`/`--assignee`/`--mine` used to fetch the workspace and filter locally, and the route had accepted all of them the whole time. `--label` takes NAMES and repeating it is an **OR**; `--due-before` is **INCLUSIVE** of the named day and excludes undated issues; `--task`/`--project` take a #number or an exact name; `--assignee` also takes `none`. Malformed values are a `400`, not a dropped clause. Footer shows `showing X of N`, both counts of the same filtered set. |
 | `bk issues issue view <id>` | `GET /api/workspaces/:ws/issues/:id` | `id` is the `#number` shown in the app (a leading `#` is accepted). |
 | `bk issues issue create --project N --title T [...]` | `POST /api/workspaces/:ws/issues` | Full flag list below. |
-| `bk issues issue edit <id> [...]` | `PATCH /api/workspaces/:ws/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. |
+| `bk issues issue edit <id> [...]` | `PATCH /api/workspaces/:ws/issues/:id` | Pass `none`/`null`/`unset`/`clear` to clear a field. `--project` moves the issue; a move that would leave it in a task belonging to another project is refused with `task_project_mismatch` naming the task — pass `--task none` in the same call. |
 | `bk issues issue assign <id> <user> [<user> ...]` | `PATCH /api/workspaces/:ws/issues/:id` | Adds one or more assignees (does not remove existing). |
 | `bk issues issue unassign <id> [<user>]` | `PATCH /api/workspaces/:ws/issues/:id` | Removes a specific assignee, or clears all if no user given. |
 | `bk issues issue delete <id> [--yes]` | `DELETE /api/workspaces/:ws/issues/:id` | Moves to Trash. Prompts to confirm. Restore with `bk issues trash restore issue:<#number>`. |
@@ -622,7 +622,7 @@ All work because the server rewrites uploaded-file urls into rich-text nodes.
 > **body**. `bk issues issue attach` is different — it's issue-only and adds the file to
 > the separate **attachments list** (sidebar), not the body.
 
-**`issue edit` flags**: `--title`, `--description` / `--description-file`, `--status`, `--priority`, `--assignee` (repeatable, replaces all assignees; `none` clears all), `--task`, `--start-date`, `--due-date`. Only flags you actually pass are sent; nullable fields (`--task`, `--start-date`, `--due-date`) accept the `none` sentinel to clear them. `--assignee none` sends an empty array, removing all assignees.
+**`issue edit` flags**: `--title`, `--description` / `--description-file`, `--status`, `--priority`, `--assignee` (repeatable, replaces all assignees; `none` clears all), `--task`, `--project` (**moves the issue between projects inside one workspace** — id or name, or `none` to unscope it; `bk issues move` is and stays workspace→workspace), `--start-date`, `--due-date`. Only flags you actually pass are sent; nullable fields (`--task`, `--start-date`, `--due-date`) accept the `none` sentinel to clear them. `--assignee none` sends an empty array, removing all assignees.
 
 ### Tasks
 
@@ -699,7 +699,7 @@ Per-user notifications (invitations, mentions, assignments, status changes).
 
 | Command | Backend call | Notes |
 |---|---|---|
-| `bk issues inbox list [--unread] [--ws W]` | `GET /api/me/inbox` | Prints an unread count to stderr. `--unread` shows only unread messages. **Global by default** — every workspace, every app that notifies you. The persistent `--ws` (slug or id) narrows it to one; an unresolvable slug errors rather than falling back to the unfiltered list. |
+| `bk issues inbox list [--unread] [--ws W] [--type T] [--from REF] [--since DATE] [--project N] [--task N]` | `GET /api/me/inbox` | Prints an unread count to stderr, **scoped to the same filters as the list**. **Global by default** — every workspace, every app that notifies you; every filter is opt-in and server-side. The persistent `--ws` (slug or id) narrows to one workspace; an unresolvable slug errors rather than falling back to the unfiltered list. `--project`/`--task` take a #number and **require `--ws`** (a #number only means something inside one workspace); `--project` matches the project, its tasks AND its issues, because an inbox row records `entity_type`+`entity_id` and carries no project. No filter searches the payload text. |
 | `bk issues inbox read [id ...] \| --all` | `POST /api/me/inbox/mark-read` | Provide message ids, or `--all` to mark every unread message read. |
 | `bk issues inbox archive <id> [id ...]` | `POST /api/me/inbox/archive` | At least one id is required. |
 

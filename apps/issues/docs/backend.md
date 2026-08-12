@@ -171,9 +171,19 @@ GET    /api/workspaces/{ws}/tasks/{id}?preview=1   child counts for delete dialo
 PATCH  /api/workspaces/{ws}/tasks/{id}     update
 DELETE /api/workspaces/{ws}/tasks/{id}?mode=cascade|detach   move to Trash (default: detach)
 GET    /api/workspaces/{ws}/tasks/{id}/comments  list / POST
-GET    /api/workspaces/{ws}/issues              list (filters) / POST create
-                                               (filters: project_id, task_id (workspace #numbers),
-                                                assignee_id(s) (user ids), status, priority, search.
+GET    /api/workspaces/{ws}/issues              list / POST create
+                                               (filters: project_id, task_id (workspace #numbers, or
+                                                `null` for unscoped), assignee_id (or `null` for
+                                                unassigned) / assignee_ids (user ids), status, priority,
+                                                label (REPEATABLE, label NAMES, several are an OR;
+                                                only labels this app owns are matched),
+                                                due_before (YYYY-MM-DD, INCLUSIVE of that day; issues
+                                                with no due_date are never returned), search.
+                                                A value it cannot PARSE is a 400 with a code and a
+                                                suggestion, never a dropped clause: ?priority=urgent
+                                                and ?assignee_ids=alice used to return every issue in
+                                                the workspace under a request that had asked for a
+                                                subset, silently (2026-08-12).
                                                 search = case-insensitive substring on title/description,
                                                 and the #id when the query is numeric (e.g. "123"/"#123");
                                                 same for tasks (name/description) and projects (name/description)
@@ -188,6 +198,15 @@ GET    /api/workspaces/{ws}/issues/{id}         detail / PATCH — PATCH REJECTS
                                                 drop them, and two reporters read the 200 as "labeling is
                                                 UI-only". Use the /labels routes below. `labels` IS in the
                                                 response of both GET and PATCH.
+                                                PATCH also REFUSES a project_id change that would leave
+                                                the issue in a task belonging to a DIFFERENT project
+                                                (400 task_project_mismatch, naming the task; 2026-08-12).
+                                                Carrying the link across makes that task's progress count
+                                                an issue no longer under it; detaching it silently changes
+                                                a second record from a call that never mentioned it. Pass
+                                                task_id: null in the same PATCH. The rule fires ONLY when
+                                                project_id is being changed — task attach/detach and
+                                                already-crossed rows are untouched. See updateIssue.
 DELETE /api/workspaces/{ws}/issues/{id}         move to Trash
 GET    /api/workspaces/{ws}/issues/{id}/comments     list / POST
 GET    /api/workspaces/{ws}/issues/{id}/labels       list / POST attach ({label_id} or {name} — name created on the fly)
