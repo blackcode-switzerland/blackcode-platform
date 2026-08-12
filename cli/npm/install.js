@@ -116,7 +116,8 @@ function postInstallNotes(platform, binPath, policy) {
       ``,
       `If that says "is not recognized", npm's global bin directory is not on your PATH:`,
       `  $env:PATH = "$(npm prefix -g);$env:PATH"     # PowerShell, this session`,
-      `  setx PATH "%PATH%;%APPDATA%\\npm"            # persistent, new shells only`,
+      `  # persistent (User scope, new shells) — NOT setx, which truncates PATH at 1024 chars:`,
+      `  [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path','User') + ';' + (npm prefix -g), 'User')`,
     )
   } else {
     lines.push(

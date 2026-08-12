@@ -28,6 +28,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const require_ = createRequire(import.meta.url)
@@ -116,7 +117,12 @@ describe('post-install notes', () => {
   it('gives Windows PATH advice in Windows shells, and never a POSIX export', () => {
     const out = notes('win32', 'remotesigned')
     expect(out).toContain('$env:PATH')
-    expect(out).toContain('setx PATH')
+    // NOT `setx PATH`. It was here until 2026-08-12 and this assertion was
+    // enforcing it: setx truncates PATH at 1024 chars and copies the system
+    // path into user scope. The persistent advice is the .NET API, which does
+    // neither. See "nothing suggests setx for PATH" below.
+    expect(out).toContain('SetEnvironmentVariable')
+    expect(out).not.toContain('setx PATH')
     // The old text printed `export PATH="$(npm prefix -g)/bin:$PATH"` to
     // everybody, Windows included, where it is not a command at all.
     expect(out).not.toContain('export PATH')
@@ -160,5 +166,64 @@ describe('failure messages name their own exit', () => {
   it('falls back to the plain download error for anything else', () => {
     const out = installer.failureMessage({ code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND github.com' })
     expect(out).toBe('Failed to download bk: getaddrinfo ENOTFOUND github.com')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// `setx PATH "%PATH%;…"` MUST NEVER BE SUGGESTED, on any surface.
+// ---------------------------------------------------------------------------
+// It is the first answer every search result gives for "add to PATH on
+// Windows", and it can permanently damage the machine of the person following
+// our install instructions:
+//
+//   1. `setx` TRUNCATES at 1024 characters, silently. A developer PATH is
+//      routinely longer than that, and the tail is gone — not restorable from
+//      anything setx wrote.
+//   2. `%PATH%` expands to SYSTEM + USER joined, and `setx` writes to USER. So
+//      it copies every system entry into user scope, where it goes stale the
+//      next time the system path changes, and compounds on a second run.
+//
+// Added 2026-08-12. Phase 6's agent flagged the line as "the one thing that
+// needs a human with Windows … that one could be actively unhelpful" and was
+// right; this is the guard so it cannot come back through a copy-paste.
+//
+// Scanned rather than reasoned about: the string can reappear in the installer,
+// the guide, the README or a help string, and only a text scan covers all four.
+describe('nothing suggests setx for PATH', () => {
+  const ROOT = resolve(__dirname, '../../..')
+  const FILES = [
+    'cli/npm/install.js',
+    'cli/internal/guide/topics/platform/02-install-auth.md',
+    'cli/README.md',
+  ]
+
+  it('THE PREMISE: the files exist and mention PATH', () => {
+    for (const f of FILES) {
+      const src = readFileSync(resolve(ROOT, f), 'utf8')
+      expect(src.length, `${f} is empty`).toBeGreaterThan(0)
+    }
+  })
+
+  it('no file tells a user to run setx on PATH', () => {
+    const offenders: string[] = []
+    for (const f of FILES) {
+      const src = readFileSync(resolve(ROOT, f), 'utf8')
+      // `setx` followed by PATH on the same line, in any casing. A prose
+      // mention that WARNS about it is allowed — those say "not setx" or
+      // "do not use", so require the command shape (setx then a quote).
+      for (const line of src.split('\n')) {
+        // Anchored at the START of the line (after whitespace, a backtick from
+        // a template literal, or a shell prompt) so it matches a COMMAND and
+        // not the prose that warns against one. The first version of this
+        // guard matched its own warning in the guide topic.
+        if (/^[\s`>$]*setx\s+PATH\s+"/i.test(line)) offenders.push(`${f}: ${line.trim()}`)
+      }
+    }
+    expect(
+      offenders,
+      'setx truncates PATH at 1024 chars and copies the system path into user ' +
+        'scope. Never suggest it; use [Environment]::SetEnvironmentVariable ' +
+        `with the 'User' scope instead:\n${offenders.join('\n')}`
+    ).toEqual([])
   })
 })

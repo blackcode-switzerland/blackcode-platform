@@ -85,9 +85,18 @@ equivalents are:
 $env:PATH = "$(npm prefix -g);$env:PATH"     # this session only
 ```
 
-```cmd
-setx PATH "%PATH%;%APPDATA%\npm"              # persistent, new shells only
+```powershell
+# persistent, User scope, new shells. NOT `setx` — see below.
+[Environment]::SetEnvironmentVariable('Path',
+  [Environment]::GetEnvironmentVariable('Path','User') + ';' + (npm prefix -g), 'User')
 ```
+
+**Do not use `setx PATH "%PATH%;…"`.** It is the answer every search result
+gives and it can permanently damage your PATH, in two ways: `setx` **truncates
+at 1024 characters**, silently, so a long PATH loses its tail; and `%PATH%`
+expands to the SYSTEM and USER paths joined, which `setx` then writes back into
+the USER path — copying every system entry into user scope, where it goes stale
+the next time the system path changes.
 
 **The piped token form, in PowerShell.** `echo <token> | bk login --token` works
 — `echo` is `Write-Output` — but the pipeline to a native binary is encoded with
