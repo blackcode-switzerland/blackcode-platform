@@ -179,10 +179,11 @@ export async function platformMetaBlock(
     // survived the split untouched.
     //
     // `relations` went with `bk link` on 2026-08-10: the link table is no longer
-    // written by any app and `linksRoute` is unmounted everywhere, so a relation
-    // vocabulary described a command that does not exist. The URN format stays
-    // because putting the other end's URN in the record's own text is the
-    // documented replacement for a link.
+    // written by any app, so a relation vocabulary described a command that does
+    // not exist. The route factory and `LINK_RELATIONS` itself followed on
+    // 2026-08-12. The URN format stays because putting the other end's URN in
+    // the record's own text is the documented replacement for a link — the
+    // design, not a stopgap (`bk guide platform/cross-app`).
     links: {
       urn_format: 'bc:<app>:<workspace-slug>/<entity-type>/<number>',
       urn_example: `bc:${app.appSlug}:${workspace?.slug ?? '<workspace>'}/issue/1`,

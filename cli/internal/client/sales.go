@@ -67,21 +67,6 @@ type SalesJourneyStep struct {
 	Note       string `json:"note" yaml:"note"`
 }
 
-// SalesLink is a cross-app link touching this prospect (D-18). `URL` is
-// absolute, built from the other app's registered base_url — a link the caller
-// cannot follow to the other deployment is a link that only exists in a table.
-type SalesLink struct {
-	Direction  string `json:"direction" yaml:"direction"`
-	Rel        string `json:"rel" yaml:"rel"`
-	URN        string `json:"urn" yaml:"urn"`
-	App        string `json:"app" yaml:"app"`
-	EntityType string `json:"entity_type" yaml:"entity_type"`
-	Number     int    `json:"number" yaml:"number"`
-	Title      string `json:"title" yaml:"title"`
-	URL        string `json:"url" yaml:"url"`
-	Deleted    bool   `json:"deleted" yaml:"deleted"`
-}
-
 // Prospect is the core object: the company AND the deal in one row (D-5).
 type Prospect struct {
 	Number       int             `json:"number" yaml:"number"`
@@ -105,7 +90,13 @@ type Prospect struct {
 
 	// Served by the single-prospect route only; empty on a listing.
 	Journey []SalesJourneyStep `json:"journey,omitempty" yaml:"journey,omitempty"`
-	Links   []SalesLink        `json:"links,omitempty" yaml:"links,omitempty"`
+
+	// There is no `Links` field, and `SalesLink` is gone (2026-08-12). The
+	// prospect route stopped serving `links` on 2026-08-10 when this app
+	// stopped reading `platform.links`, so the struct decoded an absent key
+	// into an empty slice on every call and `prospect show` printed a LINKED
+	// section that could not appear. Cross-app references are not supported;
+	// the far end's URN goes in the prospect's own summary.
 }
 
 // SalesDeleted is what an irreversible sales command prints: WHAT was destroyed,

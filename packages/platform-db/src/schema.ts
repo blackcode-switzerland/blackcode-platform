@@ -238,40 +238,28 @@ export const entities = platformSchema.table(
 )
 
 /**
- * The relation vocabulary `platform.links.rel` accepts.
+ * `platform.links` — RETIRED. Declared here because the TABLE still exists.
  *
- * Deliberately NOT a database CHECK constraint. A future app will want a
- * relation this list does not have, and "add a value" should be a code change
- * plus a changelog line, not a platform migration every app has to sequence
- * around. The API route validates against this list and `/api/meta` serves it,
- * which also keeps it out of the guide — it is a dynamic value.
+ * It held typed relations between two URNs in any two apps, written by
+ * `bk link` and served by `linksRoute`. The command went on 2026-08-10 and the
+ * route factory and its query helpers went on 2026-08-12: a link's two ends
+ * were foreign keys into `platform.entities`, which has had a single writer
+ * since 2026-08-10, so a relation with one end in another app could no longer
+ * be validated, resolved or cleaned up by the app holding it.
  *
- * Links are DIRECTED and no inverse row is written: `A blocks B` is one row, and
- * `bk link list B` reports it as an incoming `blocks` from A. Storing both
- * directions would create a second thing that can disagree.
- */
-export const LINK_RELATIONS = [
-  'blocks',
-  'relates_to',
-  'duplicates',
-  'caused_by',
-  'part_of',
-  'billed_as',
-] as const
-export type LinkRelation = (typeof LINK_RELATIONS)[number]
-
-/**
- * `platform.links` — typed relations between any two URNs, in any two apps.
+ * **Nothing reads or writes this table.** It keeps its declaration for one
+ * reason only: it is still in the database, and a schema that omitted it would
+ * make the next `drizzle-kit generate` emit a DROP nobody decided on. Dropping
+ * it is a migration with a rollback and its own decision — see
+ * `docs/changelog/platform.md`, 2026-08-12.
  *
- * This is the referential integrity that a URL pasted into a description does
- * not have. Both ends are real foreign keys into `entities`:
+ * The relation vocabulary that used to live above this (`LINK_RELATIONS`, six
+ * values, served by `/api/meta`) went with the route. `/api/meta`'s `links`
+ * block carries the URN format and nothing else.
  *
- *   ON UPDATE CASCADE — a workspace slug rename rewrites every urn, and Postgres
- *     carries the links along. This is why "a link survives a rename" is a
- *     property of the schema rather than something a code path must remember.
- *   ON DELETE CASCADE — a *purge* (the hard delete) takes its links with it. A
- *     soft delete does not: the entities row stays with `deleted_at` set, so a
- *     link to something in the recycle bin still resolves and still restores.
+ * The replacement for a link is the far end's URN in the record's own text.
+ * That is the design, not a stopgap: it is a fact one app holds, it cannot
+ * drift, and it survives being read by a person. `bk guide platform/cross-app`.
  */
 export const links = platformSchema.table(
   'links',
@@ -288,7 +276,8 @@ export const links = platformSchema.table(
   },
   (t) => ({
     pk: primaryKey({ columns: [t.from_urn, t.to_urn, t.rel] }),
-    // `bk link list <urn>` asks in both directions; from_urn is covered by the PK.
+    // Was for the reverse half of `bk link list <urn>`; from_urn is covered by
+    // the PK. Both are as retired as the table.
     toIdx: index('idx_links_to').on(t.to_urn),
     noSelf: check('links_no_self_link', sql`${t.from_urn} <> ${t.to_urn}`),
   })

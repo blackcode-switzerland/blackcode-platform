@@ -160,8 +160,12 @@ describe('search: one endpoint, one call site (D-9)', () => {
   // blocks CHF 18k deal". Nothing in the route is wrong; its premise stopped
   // being true underneath it.
   //
-  // The same is true of `…/links` (`linksRoute` resolves an issues URN and
-  // returns the far end's title), which this app also stopped mounting.
+  // The same was true of `…/links`, which this app also stopped mounting.
+  // `linksRoute` itself was DELETED on 2026-08-12 — it had been mounted by
+  // nobody for a fortnight — so the check below now guards against a
+  // hand-written mount rather than against re-mounting a factory. That is a
+  // weaker thing to guard and it is still worth guarding: the path is the part
+  // an agent or a copy-paste would recreate.
   //
   // WHAT THIS COSTS, STATED RATHER THAN GLOSSED: `bk search` and `bk link`
   // answer 404 from a sales-homed CLI. That is PLAN.md §3's deliberate loss —
@@ -195,12 +199,14 @@ describe('search: one endpoint, one call site (D-9)', () => {
     ).toBe(false)
 
     // The same failure, one path over: `bk link`'s storage is the cross-app
-    // index too, and PLAN.md §3 retires the feature outright.
+    // index too, and the feature is retired outright.
     expect(
       existsSync(join(APP_ROOT, 'app/api/workspaces/[ws]/links/route.ts')),
-      'app/api/workspaces/[ws]/links/route.ts is back. `linksRoute` resolves URNs ' +
-        'through `platform.entities` and returns the far end\'s title — the same ' +
-        'cross-tenant read as the search route, and PLAN.md §3 retires `bk link`.'
+      'app/api/workspaces/[ws]/links/route.ts is back. Any implementation of it ' +
+        'resolves URNs through `platform.entities` and returns the far end\'s ' +
+        'title — the same cross-tenant read as the search route. Cross-app ' +
+        'references are not supported (2026-08-12); the far end\'s URN goes in ' +
+        "the record's own text."
     ).toBe(false)
   })
 })

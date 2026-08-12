@@ -5,7 +5,7 @@
 // WHY THEY ARE FACTORIES AND NOT ROUTES
 // ---------------------------------------------------------------------------
 // Every "platform verb" route — `/api/me`, `/api/meta`, `/api/upload`,
-// `/api/workspaces/**`, search, activity, links, tokens — physically lived under
+// `/api/workspaces/**`, search, activity, tokens — physically lived under
 // `apps/issues/app/api/**`. With one app that was invisible. With two it breaks
 // three ways, all of them silent (docs/sales-app-plan.md B-2):
 //
@@ -53,6 +53,20 @@
 // matches nothing, so the route would work while silently dropping out of the
 // coverage check. A guard that stops seeing a route reports green.
 
+// ---------------------------------------------------------------------------
+// THERE IS NO `linksRoute`, AND THAT IS DELIBERATE (2026-08-12)
+// ---------------------------------------------------------------------------
+// `GET|POST|DELETE /api/workspaces/{ws}/links` served `bk link`, which was
+// removed on 2026-08-10. The factory outlived the command by two days short of
+// a fortnight, mounted by nobody: its two ends were URNs looked up in
+// `platform.entities`, an index with a single writer since then, so it could
+// only ever have resolved another app's rows for a caller with no access to
+// them. Both guards that watched for it staying unmounted still watch for the
+// mount FILE coming back (`apps/sales/lib/search-parity.test.ts`).
+//
+// Cross-app references are not supported. The far end's URN goes in the
+// record's own text — `bk guide platform/cross-app`.
+
 export { activityRoute, publicEventIds } from './activity'
 export type { ActivityContribution } from './activity'
 export { changelogRoute } from './changelog'
@@ -66,7 +80,6 @@ export {
 export type { PasswordOtpSender } from './password'
 export { workspaceInvitationsRoute } from './invitations'
 export type { InvitationSender } from './invitations'
-export { linksRoute } from './links'
 export { activeWorkspaceRoute, meRoute, pendingInvitationsRoute } from './me'
 export { footprintRoute } from './footprint'
 export { searchRoute } from './search'

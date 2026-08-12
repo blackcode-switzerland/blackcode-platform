@@ -238,7 +238,7 @@ run('cross-app entity projection (integration)', () => {
     ).not.toBeNull()
   })
 
-  it('purging removes the projection row outright, and takes its links with it', async () => {
+  it('purging removes the projection row outright; a soft delete leaves it', async () => {
     const a = await issuesQ.createIssue({
       workspaceId: wsId,
       title: 'Purge me',
@@ -254,33 +254,22 @@ run('cross-app entity projection (integration)', () => {
     const urnA = `bc:issues:${wsSlug}/issue/${a.seq}`
     const urnB = `bc:issues:${wsSlug}/issue/${b.seq}`
 
-    const linked = await platformDb.createLink(db, {
-      fromUrn: urnA,
-      toUrn: urnB,
-      rel: 'blocks',
-      createdBy: ownerId,
-    })
-    expect(linked.ok).toBe(true)
-    expect(await platformDb.listLinks(db, urnB)).toHaveLength(1)
-
     await deletionQ.softDeleteIssue(wsId, a.id, ownerId)
+    const binned = await entityByUrn(urnA)
     expect(
-      await platformDb.listLinks(db, urnB),
-      'a link into the recycle bin must survive — restoring has to bring it back'
-    ).toHaveLength(1)
+      binned,
+      'a soft delete keeps the row — the recycle bin has to be able to restore it'
+    ).not.toBeNull()
+    expect(binned!.deleted_at).not.toBeNull()
 
     await deletionQ.purgeItems(wsId, [{ type: 'issue', id: a.id }], ownerId)
-    expect(await entityByUrn(urnA)).toBeNull()
-    expect(
-      await platformDb.listLinks(db, urnB),
-      'but a purge is permanent, so the link goes with it'
-    ).toHaveLength(0)
-    expect(await entityByUrn(urnB), 'and the other end is untouched').not.toBeNull()
+    expect(await entityByUrn(urnA), 'but a purge is permanent').toBeNull()
+    expect(await entityByUrn(urnB), 'and the other issue is untouched').not.toBeNull()
   })
 
   // ---- 4. RENAME: THE PROPERTY THE FOREIGN KEYS PROVIDE ----
 
-  it('a link survives a workspace rename, by cascade', async () => {
+  it('a workspace rename rewrites every urn in place, by cascade', async () => {
     const ws = await workspacesQ.createWorkspace({ name: `Rename WS ${suffix}`, ownerId })
     try {
       const a = await issuesQ.createIssue({
@@ -295,13 +284,6 @@ run('cross-app entity projection (integration)', () => {
         reporterId: ownerId,
         actorUserId: ownerId,
       })
-      const created = await platformDb.createLink(db, {
-        fromUrn: `bc:issues:${ws.slug}/issue/${a.seq}`,
-        toUrn: `bc:issues:${ws.slug}/issue/${b.seq}`,
-        rel: 'relates_to',
-        createdBy: ownerId,
-      })
-      expect(created.ok).toBe(true)
 
       const renamed = await workspacesQ.updateWorkspace(ws.id, { slug: `renamed-${suffix}` }, ownerId)
       const newSlug = renamed!.slug
@@ -312,83 +294,29 @@ run('cross-app entity projection (integration)', () => {
       expect(moved).not.toBeNull()
       expect(moved!.url).toContain(`/dashboard/${newSlug}/issues/${a.seq}`)
 
-      // And the link followed, without any code path having to remember to move it.
-      const links = await platformDb.listLinks(db, `bc:issues:${newSlug}/issue/${b.seq}`)
-      expect(links).toHaveLength(1)
-      expect(links[0].other_urn).toBe(`bc:issues:${newSlug}/issue/${a.seq}`)
+      // Every row moves, not just the one we looked at — the rename is one
+      // cascading UPDATE, so a partial result would mean the projection had
+      // written a urn it should have derived.
+      expect(await entityByUrn(`bc:issues:${newSlug}/issue/${b.seq}`)).not.toBeNull()
+      expect(await entityByUrn(`bc:issues:${ws.slug}/issue/${b.seq}`)).toBeNull()
     } finally {
       await db.delete(schema.workspaces).where(eq(schema.workspaces.id, ws.id))
     }
   })
 
-  // ---- 5. LINK INVARIANTS ----
-
-  it('refuses a link to an unknown URN, to itself, or across workspaces', async () => {
-    const a = await issuesQ.createIssue({
-      workspaceId: wsId,
-      title: 'Link source',
-      reporterId: ownerId,
-      actorUserId: ownerId,
-    })
-    const urnA = `bc:issues:${wsSlug}/issue/${a.seq}`
-
-    expect(await platformDb.createLink(db, { fromUrn: urnA, toUrn: urnA, rel: 'blocks' })).toEqual({
-      ok: false,
-      reason: 'self_link',
-    })
-
-    const ghost = `bc:issues:${wsSlug}/issue/99999999`
-    expect(await platformDb.createLink(db, { fromUrn: urnA, toUrn: ghost, rel: 'blocks' })).toEqual({
-      ok: false,
-      reason: 'unknown_urn',
-      urn: ghost,
-    })
-
-    const other = await workspacesQ.createWorkspace({ name: `Other WS ${suffix}`, ownerId })
-    try {
-      const far = await issuesQ.createIssue({
-        workspaceId: other.id,
-        title: 'Far side',
-        reporterId: ownerId,
-        actorUserId: ownerId,
-      })
-      const res = await platformDb.createLink(db, {
-        fromUrn: urnA,
-        toUrn: `bc:issues:${other.slug}/issue/${far.seq}`,
-        rel: 'blocks',
-      })
-      expect(res, 'a link is the one structure that could leak across tenants').toEqual({
-        ok: false,
-        reason: 'cross_workspace',
-      })
-    } finally {
-      await db.delete(schema.workspaces).where(eq(schema.workspaces.id, other.id))
-    }
-  })
-
-  it('creating the same link twice is not an error', async () => {
-    const a = await issuesQ.createIssue({
-      workspaceId: wsId,
-      title: 'Dup A',
-      reporterId: ownerId,
-      actorUserId: ownerId,
-    })
-    const b = await issuesQ.createIssue({
-      workspaceId: wsId,
-      title: 'Dup B',
-      reporterId: ownerId,
-      actorUserId: ownerId,
-    })
-    const t = {
-      fromUrn: `bc:issues:${wsSlug}/issue/${a.seq}`,
-      toUrn: `bc:issues:${wsSlug}/issue/${b.seq}`,
-      rel: 'blocks',
-    }
-    expect(await platformDb.createLink(db, t)).toEqual({ ok: true, created: true })
-    expect(await platformDb.createLink(db, t)).toEqual({ ok: true, created: false })
-    expect(await platformDb.deleteLink(db, t)).toBe(true)
-    expect(await platformDb.deleteLink(db, t)).toBe(false)
-  })
+  // ---- 5. LINK INVARIANTS — GONE ----
+  //
+  // Two cases lived here — "refuses a link to an unknown URN, to itself, or
+  // across workspaces", and "creating the same link twice is not an error" —
+  // and both exercised `platform.links` through `createLink`/`deleteLink`.
+  // Those helpers were deleted on 2026-08-12 with the last thing that called
+  // them: `bk link` went on 2026-08-10, `linksRoute` was mounted by nobody, and
+  // a relation whose far end lives in another app's schema cannot be validated
+  // by the app holding it. The table is still there and nothing reads it.
+  //
+  // The cross-workspace case was the one worth keeping, and it has a successor
+  // that is not about links at all: `entityByUrn` is scoped by urn, and the
+  // reconciler below asserts counts PER WORKSPACE.
 
   // ---- 6. THE ONE THAT MATTERS: COUNTS MATCH ----
 

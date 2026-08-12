@@ -130,12 +130,13 @@ func newProspectShowCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "show <n>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n}"},
-		Short:       "Show one prospect, its deal journey and its cross-app links",
+		Short:       "Show one prospect, its deal journey and its URN",
 		Long: `Show one prospect by #number.
 
 The output includes the DEAL JOURNEY — one row per stage, including the steps
-not reached yet — and every cross-app LINK touching this prospect (D-18), each
-with an absolute URL you can follow into the other app.`,
+not reached yet — and the prospect's URN, which is how you refer to it from
+another app: paste it into the other record's own text. There is no cross-app
+link table and no command that records one; see "bk guide sales/cross-app".`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -763,23 +764,13 @@ func renderProspect(w io.Writer, p *client.Prospect) error {
 		}
 	}
 
-	// D-18: the link has to be VISIBLE, not just storable. The URL is absolute
-	// and points into the other app's deployment.
-	if len(p.Links) > 0 {
-		fmt.Fprintln(w, "\nLINKED")
-		lt := output.Tabwriter(w)
-		for _, l := range p.Links {
-			flag := ""
-			if l.Deleted {
-				flag = "  (in the other app's recycle bin)"
-			}
-			fmt.Fprintf(lt, "  %s\t%s\t%s%s\n",
-				l.Rel, l.URN, cmdutil.Truncate(l.Title, 40), flag)
-		}
-		if err := lt.Flush(); err != nil {
-			return err
-		}
-	}
+	// A `LINKED` section used to print here, over `p.Links` — the cross-app
+	// relations D-18 asked to be VISIBLE rather than merely storable. The route
+	// stopped serving `links` on 2026-08-10 (this app no longer reads
+	// `platform.links`), so from that day it rendered nothing while claiming in
+	// --help that it did. Removed 2026-08-12. D-18's requirement is met by the
+	// URN above: it is printed, it is absolute within the platform, and it is
+	// what you paste into the other app's record.
 	return nil
 }
 

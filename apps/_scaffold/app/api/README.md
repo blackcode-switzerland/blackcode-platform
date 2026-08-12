@@ -17,7 +17,10 @@ would have taught the next app a bug:
 - **`workspaces/[ws]/links/`** — `bk link` was removed. A link joined two apps'
   records in one shared index that every app wrote into; with each app owning its
   own records there is no such index. Put the far end's URN in the record's own
-  text instead.
+  text instead — that is the design, not a stopgap. **The `linksRoute` factory
+  itself was deleted on 2026-08-12**, so there is nothing left to mount by
+  accident; this entry stays because the PATH is the part somebody recreates.
+  Cross-app references are not a supported feature.
 - **`workspaces/[ws]/search/`** — `searchRoute` resolves the workspace through
   `AppContext.workspaces` (this app's table) and then queries `platform.entities`
   BY THAT ID. Since each app has its own workspaces with overlapping ids, that

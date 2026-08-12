@@ -5,7 +5,10 @@ export * from './qualified-type'
 export * from './app-registry'
 export * from './urn'
 export * from './entities'
-export * from './links'
+// `./links` is GONE (2026-08-12). `createLink`/`listLinks`/`deleteLink` had one
+// caller — `linksRoute`, which no app mounted after 2026-08-10. The `links`
+// TABLE is still declared in `./schema` because it still exists in the database;
+// dropping it is a migration and its own decision.
 
 // Platform reads the shared route factories need (2026-08-06, Phase 1b / D-2).
 // Each app's query layer re-exports these bound to its own `db`, so existing

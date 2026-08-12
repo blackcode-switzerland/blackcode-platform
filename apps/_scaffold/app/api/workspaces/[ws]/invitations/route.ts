@@ -13,7 +13,8 @@
 // The three that came before it, all removed from this scaffold in Phase 4 and
 // listed in `app/api/README.md`: `searchRoute` (served another app's titles to a
 // caller with no access), `usersRoute` (listed people from another app's
-// membership table), `linksRoute` (an index that no longer exists). Each looked
+// membership table), `linksRoute` (an index that no longer exists — the factory
+// itself was deleted on 2026-08-12). Each looked
 // like a free capability and each would have taught the next app a bug.
 //
 // Invitations is the fourth, and it is the quietest of the four because nothing
