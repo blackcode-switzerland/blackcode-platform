@@ -141,6 +141,11 @@ export interface CreateProjectInput {
   description?: string | null
   color?: string
   icon?: string | null
+  /** Uploaded logo shown instead of the icon+color tile. See UpdateProjectInput. */
+  icon_url?: string | null
+  banner_url?: string | null
+  /** Metadata only — not an access control. See UpdateProjectInput. */
+  visibility?: string
   priority?: string
   lead_user_id?: number | null
   start_date?: string | null
@@ -164,6 +169,9 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
         description: toRichTextHtml(input.description) ?? null,
         color: input.color ?? '#3B82F6',
         icon: input.icon ?? null,
+        icon_url: input.icon_url ?? null,
+        banner_url: input.banner_url ?? null,
+        visibility: input.visibility ?? 'team',
         priority: input.priority ?? 'P2',
         owner_id: input.lead_user_id ?? input.actorUserId,
         status: input.status ?? 'backlog',
@@ -207,6 +215,27 @@ export interface UpdateProjectInput {
   status?: string
   color?: string
   icon?: string | null
+  /**
+   * An uploaded image shown INSTEAD of the `icon`+`color` tile — the project's
+   * logo, the same idea as `platform.workspaces.logo_url`.
+   *
+   * Any value here is a live blob reference: migration 0046 puts an `exact`-mode
+   * trigger on this column so `platform.blob_references` learns about it, which
+   * is what stops another deployment's GC deleting a logo that is still in use.
+   * Do not add a sibling url column without doing the same — see
+   * `lib/storage/scanner.ts`.
+   */
+  icon_url?: string | null
+  /** Wide header image. Same blob-reference rules as `icon_url`. */
+  banner_url?: string | null
+  /**
+   * Metadata only. NOTHING in this app reads `visibility` to decide who may see
+   * a project — membership is the whole gate. It is persisted because the UI and
+   * `bk issues project update --visibility` both offered it and it was silently
+   * dropped, which is worse; it is NOT an access control, and must not be
+   * described as one until something enforces it.
+   */
+  visibility?: string
   priority?: string
   lead_user_id?: number | null
   start_date?: string | null
@@ -219,6 +248,9 @@ const PROJECT_DIFF_KEYS = [
   'status',
   'color',
   'icon',
+  'icon_url',
+  'banner_url',
+  'visibility',
   'priority',
   'start_date',
   'due_date',
@@ -247,6 +279,9 @@ export async function updateProject(
     if (patch.status !== undefined) updates.status = patch.status
     if (patch.color !== undefined) updates.color = patch.color
     if (patch.icon !== undefined) updates.icon = patch.icon
+    if (patch.icon_url !== undefined) updates.icon_url = patch.icon_url
+    if (patch.banner_url !== undefined) updates.banner_url = patch.banner_url
+    if (patch.visibility !== undefined) updates.visibility = patch.visibility
     if (patch.priority !== undefined) updates.priority = patch.priority
     if (patch.lead_user_id !== undefined) updates.owner_id = patch.lead_user_id
     if (patch.start_date !== undefined) updates.start_date = patch.start_date

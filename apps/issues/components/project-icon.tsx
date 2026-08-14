@@ -186,6 +186,12 @@ export function searchProjectIcons(query: string): string[] {
 
 interface ProjectIconProps {
   icon?: string | null
+  /**
+   * An uploaded logo. When set it REPLACES the icon+color tile — the same
+   * precedence a workspace logo has over its coloured initial, so a project
+   * that has one looks like itself everywhere it appears.
+   */
+  iconUrl?: string | null
   color?: string | null
   name?: string | null
   size?: number
@@ -193,10 +199,18 @@ interface ProjectIconProps {
   rounded?: boolean
 }
 
-// Renders the project's icon tinted by color, in a square tile. Falls back to
-// the first letter of the name when no icon is chosen.
+// Renders the project's identity in a square tile, in this order:
+//   1. the uploaded logo (`iconUrl`), if there is one
+//   2. the chosen lucide icon, tinted by `color`
+//   3. the first letter of the name
+//
+// The three are one component rather than three call-site conditionals so that
+// adding a logo cannot make a project look different in listings than it does
+// in its own header — which is what happened while `icon_url` was being saved
+// nowhere and rendered nowhere (fixed 2026-08-13).
 export function ProjectIcon({
   icon,
+  iconUrl,
   color,
   name,
   size = 36,
@@ -206,9 +220,20 @@ export function ProjectIcon({
   const tint = color ?? '#3B82F6'
   const Icon = icon ? PROJECT_ICON_MAP[icon] : undefined
   const iconSize = Math.round(size * 0.55)
+  const shape = `inline-flex shrink-0 items-center justify-center ${rounded ? 'rounded-lg' : ''} ${className}`
+
+  if (iconUrl) {
+    return (
+      <span className={`${shape} overflow-hidden`} style={{ width: size, height: size }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={iconUrl} alt="" className="size-full object-cover" />
+      </span>
+    )
+  }
+
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center ${rounded ? 'rounded-lg' : ''} ${className}`}
+      className={shape}
       style={{
         width: size,
         height: size,

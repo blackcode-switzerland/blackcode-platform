@@ -8,6 +8,8 @@ import { HealthIcon, StatusIcon } from '@/components/ui/work-item-icons'
 import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 
 interface ProjectRow {
+  /** Uploaded logo; replaces the icon+color tile when set. */
+  icon_url?: string | null
   id: number
   seq: number | null
   name: string
@@ -98,7 +100,7 @@ export function ProjectsTimeline({ projects, wsSlug }: { projects: ProjectRow[];
                 className="flex items-center gap-2.5 border-b border-r border-border/60 px-3 transition-colors hover:bg-secondary/30"
                 style={{ height: ROW_HEIGHT }}
               >
-                <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={20} />
+                <ProjectIcon icon={p.icon} iconUrl={p.icon_url} color={p.color} name={p.name} size={20} />
                 <span className="flex-1 truncate text-[13px] font-medium">{p.name}</span>
                 <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
                   <StatusIcon status={p.status} size={11} />

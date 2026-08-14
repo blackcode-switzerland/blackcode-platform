@@ -166,7 +166,14 @@ export function ProjectSettingsModal({
           priority,
           visibility,
           color,
-          owner_id: ownerId,
+          // `lead_user_id`, NOT `owner_id`. The column is `owner_id`, so the
+          // GET returns that name and this modal used to send it back —
+          // `updateProject` only ever read `lead_user_id`, so every lead change
+          // made here was silently discarded (fixed 2026-08-13). The rest of the
+          // app (project detail, projects listing, the CLI) already used the
+          // right name, which is why the bug survived: it reproduced in exactly
+          // one place.
+          lead_user_id: ownerId,
           start_date: startDate || null,
           due_date: dueDate || null,
           icon_url: iconPreview,

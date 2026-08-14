@@ -30,6 +30,8 @@ interface IssueRow {
   assignees: Array<{ id: number; name: string | null; email: string; avatar_url: string | null }>
   project_name: string | null
   project_icon: string | null
+  /** Uploaded project logo; replaces the icon tile when set. */
+  project_icon_url: string | null
   project_color: string | null
   labels: Array<{ id: number; name: string; color: string }>
 }
@@ -217,7 +219,7 @@ export function LabelDetailView({ labelId }: { labelId: number }) {
                     <span className="flex-1 truncate text-[13px]">{i.title}</span>
                     {i.project_name ? (
                       <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-                        <ProjectIcon icon={i.project_icon} color={i.project_color} name={i.project_name} size={13} />
+                        <ProjectIcon icon={i.project_icon} iconUrl={i.project_icon_url} color={i.project_color} name={i.project_name} size={13} />
                         <span className="hidden sm:inline">{i.project_name}</span>
                       </span>
                     ) : null}

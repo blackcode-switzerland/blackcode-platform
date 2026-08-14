@@ -167,6 +167,49 @@ run('blob_references triggers + reconciler (integration)', () => {
     })
   })
 
+  // The logo/banner are the SEVENTH surface (2026-08-13). They are `exact` mode
+  // on the same table as the `scan`-mode content columns above, under their own
+  // source_type — see migration 0047 for why the type has to differ.
+  it("a project's logo and banner index EXACTLY, and ignore a foreign url", async () => {
+    await inRolledBackTx(async (tx) => {
+      const r = await tx.execute(sql`
+        INSERT INTO issues.projects (workspace_id, name, icon_url, banner_url)
+        VALUES (${wsId}, 'logo project', ${FILE_A}, ${FILE_B}) RETURNING id
+      `)
+      const id = Number(r.rows[0].id)
+      expect(await indexRows(tx, 'issues', 'project_image', id)).toEqual([FILE_A, FILE_B].sort())
+
+      const ext = await tx.execute(sql`
+        INSERT INTO issues.projects (workspace_id, name, icon_url)
+        VALUES (${wsId}, 'external logo', 'https://example.com/x.png') RETURNING id
+      `)
+      expect(await indexRows(tx, 'issues', 'project_image', Number(ext.rows[0].id))).toEqual([])
+    })
+  })
+
+  // The two triggers on `issues.projects` must not clear each other's rows.
+  // They share a table and a source_id, and are told apart ONLY by source_type;
+  // if they ever shared one, each write would delete the other's references and
+  // the symptom would be logos and descriptions intermittently losing their
+  // delete protection.
+  it('writing a project logo leaves its description references intact, and vice versa', async () => {
+    await inRolledBackTx(async (tx) => {
+      const r = await tx.execute(sql`
+        INSERT INTO issues.projects (workspace_id, name, description)
+        VALUES (${wsId}, 'both surfaces', ${`d ${FILE_A}`}) RETURNING id
+      `)
+      const id = Number(r.rows[0].id)
+
+      await tx.execute(sql`UPDATE issues.projects SET icon_url = ${FILE_B} WHERE id = ${id}`)
+      expect(await indexRows(tx, 'issues', 'project', id)).toEqual([FILE_A])
+      expect(await indexRows(tx, 'issues', 'project_image', id)).toEqual([FILE_B])
+
+      await tx.execute(sql`UPDATE issues.projects SET description = ${`d ${FILE_A}`} WHERE id = ${id}`)
+      expect(await indexRows(tx, 'issues', 'project_image', id)).toEqual([FILE_B])
+      expect(await indexRows(tx, 'issues', 'project', id)).toEqual([FILE_A])
+    })
+  })
+
   it('a comment is attributed to `platform`, not to this app', async () => {
     // platform.comments is a platform-owned table every app writes into, so its
     // references belong to no single app and are always consulted.

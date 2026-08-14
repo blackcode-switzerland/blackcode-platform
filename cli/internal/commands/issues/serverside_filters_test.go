@@ -53,6 +53,8 @@ var wireFilters = []struct {
 	{"priority", client.ListIssuesOpts{Priority: 1}, "1"},
 	{"assignee_ids", client.ListIssuesOpts{AssigneeIDs: []int{7}}, "7"},
 	{"assignee_id", client.ListIssuesOpts{Unassigned: true}, "null"},
+	{"reporter_ids", client.ListIssuesOpts{ReporterIDs: []int{7}}, "7"},
+	{"reporter_id", client.ListIssuesOpts{NoReporter: true}, "null"},
 	{"label", client.ListIssuesOpts{Labels: []string{"bug"}}, "bug"},
 	{"due_before", client.ListIssuesOpts{DueBefore: "2026-08-14"}, "2026-08-14"},
 }
@@ -67,7 +69,7 @@ func TestEveryIssueListFilterReachesTheQueryString(t *testing.T) {
 		}
 	}
 	// Assert the input: a loop over an empty table passes while checking nothing.
-	if len(wireFilters) != 9 {
+	if len(wireFilters) != 11 {
 		t.Fatalf("this table covers %d filters — update it when one is added", len(wireFilters))
 	}
 
@@ -93,6 +95,25 @@ func TestUnassignedIsNotTheSameAsNoAssigneeFilter(t *testing.T) {
 	blank := client.IssuesQuery(client.ListIssuesOpts{AssigneeIDs: nil})
 	if len(blank) != 0 {
 		t.Errorf("no assignee filter sent %v — an empty list is not a request for unassigned issues", blank)
+	}
+}
+
+// The same split for --created-by. `none` here means the author's account was
+// deleted (`reporter_id IS NULL`), and folding it into ReporterIDs would turn
+// that request into the whole workspace — the shape the assignee case above
+// exists to prevent, one filter over.
+func TestNoReporterIsNotTheSameAsNoCreatorFilter(t *testing.T) {
+	none := client.IssuesQuery(client.ListIssuesOpts{NoReporter: true})
+	if none.Get("reporter_id") != "null" {
+		t.Errorf("--created-by none sent %v — it must ask for reporter_id=null", none)
+	}
+	if len(none["reporter_ids"]) != 0 {
+		t.Errorf("--created-by none also sent reporter_ids=%v — the two clauses would fight", none["reporter_ids"])
+	}
+
+	blank := client.IssuesQuery(client.ListIssuesOpts{ReporterIDs: nil})
+	if len(blank) != 0 {
+		t.Errorf("no creator filter sent %v — an empty list is not a request for authorless issues", blank)
 	}
 }
 

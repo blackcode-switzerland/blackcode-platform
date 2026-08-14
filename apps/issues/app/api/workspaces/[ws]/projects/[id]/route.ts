@@ -49,6 +49,24 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
     throw Errors.badRequest('invalid_body', 'expected JSON object')
   }
 
+  // The image columns and `visibility` reach `updateProject` from the RAW body,
+  // so they are type-checked here rather than trusted. Until 2026-08-13 they
+  // were silently dropped instead — the PATCH returned 200 with the field
+  // unchanged, which is why the settings modal's logo, banner and visibility
+  // never persisted. Validating them is the other half of making them work.
+  for (const field of ['icon_url', 'banner_url'] as const) {
+    if (field in body && body[field] !== null && typeof body[field] !== 'string') {
+      throw Errors.badRequest(
+        `invalid_${field}`,
+        `${field} must be a string or null`,
+        'upload the image with `bk issues upload` first, then pass the url it returns'
+      )
+    }
+  }
+  if ('visibility' in body && typeof body.visibility !== 'string') {
+    throw Errors.badRequest('invalid_visibility', 'visibility must be a string')
+  }
+
   // member_ids replaces the full set when present.
   if (Array.isArray(body.member_ids)) {
     const ids = body.member_ids.filter((n: unknown): n is number => typeof n === 'number')

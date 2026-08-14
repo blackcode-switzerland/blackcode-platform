@@ -419,6 +419,49 @@ that enforces it, and served by `/api/meta`. Never re-type a number.
 > workflow, a failure mode), update the relevant guide topic. If only a *value*
 > changed, touch its source instead — `bk meta` carries it live.
 
+#### START ANYWHERE — FINISH IN SYNC
+
+> **Anything a human can do in the web UI, an agent MUST be able to do with
+> `bk`, and vice versa.** The CLI is not a subset of the product; it is the whole
+> product with a different front door. Ship a button, a field, a filter, a bulk
+> action or a page without its `bk` spelling and the binary is *silently wrong* —
+> it will keep answering questions about a product that has moved on.
+
+**The entry point does not matter. The end state does.** A change may start at
+the web UI, at the route, at the CLI, or in the schema — whichever you happen to
+have open. Wherever it starts, it is not finished until every layer agrees:
+
+**web UI ⇄ route ⇄ `bk` command ⇄ guide topic ⇄ changelog ⇄ docs.**
+
+So the numbered list below is a *destination*, not a running order. Whatever you
+touched first, walk the rest and ask each in turn:
+
+| Ask | If yes |
+|---|---|
+| Can a human now do something new, or something differently? | It needs a `bk` spelling |
+| Can an agent now do something new? | Ask whether a human should be able to too — a capability that only exists in the CLI is a decision, so make it one |
+| Does it read or write through a route? | That route is step 1 below |
+| Does it read the database **directly** in a server component? | **A route may not exist yet — write one.** `cli-parity` cannot see this case (the *"A route is not a page"* corollary above) and will stay green |
+| Did a workflow, flag or failure mode change? | `cli/internal/guide/topics/**` |
+| Did a vocabulary or limit change? | Its single source, served by `bk meta` |
+| Would a maintainer's mental model be stale? | `docs/` — see the Docs sync rule |
+
+**Everything ends in sync or the change is not finished.** A UI-only feature is
+an unfinished feature. So is a CLI-only one, a route with no command, and a
+command whose guide topic still describes last week's behaviour.
+
+> **No guard enforces this one — you are the guard.** `cli-parity.test.ts`
+> compares routes against `bk`, never *pages* against `bk`. A feature added to a
+> server component, or one that reuses an existing route in a new way, ships a
+> capability gap with **every suite green**. That is the exact shape of the
+> twenty-one findings in the table above, so treat "the tests pass" as saying
+> nothing at all here, and check both front doors by hand.
+
+**The one legitimate exception is a deliberate capability decision, and it gets
+written down** — the way `DELETE /api/me` and the board-ordering `reorder` routes
+are, each in `EXCLUDED_PATHS` with its reason. Deliberate and recorded is fine.
+Forgotten is the bug.
+
 1. **Route** — workspace-scoped under `/api/workspaces/{ws}/…`; auth + errors via
    `apiHandler` + `Errors`; lists return `{ data, next_cursor }` via `jsonList()`;
    single resources return the bare entity; create → `201`, delete →

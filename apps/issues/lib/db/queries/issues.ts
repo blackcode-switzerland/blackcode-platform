@@ -81,6 +81,7 @@ const issueListSelect = sql`
   m.seq AS task_seq,
   p.name AS project_name,
   p.icon AS project_icon,
+  p.icon_url AS project_icon_url,
   p.color AS project_color,
   p.seq AS project_seq,
   (SELECT COUNT(*)::int FROM ${comments} c WHERE c.parent_type IN ${ownTypeIn('issue')} AND c.parent_id = i.id) AS comment_count,
@@ -93,6 +94,16 @@ export interface ListIssuesOptions {
   taskId?: number | null
   /** Filter by assignee(s). null = unassigned, array = any of these users. */
   assigneeIds?: number[] | null
+  /**
+   * Filter by who CREATED the issue (`reporter_id`), mirroring `assigneeIds`:
+   * an array is an OR over those users, `null` selects issues with no creator.
+   *
+   * `null` is reachable and is not a synonym for "nobody asked": `reporter_id`
+   * is `ON DELETE SET NULL`, so every issue created by a since-deleted user
+   * lands there. Without it those issues would be unreachable by this filter —
+   * present in the unfiltered list and missing from every creator's.
+   */
+  reporterIds?: number[] | null
   status?: string
   priority?: number
   /**
@@ -152,6 +163,13 @@ export async function listIssuesInWorkspace(
         ? sql`AND EXISTS (SELECT 1 FROM ${issueAssignees} ia WHERE ia.issue_id = i.id AND ia.user_id IN (${sql.join(opts.assigneeIds.map((id) => sql`${id}`), sql`, `)}))`
         : sql``
 
+  const reporterFilter =
+    opts.reporterIds === null
+      ? sql`AND i.reporter_id IS NULL`
+      : opts.reporterIds !== undefined && opts.reporterIds.length > 0
+        ? sql`AND i.reporter_id IN (${sql.join(opts.reporterIds.map((id) => sql`${id}`), sql`, `)})`
+        : sql``
+
   const labelNames = (opts.labels ?? []).map((n) => n.trim().toLowerCase()).filter(Boolean)
   const labelFilter =
     labelNames.length > 0
@@ -169,6 +187,7 @@ export async function listIssuesInWorkspace(
       ${projectFilter}
       ${taskFilter}
       ${assigneeFilter}
+      ${reporterFilter}
       ${labelFilter}
       ${opts.status ? sql`AND i.status = ${opts.status}` : sql``}
       ${opts.priority ? sql`AND i.priority = ${opts.priority}` : sql``}

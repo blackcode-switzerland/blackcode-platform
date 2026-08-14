@@ -354,8 +354,23 @@ type CreateProjectRequest struct {
 	Priority    *string `json:"priority,omitempty"`
 	Visibility  *string `json:"visibility,omitempty"`
 	Color       *string `json:"color,omitempty"`
-	StartDate   *string `json:"start_date,omitempty"`
-	DueDate     *string `json:"due_date,omitempty"`
+	// Icon / IconURL / BannerURL are json.RawMessage so that CLEARING one is
+	// expressible: `null` (remove the logo) has to be distinguishable from the
+	// field being absent (leave it alone), and an omitempty *string cannot say
+	// the first. Built with cmdutil.StringOrNullJSON.
+	//
+	// IconURL is the project's logo — a url this workspace has already uploaded;
+	// `bk issues upload <file>` returns one.
+	Icon      json.RawMessage `json:"icon,omitempty"`
+	IconURL   json.RawMessage `json:"icon_url,omitempty"`
+	BannerURL json.RawMessage `json:"banner_url,omitempty"`
+	// LeadUserID is `lead_user_id` on the wire and `owner_id` in the column.
+	// Sending `owner_id` is accepted by no write path — the web settings modal
+	// did exactly that and its lead changes were dropped (fixed 2026-08-13).
+	// json.RawMessage so `null` (clear the lead) is distinguishable from unset.
+	LeadUserID json.RawMessage `json:"lead_user_id,omitempty"`
+	StartDate  *string         `json:"start_date,omitempty"`
+	DueDate    *string         `json:"due_date,omitempty"`
 }
 
 type UpdateProjectRequest struct {
@@ -366,8 +381,13 @@ type UpdateProjectRequest struct {
 	Priority    *string `json:"priority,omitempty"`
 	Visibility  *string `json:"visibility,omitempty"`
 	Color       *string `json:"color,omitempty"`
-	StartDate   *string `json:"start_date,omitempty"`
-	DueDate     *string `json:"due_date,omitempty"`
+	/* See CreateProjectRequest for icon / icon_url / banner_url / lead_user_id. */
+	Icon       json.RawMessage `json:"icon,omitempty"`
+	IconURL    json.RawMessage `json:"icon_url,omitempty"`
+	BannerURL  json.RawMessage `json:"banner_url,omitempty"`
+	LeadUserID json.RawMessage `json:"lead_user_id,omitempty"`
+	StartDate  *string         `json:"start_date,omitempty"`
+	DueDate    *string         `json:"due_date,omitempty"`
 }
 
 type AddMemberRequest struct {

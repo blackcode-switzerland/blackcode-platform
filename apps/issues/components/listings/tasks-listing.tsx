@@ -39,6 +39,8 @@ interface TaskRow {
   status: string | null
   project_name: string | null
   project_icon: string | null
+  /** Uploaded project logo; replaces the icon tile when set. */
+  project_icon_url: string | null
   project_color: string | null
   lead_id: number | null
   lead_name: string | null
@@ -597,7 +599,7 @@ function TaskRowItem({
         <span className="hidden w-28 shrink-0 items-center gap-1.5 truncate text-[13px] text-muted-foreground sm:flex">
           {m.project_name ? (
             <>
-              <ProjectIcon icon={m.project_icon} color={m.project_color} name={m.project_name} size={15} />
+              <ProjectIcon icon={m.project_icon} iconUrl={m.project_icon_url} color={m.project_color} name={m.project_name} size={15} />
               <span className="truncate">{m.project_name}</span>
             </>
           ) : '—'}

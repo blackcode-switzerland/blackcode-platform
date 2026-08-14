@@ -330,6 +330,13 @@
       "when": 1786233720000,
       "tag": "0046_drop_dead_platform_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1786665600000,
+      "tag": "0047_project_image_blob_references",
+      "breakpoints": true
     }
   ]
 }

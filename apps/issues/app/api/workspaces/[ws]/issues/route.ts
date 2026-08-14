@@ -70,6 +70,29 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     assigneeIds = [n]
   }
 
+  // Creator filter: ?reporter_id=null (no creator), ?reporter_id=1 (single), or
+  // ?reporter_ids=1&reporter_ids=2 (multi). Same shape and the same 400-on-junk
+  // rule as the assignee filter above, for the same reason: an unparseable id
+  // that got dropped would widen the query to the whole workspace, and a caller
+  // cannot see that the filter it asked for was silently not applied.
+  const badReporter = 'creator ids are user ids — `bk issues issue list --created-by <email>` resolves a name for you, or pass null for issues whose creator was deleted'
+  let reporterIds: number[] | null | undefined
+  const reporterIdRaw = sp.get('reporter_id')
+  const reporterIdsRaw = sp.getAll('reporter_ids')
+  if (reporterIdsRaw.length > 0) {
+    reporterIds = reporterIdsRaw.map((raw) => {
+      const n = parseInt(raw, 10)
+      if (Number.isNaN(n)) throw Errors.badRequest('invalid_reporter_ids', `reporter_ids must be integers; got ${JSON.stringify(raw)}`, badReporter)
+      return n
+    })
+  } else if (reporterIdRaw === 'null') {
+    reporterIds = null
+  } else if (reporterIdRaw !== null && reporterIdRaw !== '') {
+    const n = parseInt(reporterIdRaw, 10)
+    if (Number.isNaN(n)) throw Errors.badRequest('invalid_reporter_id', `reporter_id must be an integer or null; got ${JSON.stringify(reporterIdRaw)}`, badReporter)
+    reporterIds = [n]
+  }
+
   const status = sp.get('status') ?? undefined
   if (status !== undefined && !ISSUE_STATUS_VALUES.includes(status as never)) {
     throw Errors.badRequest(
@@ -107,6 +130,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     projectId: await seqFilter(ctx.workspace.id, 'project', sp.get('project_id')),
     taskId: await seqFilter(ctx.workspace.id, 'task', sp.get('task_id')),
     assigneeIds,
+    reporterIds,
     status,
     priority,
     labels: labelNames.length > 0 ? labelNames : undefined,

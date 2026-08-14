@@ -43,11 +43,18 @@ bk issues issue list --priority urgent --mine
 bk issues issue list --due-before 2026-08-14          # INCLUSIVE of the 14th
 bk issues issue list --task "Auth rewrite"            # #number or exact name
 bk issues issue list --assignee none                  # unassigned
+bk issues issue list --created-by me                  # issues YOU opened
+bk issues issue list --created-by ana@example.com     # issues Ana opened
 ```
 
-Three things worth knowing, because each one is a place a filter can quietly
+Four things worth knowing, because each one is a place a filter can quietly
 mean something other than what you meant:
 
+- **`--assignee` and `--created-by` are different questions.** The first is who
+  has to do it, the second is who raised it, and an issue is routinely one
+  person's for each. Both take an id, an email, a name or `me`.
+- **`--created-by none` is not "unassigned".** It selects issues whose author's
+  account has been deleted — the only way an issue ends up with no creator.
 - **`--label` takes NAMES**, and repeating it is an **OR** — an issue carrying
   *any* of the names matches. There is no AND.
 - **`--due-before` is inclusive.** `--due-before 2026-08-14` returns issues due
@@ -227,7 +234,30 @@ case-insensitive) to null a field. **Omit** the flag to leave it unchanged.
 bk issues issue edit 42 --task none --due-date 2026-06-30
 ```
 
-Applies to `--assignee`, `--task`, `--start-date`, `--due-date`.
+Applies to `--assignee`, `--task`, `--start-date`, `--due-date`, and on
+`project edit` to `--lead`, `--icon`, `--logo`, `--banner`.
+
+## Giving a project a logo
+
+A project shows an uploaded image instead of its icon+colour tile when it has
+one. Upload the file first, then point the project at the url it returns:
+
+```bash
+url=$(bk issues upload ./logo.png --json | jq -r .url)
+bk issues project edit 3 --logo "$url"
+bk issues project edit 3 --logo none      # remove it; the icon returns
+```
+
+Two things to know:
+
+- **The logo WINS over the icon** wherever the project is drawn, so `--icon` and
+  `--logo` are not alternatives to choose between — the icon is what shows if the
+  logo is ever removed.
+- **`--logo` takes a url this workspace has uploaded**, not a path and not an
+  external address. An external url is stored but is not registered as a file
+  reference, so nothing keeps it alive; upload it and use that url instead.
+
+`--lead` sets who runs the project — an id, email, display name, `me`, or `none`.
 
 ## Labels on an issue that already exists
 

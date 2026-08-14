@@ -628,6 +628,13 @@ type ListIssuesOpts struct {
 	// than a sentinel in AssigneeIDs because "nobody" and "no filter" are
 	// different requests and an empty slice already means the second.
 	Unassigned bool
+	// ReporterIDs filters to issues CREATED by any of these users.
+	ReporterIDs []int
+	// NoReporter asks for issues whose creator is gone (`reporter_id IS NULL`,
+	// which is what an issue's author becomes when that account is deleted).
+	// Separate from ReporterIDs for the same reason Unassigned is separate from
+	// AssigneeIDs: an empty slice already means "no filter".
+	NoReporter bool
 	// Priority is the stored 1-5 value. 0 = no filter.
 	Priority int
 	// TaskID is the task's #number. 0 = no filter.
@@ -666,6 +673,13 @@ func IssuesQuery(opts ListIssuesOpts) url.Values {
 	} else {
 		for _, id := range opts.AssigneeIDs {
 			q.Add("assignee_ids", fmt.Sprint(id))
+		}
+	}
+	if opts.NoReporter {
+		q.Set("reporter_id", "null")
+	} else {
+		for _, id := range opts.ReporterIDs {
+			q.Add("reporter_ids", fmt.Sprint(id))
 		}
 	}
 	for _, name := range opts.Labels {

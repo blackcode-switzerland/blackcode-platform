@@ -469,6 +469,33 @@ UPDATE platform.apps SET maintains_blob_index = true WHERE slug = 'sales';
 Order matters: setting the flag before the backfill advertises an empty index as
 authoritative, which is how a file still in use gets deleted.
 
+### An IMAGE column is the other mode, and needs its own trigger
+
+`scan` mode extracts urls out of rich text. A column whose whole value **is** the
+url — a logo, an avatar, an attachment row — is `exact` mode instead:
+
+```sql
+CREATE TRIGGER trg_blob_refs_images
+  AFTER INSERT OR DELETE OR UPDATE OF icon_url, banner_url ON sales.accounts
+  FOR EACH ROW EXECUTE FUNCTION platform.blob_refs_sync('sales', 'account_image', 'workspace_id', 'exact', 'icon_url', 'banner_url');
+```
+
+Two rules, both learned from `issues.projects` (migration 0047):
+
+- **`blob_refs_sync` takes ONE mode per trigger.** A table with both rich text
+  and image columns needs **two** triggers, not more columns on one.
+- **Two triggers on one table must use DIFFERENT `source_type`s.** The function
+  scopes its `DELETE` by `(app, source_type, source_id)`, so triggers sharing a
+  type clear each other's rows on every write — each column silently losing its
+  delete protection whenever the other is touched. Give the image trigger its own
+  type (`…_image`) and its own name.
+
+Whichever mode you use, the app's **scanner** (`lib/storage/scanner.ts`) has to
+learn the same surface — `scanWorkspace`, `isUrlReferenced`, and both maps. The
+index and the scanner are compared against each other by
+`bk super-admin blob-drift`, so a surface in one and not the other reads as
+permanent drift.
+
 > **THIS IS THE ONE STEP THAT IS EASY TO FORGET AND EXPENSIVE TO MISS.** The
 > index is trigger-maintained precisely so no *write path* can forget it — which
 > moves the whole risk to here, to adding a content column without a trigger.

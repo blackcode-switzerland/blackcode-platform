@@ -134,6 +134,19 @@ trigger and a cascade rule are facts no grep of `apps/` can see.
 >
 > Corollary: **every API route must be reachable from `bk`.** A route with no
 > command is a capability an agent cannot use.
+>
+> **Start anywhere, finish in sync.** A change may begin at the web UI, at the
+> route, at the CLI or in the schema — the entry point does not matter, the end
+> state does: **web UI ⇄ route ⇄ `bk` ⇄ guide ⇄ changelog ⇄ docs**, all agreeing.
+> Anything a human can do in the browser, an agent must be able to do with `bk`,
+> and vice versa. A UI-only feature is an unfinished feature; so is a CLI-only
+> one.
+>
+> **Nothing enforces that one.** `cli-parity` compares routes against `bk`, never
+> *pages* against `bk` — so a feature built on a server component that reads the
+> database directly ships a capability gap with every suite green. Check both
+> front doors by hand. A deliberate omission is fine when it is written down with
+> its reason (`EXCLUDED_PATHS`); a forgotten one is a bug.
 
 Detail:
 

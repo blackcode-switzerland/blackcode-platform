@@ -158,6 +158,18 @@ GET    /api/workspaces/{ws}/projects            list projects
 POST   /api/workspaces/{ws}/projects            create project
 GET    /api/workspaces/{ws}/projects/{id}       project detail (+ members, labels)
 PATCH  /api/workspaces/{ws}/projects/{id}       update (also member_ids/label_ids)
+                                               (name, summary, description, status, priority,
+                                                color, icon, icon_url (the LOGO — shown instead of
+                                                the icon tile), banner_url, visibility, start_date,
+                                                due_date, and lead_user_id.
+                                                THE LEAD IS `lead_user_id`, not `owner_id`: the
+                                                column is owner_id so GET returns that name, but no
+                                                write path reads it back. icon_url/banner_url/
+                                                visibility were accepted-and-dropped until
+                                                2026-08-13 — a 200 with the row unchanged.
+                                                visibility is METADATA: nothing reads it to decide
+                                                who may see a project. icon_url/banner_url are a
+                                                blob-reference surface — see migration 0047)
 GET    /api/workspaces/{ws}/projects/{id}/members  list members / POST add (owner|admin) / DELETE remove ({user_id})
 GET    /api/workspaces/{ws}/projects/{id}?preview=1   child counts for delete dialog
 DELETE /api/workspaces/{ws}/projects/{id}?mode=cascade|detach   move to Trash (default: detach)
@@ -175,6 +187,10 @@ GET    /api/workspaces/{ws}/issues              list / POST create
                                                (filters: project_id, task_id (workspace #numbers, or
                                                 `null` for unscoped), assignee_id (or `null` for
                                                 unassigned) / assignee_ids (user ids), status, priority,
+                                                reporter_id (or `null` for issues whose AUTHOR was
+                                                deleted — reporter_id is ON DELETE SET NULL, so this is
+                                                not a synonym for unassigned) / reporter_ids (user ids,
+                                                several are an OR) — who CREATED the issue, 2026-08-13,
                                                 label (REPEATABLE, label NAMES, several are an OR;
                                                 only labels this app owns are matched),
                                                 due_before (YYYY-MM-DD, INCLUSIVE of that day; issues

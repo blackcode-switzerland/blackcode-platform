@@ -35,6 +35,104 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-08-13 — projects take a logo, and four project fields stopped being silently dropped
+
+### The bug first, because it is the breaking-ish part
+
+`PATCH /api/workspaces/{ws}/projects/{id}` accepted **`icon_url`, `banner_url`
+and `visibility` and wrote none of them.** `updateProject` copied a fixed list of
+keys out of the patch and those three were not on it, so the route returned
+`200` with the row unchanged. Any client that had been sending them was getting a
+success for a write that never happened.
+
+**They are now persisted.** If you send them, they take effect — which is the
+intent, but it IS a behaviour change for anything that was sending them
+speculatively.
+
+The same fix covers the project **lead**. The column is `owner_id`, so `GET`
+returns that name, and the web settings modal sent `owner_id` back — a field no
+write path has ever read. The wire name to SET a lead is **`lead_user_id`**, as
+it always was for tasks and for the rest of this app. Sending `owner_id` is
+still ignored; send `lead_user_id`.
+
+### Projects can have a logo
+
+`projects.icon_url` is an uploaded image shown **instead of** the icon+colour
+tile, the same precedence a workspace logo has over its coloured initial. It
+renders everywhere a project appears — listings, kanban, timeline, the project
+header, and the project chip on issue and task rows.
+
+From the CLI:
+
+```bash
+url=$(bk issues upload ./logo.png --json | jq -r .url)
+bk issues project edit 3 --logo "$url"
+bk issues project edit 3 --logo none     # remove it; the icon underneath returns
+bk issues project edit 3 --lead ana@example.com --icon Rocket
+bk issues project create --name Apollo --lead me --logo "$url"
+```
+
+New flags on `bk issues project create` and `bk issues project edit`:
+**`--lead`**, **`--icon`**, **`--logo`**, **`--banner`**. `--lead` takes an id,
+email, display name, `me`, or `none`; `--icon`/`--logo`/`--banner` take `none` to
+clear.
+
+Issue and task list rows gained **`project_icon_url`** alongside the existing
+`project_icon`/`project_color`, so a client rendering the project chip can show
+the logo without a second request.
+
+### If you write project images, read this
+
+`icon_url` and `banner_url` are now a **blob-reference surface** (migration
+0047). A url in either column is registered in `platform.blob_references` by a
+Postgres trigger, which is what stops the GC and the Storage page deleting a
+logo that is still in use. Nothing in an application write path has to remember
+this — but if you add another column that can hold a file url, it needs the same
+trigger in the same migration, or its files become deletable orphans.
+
+### `visibility` is metadata, not access control
+
+It persists now, and the picker and `--visibility` flag stop lying about whether
+the value was saved. **Nothing in this app reads it to decide who can see a
+project** — membership is the whole gate. Do not present it to users as a
+privacy setting until something enforces it.
+
+## 2026-08-13 — filter issues by who CREATED them
+
+`GET /api/workspaces/{ws}/issues` accepts two new query parameters, and the
+issue listing gained a **Created by** control beside **Assignee**.
+
+- **`?reporter_ids=1&reporter_ids=2`** — issues created by any of those users.
+- **`?reporter_id=null`** — issues whose creator is gone. `issues.reporter_id`
+  is `ON DELETE SET NULL`, so this is where an issue lands when its author's
+  account is deleted. It is **not** a synonym for "unassigned".
+
+From the CLI:
+
+```bash
+bk issues issue list --created-by me
+bk issues issue list --created-by ana@example.com   # id, email, name, or 'me'
+bk issues issue list --created-by none              # author's account deleted
+```
+
+**Not breaking.** No parameter changed meaning and the default is unchanged: an
+`issue list` with no creator filter still returns every issue.
+
+**Adapting:** nothing is required. If you were fetching a workspace and matching
+`reporter_id` client-side, you can now push that to the server — which is worth
+doing, because the listing is not paginated and the local filter was a cliff.
+
+Two notes on how the filter behaves, both chosen to match `--assignee`:
+
+- **An unparseable id is a `400`, never a silently dropped filter.** `?reporter_ids=alice`
+  fails with `invalid_reporter_ids`. A dropped filter would return the whole
+  workspace as the answer to a narrower question.
+- **Several ids are an OR.** An issue created by *any* of them matches.
+
+The web filter lists workspace **members only** and deliberately offers no "no
+creator" option — that bucket holds deleted authors, which is unreadable as a
+label next to real names. `--created-by none` and `?reporter_id=null` reach it.
+
 ## 2026-08-12 — `issue list` filters on the server, and an issue can move between projects
 
 **Two breaking changes**, both narrow, both listed at the bottom.

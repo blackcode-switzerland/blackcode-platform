@@ -67,6 +67,8 @@ interface Member {
 }
 
 interface Project {
+  /** Uploaded logo; replaces the icon+color tile when set. */
+  icon_url?: string | null
   id: number
   name: string
   color: string | null
@@ -612,7 +614,7 @@ export function IssueDetailView({ issueId, workspaceSlug }: { issueId: number; w
                 ...(projects.data ?? []).map((p) => ({
                   value: String(p.id),
                   label: p.name,
-                  icon: <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={14} />,
+                  icon: <ProjectIcon icon={p.icon} iconUrl={p.icon_url} color={p.color} name={p.name} size={14} />,
                 })),
               ]}
               onChange={(v) => patchIssue.mutate({ project_id: v ? parseInt(v) : null })}

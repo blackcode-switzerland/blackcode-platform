@@ -47,6 +47,7 @@ type issueListFlags struct {
 	project   string
 	status    string
 	assignee  string
+	createdBy string
 	mine      bool
 	search    string
 	label     []string
@@ -79,7 +80,7 @@ func newIssueListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/issues,GET /api/users,GET /api/workspaces/{ws}/projects,GET /api/workspaces/{ws}/tasks"},
-		Short:       "List issues (filter by project, task, status, assignee, label, priority, due date)",
+		Short:       "List issues (by project, task, status, assignee, creator, label, priority, due date)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runIssueList(cmd, f)
 		},
@@ -98,6 +99,7 @@ func addIssueFilterFlags(cmd *cobra.Command, f *issueListFlags) {
 	cmd.Flags().StringVar(&f.status, "status", "", "Filter by status: "+vocab("issue_statuses"))
 	cmd.Flags().StringVar(&f.assignee, "assignee", "", "Filter by assignee id, email, name, 'me', or 'none' for unassigned")
 	cmd.Flags().BoolVar(&f.mine, "mine", false, "Only issues assigned to you (same as --assignee me)")
+	cmd.Flags().StringVar(&f.createdBy, "created-by", "", "Filter by who CREATED the issue: id, email, name, 'me', or 'none' for issues whose creator was deleted")
 	cmd.Flags().StringArrayVar(&f.label, "label", nil, "Filter by label NAME (repeatable; several are an OR — an issue carrying ANY of them matches)")
 	cmd.Flags().StringVar(&f.priority, "priority", "", "Filter by priority: "+vocabPriority("issue"))
 	cmd.Flags().StringVar(&f.dueBefore, "due-before", "", "Only issues due on or INCLUDING this date, YYYY-MM-DD; issues with no due date are excluded")
@@ -230,6 +232,25 @@ func buildIssueListOpts(c *client.Client, cfg *config.Config, f issueListFlags) 
 		opts.AssigneeIDs = []int{uid}
 	}
 
+	// --created-by takes the same vocabulary as --assignee (id, email, name,
+	// 'me', 'none') so the two read alike; 'none' means the author's account is
+	// gone, not "unassigned".
+	switch createdBy := strings.TrimSpace(f.createdBy); {
+	case createdBy == "":
+		// no creator filter
+	case strings.EqualFold(createdBy, "none"), strings.EqualFold(createdBy, "nobody"):
+		opts.NoReporter = true
+	default:
+		uid, err := ResolveUserID(createdBy, c, cfg)
+		if err != nil {
+			return opts, err
+		}
+		if uid <= 0 {
+			return opts, cmdutil.Usagef("could not resolve --created-by %q to a user", f.createdBy)
+		}
+		opts.ReporterIDs = []int{uid}
+	}
+
 	return opts, nil
 }
 
@@ -254,6 +275,7 @@ func describeIssueFilters(f issueListFlags) string {
 	} else {
 		add("assignee", f.assignee)
 	}
+	add("created-by", f.createdBy)
 	for _, l := range f.label {
 		add("label", l)
 	}

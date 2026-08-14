@@ -19,6 +19,8 @@ import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 import { PROJECT_STATUSES } from '@/lib/work-items'
 
 interface ProjectRow {
+  /** Uploaded logo; replaces the icon+color tile when set. */
+  icon_url?: string | null
   id: number
   seq: number | null
   name: string
@@ -168,7 +170,7 @@ export function ProjectsKanban({
                             >
                               {/* Header: icon + name */}
                               <div className="mb-2 flex items-start gap-2">
-                                <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={20} />
+                                <ProjectIcon icon={p.icon} iconUrl={p.icon_url} color={p.color} name={p.name} size={20} />
                                 <span className="flex-1 text-[13px] font-semibold leading-snug">{p.name}</span>
                               </div>
 

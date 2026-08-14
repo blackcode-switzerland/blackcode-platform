@@ -41,9 +41,13 @@ interface IssueRow {
   project_id: number | null
   task_id: number | null
   assignees: IssueAssignee[]
+  /** Who created the issue. Null when that user has since been deleted. */
+  reporter_id: number | null
   task_name: string | null
   project_name: string | null
   project_icon: string | null
+  /** Uploaded project logo; replaces the icon tile when set. */
+  project_icon_url: string | null
   project_color: string | null
   comment_count: number
   attachment_count: number
@@ -71,6 +75,8 @@ interface Member {
 }
 
 interface Project {
+  /** Uploaded logo; replaces the icon+color tile when set. */
+  icon_url?: string | null
   id: number
   name: string
   color?: string | null
@@ -119,6 +125,7 @@ export function IssuesListing() {
   const [status, setStatus] = usePersistentState<Array<string | number>>(fk('status'), [])
   const [priority, setPriority] = usePersistentState<Array<string | number>>(fk('priority'), [])
   const [assignees, setAssignees] = usePersistentState<Array<string | number>>(fk('assignees'), [])
+  const [createdBy, setCreatedBy] = usePersistentState<Array<string | number>>(fk('createdBy'), [])
   const [projects, setProjects] = usePersistentState<Array<string | number>>(fk('projects'), [])
   const [tasks, setTasks] = usePersistentState<Array<string | number>>(fk('tasks'), [])
   const [labels, setLabels] = usePersistentState<Array<string | number>>(fk('labels'), [])
@@ -186,11 +193,11 @@ export function IssuesListing() {
     },
   })
 
-  const hasFilters = !!(search || status.length || priority.length || assignees.length || projects.length || tasks.length || labels.length || sort !== SORT_MANUAL)
-  const clearFilters = () => { setSearch(''); setStatus([]); setPriority([]); setAssignees([]); setProjects([]); setTasks([]); setLabels([]); setLabelMode('any'); setSort(SORT_MANUAL) }
+  const hasFilters = !!(search || status.length || priority.length || assignees.length || createdBy.length || projects.length || tasks.length || labels.length || sort !== SORT_MANUAL)
+  const clearFilters = () => { setSearch(''); setStatus([]); setPriority([]); setAssignees([]); setCreatedBy([]); setProjects([]); setTasks([]); setLabels([]); setLabelMode('any'); setSort(SORT_MANUAL) }
 
   const issuesQuery = useQuery({
-    queryKey: ['ws-issues', ws?.slug, { status, priority, assignees, projects, tasks, labels, labelMode }],
+    queryKey: ['ws-issues', ws?.slug, { status, priority, assignees, createdBy, projects, tasks, labels, labelMode }],
     enabled: !!ws,
     placeholderData: keepPreviousData,
     queryFn: async () => {
@@ -204,6 +211,9 @@ export function IssuesListing() {
       if (status.length === 1) base.set('status', String(status[0]))
       if (priority.length === 1) base.set('priority', String(priority[0]))
       if (assignees.length === 1 && assignees[0] !== '') base.set('assignee_ids', String(assignees[0]))
+      // Creator options are member ids only (see the Created by control), so a
+      // lone selection is always a number the route can parse.
+      if (createdBy.length === 1) base.set('reporter_ids', String(createdBy[0]))
       if (projects.length === 1 && projects[0] !== 'null') base.set('project_id', String(projects[0]))
       if (tasks.length === 1 && tasks[0] !== 'null') base.set('task_id', String(tasks[0]))
       base.set('limit', '200')
@@ -236,6 +246,11 @@ export function IssuesListing() {
         return (hasUnassigned && list.length === 0) || list.some((a) => assignees.includes(a.id))
       })
     }
+    // One selection is filtered server-side (reporter_ids); more than one is
+    // narrowed here, matching how assignees/projects/tasks split the work.
+    if (createdBy.length > 1) {
+      data = data.filter((d) => d.reporter_id != null && createdBy.includes(d.reporter_id))
+    }
     if (projects.length > 1 || projects.includes('null')) {
       const hasNull = projects.includes('null')
       data = data.filter((d) =>
@@ -260,7 +275,7 @@ export function IssuesListing() {
       })
     }
     return data
-  }, [issuesQuery.data, search, status, priority, assignees, projects, tasks, labels, labelMode])
+  }, [issuesQuery.data, search, status, priority, assignees, createdBy, projects, tasks, labels, labelMode])
 
   const sorted = useMemo(() => sortItems(filtered, sort), [filtered, sort])
   const dragEnabled = sort === SORT_MANUAL
@@ -507,6 +522,24 @@ export function IssuesListing() {
             selected={assignees}
             onChange={setAssignees}
           />
+          {/*
+            Members only — deliberately no "no creator" option. `reporter_id` is
+            ON DELETE SET NULL, so that bucket holds issues whose author was
+            deleted: rare, and unreadable as a filter label next to real names.
+            The API and `bk issues issue list --created-by none` can still reach
+            it, which is where that question actually gets asked.
+          */}
+          <MultiSelect
+            label="Created by"
+            searchable
+            options={(members ?? []).map((m) => ({
+              value: m.user_id,
+              label: m.name ?? m.email,
+              icon: <MemberAvatar name={m.name} email={m.email} avatarUrl={m.avatar_url} size={15} />,
+            }))}
+            selected={createdBy}
+            onChange={setCreatedBy}
+          />
           <MultiSelect
             label="Project"
             options={[
@@ -514,7 +547,7 @@ export function IssuesListing() {
               ...(projectList ?? []).map((p) => ({
                 value: p.id,
                 label: p.name,
-                icon: <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={15} />,
+                icon: <ProjectIcon icon={p.icon} iconUrl={p.icon_url} color={p.color} name={p.name} size={15} />,
               })),
             ]}
             selected={projects}
@@ -1069,7 +1102,7 @@ function IssueRowItem({
         )}
         {issue.project_name ? (
           <span className="hidden max-w-[120px] shrink-0 items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex">
-            <ProjectIcon icon={issue.project_icon} color={issue.project_color} name={issue.project_name} size={15} />
+            <ProjectIcon icon={issue.project_icon} iconUrl={issue.project_icon_url} color={issue.project_color} name={issue.project_name} size={15} />
             <span className="truncate">{issue.project_name}</span>
           </span>
         ) : null}

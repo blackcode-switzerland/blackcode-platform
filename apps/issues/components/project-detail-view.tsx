@@ -41,6 +41,8 @@ interface ProjectMember {
 }
 
 interface ProjectDetail {
+  /** Uploaded logo; replaces the icon+color tile when set. */
+  icon_url?: string | null
   id: number
   seq: number | null
   workspace_id: number
@@ -359,7 +361,7 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
         {data.id != null ? (
           <span className="font-mono text-xs text-muted-foreground">#{data.id}</span>
         ) : null}
-        <ProjectIcon icon={data.icon} color={data.color} name={data.name} size={18} />
+        <ProjectIcon icon={data.icon} iconUrl={data.icon_url} color={data.color} name={data.name} size={18} />
         <span className="max-w-[32ch] truncate font-medium">{data.name}</span>
         <div className="ml-auto flex items-center gap-1">
           <button
@@ -389,9 +391,17 @@ export function ProjectDetailView({ projectId, workspaceSlug }: { projectId: num
               <div className="mt-1 shrink-0">
                 <IconPicker
                   icon={data.icon}
+                  iconUrl={data.icon_url}
                   color={data.color ?? '#007bd3'}
                   name={data.name}
-                  onChange={(v) => patch.mutate({ icon: v.icon, color: v.color })}
+                  onChange={(v) =>
+                    patch.mutate({
+                      icon: v.icon,
+                      color: v.color,
+                      // Only sent when the logo actually changed — see IconPickerProps.
+                      ...(v.iconUrl !== undefined ? { icon_url: v.iconUrl } : {}),
+                    })
+                  }
                 />
               </div>
               <textarea

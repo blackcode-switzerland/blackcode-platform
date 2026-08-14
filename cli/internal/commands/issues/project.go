@@ -211,6 +211,7 @@ func newProjectTasksCmd() *cobra.Command {
 
 func newProjectCreateCmd() *cobra.Command {
 	var name, summary, description, descriptionFile string
+	var icon, iconURL, bannerURL, lead string
 	var priority, visibility, color, startDate, dueDate string
 	var files []string
 	cmd := &cobra.Command{
@@ -229,7 +230,7 @@ func newProjectCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, err := cmdutil.NewClient()
+			c, cfg, err := cmdutil.NewClientAndConfig()
 			if err != nil {
 				return err
 			}
@@ -259,6 +260,21 @@ func newProjectCreateCmd() *cobra.Command {
 			if cmd.Flags().Changed("color") {
 				req.Color = &color
 			}
+			if cmd.Flags().Changed("icon") {
+				req.Icon = cmdutil.StringOrNullJSON(icon)
+			}
+			if cmd.Flags().Changed("logo") {
+				req.IconURL = cmdutil.StringOrNullJSON(iconURL)
+			}
+			if cmd.Flags().Changed("banner") {
+				req.BannerURL = cmdutil.StringOrNullJSON(bannerURL)
+			}
+			if cmd.Flags().Changed("lead") {
+				req.LeadUserID, err = cmdutil.IntOrNullJSON(lead, c, cfg)
+				if err != nil {
+					return err
+				}
+			}
 			if cmd.Flags().Changed("start-date") {
 				req.StartDate = &startDate
 			}
@@ -282,6 +298,11 @@ func newProjectCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&priority, "priority", "", "Priority: "+vocabPriority("project"))
 	cmd.Flags().StringVar(&visibility, "visibility", "", "Visibility (public/private/secret)")
 	cmd.Flags().StringVar(&color, "color", "", "Hex color e.g. #5E6AD2")
+	cmd.Flags().StringVar(&icon, "icon", "", "Icon key, e.g. Rocket — run bk meta for the set")
+	cmd.Flags().StringVar(&iconURL, "logo", "", "Logo image URL (from bk issues upload); shown instead of the icon")
+	cmd.Flags().StringVar(&bannerURL, "banner", "", "Banner image URL (from bk issues upload)")
+	cmd.Flags().StringVar(&lead, "lead", "",
+		"Project lead — id, email, display name, or 'me'. Defaults to you; 'none' for no lead")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD")
 	cmd.Flags().StringVar(&dueDate, "due-date", "", "Due date YYYY-MM-DD")
 	cmdutil.AddFileFlag(cmd, &files)
@@ -291,10 +312,11 @@ func newProjectCreateCmd() *cobra.Command {
 func newProjectEditCmd() *cobra.Command {
 	var name, summary, description, descriptionFile, status string
 	var priority, visibility, color, startDate, dueDate string
+	var icon, iconURL, bannerURL, lead string
 	cmd := &cobra.Command{
 		Use:         "edit <id>",
 		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/projects/{id}"},
-		Short:       "Edit a project (name, description, status, priority, visibility, color, dates)",
+		Short:       "Edit a project (name, description, status, priority, lead, icon, logo, color, dates)",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])
@@ -302,6 +324,10 @@ func newProjectEditCmd() *cobra.Command {
 				return fmt.Errorf("invalid id: %w", err)
 			}
 			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			c, cfg, err := cmdutil.NewClientAndConfig()
 			if err != nil {
 				return err
 			}
@@ -335,15 +361,26 @@ func newProjectEditCmd() *cobra.Command {
 			if cmd.Flags().Changed("color") {
 				req.Color = &color
 			}
+			if cmd.Flags().Changed("icon") {
+				req.Icon = cmdutil.StringOrNullJSON(icon)
+			}
+			if cmd.Flags().Changed("logo") {
+				req.IconURL = cmdutil.StringOrNullJSON(iconURL)
+			}
+			if cmd.Flags().Changed("banner") {
+				req.BannerURL = cmdutil.StringOrNullJSON(bannerURL)
+			}
+			if cmd.Flags().Changed("lead") {
+				req.LeadUserID, err = cmdutil.IntOrNullJSON(lead, c, cfg)
+				if err != nil {
+					return err
+				}
+			}
 			if cmd.Flags().Changed("start-date") {
 				req.StartDate = &startDate
 			}
 			if cmd.Flags().Changed("due-date") {
 				req.DueDate = &dueDate
-			}
-			c, err := cmdutil.NewClient()
-			if err != nil {
-				return err
 			}
 			if req.Description != nil {
 				resolved, err := cmdutil.ResolveBodyMedia(c, *req.Description)
@@ -370,6 +407,10 @@ func newProjectEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&priority, "priority", "", "Priority: "+vocabPriority("project"))
 	cmd.Flags().StringVar(&visibility, "visibility", "", "Visibility (public/private/secret)")
 	cmd.Flags().StringVar(&color, "color", "", "Hex color e.g. #5E6AD2")
+	cmd.Flags().StringVar(&icon, "icon", "", "Icon key, e.g. Rocket; 'none' clears it")
+	cmd.Flags().StringVar(&iconURL, "logo", "", "Logo image URL (from bk issues upload); shown instead of the icon. 'none' removes it")
+	cmd.Flags().StringVar(&bannerURL, "banner", "", "Banner image URL (from bk issues upload); 'none' removes it")
+	cmd.Flags().StringVar(&lead, "lead", "", "Project lead — id, email, display name, 'me', or 'none' to clear")
 	cmd.Flags().StringVar(&startDate, "start-date", "", "Start date YYYY-MM-DD")
 	cmd.Flags().StringVar(&dueDate, "due-date", "", "Due date YYYY-MM-DD")
 	return cmd

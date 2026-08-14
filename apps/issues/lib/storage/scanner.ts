@@ -9,9 +9,11 @@
 // files, and a rewrite alongside a registry change would have made any
 // regression impossible to attribute.
 //
-// Six surfaces carry urls: issue / task / project descriptions, project
-// summaries, comments, project-update bodies, and attachment rows (which
-// reference a file by exact url rather than by embedding it).
+// Seven surfaces carry urls: issue / task / project descriptions, project
+// summaries, comments, project-update bodies, attachment rows, and a project's
+// logo/banner (`icon_url`/`banner_url`, added 2026-08-13). The last two hold an
+// EXACT url rather than embedding one in text, so they are matched by equality
+// rather than by extraction — see migration 0047.
 //
 // TRASHED ROWS COUNT. Both queries include soft-deleted rows on purpose — an
 // item in the recycle bin can be restored, so its files are still in use. This
@@ -37,7 +39,7 @@ interface Row {
 }
 
 // ---------------------------------------------------------------------------
-// THE INDEX SIDE OF THE SAME SIX SURFACES (Phase 8)
+// THE INDEX SIDE OF THE SAME SEVEN SURFACES (Phase 8)
 // ---------------------------------------------------------------------------
 // Migration 0037 puts a trigger on every table scanned below, so that a
 // deployment which cannot read `issues.*` can still learn what this app
@@ -62,6 +64,10 @@ export const INDEX_APP_BY_TYPE: Record<string, string> = {
   issue: APP_SLUG,
   task: APP_SLUG,
   project: APP_SLUG,
+  // The project's logo/banner columns, indexed separately from its rich text
+  // because they are `exact`-mode urls rather than text to extract from.
+  // Migration 0047 explains why the source_type has to differ.
+  project_image: APP_SLUG,
   project_update: APP_SLUG,
   attachment: APP_SLUG,
   comment: 'platform',
@@ -81,6 +87,8 @@ export const RETRIGGER_SQL: Record<string, (id: number) => SQL> = {
   task: (id) => sql`UPDATE ${tasks} SET description = description WHERE id = ${id}`,
   project: (id) =>
     sql`UPDATE ${projects} SET summary = summary, description = description WHERE id = ${id}`,
+  project_image: (id) =>
+    sql`UPDATE ${projects} SET icon_url = icon_url, banner_url = banner_url WHERE id = ${id}`,
   project_update: (id) => sql`UPDATE ${projectUpdates} SET body = body WHERE id = ${id}`,
   attachment: (id) => sql`UPDATE ${attachments} SET file_url = file_url WHERE id = ${id}`,
   comment: (id) => sql`UPDATE ${comments} SET content = content WHERE id = ${id}`,
@@ -103,7 +111,7 @@ export const issuesReferenceScanner: ReferenceScanner = {
     const [issueRows, taskRows, projectRows, commentRows, updates, atts] = await Promise.all([
       db.execute(sql`SELECT id, seq, title, description, deleted_at FROM ${issues} WHERE workspace_id = ${workspaceId}`),
       db.execute(sql`SELECT id, seq, name, description, deleted_at FROM ${tasks} WHERE workspace_id = ${workspaceId}`),
-      db.execute(sql`SELECT id, seq, name, summary, description, deleted_at FROM ${projects} WHERE workspace_id = ${workspaceId}`),
+      db.execute(sql`SELECT id, seq, name, summary, description, icon_url, banner_url, deleted_at FROM ${projects} WHERE workspace_id = ${workspaceId}`),
       db.execute(sql`SELECT id, content, parent_type FROM ${comments} WHERE workspace_id = ${workspaceId}`),
       db.execute(sql`SELECT id, body FROM ${projectUpdates} WHERE workspace_id = ${workspaceId}`),
       db.execute(sql`SELECT id, issue_id, file_url, filename FROM ${attachments} WHERE workspace_id = ${workspaceId}`),
@@ -119,6 +127,12 @@ export const issuesReferenceScanner: ReferenceScanner = {
       const ref: ScannedReference = { type: 'project', id: Number(r.id), seq: r.seq as number | null, label: (r.name as string) ?? null, trashed: r.deleted_at != null }
       scan(r.summary, ref)
       scan(r.description, ref)
+      // The logo/banner hold an exact url rather than text to extract from, and
+      // are reported under their own type so this matches what the index holds.
+      const imageRef: ScannedReference = { ...ref, type: 'project_image' }
+      for (const col of [r.icon_url, r.banner_url]) {
+        if (typeof col === 'string' && isUploadedAsset(col)) add(col, imageRef)
+      }
     }
     for (const r of commentRows.rows as Row[]) {
       scan(r.content, { type: 'comment', id: Number(r.id), seq: null, label: null, trashed: false })
@@ -152,6 +166,8 @@ export const issuesReferenceScanner: ReferenceScanner = {
         UNION ALL
         SELECT 1 FROM ${projects}        WHERE strpos(coalesce(description, ''), ${url}) > 0
                                          OR strpos(coalesce(summary, ''), ${url}) > 0
+                                         OR icon_url = ${url}
+                                         OR banner_url = ${url}
         UNION ALL
         SELECT 1 FROM ${comments}        WHERE strpos(coalesce(content, ''), ${url}) > 0
         UNION ALL

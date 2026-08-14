@@ -38,6 +38,8 @@ import { EmptyState, ProjectSkeletonRow, AnimatePresence, motion, listContainerV
 import { rankSearch, field, idTokens, stripTags } from '@/lib/listing-search'
 
 interface ProjectRow {
+  /** Uploaded logo; replaces the icon+color tile when set. */
+  icon_url?: string | null
   id: number
   seq: number | null
   workspace_id: number
@@ -678,7 +680,7 @@ function ProjectRowItem({
 
         {/* Name — navigates */}
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <ProjectIcon icon={p.icon} color={p.color} name={p.name} size={26} />
+          <ProjectIcon icon={p.icon} iconUrl={p.icon_url} color={p.color} name={p.name} size={26} />
           <span className="shrink-0 font-mono text-xs text-muted-foreground">#{p.seq ?? p.id}</span>
           <span className="truncate text-sm font-medium">{p.name}</span>
         </div>

@@ -61,6 +61,7 @@ import { toRichTextHtml } from '@/lib/rich-text'
 export interface TaskListItem extends Task {
   project_name: string | null
   project_icon: string | null
+  project_icon_url: string | null
   project_color: string | null
   project_seq: number | null
   lead_name: string | null
@@ -91,6 +92,7 @@ export async function listTasksInWorkspace(
       m.*,
       p.name AS project_name,
       p.icon AS project_icon,
+      p.icon_url AS project_icon_url,
       p.color AS project_color,
       p.seq AS project_seq,
       lead.name AS lead_name,
@@ -111,7 +113,7 @@ export async function listTasksInWorkspace(
             : sql``
       }
       ${searchClause(opts.search, { text: [sql`m.name`, sql`m.description`], seq: sql`m.seq` })}
-    GROUP BY m.id, p.name, p.icon, p.color, p.seq, lead.name, lead.email, lead.avatar_url
+    GROUP BY m.id, p.name, p.icon, p.icon_url, p.color, p.seq, lead.name, lead.email, lead.avatar_url
     ${
       // HAVING, not WHERE: the derived status is an aggregate over the joined
       // issues, so it does not exist yet at WHERE time.
@@ -131,6 +133,7 @@ export async function getTaskInWorkspace(
       m.*,
       p.name AS project_name,
       p.icon AS project_icon,
+      p.icon_url AS project_icon_url,
       p.color AS project_color,
       p.seq AS project_seq,
       lead.name AS lead_name,
@@ -142,7 +145,7 @@ export async function getTaskInWorkspace(
     LEFT JOIN ${users} lead ON lead.id = m.lead_id
     LEFT JOIN ${issues} i ON i.task_id = m.id AND i.deleted_at IS NULL
     WHERE m.id = ${id} AND m.workspace_id = ${workspaceId} AND m.deleted_at IS NULL
-    GROUP BY m.id, p.name, p.icon, p.color, p.seq, lead.name, lead.email, lead.avatar_url
+    GROUP BY m.id, p.name, p.icon, p.icon_url, p.color, p.seq, lead.name, lead.email, lead.avatar_url
   `)
   return (result.rows[0] as unknown as TaskListItem) ?? null
 }

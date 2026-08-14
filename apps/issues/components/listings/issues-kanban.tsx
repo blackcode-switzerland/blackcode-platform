@@ -28,6 +28,8 @@ interface IssueRow {
   assignees: IssueAssignee[]
   project_name: string | null
   project_icon: string | null
+  /** Uploaded project logo; replaces the icon tile when set. */
+  project_icon_url: string | null
   project_color: string | null
   due_date: string | null
   task_name: string | null
@@ -200,6 +202,7 @@ export function IssuesKanban({
                                 <span className="ml-auto flex items-center gap-1 truncate max-w-[90px]">
                                   <ProjectIcon
                                     icon={issue.project_icon}
+                                    iconUrl={issue.project_icon_url}
                                     color={issue.project_color}
                                     name={issue.project_name}
                                     size={12}
