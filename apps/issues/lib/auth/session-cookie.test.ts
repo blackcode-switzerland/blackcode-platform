@@ -56,8 +56,35 @@ describe('the cookie name', () => {
     )
     expect(
       sessionCookieConfig({ nextAuthUrl: 'http://localhost:3000' }).sessionToken.name
-    ).toBe(sessionCookieName(false))
+    ).toBe(`${sessionCookieName(false)}.3000`)
     expect(sessionCookieName(false)).toBe('blackcode.session-token')
+  })
+
+  // LOCAL DEV: cookies are not scoped by port, so on localhost the two apps
+  // share one jar. Without a per-port name, `apps/sales` reads the session
+  // `apps/issues` minted — valid (same secret), so its first-sign-in bootstrap
+  // never runs and it shows "No workspace yet" on a healthy machine.
+  describe('on localhost, where the apps share a cookie jar', () => {
+    it('gives each port its own session, csrf and callback cookies', () => {
+      const a = sessionCookieConfig({ nextAuthUrl: 'http://localhost:3000' })
+      const b = sessionCookieConfig({ nextAuthUrl: 'http://localhost:3100' })
+      expect(a.sessionToken.name).not.toBe(b.sessionToken.name)
+      expect(a.csrfToken?.name).toBe('next-auth.csrf-token.3000')
+      expect(b.csrfToken?.name).toBe('next-auth.csrf-token.3100')
+      expect(a.callbackUrl?.name).not.toBe(b.callbackUrl?.name)
+    })
+
+    // The POSITIVE half: production must be UNTOUCHED — one cookie across every
+    // deployment is D-16, and the csrf cookie must keep NextAuth's `__Host-`.
+    it('leaves a deployed host alone', () => {
+      const prod = sessionCookieConfig({ nextAuthUrl: PROD })
+      expect(prod.sessionToken.name).toBe('__Secure-blackcode.session-token')
+      expect(prod.csrfToken).toBeUndefined()
+      expect(prod.callbackUrl).toBeUndefined()
+      expect(sessionCookieConfig({ nextAuthUrl: 'https://sales.blackcode.ch' }).sessionToken.name).toBe(
+        prod.sessionToken.name
+      )
+    })
   })
 
   // `__Host-` forbids a Domain attribute, so a session cookie carrying that

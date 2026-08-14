@@ -1,3 +1,5 @@
+'use client'
+
 // The "your account exists, but it has no b/sales workspace" screen.
 //
 // ── IT MOVED OUT OF `app/dashboard/layout.tsx` ON 2026-08-11 ────────────────
@@ -20,6 +22,7 @@
 // wording — that is the action which actually retries it.
 
 import Link from 'next/link'
+import { signOut } from 'next-auth/react'
 
 export function NoWorkspace({ email }: { email: string }) {
   return (
@@ -44,9 +47,16 @@ export function NoWorkspace({ email }: { email: string }) {
           <Link href="/dashboard/settings/profile" className="text-primary underline">
             Account settings
           </Link>
-          <a href="/api/auth/signout" className="text-primary underline">
+          {/* `signOut()`, NOT a link to `/api/auth/signout`: that URL renders
+              NextAuth's own unstyled confirm page, whose form carries a CSRF
+              token. Every other sign-out in this app goes through this call. */}
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: '/login' })}
+            className="text-primary underline"
+          >
             Sign out
-          </a>
+          </button>
         </div>
       </div>
     </div>

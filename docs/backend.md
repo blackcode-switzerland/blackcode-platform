@@ -1388,8 +1388,14 @@ docker compose up -d        # Postgres 16 on localhost:5434
 npm install
 npm run db:migrate:issues   # or :sales
 npm run dev                 # issues on http://localhost:3000
-                            # npm run dev:sales for the sales app
+npm run dev:sales           # sales  on http://localhost:3100
 ```
+
+> **Each app's `dev` script pins its port** (`next dev -p …`), and the port MUST
+> match that app's `NEXTAUTH_URL`. `next dev` defaults to 3000 for everybody, so
+> before 2026-08-14 running the sales app alone started it on **3000** while its
+> `NEXTAUTH_URL` said 3100 — every sign-in then redirected to a port with nothing
+> listening. A new app pins its own port here and in `.env.local` together.
 
 ### Database client (`lib/db/client.ts`)
 

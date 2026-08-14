@@ -4,7 +4,7 @@
   "description": "AI-native issue tracking - Trinity Architecture",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3000",
     "build": "next build",
     "postbuild": "node ./scripts/migrate-if-enabled.mjs",
     "start": "next start",

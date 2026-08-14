@@ -7,6 +7,40 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-14 — two apps on localhost no longer share one session
+
+**Local development only. Nothing changes on a deployed host.**
+
+Cookies are not scoped by port. In production the apps are separate hosts, and
+one session cookie across all of them is the point (D-16). On a developer's
+machine they are all `localhost`, so `npm run dev` (issues, :3000) and
+`npm run dev:sales` (sales, :3100) shared one cookie jar — which is not one
+sign-in, it is one app reading a cookie the other minted:
+
+- the session token verified (same secret), so `apps/sales` believed you were
+  signed in and never ran its own first-sign-in bootstrap — the **"No workspace
+  yet"** screen on a machine where nothing was actually broken;
+- `__Host-next-auth.csrf-token` is host-only and therefore also shared, so the
+  sign-out form one app rendered carried the other app's CSRF token.
+
+`sessionCookieConfig()` now suffixes the session, CSRF and callback cookie names
+with the port when — and only when — `NEXTAUTH_URL` is a loopback host with an
+explicit port. Deployed hosts get exactly the names they had before.
+
+Also: the sales "No workspace yet" screen signs out through
+`signOut({ callbackUrl: '/login' })` like every other sign-out in that app,
+instead of linking to NextAuth's unstyled `/api/auth/signout` page.
+
+**And each app's `dev` script now pins its port** — `next dev -p 3000` for
+issues, `-p 3100` for sales. `next dev` defaults to 3000 for everybody, so
+`npm run dev:sales` on its own started the sales app on **3000** while its
+`NEXTAUTH_URL` said 3100: sign-in succeeded and then redirected to a port with
+nothing listening. A new app pins its port in `package.json` and `.env.local`
+together.
+
+**What to do:** nothing. Local sessions minted before this change are ignored —
+sign in again in each app.
+
 ## 2026-08-12 — the binary tells you when it changed under you
 
 **Not breaking. Adds a one-line notice, a `--since` flag, and a few lines to

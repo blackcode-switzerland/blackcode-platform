@@ -74,6 +74,20 @@ export interface SessionCookieConfig {
       domain?: string
     }
   }
+  /**
+   * LOCAL DEV ONLY, and absent otherwise. See `localPortSuffix` — on localhost
+   * every app shares one cookie jar, so the CSRF and callback cookies have to be
+   * separated by port too or a sign-out started in one app is rejected by the
+   * other's token.
+   */
+  csrfToken?: {
+    name: string
+    options: { httpOnly: true; sameSite: 'lax'; path: '/'; secure: boolean }
+  }
+  callbackUrl?: {
+    name: string
+    options: { httpOnly: true; sameSite: 'lax'; path: '/'; secure: boolean }
+  }
 }
 
 export interface SessionCookieInput {
@@ -89,6 +103,38 @@ export interface SessionCookieInput {
  * deployment reads.
  */
 const BASE_NAME = 'blackcode.session-token'
+
+/**
+ * LOCAL DEV ONLY: `.3100` for `http://localhost:3100`, `''` for anything else.
+ *
+ * **Cookies are not scoped by port.** In production the apps are separate hosts
+ * (`issues.blackcode.ch`, `sales.blackcode.ch`) and the shared session cookie is
+ * the whole point (D-16). On a developer's machine they are the SAME host
+ * (`localhost`) on different ports, so they share one jar — and that is not one
+ * sign-in, it is one app reading a cookie the other minted:
+ *
+ *   - the session token is valid (same secret), so `apps/sales` believes you are
+ *     signed in and never runs its own first-sign-in bootstrap → the "No
+ *     workspace yet" screen, on a machine where nothing is actually broken;
+ *   - `__Host-next-auth.csrf-token` is host-only and therefore also shared, so a
+ *     sign-out form rendered by one app carries the other's CSRF token.
+ *
+ * Suffixing by port gives each local app its own jar. It applies ONLY when the
+ * host is a loopback name AND the URL carries an explicit port, so no deployed
+ * environment can reach it.
+ */
+function localPortSuffix(nextAuthUrl: string | undefined): string {
+  if (!nextAuthUrl) return ''
+  let u: URL
+  try {
+    u = new URL(nextAuthUrl)
+  } catch {
+    return ''
+  }
+  const loopback = u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '[::1]'
+  if (!loopback || !u.port) return ''
+  return `.${u.port}`
+}
 
 export class SessionCookieDomainError extends Error {
   constructor(domain: string, host: string) {
@@ -153,9 +199,11 @@ export function sessionCookieConfig(input: SessionCookieInput = {}): SessionCook
     domain = rawDomain
   }
 
+  const suffix = localPortSuffix(nextAuthUrl)
+
   return {
     sessionToken: {
-      name: `${secure ? '__Secure-' : ''}${BASE_NAME}`,
+      name: `${secure ? '__Secure-' : ''}${BASE_NAME}${suffix}`,
       options: {
         httpOnly: true,
         sameSite: 'lax',
@@ -164,6 +212,20 @@ export function sessionCookieConfig(input: SessionCookieInput = {}): SessionCook
         ...(domain ? { domain } : {}),
       },
     },
+    // Only on localhost, and only then: `__Host-next-auth.csrf-token` is
+    // host-only by design and must keep its prefix everywhere else.
+    ...(suffix
+      ? {
+          csrfToken: {
+            name: `next-auth.csrf-token${suffix}`,
+            options: { httpOnly: true as const, sameSite: 'lax' as const, path: '/' as const, secure },
+          },
+          callbackUrl: {
+            name: `next-auth.callback-url${suffix}`,
+            options: { httpOnly: true as const, sameSite: 'lax' as const, path: '/' as const, secure },
+          },
+        }
+      : {}),
   }
 }
 
