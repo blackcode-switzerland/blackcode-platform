@@ -7,6 +7,11 @@
 // There is no validation that an SA must keep double-entry books. Migration 0004
 // carries a CHECK so the illegal state cannot be represented, and a check here
 // would be a second, weaker copy that drifts from it.
+//
+// POST returns the book WITHOUT its accounts, and it has 26 of them: `createEntity`
+// installs the PME chart in the same transaction, because a book with no accounts
+// accepts no posting. Read them from `GET .../accounts?entity=<slug>` — the create
+// response stays the entity shape every other endpoint returns.
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors, jsonList } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'

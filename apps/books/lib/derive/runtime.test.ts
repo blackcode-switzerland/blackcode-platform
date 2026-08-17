@@ -17,6 +17,22 @@
 //
 // It also exercises the create path end to end through the real query layer, which
 // is the same path `bk books entity create` takes.
+//
+// ===========================================================================
+// THE BUG THIS FILE ORIGINALLY MISSED, AND HOW IT MISSED IT
+// ===========================================================================
+// `createEntity` used to create a book with NO CHART OF ACCOUNTS, which is a book
+// that accepts no posting at all: every line names an account that has to exist in
+// `books.account` for that entity. `bk books entity create` therefore worked and
+// produced something unusable.
+//
+// This file did not catch it because it hand-inserted the three accounts it needed
+// before posting, and even asserted the empty chart as if it were correct. Doing
+// the setup a real caller cannot do is how a test agrees with the code instead of
+// checking it.
+//
+// So the rule here now: BELOW THIS LINE NOTHING INSERTS INTO `books.account`. If a
+// posting needs an account, `createEntity` has to have provided it.
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { sql } from 'drizzle-orm'
@@ -82,14 +98,33 @@ d('a book created at runtime', () => {
     expect((await listEntities(ws)).length).toBe(1)
   })
 
+  it('arrives with a chart it can post to, and the chart is its own', async () => {
+    const { listEntities, listAccounts } = await import('../db/queries/statutory')
+    const { PME_CHART } = await import('../chart')
+    const [entity] = await listEntities(ws)
+
+    const accounts = await listAccounts(entity.id)
+    expect(
+      accounts.length,
+      'a book with no accounts accepts no posting, so creating one has to include the chart'
+    ).toBe(PME_CHART.length)
+    // Account-number order, matching the template and `listAccounts`.
+    expect(accounts.map((a) => a.no)).toEqual([...PME_CHART].map((a) => a.no))
+    // Copied, not shared: every row belongs to this book, so editing one book's
+    // chart cannot reach another's.
+    expect(accounts.every((a) => a.entity_id === entity.id)).toBe(true)
+    expect(accounts.every((a) => a.workspace_id === ws)).toBe(true)
+    // `class` is smallint and arrives as a number the sign flip depends on.
+    expect(accounts.find((a) => a.no === '2000')!.class).toBe(2)
+  })
+
   it('balances with no opening balances and no postings at all', async () => {
-    const { getBilan, listEntities, createExercice, listAccounts } = await import('../db/queries/statutory')
+    const { getBilan, listEntities, createExercice } = await import('../db/queries/statutory')
     const [entity] = await listEntities(ws)
     const x = await createExercice(ws, { entityId: entity.id, year: 2027 })
 
-    // A brand new book has an empty chart. Nothing may assume the seed's 26 rows.
-    expect(await listAccounts(entity.id)).toEqual([])
-
+    // A full chart with nothing posted to it. Every account is zero, so both sides
+    // are zero: the chart is not what makes a bilan balance, the postings are.
     const bilan = await getBilan(entity.id, x.id)
     expect(bilan.balanced, `a book with nothing in it must balance at zero, écart ${bilan.ecart}`).toBe(true)
     expect(bilan.totalActif).toBe('0.00')
@@ -98,16 +133,18 @@ d('a book created at runtime', () => {
     expect(bilan.groups.reduce((s, g) => s + g.lines.length, 0)).toBe(25)
   })
 
-  it('balances once it has its own chart and a posted entry', async () => {
+  it('takes a posted entry with no chart setup whatsoever', async () => {
     const { getBilan, getCr, listEntities, listExercices } = await import('../db/queries/statutory')
     const [entity] = await listEntities(ws)
     const [x] = await listExercices(ws, entity.id)
 
-    await db.execute(sql`
-      INSERT INTO books.account (workspace_id, entity_id, no, class, label, statement, statement_position)
-      VALUES (${ws}, ${entity.id}, '1020', 1, '{"fr":"Banque"}', 'bilan', 'tresorerie'),
-             (${ws}, ${entity.id}, '2000', 2, '{"fr":"Fournisseurs"}', 'bilan', 'dettes_fournisseurs'),
-             (${ws}, ${entity.id}, '6000', 6, '{"fr":"Loyer"}', 'cr', 'autres_charges_exploitation')`)
+    // ── 1020, 2000 AND 6000 ARE NOT INSERTED HERE ───────────────────────────
+    // They come from the chart `createEntity` applied. This test used to create
+    // them itself, which is exactly why it passed while `bk books entity create`
+    // produced books that could hold nothing. The foreign key on
+    // `entry_line.account_no` is not the thing that would fail either — there is
+    // none, by design, because a staged line may carry `account: null` — so the
+    // absence would have surfaced as a statement quietly missing the amounts.
 
     // Opening: 5000 in the bank, 5000 owed. Balanced before any trading.
     await db.execute(sql`

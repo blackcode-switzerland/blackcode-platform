@@ -50,6 +50,7 @@ import {
   type ChartAccount,
   type PostingLine,
 } from '../../derive'
+import { PME_CHART } from '../../chart'
 
 // ---------------------------------------------------------------------------
 // Books and years
@@ -76,7 +77,7 @@ export async function getEntityBySlug(
 }
 
 /**
- * Create a book.
+ * Create a book, with a chart of accounts it can actually post to.
  *
  * The #number comes from `books.counters`, allocated inside the transaction so two
  * concurrent creates cannot collide on it.
@@ -84,6 +85,20 @@ export async function getEntityBySlug(
  * There is no validation here that an SA must keep double-entry books: migration
  * 0004 has a CHECK, so the illegal state cannot be represented and a check here
  * would be a second, weaker copy of it.
+ *
+ * ── THE CHART IS PART OF CREATING A BOOK, NOT A LATER STEP ──────────────────
+ * Every posting line names an account that must exist in `books.account` for this
+ * entity, so a book with an empty chart accepts NOTHING. This function returned
+ * exactly that until 2026-08-17, and the seed hid it by inserting the mockup's
+ * chart into its own three books directly.
+ *
+ * It is applied in the SAME TRANSACTION as the entity insert, so a failure part
+ * way leaves no book rather than an unusable one.
+ *
+ * A simplified book gets the chart too, and that is deliberate. Art. 957 al. 2
+ * bookkeeping reads `ri_entry` and never touches these rows, but electing double
+ * entry is a real option the RI has, `entity.regime_election` exists to record it,
+ * and an election should not also mean provisioning a chart by hand.
  */
 export async function createEntity(
   workspaceId: number,
@@ -109,6 +124,22 @@ export async function createEntity(
         seat: data.seat ?? null,
       })
       .returning()
+
+    // Copied per book. These rows belong to this entity afterwards, so editing
+    // one book's chart cannot touch another's. See `lib/chart.ts` for why the
+    // template is code while `books.statement_position` is a table.
+    await tx.insert(booksAccount).values(
+      PME_CHART.map((a) => ({
+        workspace_id: workspaceId,
+        entity_id: row.id,
+        no: a.no,
+        class: a.class,
+        label: a.label,
+        statement: a.statement,
+        statement_position: a.statement_position,
+      }))
+    )
+
     return row
   })
 }
