@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786955000000,
+      "tag": "0001_books_init",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786955060000,
+      "tag": "0002_blob_reference_index",
+      "breakpoints": true
+    }
+  ]
+}

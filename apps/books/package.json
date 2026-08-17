@@ -1,0 +1,47 @@
+{
+  "name": "books",
+  "version": "0.1.0",
+  "description": "b/books \u2014 Swiss statutory bookkeeping. Any number of books, double-entry, audit-defensible. See docs/books-app-plan/.",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3200",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@blackcode/platform-agent": "*",
+    "@blackcode/platform-api": "*",
+    "@blackcode/platform-auth": "*",
+    "@blackcode/platform-db": "*",
+    "@blackcode/platform-storage": "*",
+    "@blackcode/platform-ui": "*",
+    "drizzle-orm": "^0.45.2",
+    "next": "^16.0.10",
+    "next-auth": "^4.24.7",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@blackcode/platform-testing": "*",
+    "@tailwindcss/postcss": "^4.3.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.8",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^4.3.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.8"
+  }
+}

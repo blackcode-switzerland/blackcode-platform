@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "turbo run dev --filter=issues",
     "dev:sales": "turbo run dev --filter=sales",
+    "dev:books": "turbo run dev --filter=books",
     "build": "turbo run build",
     "start": "turbo run start --filter=issues",
     "lint": "turbo run lint",
@@ -21,7 +22,9 @@
     "db:push:issues": "npm run db:push --workspace=issues",
     "db:studio:issues": "npm run db:studio --workspace=issues",
     "db:generate:sales": "npm run db:generate --workspace=sales",
-    "db:migrate:sales": "npm run db:migrate --workspace=sales"
+    "db:migrate:sales": "npm run db:migrate --workspace=sales",
+    "db:generate:books": "npm run db:generate --workspace=books",
+    "db:migrate:books": "npm run db:migrate --workspace=books"
   },
   "devDependencies": {
     "turbo": "^2.5.6"
