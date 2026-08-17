@@ -7,6 +7,12 @@ beside this file.
 
 ## Start here: [week one](week-one.md)
 
+> **[`reports/`](reports/) is what actually happened**, one dated file per
+> milestone. Read the latest before starting anything — a phase doc says what was
+> planned, and a report says what the build found, including where the plan was
+> wrong. Newest: [frontend sprint 1](reports/2026-08-17-frontend-sprint-1.md),
+> 2026-08-17.
+
 The six phases below are the full build. **[`week-one.md`](week-one.md) is the
 compressed first slice**: a real, correct bookkeeping tool in seven days, cutting
 a vertical slice through phases 0, 1 and 2.
