@@ -96,8 +96,12 @@ function BookCard({ entity }: { entity: Entity }) {
       <div className="flex flex-wrap items-center gap-2.5">
         <EntityChip entity={entity} />
         <span className="text-[13px] text-muted-foreground">{entity.seat}</span>
-        <span className="ml-auto text-[12px] tabular-nums text-muted-foreground">
-          exercice {entity.exercice}
+        {/* No exercice here any more. A book no longer carries one year — phase 1
+            made them rows in `books.exercice` and there can be several, so this
+            printed the word with an empty space after it. The year lives in the
+            top bar, where it is a choice rather than a property of the book. */}
+        <span className="ml-auto text-[12px] uppercase tracking-wider text-muted-foreground">
+          #{entity.number}
         </span>
       </div>
       <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3">
@@ -108,9 +112,12 @@ function BookCard({ entity }: { entity: Entity }) {
         />
         <Fact
           label="VAT"
+          // `entity.vat` is a nested block, not four flat columns. Read flat, it
+          // was `undefined` and every book — including a registered one — said
+          // "Not registered". A wrong fact about tax status is not a cosmetic bug.
           value={
-            entity.vat_registered
-              ? [entity.vat_method, entity.vat_filing].filter(Boolean).join(', ') || 'Registered'
+            entity.vat.registered
+              ? [entity.vat.method, entity.vat.filing].filter(Boolean).join(', ') || 'Registered'
               : 'Not registered'
           }
         />

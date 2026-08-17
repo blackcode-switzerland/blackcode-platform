@@ -15,8 +15,8 @@
 // key that quietly omits which BOOK it is about.
 
 import { useQuery } from '@tanstack/react-query'
-import { apiGet } from './client'
-import { booksGlobalKey, type Scope } from './query-keys'
+import { apiGet, apiList } from './client'
+import { booksGlobalKey, booksKey, type Scope } from './query-keys'
 import type { Entity, Term } from './types'
 import type { BilanGroup, CrLine } from './statements'
 
@@ -24,25 +24,37 @@ import type { BilanGroup, CrLine } from './statements'
  * `GET /api/meta`, exactly as the route serves it.
  *
  * ── THIS IS NOT `BooksMeta` FROM lib/types.ts, AND THAT IS A REAL MISMATCH ──
- * `lib/types.ts` declares `entities: Entity[]`. The route
- * (`app/api/meta/route.ts`) serves `entities: { source, note, data }` — the
- * envelope that carries `source: "fixture" | "database"`, which is the field the
- * whole phase-0 contract turns on.
+ * `lib/types.ts` still declares `entities: Entity[]` and an `exercices` array.
+ * The route serves neither. This interface describes what is actually on the
+ * wire, because typing against the declaration would make every screen compile
+ * and then read `undefined` at runtime. It is the backend dev's file to correct.
  *
- * The route is right and the type is stale. This interface describes what is
- * actually on the wire, because typing against the declaration would have made
- * every screen compile and then read `undefined` at runtime. Raised with the
- * backend dev — see the report; it is his file to correct.
+ * ── AND THE BOOKS LEFT THIS PAYLOAD IN PHASE 1 ─────────────────────────────
+ * `entities` used to carry `data: Entity[]` from the mockup fixture, and
+ * `exercices` a flat `number[]`. Phase 1 made both workspace-scoped rows, so
+ * `/api/meta` — which is not workspace-scoped and is served unauthenticated —
+ * cannot answer for them and no longer tries. What is left is a POINTER at the
+ * routes that can.
+ *
+ * **This broke the book and year switchers silently**, which is the part worth
+ * remembering. Nothing threw: `meta.entities.data` became `undefined`, the
+ * switchers found nothing, and the overview rendered "You have no books yet"
+ * over a workspace holding three books and seventeen entries. A confident wrong
+ * answer, not an error. Use `useEntities` and `useExercices` below; they are
+ * workspace-scoped because the data is.
  */
 export interface MetaPayload {
   app: 'books'
+  /**
+   * A pointer, not a list. `source` says where the books really live and is the
+   * field to watch — a screen that ships against fixture data believing it is
+   * real is what it exists to prevent.
+   */
   entities: {
-    /** `"fixture"` until phase 1 serves these from `books.entity`. Rendered. */
     source: 'fixture' | 'database'
+    table?: string
     note?: string
-    data: Entity[]
   }
-  exercices: number[]
   vocabularies: {
     recognition: Term[]
     evidence_tiers: Term[]
@@ -117,16 +129,67 @@ export function useMe() {
 }
 
 /**
- * Look one book up by slug, from the meta payload.
+ * The books in this workspace. `GET /api/workspaces/{ws}/entities`.
  *
- * Not a hook and not a fetch — a lookup over data the caller already has, so a
- * chip does not cause a request. Returns null for an unknown slug rather than
- * throwing: `?entity=deleted-book` is a URL somebody can type or bookmark, and
- * the recovery is a message, not a crash.
+ * Workspace-scoped, and NOT entity-scoped: this is the list you choose a book
+ * from, so scoping it to a book would be circular. `booksKey` with an empty
+ * scope rather than `booksGlobalKey`, because two workspaces hold different
+ * books and their ids overlap.
+ *
+ * A person with no books gets `[]`, which is a real and expected state — a new
+ * employee has none until they create one. It is not an error and must not be
+ * drawn as one.
  */
-export function findEntity(meta: MetaPayload | undefined, slug: string | null): Entity | null {
-  if (!meta || !slug) return null
-  return meta.entities.data.find((e) => e.slug === slug) ?? null
+export function useEntities(ws: string | undefined) {
+  return useQuery({
+    queryKey: booksKey('entities', { entity: null, exercice: null }, { ws }),
+    queryFn: () => apiList<Entity>(`/api/workspaces/${ws}/entities`).then((r) => r.data),
+    enabled: !!ws,
+    staleTime: 60_000,
+  })
+}
+
+/** One fiscal year of one book, as `GET …/exercices` serves it. */
+export interface ExerciceRow {
+  year: number
+  starts_on: string
+  ends_on: string
+  status: 'open' | 'closed'
+}
+
+/**
+ * The fiscal years. `GET /api/workspaces/{ws}/exercices`, filtered by book.
+ *
+ * Scoped by entity because each book keeps its own, and they are not
+ * necessarily the same set — a book created this year has one where an older one
+ * has several. Passing no entity asks for the whole workspace's, which is what
+ * an unscoped screen wants.
+ */
+export function useExercices(ws: string | undefined, entity: string | null) {
+  return useQuery({
+    queryKey: booksKey('exercices', { entity, exercice: null }, { ws }),
+    queryFn: () =>
+      apiList<ExerciceRow>(
+        `/api/workspaces/${ws}/exercices${entity ? `?entity=${encodeURIComponent(entity)}` : ''}`
+      ).then((r) => r.data),
+    enabled: !!ws,
+    staleTime: 60_000,
+  })
+}
+
+/**
+ * Look one book up by slug, in a list the caller already has.
+ *
+ * Not a hook and not a fetch, so a chip does not cause a request. Returns null
+ * for an unknown slug rather than throwing: `?entity=deleted-book` is a URL
+ * somebody can type or bookmark, and the recovery is a message, not a crash.
+ *
+ * It takes the LIST now, not the meta payload — the books left that payload in
+ * phase 1. See the note on `MetaPayload`.
+ */
+export function findEntity(entities: Entity[] | undefined, slug: string | null): Entity | null {
+  if (!entities || !slug) return null
+  return entities.find((e) => e.slug === slug) ?? null
 }
 
 /**

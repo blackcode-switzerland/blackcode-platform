@@ -72,7 +72,7 @@ import {
 } from 'lucide-react'
 import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 import { ALL_NAV, NAV, isActive, scopedHref, type NavIconName, type NavItem } from '@/lib/nav'
-import { useScope } from '@/lib/scope'
+import { useScope, WorkspaceSlugProvider } from '@/lib/scope'
 import { useMe } from '@/lib/hooks'
 
 /**
@@ -96,7 +96,34 @@ const ICONS: Record<NavIconName, LucideIcon> = {
   'messages-square': MessagesSquare,
 }
 
+/**
+ * The shell, and the one place the workspace slug enters the client.
+ *
+ * It only provides the context and renders the body. `useScope` — which the body
+ * and every page below it call — needs the slug now that phase 1 made the books
+ * and the fiscal years workspace-scoped rows, and this component is the only
+ * thing that has it: `/dashboard/settings` mounts the same shell with a real
+ * slug resolved on the server, so the pathname is not a source for it.
+ */
 export function BooksShell({
+  ws,
+  title,
+  children,
+}: {
+  ws: string
+  title?: string
+  children: React.ReactNode
+}) {
+  return (
+    <WorkspaceSlugProvider value={ws}>
+      <ShellBody ws={ws} title={title}>
+        {children}
+      </ShellBody>
+    </WorkspaceSlugProvider>
+  )
+}
+
+function ShellBody({
   ws,
   /**
    * The header title, for a subtree the nav table cannot name.

@@ -60,7 +60,31 @@ export type LegalForm = 'SA' | 'RI'
 
 export type BookkeepingRegime = 'double_entry' | 'simplified'
 
+/**
+ * One book.
+ *
+ * ── REALIGNED WITH THE ROUTE ON 2026-08-17 ─────────────────────────────────
+ * This described the mockup fixture. Phase 1's `publicEntity`
+ * (`lib/db/queries/statutory.ts`) serves something different in three ways, and
+ * two of them were rendering silently wrong values before this was corrected:
+ *
+ *   - **`vat` is NESTED**, not four flat columns. Every card read
+ *     `entity.vat_registered` — `undefined` — and printed "Not registered" for
+ *     a company that is registered. A wrong fact about tax status, stated
+ *     confidently, with nothing thrown.
+ *   - **`exercice` is GONE.** A book no longer carries one year; the years are
+ *     rows in `books.exercice` and there can be several. The overview card
+ *     printed the label with an empty value beside it. Use `useExercices`.
+ *   - **`number` was added** — the workspace `seq`, which is what the CLI and
+ *     any URN print. The serial `id` is never exposed.
+ *
+ * Keep this file matching `publicEntity` field for field. A type that describes
+ * an older wire shape does not fail to compile; it renders `undefined` and lets
+ * the screen make something up.
+ */
 export interface Entity {
+  /** The workspace-scoped number. Never the serial `id`. */
+  number: number
   /** Stable slug used in URLs and CLI flags: `blackcode`, `aios`, `ri`. */
   slug: string
   name: string
@@ -68,14 +92,18 @@ export interface Entity {
   /** Legal seat. Drives which cantonal and communal tax parameters apply. */
   seat: string
   bookkeeping_regime: BookkeepingRegime
+  /** How the regime was arrived at — elected, or required by law. */
+  regime_election: string | null
+  regime_note: Label | null
   /** `calendar` today. Kept as a field so nothing hardcodes 31.12 symmetry. */
   fiscal_year: 'calendar'
-  exercice: number
-  vat_registered: boolean
-  vat_method: 'effective' | null
-  vat_filing: 'quarterly' | null
-  vat_note: Label | null
-  regime_note: Label | null
+  /** Nested to match the mockup, where VAT is a block rather than four columns. */
+  vat: {
+    registered: boolean
+    method: 'effective' | null
+    filing: 'quarterly' | null
+    note: Label | null
+  }
   /** `opted_out` under art. 727a CO, or null. */
   audit_status: 'opted_out' | null
   /** Kept visible because it is what preserves audit opt-out eligibility. */
