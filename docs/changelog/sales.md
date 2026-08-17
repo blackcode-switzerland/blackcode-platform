@@ -22,6 +22,43 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-17 — the document library previews files and knows where they live
+
+**Additive, nothing breaking** (sales #40). The library rendered every entry as
+an identical grey row — a video, an image, a deck and a folder all looked the
+same, and nothing said whether a file was ours or somebody else's.
+
+- **Previews by type**, web only: images and video we host play inline, PDFs
+  render, Google Drive files use Drive's own viewer. A thumbnail shows in the
+  row; the player opens on demand, because ten iframes to a third party is ten
+  round trips before the page settles.
+- **A badge on every row** saying `Blackcode storage` or `Google Drive`, with
+  what that means on hover — who can delete it, and who decides who sees it.
+- **`--kind` is now OPTIONAL on `doc add`.** The type is derived from the url; an
+  explicit value still wins, because `deck` is a judgement no recogniser can make.
+- **`bk sales doc recheck <n|all>`** — re-ask whether an external file is
+  viewable. Run `recheck all` once after upgrading: documents added before this
+  have no recorded source, and the sweep fills it in.
+- **`doc list` gained a SOURCE column** and warns when something cannot be
+  previewed; **`doc show`** prints the provider, type, preview status and the
+  remedy.
+- **`doc link --strategy`** — the fourth attachment point #40 asks for. Prospect,
+  product and template have worked since day one; strategies only existed from
+  migration 0010.
+
+**What #40 asked for and did NOT get, deliberately:** browsing and picking files
+from inside the app. That needs OAuth, a Drive scope, stored refresh tokens and a
+security review, and buys little over "the agent supplies a url". The mechanism
+is shared (`@blackcode/platform-file-providers`) so any app can adopt it and any
+provider can be added.
+
+Migration 0012 adds `documents.storage_provider|external_id|preview_status|
+preview_checked_at` and the `document_strategies` link table. The media kind,
+embed url and thumbnail are **derived on every read**, so improving the
+recogniser improves every existing row with no backfill.
+
+---
+
 ## 2026-08-17 — products: internal price guidance, and whose page it is
 
 **Additive, nothing breaking.** Two product-model gaps (#27 part 1, #29).

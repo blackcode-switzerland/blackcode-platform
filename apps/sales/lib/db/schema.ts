@@ -1012,6 +1012,49 @@ export const documents = salesSchema.table(
 
     size_bytes: integer('size_bytes'),
     mime_type: varchar('mime_type', { length: 120 }),
+
+    // ── WHERE THE BYTES LIVE (migration 0012, sales #40) ───────────────────
+    //
+    //   ┌──────────────────────────────────────────────────────────────────┐
+    //   │ THE MEDIA KIND, THE EMBED URL AND THE THUMBNAIL ARE **NOT**      │
+    //   │ COLUMNS. They are derived from the url on every read by          │
+    //   │ `@blackcode/platform-file-providers`, so improving the           │
+    //   │ recogniser improves every existing row with no backfill.         │
+    //   └──────────────────────────────────────────────────────────────────┘
+    //
+    /**
+     * `blob` (ours) | `google_drive` | `external` — the decision made at write
+     * time. Validated in the route against the live provider registry rather
+     * than by a CHECK: a provider can be registered without a migration.
+     *
+     * **NULL means "not yet classified", not "unknown".** Migration 0012 could
+     * backfill only the internal half (`platform.is_uploaded_asset` is the SQL
+     * authority for that, and reusing it avoids a second copy of the rule);
+     * deciding WHICH external provider is implemented once, in TypeScript, and
+     * transcribing that into SQL is the two-lists failure this repo keeps
+     * finding. `bk sales doc recheck --all` fills the rest.
+     *
+     * Nothing on screen depends on it — `publicDocument` derives the provider
+     * from the url every time, so a lagging column is invisible except to the
+     * `--provider` filter.
+     */
+    storage_provider: varchar('storage_provider', { length: 32 }),
+    /** The provider's own handle — a Drive file id. Null for our own uploads,
+     *  where `external_id` would have nothing to point at. */
+    external_id: varchar('external_id', { length: 255 }),
+    /**
+     * `public | restricted | unknown` — can a viewer actually open this?
+     *
+     * A PROBE RESULT, which is the entire reason it is a column: it cannot be
+     * recomputed without a network call. We hold no Google credentials, so the
+     * only credential-free signal is whether Drive's thumbnail endpoint answers
+     * for the file, and that answer has to be remembered.
+     *
+     * NULL for our own uploads, which are always viewable by anyone who can see
+     * the record — there is no external permission system in the way.
+     */
+    preview_status: varchar('preview_status', { length: 16 }),
+    preview_checked_at: timestamp('preview_checked_at', { withTimezone: true }),
     /** BLOB-REF (scan). The mockup's `note` — prose about what the file is for. */
     description: text('description'),
     tags: text('tags').array(),
@@ -1141,6 +1184,29 @@ export const documentProspects = salesSchema.table(
 )
 
 /** Which products a document is collateral for. */
+/**
+ * A document attached to a segment strategy — migration 0012.
+ *
+ * The fourth of the four #40 asks for ("a prospect, a product, a strategy doc, a
+ * template"). The other three have existed since 0001; this one was missing only
+ * because `sales.strategies` did not exist until 0010.
+ */
+export const documentStrategies = salesSchema.table(
+  'document_strategies',
+  {
+    document_id: integer('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    strategy_id: integer('strategy_id')
+      .notNull()
+      .references(() => strategies.id, { onDelete: 'cascade' }),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.document_id, t.strategy_id] }),
+    strategyIdx: index('idx_document_strategies_strategy').on(t.strategy_id),
+  })
+)
+
 export const documentProducts = salesSchema.table(
   'document_products',
   {

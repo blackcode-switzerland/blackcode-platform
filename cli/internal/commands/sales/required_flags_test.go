@@ -39,10 +39,15 @@ import (
 func TestRequiredSalesFlagsSayRequired(t *testing.T) {
 	// command path under `bk sales` → flags the ROUTE refuses without.
 	cases := map[string][]string{
-		"prospect create":  {"name"},
-		"product create":   {"name", "category"},
-		"template create":  {"name", "channel", "category"},
-		"doc add":          {"title", "kind"},
+		"prospect create": {"name"},
+		"product create":  {"name", "category"},
+		"template create": {"name", "channel", "category"},
+		// `kind` left this list on 2026-08-17 (sales #40). The ROUTE stopped
+		// requiring it: the server derives the type from the url, and demanding
+		// it was making an agent answer a question about a Drive link it could
+		// not open. The table follows the route, which is the authority — see
+		// the header.
+		"doc add":          {"title"},
 		"meeting schedule": {"prospect", "title", "type", "at"},
 		"meeting log":      {"prospect", "title", "type", "at", "outcome"},
 		"comm log":         {"prospect", "channel", "dir"},

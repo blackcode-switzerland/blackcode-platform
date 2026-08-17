@@ -1047,6 +1047,12 @@
     },
     {
       "method": "POST",
+      "path": "/api/workspaces/{ws}/documents/{n}/recheck",
+      "command": "bk sales doc recheck",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
       "path": "/api/workspaces/{ws}/invitations",
       "command": "bk sales invite send",
       "app": "sales"
