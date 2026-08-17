@@ -265,7 +265,7 @@ not repeated here. Two things are this app's own:
 | `/dashboard/{ws}/prospects` | table ⇄ board, filter bar in the URL |
 | `/dashboard/{ws}/prospects/{n}` | five tabs, journey, contacts, research log, objections, triangulation |
 | `/dashboard/{ws}/meetings` · `/communications` | the two cross-prospect ledgers |
-| `/dashboard/{ws}/products` · `/templates` · `/documents` | the catalog |
+| `/dashboard/{ws}/products` · `/templates` · `/documents` | the catalog. Documents preview by type and badge their source — §7.9 |
 | `/dashboard/{ws}/strategies` | why a SEGMENT was chosen — §7.4, and reusable across prospects (2026-08-17) |
 | `/dashboard/{ws}/activity` | what changed and who changed it — §7.7 |
 | `/dashboard/{ws}/search` | grouped, faceted full search — §7.8 |
@@ -879,3 +879,26 @@ platform administration is, with a link built from the other app's registered
 `base_url` — the same reasoning as the password and account-deletion lines
 beside it. A control that is simply absent reads as a feature that does not
 exist.
+
+### 7.9 Documents — preview, and whose file it is (2026-08-17, #40)
+
+`components/documents/file-preview.tsx`. Two rules, and both are about not
+lying to the reader:
+
+- **Embed only on an explicit `public` verdict** for an external file. A Drive
+  `/preview` iframe renders the document for somebody signed in to Drive and
+  Google's request-access page for everybody else — inside our page, on a
+  customer record. We cannot tell those apart in the browser, so the server's
+  probe decides. Getting this backwards would not show up in testing: whoever
+  builds it is signed in to Drive, so every embed works for them.
+- **The badge says whose file it is.** `Blackcode storage` (filled) or
+  `Google Drive` (outlined), with the consequence on hover. They differ in who
+  can delete the file and who controls who sees it, and a listing that rendered
+  them identically — which this app did until now — hid both.
+
+Thumbnail in the row, player on request: ten iframes to a third party is ten
+round trips before the page settles, for previews nobody asked to watch.
+
+A folder never gets a preview and never gets a "Restricted" chip — it has no
+embed at any permission level, and saying "share it to preview it here" would
+advise a fix that changes nothing. That was a live bug, caught in the browser.

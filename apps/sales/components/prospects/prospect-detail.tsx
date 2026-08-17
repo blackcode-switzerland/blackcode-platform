@@ -20,7 +20,7 @@
 // library, filtered — never a parallel per-prospect store that drifts from it.
 // The Meetings and Communications tabs do the same with `?prospect=`.
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowUpRight, ExternalLink, Globe, Linkedin, Mail, Phone, Star, Target } from 'lucide-react'
@@ -52,6 +52,7 @@ import {
   RemoveCommunicationButton,
 } from '@/components/ledgers/ledger-forms'
 import { MeetingLink } from '@/components/ledgers/ledger-pages'
+import { FilePreview, SourceBadge } from '@/components/documents/file-preview'
 import { useCanWrite } from '@/lib/ui-mode'
 import { usePageTitle } from '@/components/sales-shell'
 import {
@@ -852,6 +853,106 @@ function DocumentsTab({ ws, n }: { ws: string; n: number }) {
 }
 
 /** Shared by this tab and the library page, so the two cannot render differently. */
+/**
+ * One row of the library: what it is, whose it is, and a preview on demand.
+ *
+ * THUMBNAIL BY DEFAULT, PLAYER ON REQUEST. #40 asks for "thumbnail/player", and
+ * the split is not just taste: a thumbnail is one `<img>`, while a player is an
+ * iframe to a third party. Ten of those on one page is ten round trips to
+ * Google before the page settles, for previews nobody asked to watch.
+ *
+ * The row is a `<div>` rather than the `<a>` it used to be, because an anchor
+ * may not contain a button or an iframe — nesting interactive content inside a
+ * link is invalid and browsers resolve it unpredictably.
+ */
+function DocumentRow({
+  doc,
+  first,
+  focused,
+}: {
+  doc: import('@/lib/hooks').SalesDocument
+  first: boolean
+  focused: boolean
+}) {
+  // The scroll ref is OWNED HERE, not passed in — this file's `DocumentList`
+  // header already records why: threading a ref across a component boundary
+  // hits two copies of `@types/react` disagreeing about `Ref`, and it does not
+  // compile. The row knows whether it is the focused one.
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (focused) ref.current?.scrollIntoView({ block: 'center' })
+  }, [focused])
+  const [open, setOpen] = useState(false)
+  const f = doc.file
+  const mayEmbed = f.internal || f.preview_status === 'public'
+  const hasPlayer = mayEmbed && f.embed_mode !== 'none' && Boolean(f.embed_url)
+
+  return (
+    <div
+      ref={ref}
+      className={
+        'px-4 py-3 ' +
+        (first ? '' : 'border-t border-border') +
+        (focused ? ' bg-accent ring-1 ring-inset ring-primary' : '')
+      }
+    >
+      <div className="flex items-center gap-3">
+        <RecordNumber n={doc.number} />
+        {/* The thumbnail IS the recognisability #40 is about: a video that
+            looks like a video before you click anything. */}
+        {f.thumbnail_url && mayEmbed && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={f.thumbnail_url}
+            alt=""
+            loading="lazy"
+            className="h-9 w-14 shrink-0 rounded border border-border object-cover"
+          />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm text-foreground">{doc.title}</span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {[doc.kind, doc.added_by ? `added by ${doc.added_by}` : null, ...doc.tags]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        </span>
+        <SourceBadge doc={doc} />
+        {hasPlayer && (
+          <button
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-accent"
+          >
+            {open ? 'Hide' : 'Preview'}
+          </button>
+        )}
+        <a
+          href={f.open_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+          aria-label={`Open ${doc.title}`}
+        >
+          <ArrowUpRight size={14} />
+        </a>
+      </div>
+      {/* The fallback card renders WITHOUT expanding, because "this cannot be
+          previewed and here is why" is the thing a reader most needs to see. */}
+      {!hasPlayer && (f.preview_status === 'restricted' || f.preview_status === 'unknown') && (
+        <div className="mt-2">
+          <FilePreview doc={doc} />
+        </div>
+      )}
+      {open && hasPlayer && (
+        <div className="mt-2">
+          <FilePreview doc={doc} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function DocumentList({
   docs,
   focus = null,
@@ -862,50 +963,17 @@ export function DocumentList({
    * link and ⌘K both arrive at a document, which has no page of its own.
    * Optional because the prospect Documents tab has nothing to focus.
    *
-   * The scroll ref is OWNED HERE rather than passed in: the focused element is
-   * the `<a>` this component renders, and threading a ref for it through a prop
-   * crosses a file boundary where two copies of `@types/react` disagree about
-   * `Ref`. The list knows which row is focused; let it keep that.
+   * The scroll ref lives on the ROW (`DocumentRow`), not here: threading one
+   * across a component boundary hits two copies of `@types/react` disagreeing
+   * about `Ref` and does not compile. The row knows whether it is focused.
    */
   focus?: number | null
 }) {
-  const focusRef = useRef<HTMLAnchorElement>(null)
-  useEffect(() => {
-    if (focus != null) focusRef.current?.scrollIntoView({ block: 'center' })
-  }, [focus])
-
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
-      {docs.map((d, i) => {
-        const href = d.upload_url ?? d.external_url
-        const focused = d.number === focus
-        return (
-          <a
-            key={d.number}
-            ref={focused ? focusRef : undefined}
-            href={href ?? undefined}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={
-              'flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent ' +
-              (i > 0 ? 'border-t border-border' : '') +
-              (focused ? ' bg-accent ring-1 ring-inset ring-primary' : '') +
-              (href ? '' : ' pointer-events-none opacity-60')
-            }
-          >
-            <RecordNumber n={d.number} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm text-foreground">{d.title}</span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {[d.kind, d.added_by ? `added by ${d.added_by}` : null, ...d.tags]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </span>
-            </span>
-            <ArrowUpRight size={14} className="shrink-0 text-muted-foreground" />
-          </a>
-        )
-      })}
+      {docs.map((d, i) => (
+        <DocumentRow key={d.number} doc={d} first={i === 0} focused={d.number === focus} />
+      ))}
     </div>
   )
 }

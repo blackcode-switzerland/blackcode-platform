@@ -107,8 +107,36 @@ const SOURCES = [
   ...walk(join(APP_ROOT, 'lib')),
 ]
 
-/** The one module allowed to call `fetch`. */
+/** The one module allowed to call `fetch` **to reach our own API**. */
 const TRANSPORT = 'lib/client.ts'
+
+/**
+ * Server-side modules that call `fetch` OUTBOUND, to a third party, with reasons.
+ *
+ * ---------------------------------------------------------------------------
+ * THIS IS A DIFFERENT KIND OF CALL FROM THE ONE THE RULE IS ABOUT
+ * ---------------------------------------------------------------------------
+ * The property above is "no mutation reaches OUR API except through the module
+ * that documents them". It is about the browser talking to us. A route handler
+ * asking Google whether a Drive file is publicly viewable is not that: it runs
+ * on the server, it never touches `/api/`, and no affordance switch could
+ * meaningfully gate it.
+ *
+ * The guard scanned `app/` and `lib/` wholesale, so it saw one and could not
+ * tell the difference. Widening it without a second assertion would have
+ * traded a real property for a list — so each entry below is ALSO required to
+ * contain no reference to our own API, which is what keeps "a component cannot
+ * quietly call fetch" true while permitting the outbound case.
+ */
+const OUTBOUND_FETCH = new Map<string, string>([
+  [
+    'lib/api/preview-probe.ts',
+    // Asks Drive, unauthenticated, whether an attached file is viewable — the
+    // one question about an external attachment that a url cannot answer.
+    // Server-only, best-effort, and it may never fail the write it runs inside.
+    'probes an external provider (sales #40)',
+  ],
+])
 /** The one module allowed to write a sales RECORD. */
 const RECORD_WRITES = 'lib/mutations.ts'
 
@@ -284,15 +312,40 @@ describe('the inputs', () => {
 })
 
 describe('read-only is a property of the tree', () => {
-  it('there is exactly one fetch() in the whole web surface', () => {
+  it('there is exactly one fetch() to our own API in the whole web surface', () => {
     const callers = SOURCES.filter((f) => /\bfetch\s*\(/.test(codeOf(readFileSync(f, 'utf8')))).map(rel)
+    const unexpected = callers.filter((c) => c !== TRANSPORT && !OUTBOUND_FETCH.has(c))
     expect(
-      callers,
+      unexpected,
       `only ${TRANSPORT} may call fetch. A component that calls it directly makes ` +
         '"no mutation reaches the network except through the module that documents ' +
         'them" unverifiable, which is the difference between a property and a ' +
-        `promise:\n${callers.join('\n')}`
-    ).toEqual([TRANSPORT])
+        'promise. A server-side call to a THIRD PARTY goes in OUTBOUND_FETCH ' +
+        `with a reason:\n${unexpected.join('\n')}`
+    ).toEqual([])
+    // THE PREMISE. Without it the assertion above passes against a file that
+    // stopped calling fetch entirely, and the exemption list would quietly
+    // become a list of files nobody checks.
+    expect(callers, 'nothing calls fetch at all — this guard has stopped guarding').toContain(
+      TRANSPORT
+    )
+  })
+
+  it('every OUTBOUND_FETCH module really is outbound — it never names our API', () => {
+    // This is what makes the exemption safe rather than a hole. An exempted
+    // module that started calling `/api/workspaces/…` would be doing exactly
+    // the thing the rule forbids, wearing a permission granted for something
+    // else — the shape CLAUDE.md's finding #10 describes.
+    for (const [file, reason] of OUTBOUND_FETCH) {
+      const full = join(APP_ROOT, file)
+      expect(existsSync(full), `OUTBOUND_FETCH names ${file}, which does not exist`).toBe(true)
+      const src = codeOf(readFileSync(full, 'utf8'))
+      expect(reason.length, `${file} needs a reason, not an empty string`).toBeGreaterThan(10)
+      expect(src, `${file} is exempted as outbound but names our own API`).not.toMatch(
+        WORKSPACE_PATH
+      )
+      expect(src, `${file} is exempted as outbound but calls apiSend`).not.toMatch(/\bapiSend\s*[<(]/)
+    }
   })
 
   it('only lib/mutations.ts and the named account modules send apiSend', () => {

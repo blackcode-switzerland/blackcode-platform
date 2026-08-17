@@ -1190,8 +1190,40 @@ type SalesDocument struct {
 	AddedBy     string   `json:"added_by" yaml:"added_by"`
 	Prospects   []int    `json:"prospects" yaml:"prospects"`
 	Products    []int    `json:"products" yaml:"products"`
-	URN         string   `json:"urn" yaml:"urn"`
-	DeletedAt   string   `json:"deleted_at" yaml:"deleted_at"`
+	Strategies  []int    `json:"strategies" yaml:"strategies"`
+
+	// Where the bytes live and how a web surface shows it (sales #40).
+	// DERIVED by the server on every read from the url, so a document added
+	// before this existed reports correctly without a backfill.
+	File SalesDocumentFile `json:"file" yaml:"file"`
+
+	// Only on a create/recheck response: the sentence explaining the preview
+	// verdict. Printed on stderr — an agent that attached an unopenable Drive
+	// link must not have to ask a second time to find out.
+	PreviewNote string `json:"preview_note,omitempty" yaml:"preview_note,omitempty"`
+
+	URN       string `json:"urn" yaml:"urn"`
+	DeletedAt string `json:"deleted_at" yaml:"deleted_at"`
+}
+
+// SalesDocumentFile is the derived answer to "where does this live and how do we
+// show it". `Internal` is the one field worth reading twice: true means WE hold
+// the bytes and the cross-app delete gate is responsible for them; false means
+// somebody else does, and we must never delete it.
+type SalesDocumentFile struct {
+	Provider   string `json:"provider" yaml:"provider"`
+	Internal   bool   `json:"internal" yaml:"internal"`
+	Label      string `json:"label" yaml:"label"`
+	ExternalID string `json:"external_id" yaml:"external_id"`
+	MediaKind  string `json:"media_kind" yaml:"media_kind"`
+	EmbedMode  string `json:"embed_mode" yaml:"embed_mode"`
+	EmbedURL   string `json:"embed_url" yaml:"embed_url"`
+	Thumbnail  string `json:"thumbnail_url" yaml:"thumbnail_url"`
+	OpenURL    string `json:"open_url" yaml:"open_url"`
+	// `public | restricted | unknown`, empty for our own files. NOT derivable —
+	// it is the stored result of asking the provider.
+	PreviewStatus  string `json:"preview_status" yaml:"preview_status"`
+	PreviewChecked string `json:"preview_checked_at" yaml:"preview_checked_at"`
 }
 
 // URL returns wherever the document actually is. Exactly one of the two columns
@@ -1204,7 +1236,9 @@ func (d SalesDocument) URL() string {
 }
 
 type DocumentRequest struct {
-	Title       string   `json:"title,omitempty"`
+	Title string `json:"title,omitempty"`
+	// Optional since 2026-08-17: the server derives it from the url when absent.
+	// An explicit value still wins — it is the author's own label.
 	Kind        string   `json:"kind,omitempty"`
 	UploadURL   string   `json:"upload_url,omitempty"`
 	ExternalURL string   `json:"external_url,omitempty"`
@@ -1285,6 +1319,43 @@ func (c *Client) AddDocument(ws string, req DocumentRequest) (*SalesDocument, er
 	return &out, nil
 }
 
+// RecheckDocument re-asks the provider whether a file is viewable, and
+// re-derives where it lives. `n` may be the literal "all" for a sweep.
+func (c *Client) RecheckDocument(ws string, n string) (*SalesDocumentRecheck, error) {
+	var out SalesDocumentRecheck
+	p := salesPath(ws, fmt.Sprintf("documents/%s/recheck", n))
+	if err := c.postJSON(p, struct{}{}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SalesDocumentRecheck carries BOTH shapes the route can answer with: a single
+// document (with `recheck`) or a sweep (`checked`/`changed`/`restricted`). One
+// struct because Go decodes absent keys to zero values, and two would mean the
+// caller choosing which to unmarshal by inspecting the request it just sent.
+type SalesDocumentRecheck struct {
+	// single
+	Number  int                 `json:"number" yaml:"number"`
+	Title   string              `json:"title" yaml:"title"`
+	File    SalesDocumentFile   `json:"file" yaml:"file"`
+	Recheck *SalesRecheckResult `json:"recheck,omitempty" yaml:"recheck,omitempty"`
+	// sweep
+	Checked    int                  `json:"checked" yaml:"checked"`
+	Changed    int                  `json:"changed" yaml:"changed"`
+	Restricted []int                `json:"restricted" yaml:"restricted"`
+	Results    []SalesRecheckResult `json:"results,omitempty" yaml:"results,omitempty"`
+}
+
+type SalesRecheckResult struct {
+	Number   int    `json:"number" yaml:"number"`
+	Provider string `json:"provider" yaml:"provider"`
+	Was      string `json:"was" yaml:"was"`
+	Now      string `json:"now" yaml:"now"`
+	Changed  bool   `json:"changed" yaml:"changed"`
+	Note     string `json:"note" yaml:"note"`
+}
+
 func (c *Client) UpdateDocument(ws string, n int, req DocumentRequest) (*SalesDocument, error) {
 	var out SalesDocument
 	if err := c.patchJSON(salesPath(ws, fmt.Sprintf("documents/%d", n)), req, &out); err != nil {
@@ -1304,6 +1375,7 @@ func (c *Client) DeleteDocument(ws string, n int, confirm string) (*SalesDeleted
 
 // DocumentLinkRequest names exactly ONE target. The route refuses zero or two.
 type DocumentLinkRequest struct {
+	Strategy *int `json:"strategy,omitempty"`
 	Prospect *int `json:"prospect,omitempty"`
 	Product  *int `json:"product,omitempty"`
 	Template *int `json:"template,omitempty"`

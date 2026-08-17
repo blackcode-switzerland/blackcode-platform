@@ -520,6 +520,7 @@ records is what is specific to this app.
 | `GET \| POST …/templates`, `GET \| PATCH \| DELETE …/templates/{n}` | `template …` |
 | `POST …/templates/{n}/render` | `template render` |
 | `GET \| POST …/strategies`, `GET \| PATCH \| DELETE …/strategies/{n}` | `strategy …` |
+| `POST …/documents/{n}/recheck` | `doc recheck <n\|all>` — re-probe an external file |
 | `GET \| POST …/documents`, `GET \| PATCH \| DELETE …/documents/{n}` | `doc …` |
 | `POST \| DELETE …/documents/{n}/links` | `doc link \| unlink` |
 | `GET \| POST …/labels`, `GET \| PATCH \| DELETE …/labels/{id}` | `label …` |

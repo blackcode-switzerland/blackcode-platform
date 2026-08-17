@@ -362,6 +362,30 @@ export interface SalesDocument {
   added_by: string | null
   prospects: number[]
   products: number[]
+  /** Migration 0012 — the fourth attachment point (#40). */
+  strategies: number[]
+  /**
+   * Where the bytes live and how to show it. DERIVED by the server on every
+   * read, so a document added before this existed reports correctly with no
+   * backfill. See `@blackcode/platform-file-providers`.
+   */
+  file: {
+    provider: string
+    /** True when WE hold the bytes. Decides the badge, and decides whether the
+     *  file can be shown to anyone who can see the record. */
+    internal: boolean
+    label: string
+    external_id: string | null
+    media_kind: string
+    embed_mode: 'image' | 'video' | 'audio' | 'iframe' | 'none'
+    embed_url: string | null
+    thumbnail_url: string | null
+    open_url: string
+    /** `public | restricted | unknown | null`. Anything but `public` on an
+     *  EXTERNAL file means: do not embed. */
+    preview_status: string | null
+    preview_checked_at: string | null
+  }
   urn: string | null
   deleted_at: string | null
 }

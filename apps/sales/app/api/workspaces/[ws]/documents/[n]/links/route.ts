@@ -20,6 +20,7 @@ import {
   setDocumentLink,
 } from '@/lib/db/queries/catalog'
 import { prospectIdBySeq } from '@/lib/db/queries/prospect-children'
+import { getStrategyBySeq } from '@/lib/db/queries/strategies'
 import { publicDocument } from '@/lib/views'
 import { numberOr, requireNumberParam } from '@/lib/http-input'
 
@@ -27,22 +28,29 @@ interface Params {
   params: Promise<{ ws: string; n: string }>
 }
 
-type Target = { kind: 'prospect' | 'product' | 'template'; id: number; number: number }
+type TargetKind = 'prospect' | 'product' | 'template' | 'strategy'
+type Target = { kind: TargetKind; id: number; number: number }
 
-/** Exactly one of --prospect / --product / --template, resolved to a row id. */
+/**
+ * Exactly one of --prospect / --product / --template / --strategy, resolved to
+ * a row id.
+ *
+ * `strategy` joined the list in migration 0012 (#40 asks for "a prospect, a
+ * product, a strategy doc, a template"); the other three have worked since 0001.
+ */
 async function resolveTarget(
   workspaceId: number,
-  values: { prospect?: number; product?: number; template?: number }
+  values: { prospect?: number; product?: number; template?: number; strategy?: number }
 ): Promise<Target> {
   const given = Object.entries(values).filter(([, v]) => v != null)
   if (given.length !== 1) {
     throw Errors.badRequest(
       'one_target_required',
-      'link exactly one of prospect, product or template',
+      'link exactly one of prospect, product, template or strategy',
       'e.g. `bk sales doc link 4 --prospect 12`'
     )
   }
-  const [kind, number] = given[0] as ['prospect' | 'product' | 'template', number]
+  const [kind, number] = given[0] as [TargetKind, number]
 
   if (kind === 'prospect') {
     const id = await prospectIdBySeq(workspaceId, number)
@@ -58,12 +66,16 @@ async function resolveTarget(
   const row =
     kind === 'product'
       ? await getProductBySeq(workspaceId, number)
-      : await getTemplateBySeq(workspaceId, number)
+      : kind === 'strategy'
+        ? await getStrategyBySeq(workspaceId, number)
+        : await getTemplateBySeq(workspaceId, number)
   if (!row) {
     throw Errors.notFound(
       `${kind}_not_found`,
       `no ${kind} #${number} in this workspace`,
-      `run \`bk sales ${kind === 'product' ? 'product' : 'template'} list\` for the numbers`
+      // The noun IS the command here — `product`, `template` and `strategy` are
+      // all spelled the same way in `bk sales <noun> list`.
+      `run \`bk sales ${kind} list\` for the numbers`
     )
   }
   return { kind, id: row.id, number }
@@ -91,6 +103,7 @@ async function handle(req: NextRequest, params: Params['params'], attach: boolea
     prospect: numberOr(source?.prospect == null ? null : String(source.prospect)),
     product: numberOr(source?.product == null ? null : String(source.product)),
     template: numberOr(source?.template == null ? null : String(source.template)),
+    strategy: numberOr(source?.strategy == null ? null : String(source.strategy)),
   })
 
   const actor = await resolveActor(getDb(), req, ctx.user)

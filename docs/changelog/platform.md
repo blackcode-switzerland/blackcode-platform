@@ -7,6 +7,50 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-17 — external file providers: Google Drive links are first-class
+
+**Additive, nothing breaking.** A file attached to a record could live in our
+storage or be an external link, and every surface rendered the two identically —
+a grey row with a title. The difference matters: we may delete one and must
+never delete the other, and only one of them is guaranteed to render for the
+person looking at it.
+
+**`packages/platform-file-providers`** is the new shared mechanism. It turns a
+url into `{ provider, internal, media_kind, embed, thumbnail, open_url }` — pure,
+dependency-free, and safe inside a `"use client"` tree (deliberately NOT part of
+`platform-storage`, which pulls in the code path that can reach `del()`).
+
+Google Drive is the first external provider: files, Docs, Sheets, Slides and
+folders, in every url shape Drive emits. **Adding another is one file and one
+registry line**, and apps declare what they accept —
+`/api/meta` serves `apps.<slug>.file_providers`, so an agent discovers a new
+provider without a CLI release and `contract_version` moves when one is added.
+
+**We hold no Google credentials and call no Google API.** Making a Drive item
+viewable is the agent's job; we recognise, render and report. There is no file
+picker and no upload-to-Drive, deliberately — both need OAuth, token storage and
+a security review, and neither is needed to attach a link.
+
+**The honest failure is the feature.** A Drive file that is not shared cannot be
+previewed by us, so the server probes it on attach and records the verdict.
+`bk sales doc add` prints it in the same command that created the row:
+
+```
+added document #14: AP configurator walkthrough
+  source: Google Drive · video · kind=video
+  preview: NOT viewable without access — share it "anyone with the link" in
+           Drive, then run `bk sales doc recheck 14`
+```
+
+The web renders a card with an "Open" button rather than an iframe showing
+Google's sign-in page inside a customer record.
+
+**Nothing changed about blob storage or the delete gate.** A Drive url produces
+no `platform.blob_references` row, because `platform.is_uploaded_asset` returns
+false for it — correct, and the reason the two coexist safely.
+
+---
+
 ## 2026-08-17 — `bk meta --contract-version`: poll for drift in one line
 
 **Additive, nothing breaking.** Agents write per-app skill files that hardcode

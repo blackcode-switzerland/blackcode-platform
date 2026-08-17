@@ -564,6 +564,7 @@ func newDocCmd() *cobra.Command {
 	cmd.AddCommand(
 		newDocListCmd(), newDocShowCmd(), newDocAddCmd(), newDocEditCmd(),
 		newDocRemoveCmd(), newDocLinkCmd(false), newDocLinkCmd(true),
+		newDocRecheckCmd(),
 	)
 	return cmd
 }
@@ -610,18 +611,35 @@ tags are in use.`,
 			}
 			return output.Render(format, rows, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "#\tKIND\tTITLE\tLINKED TO\tADDED BY")
+				fmt.Fprintln(tw, "#\tKIND\tSOURCE\tTITLE\tLINKED TO\tADDED BY")
+				restricted := 0
 				for _, r := range rows {
-					linked := fmt.Sprintf("%d prospect(s), %d product(s)", len(r.Prospects), len(r.Products))
-					fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\n",
-						r.Number, r.Kind, cmdutil.Truncate(r.Title, 34), linked,
-						cmdutil.Truncate(dashIf(r.AddedBy), 18))
+					linked := fmt.Sprintf("%dp %dpr %ds", len(r.Prospects), len(r.Products), len(r.Strategies))
+					if r.File.PreviewStatus == "restricted" {
+						restricted++
+					}
+					fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\n",
+						r.Number, r.Kind, sourceCell(r), cmdutil.Truncate(r.Title, 30), linked,
+						cmdutil.Truncate(dashIf(r.AddedBy), 16))
 				}
 				if err := tw.Flush(); err != nil {
 					return err
 				}
+				// AGENT EDUCATION, on the command an agent already ran. A
+				// restricted link renders as a card rather than a preview and
+				// nothing else would say so.
+				if restricted > 0 {
+					fmt.Fprintf(cmd.ErrOrStderr(),
+						"note: %d document(s) marked ! are NOT viewable without access — share them\n"+
+							"      \"anyone with the link\" at the provider, then `bk sales doc recheck all`\n",
+						restricted)
+				}
 				if len(rows) == 0 {
-					fmt.Fprintln(cmd.ErrOrStderr(), "(no documents)")
+					fmt.Fprintln(cmd.ErrOrStderr(),
+						"(no documents — two ways to add one:\n"+
+							"   a file:  bk sales upload <file>   then  bk sales doc add --title T --upload <url>\n"+
+							"   a link:  bk sales doc add --title T --url https://drive.google.com/file/d/<id>/view\n"+
+							" `bk guide platform/files` explains when to use which)")
 				}
 				return nil
 			})
@@ -640,6 +658,27 @@ tags are in use.`,
 		"Only documents carrying any of these tags (repeatable; case-insensitive)")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Max documents to return")
 	return cmd
+}
+
+// sourceCell renders WHERE a document lives, in one narrow column.
+//
+// A `!` marks a file the provider will not show to an anonymous viewer, and a
+// `?` one we could not check. Two characters rather than a whole column, because
+// the answer is "fine" for almost every row and a column of "public" teaches
+// nothing — the exceptions are the information.
+func sourceCell(d client.SalesDocument) string {
+	name := d.File.Label
+	if name == "" {
+		name = dashIf(d.File.Provider)
+	}
+	switch d.File.PreviewStatus {
+	case "restricted":
+		return "! " + name
+	case "unknown":
+		return "? " + name
+	default:
+		return name
+	}
 }
 
 func newDocShowCmd() *cobra.Command {
@@ -671,11 +710,27 @@ func newDocShowCmd() *cobra.Command {
 				fmt.Fprintf(tw, "kind\t%s\n", d.Kind)
 				fmt.Fprintf(tw, "url\t%s\n", d.URL())
 				fmt.Fprintf(tw, "stored\t%s\n", storedWhere(*d))
+				if d.File.MediaKind != "" && d.File.MediaKind != "other" {
+					fmt.Fprintf(tw, "type\t%s\n", d.File.MediaKind)
+				}
+				// Preview is a WEB affordance — there is nothing to render in a
+				// terminal — but its STATUS is exactly what an agent needs, since
+				// the agent is the one who can go and fix the sharing.
+				if d.File.PreviewStatus != "" {
+					fmt.Fprintf(tw, "preview\t%s\n", d.File.PreviewStatus)
+				}
+				if d.File.ExternalID != "" {
+					fmt.Fprintf(tw, "provider id\t%s\n", d.File.ExternalID)
+				}
 				fmt.Fprintf(tw, "added by\t%s\n", dashIf(d.AddedBy))
 				fmt.Fprintf(tw, "prospects\t%s\n", numbersOrDash(d.Prospects))
 				fmt.Fprintf(tw, "products\t%s\n", numbersOrDash(d.Products))
+				fmt.Fprintf(tw, "strategies\t%s\n", numbersOrDash(d.Strategies))
 				if err := tw.Flush(); err != nil {
 					return err
+				}
+				if note := previewAdvice(*d); note != "" {
+					fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", note)
 				}
 				if d.Description != "" {
 					fmt.Fprintf(w, "\n%s\n", d.Description)
@@ -689,11 +744,47 @@ func newDocShowCmd() *cobra.Command {
 // storedWhere says which of the two locations a document has, because it
 // decides something real: only an uploaded file is covered by the blob
 // reference index, and only that file can be lost by a purge elsewhere.
+// storedWhere answers "whose bytes are these", which is the question with
+// consequences: we may delete our own and must never delete anybody else's.
+//
+// It reads the DERIVED `File` block rather than testing `UploadURL != ""` as it
+// used to. Both answer correctly today, but only one of them knows the
+// difference between Google Drive and a random link — and that difference is
+// what decides whether the web can preview it.
 func storedWhere(d client.SalesDocument) string {
-	if d.UploadURL != "" {
-		return "uploaded to this app"
+	if d.File.Internal {
+		return d.File.Label + " (ours — covered by the delete gate)"
+	}
+	if d.File.Label != "" {
+		return d.File.Label + " (external — we reference it, never delete it)"
 	}
 	return "external link"
+}
+
+// previewAdvice turns a preview verdict into the next command to run.
+//
+// CLAUDE.md: "a dead end must name its own exit". A `restricted` file is a dead
+// end for the WEB — the page will show a card instead of the video somebody
+// expected — and the exit is at the provider, not here. So the advice names both
+// halves: what to change in Drive, and how to confirm it afterwards.
+func previewAdvice(d client.SalesDocument) string {
+	// A folder has no preview at any permission level, so advising a share
+	// change would be advising a fix that changes nothing. Same ordering as the
+	// web fallback, for the same reason.
+	if d.File.MediaKind == "folder" {
+		return ""
+	}
+	switch d.File.PreviewStatus {
+	case "restricted":
+		return fmt.Sprintf("this file is NOT viewable without access, so the app cannot preview it — "+
+			"share it \"anyone with the link\" at %s, then `bk sales doc recheck %d`",
+			dashIf(d.File.Label), d.Number)
+	case "unknown":
+		return fmt.Sprintf("could not check whether this is viewable — it will not be previewed "+
+			"until a check succeeds; retry with `bk sales doc recheck %d`", d.Number)
+	default:
+		return ""
+	}
 }
 
 func numbersOrDash(ns []int) string {
@@ -710,22 +801,37 @@ func numbersOrDash(ns []int) string {
 func newDocAddCmd() *cobra.Command {
 	var req client.DocumentRequest
 	var tags []string
-	var prospects, products, templates []int
+	var prospects, products, templates, strategies []int
 	cmd := &cobra.Command{
-		Use: "add --title <t> --kind <k> (--url <u> | --upload <u>)",
+		Use: "add --title <t> (--url <u> | --upload <u>)",
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/documents," +
 			"POST /api/workspaces/{ws}/documents/{n}/links"},
 		Short: "Add a document to the library",
 		Long: `Add a file or a link to the one library.
 
-EXACTLY ONE location:
-  --upload <url>   a file already stored against this app — upload it first with
-                   "bk sales upload <file>" and pass the URL it prints
-  --url <url>      an external link (a Drive folder, a recording)
+EXACTLY ONE location, and the choice matters:
 
-The difference is not cosmetic: only an uploaded file is covered by the
-cross-app delete gate, and putting a stored file's URL in --url would hide it
-from the index that stops it being deleted while still in use.
+  --upload <url>   OUR storage. Upload the file first with "bk sales upload
+                   <file>" and pass the URL it prints. We hold the bytes, so the
+                   cross-app delete gate protects them and the web previews them
+                   for anyone who can see the record.
+
+  --url <url>      SOMEBODY ELSE'S. A Google Drive link, or any other url. We
+                   store a reference and never a copy — so we never delete it,
+                   and we can only preview it if the provider will show it to a
+                   viewer who is not signed in to our app.
+
+Putting a stored file's URL in --url would hide it from the index that stops it
+being deleted while still in use, which is why they are different flags.
+
+GOOGLE DRIVE. A Drive link is recognised automatically — file, Doc, Sheet,
+Slides or folder — and this command tells you whether it can actually be
+previewed. It cannot be if the file is private: WE HOLD NO GOOGLE CREDENTIALS
+AND CANNOT GRANT ACCESS. Share it "anyone with the link" in Drive first, or run
+"bk sales doc recheck <n>" after you do.
+
+--kind is OPTIONAL. Give it when you know better (a "deck" is a judgement no
+recogniser can make); leave it out and the type is derived from the url.
 
 --prospect / --product / --template attach it as it is created, each repeatable.
 They are the same links "bk sales doc link" writes, done in one call; that
@@ -748,7 +854,7 @@ command remains the way to attach a document that already exists.`,
 			// The document EXISTS from here on, and every later failure has to say
 			// so. A caller told only "failed" adds it a second time — and this
 			// command's whole point is that it is two writes behind one call.
-			linked, err := linkNewDocument(c, ws, d, prospects, products, templates)
+			linked, err := linkNewDocument(c, ws, d, prospects, products, templates, strategies)
 			if err != nil {
 				return fmt.Errorf("document #%d (%s) WAS created; %w — attach the rest with "+
 					"`bk sales doc link %d …`, do not re-add it", d.Number, d.Title, err, d.Number)
@@ -757,6 +863,24 @@ command remains the way to attach a document that already exists.`,
 				_, err := fmt.Fprintf(w, "added document #%d: %s\n%s\n", linked.Number, linked.Title, linked.URN)
 				if err != nil {
 					return err
+				}
+				// WHAT WE WORKED OUT, said back. An agent that passed a Drive url
+				// and got only "added document #7" has no idea whether we
+				// recognised it, what type we think it is, or whether the thing
+				// will ever render. All three are decided here and all three are
+				// printed here.
+				if d.File.Provider != "" {
+					fmt.Fprintf(cmd.ErrOrStderr(), "  source: %s", d.File.Label)
+					if d.File.MediaKind != "" && d.File.MediaKind != "other" {
+						fmt.Fprintf(cmd.ErrOrStderr(), " · %s", d.File.MediaKind)
+					}
+					if d.Kind != "" {
+						fmt.Fprintf(cmd.ErrOrStderr(), " · kind=%s", d.Kind)
+					}
+					fmt.Fprintln(cmd.ErrOrStderr())
+				}
+				if d.PreviewNote != "" {
+					fmt.Fprintf(cmd.ErrOrStderr(), "  preview: %s\n", d.PreviewNote)
 				}
 				if n := len(prospects) + len(products) + len(templates); n > 0 {
 					_, err = fmt.Fprintf(w, "linked to prospects %s and products %s\n",
@@ -770,14 +894,16 @@ command remains the way to attach a document that already exists.`,
 	cmd.Flags().IntSliceVar(&products, "product", nil, "Attach to this product as it is created (repeatable)")
 	cmd.Flags().IntSliceVar(&templates, "template", nil, "Attach to this template as it is created (repeatable)")
 	cmd.Flags().StringVar(&req.Title, "title", "", "What the document is (required)")
-	cmd.Flags().StringVar(&req.Kind, "kind", "", vocab("document_kinds", "required"))
-	cmd.Flags().StringVar(&req.UploadURL, "upload", "", "URL of a file uploaded to this app (this OR --url, exactly one)")
-	cmd.Flags().StringVar(&req.ExternalURL, "url", "", "An external link (this OR --upload, exactly one)")
+	cmd.Flags().StringVar(&req.Kind, "kind", "", "Your label — "+vocab("document_kinds", "optional: derived from the url when omitted"))
+	cmd.Flags().StringVar(&req.UploadURL, "upload", "", "URL of a file uploaded to OUR storage (this OR --url, exactly one)")
+	cmd.Flags().StringVar(&req.ExternalURL, "url", "", "A link somebody else hosts — e.g. Google Drive (this OR --upload, exactly one)")
 	cmd.Flags().StringVar(&req.Description, "description", "", "What it is for")
 	cmd.Flags().StringSliceVar(&tags, "tag", nil, "Tags (repeatable)")
-	for _, f := range []string{"title", "kind"} {
-		_ = cmd.MarkFlagRequired(f)
-	}
+	cmd.Flags().IntSliceVar(&strategies, "strategy", nil, "Attach to this strategy as it is created (repeatable)")
+	// `kind` left the required list on 2026-08-17: the server derives it from
+	// the url. It was a question an agent had to answer about a Drive link it
+	// could not open.
+	_ = cmd.MarkFlagRequired("title")
 	return cmd
 }
 
@@ -790,7 +916,7 @@ command remains the way to attach a document that already exists.`,
 // caller is mid-way through a partial attach, and "3 of 5" with no names is not
 // something anybody can act on.
 func linkNewDocument(c *client.Client, ws string, d *client.SalesDocument,
-	prospects, products, templates []int) (*client.SalesDocument, error) {
+	prospects, products, templates, strategies []int) (*client.SalesDocument, error) {
 	type target struct {
 		noun string
 		n    int
@@ -805,6 +931,9 @@ func linkNewDocument(c *client.Client, ws string, d *client.SalesDocument,
 	for _, n := range templates {
 		targets = append(targets, target{"template", n})
 	}
+	for _, n := range strategies {
+		targets = append(targets, target{"strategy", n})
+	}
 
 	out := d
 	for _, t := range targets {
@@ -817,6 +946,8 @@ func linkNewDocument(c *client.Client, ws string, d *client.SalesDocument,
 			req.Product = &n
 		case "template":
 			req.Template = &n
+		case "strategy":
+			req.Strategy = &n
 		}
 		next, err := c.LinkDocument(ws, d.Number, req)
 		if err != nil {
@@ -891,15 +1022,15 @@ func newDocRemoveCmd() *cobra.Command {
 }
 
 func newDocLinkCmd(unlink bool) *cobra.Command {
-	var prospect, product, template int
-	verb, short := "link", "Attach a document to a prospect, product or template"
+	var prospect, product, template, strategy int
+	verb, short := "link", "Attach a document to a prospect, product, template or strategy"
 	routes := "POST /api/workspaces/{ws}/documents/{n}/links"
 	if unlink {
-		verb, short = "unlink", "Detach a document from a prospect, product or template"
+		verb, short = "unlink", "Detach a document from a prospect, product, template or strategy"
 		routes = "DELETE /api/workspaces/{ws}/documents/{n}/links"
 	}
 	cmd := &cobra.Command{
-		Use:         verb + " <n> (--prospect <n> | --product <n> | --template <n>)",
+		Use:         verb + " <n> (--prospect <n> | --product <n> | --template <n> | --strategy <n>)",
 		Annotations: map[string]string{"routes": routes},
 		Short:       short,
 		Long: `Exactly one target per call.
@@ -919,7 +1050,7 @@ to the others.`,
 			}
 			req := client.DocumentLinkRequest{}
 			given := 0
-			for name, target := range map[string]*int{"prospect": &prospect, "product": &product, "template": &template} {
+			for name, target := range map[string]*int{"prospect": &prospect, "product": &product, "template": &template, "strategy": &strategy} {
 				if cmd.Flags().Changed(name) {
 					given++
 					v := *target
@@ -930,11 +1061,13 @@ to the others.`,
 						req.Product = &v
 					case "template":
 						req.Template = &v
+					case "strategy":
+						req.Strategy = &v
 					}
 				}
 			}
 			if given != 1 {
-				return fmt.Errorf("exactly one of --prospect, --product or --template is required")
+				return fmt.Errorf("exactly one of --prospect, --product, --template or --strategy is required")
 			}
 			c, ws, err := clientAndWorkspace()
 			if err != nil {
@@ -950,8 +1083,9 @@ to the others.`,
 				return err
 			}
 			return output.Render(format, d, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "%sed document #%d (%s) — now on %s and %s\n",
-					verb, d.Number, d.Title, numbersOrDash(d.Prospects), numbersOrDash(d.Products))
+				_, err := fmt.Fprintf(w, "%sed document #%d (%s) — now on prospects %s, products %s, strategies %s\n",
+					verb, d.Number, d.Title,
+					numbersOrDash(d.Prospects), numbersOrDash(d.Products), numbersOrDash(d.Strategies))
 				return err
 			})
 		},
@@ -959,6 +1093,90 @@ to the others.`,
 	cmd.Flags().IntVar(&prospect, "prospect", 0, "A prospect's #number")
 	cmd.Flags().IntVar(&product, "product", 0, "A product's #number")
 	cmd.Flags().IntVar(&template, "template", 0, "A template's #number")
+	cmd.Flags().IntVar(&strategy, "strategy", 0, "A segment strategy's #number")
+	return cmd
+}
+
+// `bk sales doc recheck` — ask the provider again whether a file is viewable.
+//
+// The closing half of the attach→warn→share→recheck loop. Without it an agent
+// that fixed the sharing in Drive has no way to confirm it took, and the next
+// thing anybody learns is a human seeing a request-access screen on a customer
+// record.
+func newDocRecheckCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:         "recheck <n|all>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/documents/{n}/recheck"},
+		Short:       "Re-ask whether an external file is viewable",
+		Long: `Ask the provider again whether an attached file can be opened by somebody
+who is not signed in, and record the answer.
+
+Run it after sharing a Google Drive file "anyone with the link" — the app cannot
+preview a file it cannot fetch, and WE HOLD NO GOOGLE CREDENTIALS, so sharing is
+the only thing that changes the answer.
+
+"recheck all" sweeps the whole library. Use it once after upgrading: documents
+added before this feature have no recorded source, and the sweep fills it in.
+It is deliberately sequential — firing hundreds of requests at a provider in
+parallel gets an IP rate-limited, which would report every file as uncheckable
+and look like the files were the problem.
+
+Our OWN uploads are never probed. They are always viewable by anyone who can see
+the record; there is no external permission system in the way.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			ref := strings.TrimSpace(args[0])
+			if ref != "all" {
+				if _, err := entityNumber(ref, "document"); err != nil {
+					return err
+				}
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			res, err := c.RecheckDocument(ws, ref)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, res, func(w io.Writer) error {
+				if ref == "all" {
+					fmt.Fprintf(w, "checked %d document(s); %d changed\n", res.Checked, res.Changed)
+					for _, r := range res.Results {
+						if r.Now == "restricted" || r.Now == "unknown" {
+							fmt.Fprintf(w, "  !  #%d  %s — %s\n", r.Number, r.Provider, r.Now)
+						}
+					}
+					if len(res.Restricted) > 0 {
+						fmt.Fprintf(cmd.ErrOrStderr(),
+							"note: %d document(s) cannot be previewed. Share each one \"anyone with the\n"+
+								"      link\" at its provider, then run this again.\n", len(res.Restricted))
+					}
+					return nil
+				}
+				if res.Recheck == nil {
+					// The server answered without the block this command exists to
+					// print. Loud rather than a blank line: a silent success here
+					// would read as "checked, all fine".
+					return fmt.Errorf("the server did not report a recheck result — it may predate this command")
+				}
+				fmt.Fprintf(w, "#%d  %s\n", res.Number, res.Title)
+				fmt.Fprintf(w, "  preview: %s", dashIf(res.Recheck.Now))
+				if res.Recheck.Changed {
+					fmt.Fprintf(w, "  (was %s)", dashIf(res.Recheck.Was))
+				}
+				fmt.Fprintln(w)
+				if res.Recheck.Note != "" {
+					fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", res.Recheck.Note)
+				}
+				return nil
+			})
+		},
+	}
 	return cmd
 }
 

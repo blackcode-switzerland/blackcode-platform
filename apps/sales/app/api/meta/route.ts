@@ -43,6 +43,7 @@ import { LENGTH_LIMITS } from '@/lib/limits'
 import { ENTITY_TYPES } from '@/lib/entity-address'
 import { SEARCH_TYPES } from '@/lib/db/queries/search'
 import { RETENTION_DAYS, TRASH_TYPES } from '@/lib/db/queries/trash'
+import { providerManifest } from '@blackcode/platform-file-providers'
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const user = await appContext.resolveUser(request)
@@ -61,6 +62,16 @@ export const GET = apiHandler(async (request: NextRequest) => {
     /** What `bk sales trash` can hold, and for how long (D-19 item 1). */
     trash_types: TRASH_TYPES,
     retention_days: RETENTION_DAYS,
+    /**
+     * Where a document's bytes may live, and how an agent attaches one (#40).
+     *
+     * Served rather than documented in `bk guide`, for the standing reason: the
+     * guide ships inside the binary and would describe the providers that
+     * existed when it was built. A provider registered on the server appears
+     * here immediately — and `contract_version` below moves, so an agent
+     * polling for drift finds out without re-reading anything else.
+     */
+    file_providers: providerManifest(),
   }
 
   /**

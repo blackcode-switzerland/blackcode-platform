@@ -23,6 +23,7 @@
 //    rendering, never storage, and by the same argument never a wire format.
 
 import type { ProspectLabel, ProspectRow } from './db/queries/prospects'
+import { describeFile } from '@blackcode/platform-file-providers'
 import { entityUrnOrNull } from './entity-address'
 import { APP_SLUG } from './app'
 
@@ -458,10 +459,28 @@ export function publicDocument(
     added_by_label: string | null
     prospect_numbers: number[]
     product_numbers: number[]
+    strategy_numbers: number[]
+    storage_provider: string | null
+    external_id: string | null
+    preview_status: string | null
+    preview_checked_at: Date | null
     deleted_at: Date | null
   },
   workspaceSlug: string
 ) {
+  // ── WHERE IT LIVES AND HOW TO SHOW IT (migration 0012, sales #40) ────────
+  // DERIVED on every read rather than read from a column, so improving the
+  // recogniser improves every existing row with no backfill. `storage_provider`
+  // IS a column, but only so `--provider` can be a query — the value served
+  // here is the derived one, which is why a row the migration could not
+  // classify still renders correctly.
+  const url = d.upload_url ?? d.external_url ?? ''
+  // `filename` is NOT the title. Passing it was a live bug: a document called
+  // "Probe test image (ours)" beat its own `…/probe-test.png` path and typed as
+  // `other`, so an image we host rendered as a download card. The title is a
+  // label a human wrote; the filename is in the url, and the provider reads it
+  // from there. Only the recorded `mime` is a better source than the path.
+  const file = describeFile(url, { mime: d.mime_type })
   return {
     number: d.seq,
     title: d.title,
@@ -478,6 +497,37 @@ export function publicDocument(
     added_by: d.added_by_label,
     prospects: d.prospect_numbers,
     products: d.product_numbers,
+    strategies: d.strategy_numbers,
+    /**
+     * Everything a surface needs to SHOW the file, in one block.
+     *
+     * Nested rather than spread flat so a caller can hand `file` straight to a
+     * renderer, and so adding a field here cannot collide with a document
+     * column called the same thing.
+     */
+    file: {
+      provider: file.provider,
+      /** True when WE hold the bytes — the delete gate applies, and the UI
+       *  badge says so. */
+      internal: file.internal,
+      label: file.label,
+      external_id: file.external_id ?? d.external_id,
+      media_kind: file.media_kind,
+      embed_mode: file.embed.mode,
+      embed_url: file.embed.url,
+      thumbnail_url: file.thumbnail_url,
+      open_url: file.open_url,
+      /**
+       * `public | restricted | unknown | null`.
+       *
+       * NOT derivable — a probe result. `null` for our own files, which are
+       * always viewable by anyone who can see the record. A web surface must
+       * treat anything other than `public` as "do not embed": showing Google's
+       * request-access screen inside a customer record is worse than a card.
+       */
+      preview_status: d.preview_status,
+      preview_checked_at: iso(d.preview_checked_at),
+    },
     urn: entityUrnOrNull(workspaceSlug, 'document', d.seq),
     deleted_at: iso(d.deleted_at),
   }
