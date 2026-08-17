@@ -36,6 +36,13 @@
       "when": 1786955240000,
       "tag": "0005_app_role_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786955300000,
+      "tag": "0006_source_layer_nullable",
+      "breakpoints": true
     }
   ]
 }

@@ -8,7 +8,22 @@
 // Deciding where a new table goes is one question: "would a second app need this
 // unchanged?" Yes → `packages/platform-db` (workspaces, members, comments,
 // labels, uploads, events). No → here.
-import { pgSchema, serial, varchar, text, integer, timestamp } from 'drizzle-orm/pg-core'
+import {
+  pgSchema,
+  serial,
+  varchar,
+  text,
+  integer,
+  smallint,
+  timestamp,
+  numeric,
+  date,
+  boolean,
+  jsonb,
+  primaryKey,
+  unique,
+  index,
+} from 'drizzle-orm/pg-core'
 import { users } from '@blackcode/platform-db'
 
 /** This app's Postgres schema. Named for the app slug — see lib/app.ts. */
@@ -154,3 +169,457 @@ export const noteCounters = booksSchema.table('note_counters', {
     .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
   last_note_seq: integer('last_note_seq').default(0).notNull(),
 })
+
+// ===========================================================================
+// THE STATUTORY CORE (migration 0003)
+// ===========================================================================
+// The TypeScript mirror of the hand-written migrations. It is a MIRROR and not a
+// source: `db:generate` cannot be used on this app (see 0001's header), so these
+// declarations follow the SQL rather than producing it. When they disagree, the
+// SQL is right and this file is the bug.
+//
+// `lib/db/schema-parity.test.ts` compares the two against the live database, so a
+// column added in one place and not the other fails a test instead of failing a
+// query at runtime.
+//
+// ── MONEY IS `numeric(14,2)` AND DRIZZLE HANDS IT BACK AS A STRING ──────────
+// That is correct and deliberate: a bilan balances to the rappen and a float
+// cannot hold 0.10. `lib/types.ts` types it as `Money = string` all the way to the
+// browser. Never `Number()` it except for view arithmetic (`lib/format.ts`).
+
+/**
+ * One counter row per (workspace, entity type).
+ *
+ * Replaces the fixed-column shape of `note_counters` above, which needs an ALTER
+ * for every new entity type. That is the generalisation the scaffold's own
+ * comment records as the wanted follow-up.
+ */
+export const booksCounters = booksSchema.table(
+  'counters',
+  {
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    entity_type: varchar('entity_type', { length: 32 }).notNull(),
+    last_value: integer('last_value').default(0).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.entity_type] })]
+)
+
+/**
+ * The art. 959a / 959b line keys, seeded from `lib/statements.ts` by migration.
+ *
+ * A lookup table so `account.statement_position` can be a real foreign key. The
+ * ORDER, the French labels and the signs stay in code; only the SET of legal keys
+ * lives here. Nothing writes it at runtime and `books_app` has SELECT only.
+ */
+export const booksStatementPosition = booksSchema.table('statement_position', {
+  pos: varchar('pos', { length: 40 }).primaryKey(),
+  statement: varchar('statement', { length: 10 }).notNull(),
+})
+
+/**
+ * ONE ROW PER BOOK. The user creates these and may have any number.
+ *
+ * A book is not a workspace (D1). The tax parameters live here rather than in a
+ * constant because they already differ per book in the seed: blackcode SA is VAT
+ * registered and files quarterly, AIOS SA is under the threshold and is not
+ * registered at all.
+ */
+export const booksEntity = booksSchema.table(
+  'entity',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    /** Workspace-scoped #number. Never expose `id`. */
+    seq: integer('seq').notNull(),
+    /** The mockup switches books with `?entity=blackcode`. */
+    slug: varchar('slug', { length: 40 }).notNull(),
+    name: varchar('name', { length: 200 }).notNull(),
+    /** `SA` | `RI`. A CHECK in 0004 makes an SA with simplified books impossible. */
+    legal_form: varchar('legal_form', { length: 20 }).notNull(),
+    seat: text('seat'),
+    bookkeeping_regime: varchar('bookkeeping_regime', { length: 20 }).notNull(),
+    /** The art. 957 al. 2 election, recorded rather than assumed. */
+    regime_election: varchar('regime_election', { length: 40 }),
+    regime_note: jsonb('regime_note'),
+    fiscal_year: varchar('fiscal_year', { length: 20 }).default('calendar').notNull(),
+    vat_registered: boolean('vat_registered').default(false).notNull(),
+    vat_method: varchar('vat_method', { length: 20 }),
+    vat_filing: varchar('vat_filing', { length: 20 }),
+    vat_note: jsonb('vat_note'),
+    audit_status: varchar('audit_status', { length: 20 }),
+    fte_count: numeric('fte_count', { precision: 6, scale: 2 }),
+    accent: varchar('accent', { length: 16 }),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    deleted_at: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    unique('entity_workspace_id_seq_unique').on(t.workspace_id, t.seq),
+    unique('entity_workspace_id_slug_unique').on(t.workspace_id, t.slug),
+  ]
+)
+
+/**
+ * The fiscal year. The one thing here that is genuinely expensive to retrofit.
+ *
+ * The mockup has no fiscal year at all: its derivations sum every posting with no
+ * boundary. Every derivation in this app takes `(entityId, exerciceId)` from its
+ * first line so that multi-year is additive rather than a rewrite.
+ */
+export const booksExercice = booksSchema.table(
+  'exercice',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    entity_id: integer('entity_id')
+      .notNull()
+      .references(() => booksEntity.id, { onDelete: 'cascade' }),
+    year: integer('year').notNull(),
+    starts_on: date('starts_on').notNull(),
+    ends_on: date('ends_on').notNull(),
+    /** `open` | `closed`. Closing is what freezes the next year's openings. */
+    status: varchar('status', { length: 20 }).default('open').notNull(),
+    closed_at: timestamp('closed_at', { withTimezone: true }),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [unique('exercice_entity_id_year_unique').on(t.entity_id, t.year)]
+)
+
+/**
+ * The Swiss PME chart, per book.
+ *
+ * `label` holds the mockup's own `{ fr, enSuffix }` shape verbatim, including the
+ * unusual key name, because the frontend codes against that JSON.
+ */
+export const booksAccount = booksSchema.table(
+  'account',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    entity_id: integer('entity_id')
+      .notNull()
+      .references(() => booksEntity.id, { onDelete: 'cascade' }),
+    no: varchar('no', { length: 10 }).notNull(),
+    class: smallint('class').notNull(),
+    label: jsonb('label').notNull(),
+    statement: varchar('statement', { length: 10 }).notNull(),
+    /** NOT NULL FK. An unmapped account is a load error, never an "autre" bucket. */
+    statement_position: varchar('statement_position', { length: 40 })
+      .notNull()
+      .references(() => booksStatementPosition.pos, { onDelete: 'restrict' }),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    unique('account_entity_id_no_unique').on(t.entity_id, t.no),
+    index('idx_books_account_entity').on(t.entity_id),
+  ]
+)
+
+/**
+ * Opening balances. A table, not a constant.
+ *
+ * **A missing row means zero, not an error.** The mockup's `OPENING` covers only
+ * `blackcode` and `aios`: the RI has none at all. And amounts go NEGATIVE —
+ * account 2970 is `résultat reporté` and a carried-forward loss is below zero.
+ */
+export const booksOpeningBalance = booksSchema.table(
+  'opening_balance',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    entity_id: integer('entity_id')
+      .notNull()
+      .references(() => booksEntity.id, { onDelete: 'cascade' }),
+    exercice_id: integer('exercice_id')
+      .notNull()
+      .references(() => booksExercice.id, { onDelete: 'cascade' }),
+    account_no: varchar('account_no', { length: 10 }).notNull(),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    unique('opening_balance_entity_exercice_account_unique').on(
+      t.entity_id,
+      t.exercice_id,
+      t.account_no
+    ),
+  ]
+)
+
+/**
+ * Where money moved. Phase 1 keeps the flat lookup only.
+ *
+ * `entity_id` IS NULLABLE and that is data rather than laxity: source 509 is
+ * PostFinance, carrying "UNCONFIRMED, Andrea to confirm whether any entity holds
+ * an account". An unattributed source is a real state to hold and to show.
+ */
+export const booksSource = booksSchema.table(
+  'source',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    /** NULL is legitimate. See above. */
+    entity_id: integer('entity_id').references(() => booksEntity.id, { onDelete: 'set null' }),
+    seq: integer('seq').notNull(),
+    name: varchar('name', { length: 200 }).notNull(),
+    type: varchar('type', { length: 20 }).notNull(),
+    /** NULLABLE: the three-tier hierarchy is phase 3's, and four sources have no tier. */
+    layer: varchar('layer', { length: 20 }),
+    /** Self-reference: a card draws on a bank account. */
+    draws_from: integer('draws_from'),
+    ledger_accounts: text('ledger_accounts').array().default([]).notNull(),
+    method: text('method'),
+    expected: varchar('expected', { length: 20 }),
+    last_import: date('last_import'),
+    retired: boolean('retired').default(false).notNull(),
+    notes_freeform: jsonb('notes_freeform'),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [unique('source_workspace_id_seq_unique').on(t.workspace_id, t.seq)]
+)
+
+/**
+ * A recognition rule. Keyed on the PAIR (source, counterparty), never the
+ * counterparty alone.
+ *
+ * The mockup's rule 101 is the reason and says so: the rent was taught by a UBS
+ * entry then moved to WIR, so "IMMOREGIE" alone would match two sources and mean
+ * two different things.
+ *
+ * `learned_from` is the mockup's `source` field renamed, because a column called
+ * `source` beside `source_id` reads as the same fact twice. The API serves it as
+ * `source`.
+ */
+export const booksRule = booksSchema.table(
+  'rule',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    entity_id: integer('entity_id')
+      .notNull()
+      .references(() => booksEntity.id, { onDelete: 'cascade' }),
+    seq: integer('seq').notNull(),
+    source_id: integer('source_id').references(() => booksSource.id, { onDelete: 'set null' }),
+    active: boolean('active').default(true).notNull(),
+    learned_from: varchar('learned_from', { length: 40 }),
+    /** `{ counterparty, amount_chf, tolerance_chf, interval }`. */
+    pattern: jsonb('pattern').notNull(),
+    explanation: jsonb('explanation'),
+    account_no: varchar('account_no', { length: 10 }),
+    /**
+     * The entry that taught this rule. **Deliberately not a foreign key**:
+     * `entry.matched_rule_id` already points the other way, so this edge would be
+     * circular and need an ALTER after both tables exist. See docs/backend.md §2.
+     */
+    created_from_entry_id: integer('created_from_entry_id'),
+    created_on: date('created_on'),
+    note: jsonb('note'),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    unique('rule_workspace_id_seq_unique').on(t.workspace_id, t.seq),
+    index('idx_books_rule_lookup').on(t.source_id, t.active),
+  ]
+)
+
+/**
+ * One row per écriture. The double-entry ledger.
+ *
+ * ── POSTING IS A TRANSITION ─────────────────────────────────────────────────
+ * You cannot insert this with `status: 'posted'` and then add lines: 0004's
+ * trigger refuses them. Insert `staged`, add lines, then UPDATE to `posted`.
+ *
+ * ── WHAT FREEZES AND WHAT DOES NOT ──────────────────────────────────────────
+ * Once posted: entity, exercice, entry_no, date, seq, the lines, the VAT rate and
+ * amount, and any delete. Still open: counterparty, explanation, recognition,
+ * matched rule, evidence tier and note, related party, the pièce, history, and
+ * `tva_input_claimed`. Entry 1009 in the mockup is posted, unrecognized, and meant
+ * to be resolved later, which is why the freeze is per column.
+ */
+export const booksEntry = booksSchema.table(
+  'entry',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    entity_id: integer('entity_id')
+      .notNull()
+      .references(() => booksEntity.id, { onDelete: 'cascade' }),
+    exercice_id: integer('exercice_id')
+      .notNull()
+      .references(() => booksExercice.id, { onDelete: 'restrict' }),
+    /** Workspace #number. Addresses the row. */
+    seq: integer('seq').notNull(),
+    /** Statutory journal number, gapless per (entity, exercice). Not the same job as `seq`. */
+    entry_no: integer('entry_no').notNull(),
+    date: date('date').notNull(),
+    status: varchar('status', { length: 20 }).default('staged').notNull(),
+    source_id: integer('source_id').references(() => booksSource.id, { onDelete: 'set null' }),
+    /** The bank's own text. Frozen at EVERY status, not only once posted. */
+    raw_label: text('raw_label').notNull(),
+    counterparty: varchar('counterparty', { length: 200 }),
+    explanation: jsonb('explanation'),
+    recognition: varchar('recognition', { length: 30 }).default('unrecognized').notNull(),
+    matched_rule_id: integer('matched_rule_id').references(() => booksRule.id, {
+      onDelete: 'set null',
+    }),
+    evidence_tier: varchar('evidence_tier', { length: 10 }).default('bare').notNull(),
+    evidence_note: jsonb('evidence_note'),
+    tva_rate: numeric('tva_rate', { precision: 5, scale: 2 }),
+    tva_amount: numeric('tva_amount', { precision: 14, scale: 2 }),
+    /** NEVER derived from `evidence_tier`. A CHECK requires `full` to claim. */
+    tva_input_claimed: boolean('tva_input_claimed').default(false).notNull(),
+    tva_note: jsonb('tva_note'),
+    /** art. 959a al. 4. Holds `mirror_entry_id`, which points into another book. */
+    related_party: jsonb('related_party'),
+    piece_drive_ref: text('piece_drive_ref'),
+    piece_hash: varchar('piece_hash', { length: 80 }),
+    piece_captured: date('piece_captured'),
+    /** The only correction path. */
+    reverses_entry_id: integer('reverses_entry_id'),
+    history: jsonb('history'),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    deleted_at: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    unique('entry_workspace_id_seq_unique').on(t.workspace_id, t.seq),
+    unique('entry_entity_exercice_no_unique').on(t.entity_id, t.exercice_id, t.entry_no),
+    index('idx_books_entry_entity_exercice').on(t.entity_id, t.exercice_id),
+  ]
+)
+
+/**
+ * The debit and credit sides.
+ *
+ * `account_no` IS NULLABLE while staged. Mockup entries 1012, 1013 and 2004 carry
+ * `account: null` on the debit side, which is the normal arrival state: the money
+ * moved and nobody has said yet what it was for. That is the whole reason the
+ * balance check fires on posted rows only.
+ */
+export const booksEntryLine = booksSchema.table(
+  'entry_line',
+  {
+    id: serial('id').primaryKey(),
+    entry_id: integer('entry_id')
+      .notNull()
+      .references(() => booksEntry.id, { onDelete: 'cascade' }),
+    /** NULL while staged. Required once posted. */
+    account_no: varchar('account_no', { length: 10 }),
+    debit: numeric('debit', { precision: 14, scale: 2 }).default('0').notNull(),
+    credit: numeric('credit', { precision: 14, scale: 2 }).default('0').notNull(),
+    position: smallint('position').default(0).notNull(),
+  },
+  (t) => [index('idx_books_entry_line_entry').on(t.entry_id)]
+)
+
+/**
+ * The single-entry book. Art. 957 al. 2 CO.
+ *
+ * NOT a double-entry transaction with a line missing: `direction` plus `amount`,
+ * because recettes/dépenses has no debit and credit to balance. Modelling it as a
+ * small `entry` would import a balance requirement that does not legally apply.
+ */
+export const booksRiEntry = booksSchema.table(
+  'ri_entry',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    entity_id: integer('entity_id')
+      .notNull()
+      .references(() => booksEntity.id, { onDelete: 'cascade' }),
+    exercice_id: integer('exercice_id')
+      .notNull()
+      .references(() => booksExercice.id, { onDelete: 'restrict' }),
+    seq: integer('seq').notNull(),
+    date: date('date').notNull(),
+    /** `recette` | `depense`. */
+    direction: varchar('direction', { length: 10 }).notNull(),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    category: jsonb('category'),
+    raw_label: text('raw_label').notNull(),
+    counterparty: varchar('counterparty', { length: 200 }),
+    explanation: jsonb('explanation'),
+    recognition: varchar('recognition', { length: 30 }).default('unrecognized').notNull(),
+    matched_rule_id: integer('matched_rule_id').references(() => booksRule.id, {
+      onDelete: 'set null',
+    }),
+    evidence_tier: varchar('evidence_tier', { length: 10 }).default('bare').notNull(),
+    evidence_note: jsonb('evidence_note'),
+    piece_drive_ref: text('piece_drive_ref'),
+    piece_hash: varchar('piece_hash', { length: 80 }),
+    piece_captured: date('piece_captured'),
+    history: jsonb('history'),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    deleted_at: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    unique('ri_entry_workspace_id_seq_unique').on(t.workspace_id, t.seq),
+    index('idx_books_ri_entry_entity_exercice').on(t.entity_id, t.exercice_id),
+  ]
+)
+
+/**
+ * The RI net-worth statement. The second half of art. 957 al. 2.
+ *
+ * `as_of` is what the statement describes; `compiled` is when it was produced.
+ * Two fields on purpose: a reader needs both to judge it.
+ */
+export const booksPatrimoine = booksSchema.table(
+  'patrimoine',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    entity_id: integer('entity_id')
+      .notNull()
+      .references(() => booksEntity.id, { onDelete: 'cascade' }),
+    exercice_id: integer('exercice_id').references(() => booksExercice.id, {
+      onDelete: 'set null',
+    }),
+    seq: integer('seq').notNull(),
+    as_of: date('as_of').notNull(),
+    compiled: date('compiled'),
+    /** `[{ label, amount }]`. Not a chart of accounts, and must not become one. */
+    items: jsonb('items').default([]).notNull(),
+    note: jsonb('note'),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [unique('patrimoine_workspace_id_seq_unique').on(t.workspace_id, t.seq)]
+)
+
+export type BooksEntity = typeof booksEntity.$inferSelect
+export type BooksExercice = typeof booksExercice.$inferSelect
+export type BooksAccount = typeof booksAccount.$inferSelect
+export type BooksOpeningBalance = typeof booksOpeningBalance.$inferSelect
+export type BooksSource = typeof booksSource.$inferSelect
+export type BooksRule = typeof booksRule.$inferSelect
+export type BooksEntry = typeof booksEntry.$inferSelect
+export type BooksEntryLine = typeof booksEntryLine.$inferSelect
+export type BooksRiEntry = typeof booksRiEntry.$inferSelect
+export type BooksPatrimoine = typeof booksPatrimoine.$inferSelect

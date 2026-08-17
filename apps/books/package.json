@@ -1,7 +1,7 @@
 {
   "name": "books",
   "version": "0.1.0",
-  "description": "b/books \u2014 Swiss statutory bookkeeping. Any number of books, double-entry, audit-defensible. See docs/books-app-plan/.",
+  "description": "b/books — Swiss statutory bookkeeping. Any number of books, double-entry, audit-defensible. See docs/books-app-plan/.",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3200",
@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
     "@blackcode/platform-agent": "*",
