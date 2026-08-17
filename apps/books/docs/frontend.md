@@ -159,19 +159,47 @@ Three things about these that will bite otherwise:
 **Zero-balance legal lines still exist.** They may be collapsed visually. They
 are never absent from the model.
 
-## 7. What is missing, and it is your call
+## 7. What was missing, and what the frontend chose — settled 2026-08-17
 
-**There is no TanStack Query and no provider.** The root
-[`docs/frontend.md`](../../../docs/frontend.md) makes TanStack the platform's
-data-fetching convention and both other apps have it; this app has neither the
-dependency nor an `app/providers.tsx`.
+> **This section described an absence. The absence was filled on 2026-08-17 by
+> the frontend's sprint 1, so it now records the DECISION instead.** The original
+> wording ("there is no TanStack Query and no provider… also absent: any shell,
+> nav, or theme wiring") was correct when written and is not any more.
 
-That was left rather than guessed, because the dependency set is the frontend's
-decision. [`apps/sales/app/providers.tsx`](../../sales/app/providers.tsx) is the
-stack to copy and its header explains the provider order. `apps/sales/lib/hooks.ts`
-is the query-hook pattern.
+The dependency set was left to the frontend rather than guessed, and the frontend
+took the stack the root [`docs/frontend.md`](../../../docs/frontend.md) already
+makes the platform convention, copied from
+[`apps/sales/app/providers.tsx`](../../sales/app/providers.tsx):
 
-Also absent: any shell, nav, or theme wiring. `app/layout.tsx` is bare scaffold.
+- `@tanstack/react-query`, `next-themes`, `sonner`, `lucide-react` — plus
+  `clsx`, `tailwind-merge` and `tw-animate-css`, at the versions `apps/sales`
+  pins.
+- `app/providers.tsx` in the order that file's header specifies:
+  `SessionProvider → QueryClientProvider → ThemeProvider → ConfirmProvider`.
+- `app/globals.css` is now this app's own palette: **ledger gold `#e8b84b`**,
+  cream neutrals, `--radius: 0.5rem`. Token *names* are unchanged, so the
+  `@blackcode/platform-ui` primitives keep working.
+
+Two things a backend reader should know because they touch this file's contract:
+
+- **`lib/query-keys.ts` is new and every read goes through it.** Almost every
+  read in this app is scoped by `(entity, exercice)`, so the key shape is
+  `['books', resource, { entity, exercice, …filters }]`, spelled in one module
+  and enforced by `lib/query-keys.test.ts`, which scans for a `queryKey:` written
+  any other way.
+- **`lib/read-only.test.ts` now permits a SECOND write module**, `lib/account.ts`
+  — for `POST /api/auth/register` and `PATCH /api/me`, neither of which touches
+  `books.*`. `lib/mutations.ts` is still the only module that writes to the
+  books, and the four writes are still four. The reasoning is in both files'
+  headers.
+
+**One correction this section owes you:** §2's table and `lib/types.ts` both
+declare `entities` as an `Entity[]`. `app/api/meta/route.ts` actually serves
+`entities: { source, note, data }` — the envelope that carries
+`source: "fixture" | "database"`, which is the field the whole phase-0 contract
+turns on. The route is right and `BooksMeta` in `lib/types.ts` is stale. The
+frontend types against the wire shape (`MetaPayload` in `lib/hooks.ts`) and is
+not going to edit `lib/types.ts`.
 
 ## 8. The thirteen screens, and when each gets real data
 

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════
@@ -31,41 +32,304 @@
  */
 @source "../../../packages/platform-ui/src";
 
+/* Class-based dark mode (next-themes flips a `dark` class on <html>). */
+@custom-variant dark (&:is(.dark *));
+
 /*
- * The scaffold defines the smallest token set that makes the shared UI
- * primitives render: they read `--background`, `--foreground` and `--primary`.
- * A real app replaces this block with its own palette — see
- * `apps/issues/app/globals.css` for the full one, and `docs/frontend.md` for
- * what each token is for.
+ * ═══════════════════════════════════════════════════════════════════════════
+ * B/BOOKS' VISUAL IDENTITY — decision D-B in booksFrontend/00-decisions.md
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * `--primary: #007bd3` is the platform's one brand colour and is the one value
- * here a new app should think twice before changing.
+ * Phase 0 said "keep the scaffold's globals.css unedited". That instruction was
+ * about copying the scaffold cleanly and it has served its purpose; which colour
+ * a product is, is a product decision. D-B settles it.
+ *
+ *   primary    #e8b84b  ledger gold   (issues: #007bd3 blue, sales: #10a37f emerald)
+ *   neutrals   CREAM — hue 80, chroma 0.012, which is 2-6× sales' chroma
+ *   radius     0.5rem                 (issues: 0.5rem, sales: 0.75rem)
+ *   density    tight — h-11 header, py-1.5 rows. Every screen is a table of money
+ *
+ * `#e8b84b` is `--pt-amber` in the mockup's own stylesheet
+ * (`b-mockups/bbooks/assets/bbooks.css`) and the accent the blackcode SA book
+ * already carries. It reads as ledger paper rather than as software.
+ *
+ * **The neutrals are why this does not look like sales in a different colour.**
+ * Sales' warm off-white is a near-neutral with a cast (chroma 0.002–0.008);
+ * this one is genuinely cream, and the dark theme is a warm ink-brown rather
+ * than a charcoal. A brand hue is one accent on a page; the neutral hue is
+ * every surface, border and muted label on it.
+ *
+ * ── AMBER FAILS AA AS TEXT, AND THAT IS WHY THERE ARE TWO TOKENS ───────────
+ * Measured, not assumed (WCAG relative luminance, computed 2026-08-17):
+ *
+ *     #e8b84b on #ffffff ............  1.84:1   FAILS — never use as text on light
+ *     #ffffff on #e8b84b ............  1.84:1   FAILS — never a white button label
+ *     #14110a on #e8b84b ............ 10.22:1   PASSES — the ink label on a gold fill
+ *     #8a6410 on cream ..............  5.19:1   PASSES — amber-as-TEXT, light theme
+ *     #f0c96f on ink ................ 11.93:1   PASSES — amber-as-TEXT, dark theme
+ *
+ * So:
+ *   --primary          the FILL. Buttons, active nav, chip backgrounds.
+ *   --primary-foreground   what sits ON that fill. Ink, never white.
+ *   --primary-strong   amber as TEXT on the page background. Different value
+ *                      per theme, because the requirement is different per theme.
+ *
+ * A link or an eyebrow drawn in `--primary` on a light background is the one
+ * mistake this palette invites. Use `--primary-strong` — or `text-primary-strong`.
+ *
+ * ── WHAT IS NOT IN THIS FILE, AND MUST NEVER BE ────────────────────────────
+ * **Vocabulary colours and entity accent colours.** Both arrive from
+ * `GET /api/meta` with the value they belong to, so a new recognition state or a
+ * new book renders correctly with no frontend release. Spelling one here makes
+ * it a second copy that goes stale the day the vocabulary changes, with nothing
+ * to say so. See D-B and `lib/vocabularies.ts`.
+ *
+ * `:root` / `.dark` define the VALUES. `@theme inline` maps Tailwind utilities
+ * onto them and should not normally be touched.
  */
+
 :root {
-  --background: #ffffff;
-  --foreground: #0a0a0a;
-  --primary: #007bd3;
-  --primary-foreground: #ffffff;
-  --border: #e5e5e5;
+  /* Surfaces — cream ledger paper, not white */
+  --background: oklch(0.988 0.012 85);
+  --foreground: oklch(0.19 0.012 75);
+  --card: oklch(0.997 0.006 85);
+  --card-foreground: oklch(0.19 0.012 75);
+  --popover: oklch(0.997 0.006 85);
+  --popover-foreground: oklch(0.19 0.012 75);
+
+  /* Brand — the fill, and the ink that sits on it */
+  --primary: #e8b84b;
+  --primary-foreground: #14110a;
+  /* Amber as TEXT on a light surface. 5.19:1 — see the block above. */
+  --primary-strong: #8a6410;
+
+  /* ── HOW FAR A SERVED CHIP COLOUR IS PULLED TOWARD THE TEXT COLOUR ───────
+     `components/chips.tsx` mixes each vocabulary colour with `--foreground` so
+     one served hex works in both themes. The ratio was a single hardcoded 62%,
+     and in THIS theme that failed WCAG AA on three of the seven served
+     colours — 3.9:1 for the amber that carries "inferred", "partial" and
+     "staged" across five vocabularies, on 10px uppercase text where the
+     large-text exemption does not apply. Measured, 2026-08-17.
+
+     Lower means more foreground, means more contrast. 48% puts the worst
+     colour at 5.8:1 by calculation and ~5.5:1 as the browser resolves it; 55%
+     was the first ratio that passed and was rejected as too close to the line.
+     Dark mode keeps 62% — it was never the problem, at 8:1 and up. */
+  --chip-mix: 48%;
+
+  /* Neutrals — cream (hue 80), chroma high enough to read as paper */
+  --secondary: oklch(0.955 0.014 85);
+  --secondary-foreground: oklch(0.24 0.012 75);
+  --muted: oklch(0.955 0.014 85);
+  --muted-foreground: oklch(0.48 0.014 75);
+  --accent: oklch(0.938 0.018 85);
+  --accent-foreground: oklch(0.24 0.012 75);
+
+  /* Feedback */
+  --destructive: oklch(0.55 0.21 27);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  /* Form chrome */
+  --border: oklch(0.898 0.014 85);
+  --input: oklch(0.898 0.014 85);
+  --ring: #b8892a;
+
+  /*
+   * Chart SERIES roles, the contract `@blackcode/platform-ui/charts` reads.
+   * The kit names no colour of its own — these four ARE the extension point,
+   * and an undefined one makes a stroke silently disappear.
+   *
+   * Defined so the door is open, NOT as a commitment that the management view
+   * uses the shared kit. That is a sprint-2 decision.
+   */
+  --chart-series-created: var(--primary);
+  --chart-series-completed: #3fb27f;
+  --chart-series-activity: #7dd3fc;
+  --chart-series-ideal: #b1a48c;
+
+  /* Charts — gold → sky → sage → violet → clay. The mockup's own gold/sky
+     pairing (`--pt-amber` / `--pt-coral`) extended to five. */
+  --chart-1: #b8892a;
+  --chart-2: #3a94c4;
+  --chart-3: #3fb27f;
+  --chart-4: #8b5cf6;
+  --chart-5: #c2593f;
+
+  /* Sidebar — a shade deeper than the page, like a bound ledger's edge */
+  --sidebar: oklch(0.962 0.017 85);
+  --sidebar-foreground: oklch(0.19 0.012 75);
+  --sidebar-primary: #b8892a;
+  --sidebar-primary-foreground: #14110a;
+  --sidebar-accent: oklch(0.925 0.022 85);
+  --sidebar-accent-foreground: oklch(0.19 0.012 75);
+  --sidebar-border: oklch(0.898 0.014 85);
+  --sidebar-ring: #b8892a;
+
+  --radius: 0.5rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #fafafa;
-    --border: #262626;
-  }
+.dark {
+  /* Warm ink: hue 75 held at low chroma, so it reads as a dark brown-black
+     rather than the charcoal issues uses or the warm grey sales uses. */
+  --background: oklch(0.165 0.008 75);
+  --foreground: oklch(0.96 0.008 85);
+  --card: oklch(0.205 0.009 75);
+  --card-foreground: oklch(0.96 0.008 85);
+  --popover: oklch(0.205 0.009 75);
+  --popover-foreground: oklch(0.96 0.008 85);
+
+  --primary: #e8b84b;
+  --primary-foreground: #14110a;
+  /* Amber as TEXT on ink. 11.93:1 — lifted, because the light theme's #8a6410
+     is invisible here. Same token, different requirement. */
+  --primary-strong: #f0c96f;
+
+  /* Unchanged from the original. Every served chip colour measures 7:1 or better
+     against this background at this ratio; the light theme is the one that
+     needed moving. See the note beside the light value. */
+  --chip-mix: 62%;
+
+  --secondary: oklch(0.255 0.009 75);
+  --secondary-foreground: oklch(0.96 0.008 85);
+  --muted: oklch(0.255 0.009 75);
+  --muted-foreground: oklch(0.72 0.012 85);
+  --accent: oklch(0.255 0.009 75);
+  --accent-foreground: oklch(0.96 0.008 85);
+
+  --destructive: oklch(0.70 0.19 22);
+  --destructive-foreground: oklch(0.985 0 0);
+
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: #e8b84b;
+
+  /* Lifted for contrast against the dark surface; same hue order. */
+  --chart-1: #e8b84b;
+  --chart-2: #7dd3fc;
+  --chart-3: #3fb27f;
+  --chart-4: #a78bfa;
+  --chart-5: #f0876b;
+
+  --sidebar: oklch(0.142 0.008 75);
+  --sidebar-foreground: oklch(0.96 0.008 85);
+  --sidebar-primary: #e8b84b;
+  --sidebar-primary-foreground: #14110a;
+  --sidebar-accent: oklch(0.235 0.009 75);
+  --sidebar-accent-foreground: oklch(0.96 0.008 85);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: #e8b84b;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-strong: var(--primary-strong);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: "Google Sans", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  button, [role="button"], a, select, label[for], [tabindex]:not([tabindex="-1"]) {
+    cursor: pointer;
+  }
+  button:disabled, [disabled] {
+    cursor: not-allowed;
+  }
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * NUMERIC TABLES — the CSS this app needs and the other two do not
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Every screen in b/books is a table of money. Three properties carry that, and
+ * all three are here rather than repeated as utility soup on every cell:
+ *
+ *   `.num`   tabular figures + right alignment. Proportional digits make a
+ *            column of amounts ragged, so the eye cannot compare magnitudes —
+ *            which is the entire job of a column of amounts.
+ *   `.num-neg`  the negative treatment. A minus sign alone is one glyph wide
+ *            and is missed; the colour is what makes a negative legible at a
+ *            glance. It is `--destructive` deliberately, and deliberately NOT
+ *            red-on-red: a negative in a bookkeeping system is normal, not an
+ *            error, so it is tinted text and never a filled badge.
+ *   `.num-total`  a total line. Heavier, with a rule above it, the way a paper
+ *            ledger does it.
+ *
+ * `font-variant-numeric: tabular-nums` is set on the CLASS and not on `body`,
+ * because tabular figures in running prose look mechanical — the point is that
+ * columns line up, not that everything does.
+ */
+@utility num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  text-align: right;
+  white-space: nowrap;
+}
+
+@utility num-neg {
+  color: var(--destructive);
+}
+
+@utility num-total {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  text-align: right;
+  white-space: nowrap;
+  font-weight: 600;
+  border-top: 1px solid var(--border);
+}
+
+/* Toast bridge — sonner reads these via inline style on the <Toaster>. */
+:root {
+  --toast-bg: var(--popover);
+  --toast-text: var(--popover-foreground);
+  --toast-border: var(--border);
 }

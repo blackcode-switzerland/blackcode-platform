@@ -1,31 +1,29 @@
-// The one page, so the app is a real Next app and `npm run build` proves it.
+// `/` — the marketing page, and a redirect for anybody already signed in.
 //
-// A new app's UI starts here. `@blackcode/platform-ui` carries the shared
-// primitives and the theme tokens — import them rather than restyling, or the
-// suite stops looking like one product.
-export default function Home() {
-  return (
-    <main style={{ fontFamily: 'system-ui', padding: 48, maxWidth: 640 }}>
-      <h1>Template app</h1>
-      <p>
-        This is the scaffold from <code>apps/books</code>. Copy the directory,
-        rename the slug in the five places listed in <code>lib/app.ts</code>, and
-        follow <code>docs/adding-an-app.md</code>.
-      </p>
-      <p>
-        It defines one entity (<code>note</code>), one route
-        (<code>/api/workspaces/{'{ws}'}/notes</code>), one CLI command group
-        (<code>bk books note</code>) and one guide topic — enough for every
-        guardrail in the repo to have something real to check.
-      </p>
-      <p>
-        It also owns its <strong>tenancy</strong>: <code>books.workspaces</code>,{' '}
-        <code>workspace_members</code> and <code>invitations</code>, self-signup behind the
-        platform whitelist, and a workspace minted on first sign-in. Sign in at{' '}
-        <a href="/login">/login</a> and <a href="/dashboard">/dashboard</a> is the members page.
-        Identity is the only thing shared with the other apps — one account, one password, one
-        token.
-      </p>
-    </main>
-  )
+// This file was literal scaffold text reading "Template app" until 2026-08-17.
+// Decision D-E: books has self-signup, so a stranger sent the bare URL can get
+// in on their own, and what they met was a page describing a scaffold. The copy
+// itself is `components/landing-page.tsx`, whose header carries the rules about
+// what may and may not be written on it.
+//
+// ── SIGNED IN? YOU DO NOT WANT THE BROCHURE ────────────────────────────────
+// A person with a session is a user, not a visitor, and showing them a "create
+// an account" hero is the shape that makes an internal tool feel like a website
+// somebody left the marketing on. The check is `getValidatedSessionUser`, not a
+// raw `getServerSession`: a soft-deleted account or one whose password was reset
+// elsewhere has a cookie and no longer has a session, and bouncing that person
+// into `/dashboard` would send them to a page that redirects them straight back.
+
+import { redirect } from 'next/navigation'
+import { getValidatedSessionUser } from '@/lib/auth/session'
+import { LandingPage } from '@/components/landing-page'
+
+// Per-request by construction: it reads the session. Saying so beats
+// discovering at build time that Next tried to prerender it.
+export const dynamic = 'force-dynamic'
+
+export default async function Home() {
+  const user = await getValidatedSessionUser()
+  if (user) redirect('/dashboard')
+  return <LandingPage />
 }

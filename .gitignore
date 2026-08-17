@@ -73,3 +73,6 @@ next-env.d.ts
 # transient production connection string — never commit
 /.prod-url
 /parityAudit/
+
+# Books frontend working plan — not part of the repo
+/booksFrontend/
