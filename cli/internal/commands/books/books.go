@@ -28,14 +28,11 @@
 package books
 
 import (
-	"fmt"
-	"io"
-
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/appverbs"
+	"github.com/spf13/cobra"
+
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
-	"github.com/blackcode-switzerland/bc-issues/cli/internal/output"
-	"github.com/spf13/cobra"
 )
 
 // Slug is this app's name — the first segment of `bk books …`, the key in
@@ -112,9 +109,6 @@ func nouns() []*cobra.Command {
 		newCrCmd(),
 		newOverviewCmd(),
 		newPatrimoineCmd(),
-
-		// The scaffold's placeholder. Goes with books.notes.
-		newNoteCmd(),
 	}
 }
 
@@ -145,91 +139,6 @@ func appOwnedVerbs() []*cobra.Command {
 		Members:   true,
 		Invites:   true,
 	}).All()
-}
-
-// ---------------------------------------------------------------------------
-// note — the scaffold's placeholder. Removed in phase 1.
-// ---------------------------------------------------------------------------
-
-func newNoteCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "note",
-		Short: "Placeholder entity (phase 0 only — removed when the ledger lands)",
-	}
-	cmd.AddCommand(newNoteListCmd(), newNoteCreateCmd())
-	return cmd
-}
-
-func newNoteListCmd() *cobra.Command {
-	var limit int
-	cmd := &cobra.Command{
-		Use:         "list",
-		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/notes"},
-		Short:       "List notes in the active workspace",
-		Args:        cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			format, err := output.Resolve(cmd)
-			if err != nil {
-				return err
-			}
-			c, ws, err := clientAndWorkspace()
-			if err != nil {
-				return err
-			}
-			notes, err := c.ListBooksNotes(ws, limit)
-			if err != nil {
-				return err
-			}
-			return output.Render(format, notes, func(w io.Writer) error {
-				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "#\tTITLE\tCREATED")
-				for _, n := range notes {
-					fmt.Fprintf(tw, "%d\t%s\t%s\n", n.Number, cmdutil.Truncate(n.Title, 48), n.CreatedAt)
-				}
-				if err := tw.Flush(); err != nil {
-					return err
-				}
-				if len(notes) == 0 {
-					fmt.Fprintln(cmd.ErrOrStderr(), "(no notes)")
-				}
-				return nil
-			})
-		},
-	}
-	cmd.Flags().IntVar(&limit, "limit", 50, "Max notes to return (1-200)")
-	return cmd
-}
-
-func newNoteCreateCmd() *cobra.Command {
-	var title, body string
-	cmd := &cobra.Command{
-		Use:         "create --title <title>",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/notes"},
-		Short:       "Create a note",
-		Args:        cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			format, err := output.Resolve(cmd)
-			if err != nil {
-				return err
-			}
-			c, ws, err := clientAndWorkspace()
-			if err != nil {
-				return err
-			}
-			note, err := c.CreateBooksNote(ws, client.CreateBooksNoteRequest{Title: title, Body: body})
-			if err != nil {
-				return err
-			}
-			return output.Render(format, note, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "created note #%d: %s\n", note.Number, note.Title)
-				return err
-			})
-		},
-	}
-	cmd.Flags().StringVar(&title, "title", "", "Note title (required)")
-	cmd.Flags().StringVar(&body, "body", "", "Note body")
-	_ = cmd.MarkFlagRequired("title")
-	return cmd
 }
 
 // clientAndWorkspace resolves the credential and THIS app's active workspace.

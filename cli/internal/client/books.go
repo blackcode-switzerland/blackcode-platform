@@ -24,45 +24,6 @@ package client
 
 import "fmt"
 
-// BooksNote is the scaffold's placeholder entity, carried while phase 0 is in
-// progress so this app has a route and a command to be parity-checked against.
-// Phase 1 replaces it with the ledger entry and this type goes with it.
-type BooksNote struct {
-	Number    int     `json:"number" yaml:"number"`
-	Title     string  `json:"title" yaml:"title"`
-	Body      *string `json:"body" yaml:"body"`
-	CreatedAt string  `json:"created_at" yaml:"created_at"`
-}
-
-type CreateBooksNoteRequest struct {
-	Title string `json:"title"`
-	Body  string `json:"body,omitempty"`
-}
-
-// ListBooksNotes unwraps the `{ data, next_cursor }` envelope every list route
-// serves.
-func (c *Client) ListBooksNotes(slugOrID string, limit int) ([]BooksNote, error) {
-	path := fmt.Sprintf("/api/workspaces/%s/notes", slugOrID)
-	if limit > 0 {
-		path += fmt.Sprintf("?limit=%d", limit)
-	}
-	var resp struct {
-		Data []BooksNote `json:"data"`
-	}
-	if err := c.get(path, &resp); err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
-func (c *Client) CreateBooksNote(slugOrID string, req CreateBooksNoteRequest) (*BooksNote, error) {
-	var out BooksNote
-	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/notes", slugOrID), req, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
-}
-
 // ===========================================================================
 // THE STATUTORY CORE (phase 1)
 // ===========================================================================

@@ -39,7 +39,7 @@
 // `(entityId, exerciceId)`, so adding 2025 later is data plus a close routine, not
 // a migration.
 
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { getDb } from './client'
 import {
   booksWorkspaces,
@@ -117,25 +117,71 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
   const db = getDb()
 
   // ---- idempotence -------------------------------------------------------
-  // Replace rather than merge. A seed that half-applies is worse than one that
-  // starts over, and `books.workspaces` cascades to everything below it.
+  // Replace rather than merge: a seed that half-applies is worse than one that
+  // starts over.
   //
-  // Note this only works because 0004's no-hard-delete trigger is on `entry` and
-  // `ri_entry` rather than on the workspace: dropping the SCHEMA-level parent is a
-  // developer action, and the trigger exists to stop the app deleting a booking.
-  const existing = await db.select().from(booksWorkspaces).where(eq(booksWorkspaces.slug, SEED_SLUG))
-  for (const w of existing) {
-    await db.execute(
-      `ALTER TABLE books.entry DISABLE TRIGGER trg_no_hard_delete;
-       ALTER TABLE books.ri_entry DISABLE TRIGGER trg_no_hard_delete;
-       ALTER TABLE books.entry DISABLE TRIGGER trg_entry_frozen;
-       ALTER TABLE books.entry_line DISABLE TRIGGER trg_entry_line_frozen;
-       DELETE FROM books.workspaces WHERE id = ${w.id};
-       ALTER TABLE books.entry ENABLE TRIGGER trg_no_hard_delete;
-       ALTER TABLE books.ri_entry ENABLE TRIGGER trg_no_hard_delete;
-       ALTER TABLE books.entry ENABLE TRIGGER trg_entry_frozen;
-       ALTER TABLE books.entry_line ENABLE TRIGGER trg_entry_line_frozen;` as never
-    )
+  // ── THE GUARDS HAVE TO COME OFF, AND THE ORDER IS THE WHOLE TRICK ──────────
+  // Every guard in 0004 refuses this teardown, correctly: posted entries cannot be
+  // deleted, their lines cannot be removed, and `entry` rejects DELETE outright
+  // under art. 958f. That is the schema working, not an obstacle.
+  //
+  // So the seed disables them, and **every DISABLE runs before any DML**. Getting
+  // that order wrong fails outright rather than subtly: with a delete first,
+  // Postgres answers `cannot ALTER TABLE "entry_line" because it has pending
+  // trigger events`, because the deferred balance constraint has queued work that
+  // an ALTER may not jump ahead of.
+  //
+  // Two things make this safe to do here and nowhere else:
+  //
+  //   1. It runs as the MIGRATOR. `books_app` cannot reach it at all — 0005 revokes
+  //      DELETE on every ledger table, so the app cannot follow this path even by
+  //      accident.
+  //   2. Each statement is its own autocommit, so the re-ENABLEs cannot be skipped
+  //      by a rollback halfway through.
+  //
+  // The two DB test files deliberately do NOT do this. They leave their rows and
+  // isolate by workspace slug instead, because vitest runs files in parallel and
+  // one file's disable window silently swallowed a sibling's assertion.
+  const FROZEN_TRIGGERS: [string, string][] = [
+    ['books.entry', 'trg_no_hard_delete'],
+    ['books.ri_entry', 'trg_no_hard_delete'],
+    ['books.entry', 'trg_entry_frozen'],
+    ['books.entry_line', 'trg_entry_line_frozen'],
+    // The two DEFERRED constraint triggers. Easy to forget, and the failure names
+    // the symptom rather than the cause: `entry 14 cannot be posted with 0 line(s)`,
+    // raised at COMMIT because the balance check saw a posted entry whose lines had
+    // just been deleted.
+    ['books.entry', 'trg_entry_balanced'],
+    ['books.entry_line', 'trg_entry_line_balanced'],
+  ]
+
+  const existing = await db
+    .select()
+    .from(booksWorkspaces)
+    .where(eq(booksWorkspaces.slug, SEED_SLUG))
+
+  if (existing.length > 0) {
+    for (const [table, trigger] of FROZEN_TRIGGERS) {
+      await db.execute(sql.raw(`ALTER TABLE ${table} DISABLE TRIGGER ${trigger}`))
+    }
+    try {
+      for (const w of existing) {
+        // Bottom-up, so no foreign key complains on the way.
+        await db.execute(
+          sql`DELETE FROM books.entry_line WHERE entry_id IN (SELECT id FROM books.entry WHERE workspace_id = ${w.id})`
+        )
+        await db.execute(sql`DELETE FROM books.entry WHERE workspace_id = ${w.id}`)
+        await db.execute(sql`DELETE FROM books.ri_entry WHERE workspace_id = ${w.id}`)
+        // The rest cascades from the workspace.
+        await db.execute(sql`DELETE FROM books.workspaces WHERE id = ${w.id}`)
+      }
+    } finally {
+      // `finally`, so a failed delete cannot leave the guards off for the next
+      // person to run against a database that silently accepts anything.
+      for (const [table, trigger] of FROZEN_TRIGGERS) {
+        await db.execute(sql.raw(`ALTER TABLE ${table} ENABLE TRIGGER ${trigger}`))
+      }
+    }
   }
 
   const [ws] = await db

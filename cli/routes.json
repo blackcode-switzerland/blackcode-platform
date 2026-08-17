@@ -75,12 +75,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/workspaces/{ws}/notes",
-      "command": "bk books note list",
-      "app": "books"
-    },
-    {
-      "method": "GET",
       "path": "/api/workspaces/{ws}/overview",
       "command": "bk books overview",
       "app": "books"
@@ -113,12 +107,6 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/invitations",
       "command": "bk books invite send",
-      "app": "books"
-    },
-    {
-      "method": "POST",
-      "path": "/api/workspaces/{ws}/notes",
-      "command": "bk books note create",
       "app": "books"
     },
     {
