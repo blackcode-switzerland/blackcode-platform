@@ -50,6 +50,41 @@
       "when": 1786061160000,
       "tag": "0007_meetings_carry_a_link",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786061220000,
+      "tag": "0008_prospects_and_contacts_carry_an_identity_card",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786061280000,
+      "tag": "0009_prospects_carry_a_research_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786061340000,
+      "tag": "0010_strategies_and_game_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786061400000,
+      "tag": "0011_products_carry_internal_price_and_reach",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786061460000,
+      "tag": "0012_documents_know_where_they_live",
+      "breakpoints": true
     }
   ]
 }
