@@ -214,11 +214,48 @@ Three of these block migration 0001.
 
 | # | Decision | Recommendation | Blocks |
 |---|---|---|---|
-| D1 | Workspace = one client's books with an `entity_id` column, or workspace = legal entity? | **Settled: one workspace, `entity_id` column.** The user creates books and may have any number, so a workspace cannot be one book. Matches the mockup's `?entity=`. Keeps related party mirroring simple. | migration 0001 |
+| D1 | Workspace = one client's books with an `entity_id` column, or workspace = legal entity? | **Settled: one workspace, `entity_id` column.** See D1 in full below, because the appealing answer is the wrong one. | migration 0001 |
 | D2 | One number or two: platform `seq` vs a gapless per exercice `entry_no`? | Two. `seq` addresses a row. `entry_no` is the statutory journal number. | migration 0001 |
 | D3 | Language | UI and CLI in English. Statutory line names stay French (they are legal text and the filed PDF must be French). Needs a one line confirmation from Andrea. | phase 0 |
 | D4 | URL and CLI grammar for exercice | `?entity=...&exercice=2026` on routes. `--entity` and `--exercice` flags with remembered defaults. | phase 1 routes |
 | D5 | Does the frontend call routes directly? | Yes. Frontend uses routes, agents use `bk`, both over the same query layer. | phase 0 |
+
+### D1 in full: why a legal entity is not a workspace
+
+"AIOS is a workspace, and inside it are the books of AIOS" is the natural reading,
+and it is the one to reject. Written out because it has been proposed twice and
+re-derived from scratch both times.
+
+**What decides it is source 503, the Yapeal card.** It sits on blackcode SA, and
+its individual spends are attributed to different entities, per transaction, at
+import. The mockup calls it the source of truth for merchant lines, singular.
+
+Make each legal entity a workspace and that card has two bad endings. Duplicate it
+into both workspaces, and one piece of plastic is two rows that must agree with
+nobody keeping them in agreement. Or read across workspaces, which every route
+factory's membership check exists to prevent.
+
+One workspace with `entity_id` gives one card row, an `entity_id` on each entry,
+and attribution at import as a column. Which is what the mockup does.
+
+Supporting, less decisive: the 17 transactions are one array filtered by entity, so
+`?entity=` is a filter rather than a navigation boundary. And each entity carries an
+`accent` colour, which only earns its place if entities are seen together or swapped
+in place.
+
+**The requirement behind the instinct still holds.** Two legal entities' books must
+never mix, and that is law. It comes from `entity_id` being NOT NULL on every ledger
+row and from every derivation taking `(entityId, exerciceId)` and nothing else. It is
+asserted per entity: actif equals passif on every entity, including a fourth created
+at runtime.
+
+**And the mistake is asymmetric.** One workspace can be split into several later by
+creating them and moving rows. Merging several into one collides every
+workspace-scoped `seq`. Split is recoverable; merge is not worth writing.
+
+The one future that flips this is b/books as a fiduciary's tool over several
+unrelated clients. That is a workspace per **client**, still not per legal entity,
+since one client can own three companies sharing a card.
 
 ## Two open items to raise, not solve alone
 

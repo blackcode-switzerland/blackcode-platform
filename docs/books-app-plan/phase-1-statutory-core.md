@@ -69,6 +69,11 @@ should, that is a signal to re-read the boundary rules first.
 
 ### Migration 0001: tables
 
+**Every table below carries `workspace_id`, and `entity` carries it directly.** The
+workspace is the tenant and is never a book (D1). Leave the column off and the app
+has no tenancy at all, which is close to unfixable once there are books in it. It is
+listed once here rather than repeated in eight rows.
+
 | Table | Notes |
 |---|---|
 | `entity` | One row per book. **The user creates these and may have any number.** Three are seeded; nothing anywhere may assume three. `legal_form` drives everything. |
