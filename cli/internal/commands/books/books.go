@@ -103,6 +103,17 @@ func NewGroup() *cobra.Command {
 // nouns is this app's surface — what `bk books` offers today.
 func nouns() []*cobra.Command {
 	return []*cobra.Command{
+		// The statutory core — see statutory.go.
+		newEntityCmd(),
+		newExerciceCmd(),
+		newAccountCmd(),
+		newEntryCmd(),
+		newBilanCmd(),
+		newCrCmd(),
+		newOverviewCmd(),
+		newPatrimoineCmd(),
+
+		// The scaffold's placeholder. Goes with books.notes.
 		newNoteCmd(),
 	}
 }

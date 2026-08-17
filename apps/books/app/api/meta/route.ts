@@ -20,17 +20,20 @@
 // second claim on the same route.
 //
 // ---------------------------------------------------------------------------
-// WHY `entities` COMES FROM A FIXTURE TODAY
+// `entities` NOW COMES FROM THE DATABASE (phase 1)
 // ---------------------------------------------------------------------------
-// Phase 0 adds no tables (docs/books-app-plan/phase-0-contract.md). The books a
-// user creates live in `books.entity` from phase 1, and this route reads them
-// from the database then. Until it does, the seeded three are served from
-// `fixtures/mockup.json` so the frontend can build every screen against real
-// shapes before the schema exists — which is the entire purpose of phase 0.
+// It was served from `fixtures/mockup.json` through phase 0, marked
+// `source: "fixture"`, so the frontend could build every screen against real
+// shapes before any table existed.
 //
-// It is a FIXTURE and it says so in the payload: `source: "fixture"`. A frontend
-// that quietly ships against fake data believing it is real is the failure this
-// field exists to prevent, and phase 1 flips it to `"database"`.
+// `books.entity` exists now, so this reads it. **`source` is kept in the payload**
+// rather than deleted: a frontend that quietly ships against fake data believing it
+// is real is the failure the field exists to prevent, and a reader of a deployed
+// `/api/meta` should still be able to tell which they are looking at.
+//
+// This route is UNAUTHENTICATED, so it cannot resolve a workspace and therefore
+// cannot list one user's books. It reports the vocabularies and the law, and says
+// where the books actually come from. `bk books entity list` is the scoped read.
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler } from '@/lib/api'
 import { BILAN_STRUCTURE, CR_STRUCTURE } from '@/lib/statements'
@@ -44,8 +47,7 @@ import {
   SOURCE_TYPES,
   TVA_RATES,
 } from '@/lib/vocabularies'
-import fixture from '@/fixtures/mockup.json'
-import type { Entity } from '@/lib/types'
+
 
 /**
  * Unauthenticated on purpose, exactly as the platform's own meta route is: an
@@ -55,23 +57,17 @@ import type { Entity } from '@/lib/types'
  * user's own books.
  */
 export const GET = apiHandler(async (_req: NextRequest) => {
-  const entities = fixture.ENTITIES as unknown as Entity[]
-
   return NextResponse.json({
     app: 'books',
 
     // ── THE BOOKS ────────────────────────────────────────────────────────
-    // Any number of them. Three are seeded; nothing may assume three.
+    // Any number of them, and this route cannot name them: it is
+    // unauthenticated by design, so it has no workspace to read.
     entities: {
-      source: 'fixture',
-      note: 'Seeded from the mockup. Phase 1 serves these from books.entity, where the user creates them.',
-      data: entities,
+      source: 'database',
+      table: 'books.entity',
+      note: 'Books are workspace-scoped. Read them with `bk books entity list`, or GET /api/workspaces/{ws}/entities.',
     },
-
-    // Every exercice present in the data. One year today, and the model is
-    // parameterised by (entity, exercice) from the first line of code so
-    // multi-year is additive rather than a rewrite.
-    exercices: [...new Set(entities.map((e) => e.exercice))].sort(),
 
     // ── THE VOCABULARIES ─────────────────────────────────────────────────
     // Colour and icon travel with the value, so a new state needs no frontend
