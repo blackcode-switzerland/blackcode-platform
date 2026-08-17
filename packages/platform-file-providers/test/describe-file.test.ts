@@ -131,11 +131,7 @@ describe('describeFile — Google Drive', () => {
       mode: 'iframe',
       url: `https://drive.google.com/file/d/${DRIVE_ID}/preview`,
     })
-    // NULL, and that is a measured decision rather than an omission: Drive
-    // thumbnails are blocked by the browser's Opaque Response Blocking in every
-    // variant tried, so emitting one costs a request per row and renders a
-    // broken-image glyph. See `google-drive.ts` at `thumbnail`.
-    expect(d.thumbnail_url).toBeNull()
+    expect(d.thumbnail_url).toContain(DRIVE_ID)
   })
 
   it('recognises the older /open?id= and /uc?id= shapes', () => {
@@ -161,19 +157,25 @@ describe('describeFile — Google Drive', () => {
     expect(slides.embed.url).toBe(`https://docs.google.com/presentation/d/${DRIVE_ID}/embed`)
   })
 
-  it('emits NO thumbnail for any Drive shape — ORB blocks them all', () => {
-    // Pinned so nobody re-adds it from the server side, where `curl` makes it
-    // look like it works.
+  it('emits a thumbnail for every previewable Drive shape', () => {
+    // It was briefly NULLED, on the strength of a browser test run against
+    // `http://localhost`. Measured again on both origins, same file, same url:
+    //
+    //     http://localhost:3100       BLOCKED (ERR_BLOCKED_BY_ORB)
+    //     https://sales.blackcode.ch  RENDERS
+    //
+    // Opaque Response Blocking refuses it from an INSECURE origin only. So the
+    // url is correct and the localhost failure is a dev artifact — the renderer
+    // carries an `onError` fallback for it. See `google-drive.ts`.
     for (const u of [
       `https://drive.google.com/file/d/${DRIVE_ID}/view`,
       `https://docs.google.com/document/d/${DRIVE_ID}/edit`,
       `https://docs.google.com/presentation/d/${DRIVE_ID}/edit`,
     ]) {
-      expect(describeFile(u).thumbnail_url, u).toBeNull()
+      expect(describeFile(u).thumbnail_url, u).toContain(DRIVE_ID)
     }
-    // The preview itself is NOT affected — that is the thing that matters, and
-    // it was verified in a browser against a real link-shared file.
-    expect(describeFile(`https://drive.google.com/file/d/${DRIVE_ID}/view`).embed.mode).toBe('iframe')
+    // A folder has no thumbnail — nothing to picture.
+    expect(describeFile(`https://drive.google.com/drive/folders/${DRIVE_ID}`).thumbnail_url).toBeNull()
   })
 
   it('recognises a folder and refuses to embed it', () => {

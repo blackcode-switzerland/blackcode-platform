@@ -174,10 +174,10 @@ provider named and a link to the original.
 
 Two limits worth knowing, both measured rather than assumed:
 
-- **A Drive file shows no thumbnail in the list.** Drive's thumbnail endpoint
-  cannot be hot-linked into a browser — every variant is refused by Opaque
-  Response Blocking — so the row shows a type icon instead of a broken image.
-  The preview itself is unaffected.
+- **A Drive thumbnail may not render on an insecure origin.** Browsers refuse
+  Google's image for a page served over plain `http://` — local development —
+  while a normal `https://` deployment shows it. The row falls back to a type
+  icon when that happens, so nothing looks broken either way.
 - **The preview is the provider's own viewer**, so it renders for a viewer who
   can already open the file. That is why `doc add` tells you the sharing status
   up front.

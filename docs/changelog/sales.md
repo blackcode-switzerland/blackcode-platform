@@ -51,12 +51,11 @@ so any app can use it.
 
 **Two measured limits, recorded because they look like bugs:**
 
-- **A Drive file shows no thumbnail in the list.** Drive's thumbnail endpoint
-  cannot be hot-linked into a browser — four variants all refused with
-  `ERR_BLOCKED_BY_ORB`, though `curl` fetches it happily, which is why it looked
-  fine from the server. The row shows a type icon rather than a broken image.
-  **The preview itself is unaffected** — Drive's player was verified loading
-  inside the modal.
+- **A Drive thumbnail renders in production but not on `http://localhost`.**
+  Chrome's Opaque Response Blocking refuses Google's image from an insecure
+  origin and allows it from a secure one — measured on both. The row falls back
+  to a type icon when the browser refuses, so local dev degrades cleanly instead
+  of showing a broken-image glyph.
 - A large Drive file answers the type probe with an HTML virus-scan
   interstitial. That is refused rather than mapped, because `text/*` would have
   typed every big video as a document — wrong with conviction.

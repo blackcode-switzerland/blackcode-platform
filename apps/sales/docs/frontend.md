@@ -903,11 +903,16 @@ video. `MediaLightbox` in `@blackcode/platform-ui` is the shared overlay; the
 only thing still rendered inline is the "cannot be previewed, and here is why"
 card, which is exactly what a reader needs in the row.
 
-**A Drive file shows no thumbnail**, and that is measured rather than missing:
-Drive's thumbnail endpoint is refused by the browser's Opaque Response Blocking
-in every variant tried, while `curl` fetches it happily — so it looked correct
-from the server and from every test. `google-drive.ts` records the four variants
-and the proxy that would fix it. The preview itself is unaffected.
+**A Drive thumbnail renders in production and NOT on `http://localhost`**, and
+the difference is the whole story. Chrome's Opaque Response Blocking refuses
+Google's image for an `<img>` load from an INSECURE origin and permits it from a
+secure one — measured on both, same file, same url. It was briefly removed on
+the strength of the localhost result alone, which was wrong.
+
+So the url is emitted and the row carries an `onError` that falls back to the
+type icon. That fallback is not defensive padding: it is what every developer
+sees locally, and without it local dev looks broken and somebody "fixes" a thing
+that works.
 
 A folder never gets a preview and never gets a "Restricted" chip — it has no
 embed at any permission level, and saying "share it to preview it here" would

@@ -888,6 +888,10 @@ function DocumentRow({
     if (focused) ref.current?.scrollIntoView({ block: 'center' })
   }, [focused])
   const [open, setOpen] = useState(false)
+  // A thumbnail the browser refuses — see the render below. Falling back to the
+  // icon is the whole point; a broken-image glyph in a customer record is worse
+  // than no picture at all.
+  const [thumbFailed, setThumbFailed] = useState(false)
   const f = doc.file
   const hasPlayer = canPreview(doc)
 
@@ -904,14 +908,24 @@ function DocumentRow({
         <RecordNumber n={doc.number} />
         {/* The thumbnail IS the recognisability #40 is about: a video that
             looks like a video before you click anything. */}
-        {/* Gated on the same rule as the player: a thumbnail we are not allowed
-            to fetch renders as a broken image icon, which is worse than none. */}
-        {f.thumbnail_url && (f.internal || f.preview_status === 'public') && (
+        {/*
+          Gated on the same rule as the player: a thumbnail we are not allowed
+          to fetch would render as a broken-image glyph.
+
+          `onError` hides it entirely rather than leaving the glyph, and it is
+          NOT belt-and-braces — it fires for real. A Google thumbnail is refused
+          by Opaque Response Blocking on an INSECURE origin, so this is exactly
+          what every developer sees on `http://localhost` while production
+          renders it fine. Without the fallback, local dev looks broken and
+          somebody "fixes" a thing that works — which is what happened once.
+        */}
+        {f.thumbnail_url && !thumbFailed && (f.internal || f.preview_status === 'public') && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={f.thumbnail_url}
             alt=""
             loading="lazy"
+            onError={() => setThumbFailed(true)}
             className="h-9 w-14 shrink-0 rounded border border-border object-cover"
           />
         )}
