@@ -25,8 +25,10 @@
 // `/api/workspaces/…` path is `lib/mutations.ts`, and every hook there is built
 // on the one `useMutation` that reads `useCanWrite()`.
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
+  DECISION_POWERS,
+  NEUTRAL_OPTION_COLOR,
   NEXT_ACTION_TYPES,
   OBJECTION_STATUSES,
   OBJECTION_TYPES,
@@ -44,17 +46,20 @@ import {
 } from '@/components/forms'
 import {
   useAddContact,
+  useAddProspectNote,
   useEditContact,
   useEditObjection,
   useEditProspect,
   useRaiseObjection,
   useRemoveContact,
   useRemoveObjection,
+  useRemoveProspectNote,
   useSetNextAction,
   useSetStage,
   type ProspectPatch,
 } from '@/lib/mutations'
-import type { Contact, Objection, ProspectDetail } from '@/lib/hooks'
+import { useStrategies } from '@/lib/hooks'
+import type { Contact, Objection, ProspectDetail, ProspectNote } from '@/lib/hooks'
 
 // ---------------------------------------------------------------------------
 // The deal itself
@@ -70,10 +75,30 @@ export function EditProspectForm({ ws, p }: { ws: string; p: ProspectDetail }) {
 
 function ProspectFields({ ws, p, close }: { ws: string; p: ProspectDetail; close: () => void }) {
   const edit = useEditProspect(ws, p.number)
+  // The segments to choose from, by #number — the same address the CLI takes
+  // and the value the route reads. A free-text box would 404 on a typo.
+  const strategies = useStrategies(ws)
+  const strategyOptions = useMemo(
+    () =>
+      // No `color`: a strategy is not a vocabulary value and has no colour to
+      // decide. `lib/palette.test.ts` is right to refuse a hex here — D-4 is
+      // that colour is chosen in `lib/pipeline.ts` and nowhere else, and this
+      // list is data from the server, not a vocabulary.
+      (strategies.data ?? []).map((g) => ({
+        value: String(g.number),
+        label: `#${g.number} ${g.name}`,
+        color: NEUTRAL_OPTION_COLOR,
+      })),
+    [strategies.data]
+  )
   const [form, setForm] = useState<ProspectPatch>({
     name: p.name,
     city: p.city,
     sector: p.sector,
+    website: p.website,
+    address: p.address,
+    strategy: p.strategy,
+    game_plan: p.game_plan,
     value: p.value,
     source: p.source,
     summary: p.summary,
@@ -109,6 +134,31 @@ function ProspectFields({ ws, p, close }: { ws: string; p: ProspectDetail; close
             onChange={(e) => set('source', e.target.value || null)}
           />
         </Field>
+        <Field label="Website" hint="The company's site. Include https:// — the route refuses anything else.">
+          <TextInput
+            type="url"
+            value={form.website ?? ''}
+            onChange={(e) => set('website', e.target.value || null)}
+          />
+        </Field>
+        <Field label="Address" hint="One line, as you would write it on an envelope.">
+          <TextInput
+            value={form.address ?? ''}
+            onChange={(e) => set('address', e.target.value || null)}
+          />
+        </Field>
+        <Field
+          label="Strategy"
+          hint="The segment this deal belongs to. Its reasoning lives on the strategy, not here."
+        >
+          <VocabSelect
+            label="Strategy"
+            options={strategyOptions}
+            placeholder="Not linked"
+            value={form.strategy == null ? '' : String(form.strategy)}
+            onChange={(v) => set('strategy', v === '' ? null : Number(v))}
+          />
+        </Field>
         {/*
           STAGE IS NOT IN THIS FORM, and its absence is the contract. Moving a
           deal writes a journey step and may close it; `PATCH …/prospects/{n}`
@@ -121,6 +171,18 @@ function ProspectFields({ ws, p, close }: { ws: string; p: ProspectDetail; close
           has the member list to check against; this page does not mount
           `/api/workspaces/{ws}/members`.
         */}
+      </div>
+      <div className="mt-3 space-y-3">
+        <Field
+          label="Game plan"
+          hint="What to say on the way IN: the angle, the talking points, the objections to expect. Line breaks are kept."
+        >
+          <TextArea
+            value={form.game_plan ?? ''}
+            onChange={(e) => set('game_plan', e.target.value || null)}
+            rows={5}
+          />
+        </Field>
       </div>
       <div className="mt-3">
         <Field label="Summary">
@@ -280,6 +342,102 @@ export function AddContactForm({ ws, n }: { ws: string; n: number }) {
   )
 }
 
+/**
+ * Append one research note (#39).
+ *
+ * ---------------------------------------------------------------------------
+ * THIS FORM CANNOT EDIT, AND THERE IS NO SIBLING THAT CAN
+ * ---------------------------------------------------------------------------
+ * `ContactFields` below serves both add and edit from one component, which is
+ * right there and would be wrong here: the log is append-only, so an edit form
+ * would have no route to POST to. See the route header — an editable log stops
+ * answering the only question it exists for.
+ */
+export function AddProspectNoteForm({ ws, n }: { ws: string; n: number }) {
+  return (
+    <Disclosure label="Add a note">
+      {(close) => <ProspectNoteFields ws={ws} n={n} close={close} />}
+    </Disclosure>
+  )
+}
+
+function ProspectNoteFields({ ws, n, close }: { ws: string; n: number; close: () => void }) {
+  const add = useAddProspectNote(ws, n)
+  const [body, setBody] = useState('')
+  const [kind, setKind] = useState('')
+
+  return (
+    <>
+      <div className="space-y-3">
+        <Field
+          label="What you found"
+          hint="Line breaks are kept — a site audit reads as a list, not a paragraph."
+        >
+          <TextArea value={body} onChange={(e) => setBody(e.target.value)} rows={6} />
+        </Field>
+        <Field
+          label="Kind"
+          hint="Optional, free text — “site audit”, “competitor”, “timing”. Not a fixed list."
+        >
+          <TextInput value={kind} onChange={(e) => setKind(e.target.value)} />
+        </Field>
+      </div>
+      <FormActions
+        submitLabel="Append"
+        pending={add.isPending}
+        disabled={!body.trim()}
+        onCancel={close}
+        onSubmit={() =>
+          add.mutate(
+            { body: body.trim(), kind: kind.trim() || null },
+            {
+              onSuccess: () => {
+                setBody('')
+                setKind('')
+                close()
+              },
+            }
+          )
+        }
+      />
+    </>
+  )
+}
+
+/**
+ * Destroy one note. Hard — `sales.prospect_notes` has no `deleted_at`, so there
+ * is no bin behind this and `bk sales trash restore` has nothing to take.
+ *
+ * The confirmation types the note's **id** back, which is what the route
+ * requires. It is the weaker of this repo's two confirmation shapes and the
+ * reason is at `deleteProspectNote`: `kind` is nullable, so confirming on it
+ * would leave the common note unconfirmable.
+ */
+export function RemoveProspectNoteButton({
+  ws,
+  n,
+  note,
+}: {
+  ws: string
+  n: number
+  note: ProspectNote
+}) {
+  const remove = useRemoveProspectNote(ws, n)
+  return (
+    <Disclosure label="Remove" icon="pencil">
+      {(close) => (
+        <ConfirmDelete
+          target={String(note.id)}
+          targetLabel="note’s id"
+          pending={remove.isPending}
+          onCancel={close}
+          onConfirm={() => remove.mutate({ id: note.id }, { onSuccess: close })}
+        />
+      )}
+    </Disclosure>
+  )
+}
+
 export function EditContactForm({
   ws,
   n,
@@ -317,6 +475,8 @@ function ContactFields({
     role: contact?.role ?? '',
     email: contact?.email ?? '',
     phone: contact?.phone ?? '',
+    linkedin: contact?.linkedin ?? '',
+    decision_power: contact?.decision_power ?? '',
     notes: contact?.notes ?? '',
     is_primary: contact?.is_primary ?? false,
   })
@@ -339,6 +499,8 @@ function ContactFields({
     role: form.role.trim() || null,
     email: form.email.trim() || null,
     phone: form.phone.trim() || null,
+    linkedin: form.linkedin.trim() || null,
+    decision_power: form.decision_power || null,
     notes: form.notes.trim() || null,
     is_primary: form.is_primary,
   }
@@ -358,9 +520,28 @@ function ContactFields({
         <Field label="Phone">
           <TextInput value={form.phone} onChange={(e) => set('phone', e.target.value)} />
         </Field>
+        <Field label="LinkedIn" hint="Include https:// — the route refuses anything else.">
+          <TextInput
+            type="url"
+            value={form.linkedin}
+            onChange={(e) => set('linkedin', e.target.value)}
+          />
+        </Field>
+        <Field
+          label="Decision power"
+          hint="What they can DO in the deal, not their job title. The one who wants it is rarely the one who signs."
+        >
+          <VocabSelect
+            label="Decision power"
+            options={DECISION_POWERS}
+            placeholder="Not recorded"
+            value={form.decision_power}
+            onChange={(v) => set('decision_power', v)}
+          />
+        </Field>
       </div>
       <div className="mt-3 space-y-3">
-        <Field label="Notes">
+        <Field label="Notes" hint="Background, negotiation history, how they behave in a room.">
           <TextArea value={form.notes} onChange={(e) => set('notes', e.target.value)} />
         </Field>
         <label className="flex items-center gap-2 text-sm text-foreground">

@@ -43,6 +43,12 @@ export const SEARCH_TYPES = [
   'template',
   'document',
   'match',
+  // Migration 0009 (#39). Searchable and #number-less, like `contact` and
+  // `objection` — and it is the highest-value addition to this list since the
+  // corpus was written, because a research log is where a proper noun somebody
+  // half-remembers actually lives.
+  'prospect_note',
+  'strategy',
 ] as const
 export type SearchType = (typeof SEARCH_TYPES)[number]
 
@@ -136,6 +142,24 @@ export async function searchSales(opts: {
              ts_rank(o.search, ${tsquery})
       FROM sales.objections o JOIN sales.prospects p ON p.id = o.prospect_id
       WHERE o.workspace_id = ${opts.workspaceId} AND o.search @@ ${tsquery}`)
+  }
+  if (include('prospect_note')) {
+    parts.push(sql`
+      SELECT 'prospect_note', NULL::int, p.seq,
+             concat(coalesce(nullif(n.kind, ''), 'note'), ' · ', p.name),
+             left(n.body, 240),
+             ts_rank(n.search, ${tsquery})
+      FROM sales.prospect_notes n JOIN sales.prospects p ON p.id = n.prospect_id
+      WHERE n.workspace_id = ${opts.workspaceId} AND n.search @@ ${tsquery}`)
+  }
+  if (include('strategy')) {
+    parts.push(sql`
+      SELECT 'strategy', g.seq, NULL::int, g.name,
+             left(concat_ws(' · ', g.vertical, g.area, g.rationale), 240),
+             ts_rank(g.search, ${tsquery})
+      FROM sales.strategies g
+      WHERE g.workspace_id = ${opts.workspaceId} AND g.deleted_at IS NULL
+        AND g.search @@ ${tsquery}`)
   }
   if (include('product')) {
     parts.push(sql`

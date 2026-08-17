@@ -30,7 +30,7 @@
 // `bk guide` — it is the complete usage guide for the binary in the agent's hand.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { platformMetaBlock } from '@blackcode/platform-api'
+import { contractVersion, platformMetaBlock } from '@blackcode/platform-api'
 import { apiHandler, Errors, publicProject, appContext } from '@/lib/api'
 import { resolveAuth } from '@/lib/auth/resolve'
 import { getUserById } from '@/lib/db/queries/users'
@@ -86,7 +86,30 @@ export const GET = apiHandler(async (request: NextRequest) => {
     entity_types: ENTITY_TYPES,
   }
 
-  const { meta, workspace } = await platformMetaBlock(appContext, request, fresh, { currentApp })
+  /**
+   * One value an agent can poll instead of re-reading this whole block, and the
+   * `--help` tree behind it (sales #31, applied here too — the ask was for
+   * "each app's behaviour surface").
+   *
+   * DERIVED from `currentApp` and never typed. A hand-bumped integer is a
+   * second copy of a fact whose failure mode is the worst one available: it
+   * says "nothing changed" while something did, and an agent that trusts it
+   * skips the re-read it would otherwise have done.
+   *
+   * It is computed over exactly `currentApp`, so a vocabulary or limit added to
+   * the module that owns it moves this with no second edit. **Nothing per-user
+   * or per-deploy may be folded in** — `contractVersion`'s header says why that
+   * would look like it was working while being useless.
+   *
+   * NOT added to the three deprecated top-level keys below: those are frozen at
+   * the shape they had, and growing them during their own removal window is the
+   * opposite of deprecating them.
+   */
+  const contract_version = contractVersion(currentApp)
+
+  const { meta, workspace } = await platformMetaBlock(appContext, request, fresh, {
+    currentApp: { ...currentApp, contract_version },
+  })
 
   // Only this app's own entities are left to fetch — the platform helper has
   // already resolved the workspace and read the members.

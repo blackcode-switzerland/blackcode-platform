@@ -22,7 +22,7 @@ import { resolveActor } from '@/lib/actor'
 import { clearMatch, listMatches, prospectIdBySeq, setMatch } from '@/lib/db/queries/prospect-children'
 import { getProductBySeq, getTemplateBySeq } from '@/lib/db/queries/catalog'
 import { publicMatch } from '@/lib/views'
-import { numberOr, requireNumberParam, str } from '@/lib/http-input'
+import { bodyNumber, numberOr, requireNumberParam, str } from '@/lib/http-input'
 
 interface Params {
   params: Promise<{ ws: string; n: string }>
@@ -54,7 +54,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   const prospectId = await requireProspect(ctx.workspace.id, n)
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
 
-  const productNumber = numberOr(str(body?.product) ?? null)
+  const productNumber = bodyNumber(body?.product)
   if (productNumber == null) {
     throw Errors.badRequest(
       'missing_product',
@@ -72,7 +72,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   }
 
   let templateId: number | null = null
-  const templateNumber = numberOr(str(body?.template) ?? null)
+  const templateNumber = bodyNumber(body?.template)
   if (templateNumber != null) {
     // `tpl`, not `template`. A local called `template` produces `template.id`,
     // which the cross-schema guard reads as a reference to the `template` app's

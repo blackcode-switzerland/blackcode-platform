@@ -44,6 +44,7 @@ import {
   meetings,
   products,
   prospects,
+  strategies,
   templates,
 } from '../schema'
 import { recordEvent } from './events'
@@ -56,8 +57,14 @@ import type { Actor } from '@/lib/actor'
  * `contact` is absent and that is the whole of the reason it is worth a comment:
  * a contact has no #number, so `contact:12` is not an address a caller could
  * type. Contacts are binned and restored WITH their prospect and are never
- * addressed on their own. The Go side declares the same six in
+ * addressed on their own. The Go side declares the same list in
  * `appverbs.Config.TrashTypes`; `trash-types.test.ts` holds the two together.
+ *
+ * `prospect_note` is absent for `contact`'s reason and for one more besides: a
+ * note has no #number, and its delete is HARD by design (migration 0009) —
+ * there is no `deleted_at` for a bin to find. `strategy` IS here, because it
+ * has a #number and retiring a segment is exactly the reversible act a bin is
+ * for.
  */
 const BINNABLE = {
   prospect: prospects,
@@ -66,6 +73,7 @@ const BINNABLE = {
   product: products,
   template: templates,
   document: documents,
+  strategy: strategies,
 } as const
 
 export type TrashType = keyof typeof BINNABLE

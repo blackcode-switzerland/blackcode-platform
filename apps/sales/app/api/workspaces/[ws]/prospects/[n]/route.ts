@@ -32,10 +32,19 @@ import {
   softDeleteProspect,
   updateProspect,
 } from '@/lib/db/queries/prospects'
-import { publicProspect } from '@/lib/views'
-import { PROSPECT_NAME_MAX } from '@/lib/limits'
+import { listContacts } from '@/lib/db/queries/prospect-children'
+import { publicContact, publicProspect } from '@/lib/views'
+import {
+  CONTACT_URL_MAX,
+  GAME_PLAN_MAX,
+  PROSPECT_ADDRESS_MAX,
+  PROSPECT_NAME_MAX,
+} from '@/lib/limits'
+import { resolveStrategy } from '@/lib/api/strategy-ref'
 import {
   nullableStr,
+  bodyNumber,
+  requireHttpUrl,
   requireMaxLength,
   requireMoney,
   requireNumberParam,
@@ -54,7 +63,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const row = await getProspectBySeq(ctx.workspace.id, seq)
   if (!row) throw prospectNotFound(seq)
 
-  const journey = await listJourney(row.id)
+  const [journey, contactRows] = await Promise.all([listJourney(row.id), listContacts(row.id)])
 
   return NextResponse.json({
     ...publicProspect(row, ctx.workspace.slug),
@@ -68,6 +77,20 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
       actor: s.actor_label,
       note: s.note,
     })),
+    // ---------------------------------------------------------------------
+    // CONTACTS ARE SERVED HERE, AND THAT IS THE WHOLE FIX FOR HALF OF #34/#33
+    // ---------------------------------------------------------------------
+    // `sales.contacts` has carried name/role/email/phone/notes since 0001 and
+    // both issues were still written as "a prospect is just a name + company +
+    // stage — reps can't call or email". The fields existed; the prospect is
+    // where somebody looks, and they were one level down behind a sub-route
+    // nobody had reason to guess at.
+    //
+    // So they are part of the prospect now, for the journey's reason directly
+    // above: there is no view that wants a prospect without the people at it.
+    // `…/contacts` stays the write surface and the paged read; this is the
+    // single-prospect convenience that makes them findable at all.
+    contacts: contactRows.map(publicContact),
     // `links` is GONE from this response (2026-08-10, Phase 3). It read
     // `platform.links`, the shared cross-app index this app no longer writes —
     // so after the split it could only ever have returned another app's rows or,
@@ -107,6 +130,29 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
     }
   }
 
+  // The identity card (#34). Three-way like every other patchable field, so
+  // `--website ""` can CLEAR one that turned out to be wrong.
+  const website = nullableStr(body?.website)
+  if (website) {
+    requireMaxLength(website, CONTACT_URL_MAX, 'website')
+    requireHttpUrl(website, 'website', 'a company website', 'pass the full url including https://')
+  }
+  const address = nullableStr(body?.address)
+  if (address) requireMaxLength(address, PROSPECT_ADDRESS_MAX, 'address')
+
+  // `strategy` is three-way like the rest: `null` unlinks the segment, a
+  // #number links it, absent leaves it alone. Unlinking has to be expressible —
+  // a prospect that turned out not to belong to a segment must not be stuck in
+  // it. `strategy_id` is a serial and is resolved here, never sent.
+  let strategyId: number | null | undefined
+  if (body?.strategy === null) {
+    strategyId = null
+  } else if (body?.strategy !== undefined) {
+    strategyId = await resolveStrategy(ctx.workspace.id, bodyNumber(body.strategy))
+  }
+  const gamePlan = nullableStr(body?.game_plan)
+  if (gamePlan) requireMaxLength(gamePlan, GAME_PLAN_MAX, 'game_plan')
+
   // `stage` is NOT accepted here, and the refusal is explicit rather than a
   // silent ignore. Moving a deal writes a journey step and may close it; a PATCH
   // that did half of that would leave a ladder disagreeing with the stage column
@@ -132,6 +178,10 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
       ownerUserId,
       source: nullableStr(body?.source),
       summary: nullableStr(body?.summary),
+      website,
+      address,
+      strategyId,
+      gamePlan,
     },
     actor
   )

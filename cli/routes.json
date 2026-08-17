@@ -681,8 +681,20 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}/prospects/{n}/notes/{noteId}",
+      "command": "bk sales prospect note rm",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/prospects/{n}/objections/{oid}",
       "command": "bk sales objection rm",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/strategies/{n}",
+      "command": "bk sales strategy rm",
       "app": "sales"
     },
     {
@@ -867,6 +879,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/prospects/{n}/notes",
+      "command": "bk sales prospect note list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/prospects/{n}/objections",
       "command": "bk sales objection list",
       "app": "sales"
@@ -875,6 +893,18 @@
       "method": "GET",
       "path": "/api/workspaces/{ws}/sales-search",
       "command": "bk sales search",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/strategies",
+      "command": "bk sales strategy list",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/strategies/{n}",
+      "command": "bk sales strategy show",
       "app": "sales"
     },
     {
@@ -953,6 +983,12 @@
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/prospects/{n}/objections/{oid}",
       "command": "bk sales objection counter, bk sales objection resolve",
+      "app": "sales"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/strategies/{n}",
+      "command": "bk sales strategy edit",
       "app": "sales"
     },
     {
@@ -1065,6 +1101,12 @@
     },
     {
       "method": "POST",
+      "path": "/api/workspaces/{ws}/prospects/{n}/notes",
+      "command": "bk sales prospect note add",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
       "path": "/api/workspaces/{ws}/prospects/{n}/objections",
       "command": "bk sales objection raise",
       "app": "sales"
@@ -1073,6 +1115,12 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/prospects/{n}/stage",
       "command": "bk sales prospect stage",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/strategies",
+      "command": "bk sales strategy add",
       "app": "sales"
     },
     {

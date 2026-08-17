@@ -69,10 +69,19 @@ type SalesJourneyStep struct {
 
 // Prospect is the core object: the company AND the deal in one row (D-5).
 type Prospect struct {
-	Number       int             `json:"number" yaml:"number"`
-	Name         string          `json:"name" yaml:"name"`
-	City         string          `json:"city" yaml:"city"`
-	Sector       string          `json:"sector" yaml:"sector"`
+	Number int    `json:"number" yaml:"number"`
+	Name   string `json:"name" yaml:"name"`
+	City   string `json:"city" yaml:"city"`
+	Sector string `json:"sector" yaml:"sector"`
+	// The identity card (sales #34, migration 0008). `website` is the COMPANY's
+	// site; a PERSON's link is SalesContact.LinkedIn.
+	Website string `json:"website" yaml:"website"`
+	Address string `json:"address" yaml:"address"`
+	// The segment strategy this prospect belongs to (#37), by #NUMBER — never
+	// the row id. Zero means unlinked. `GamePlan` is the angle for THIS
+	// prospect on top of the shared one (#35).
+	Strategy     int             `json:"strategy" yaml:"strategy"`
+	GamePlan     string          `json:"game_plan" yaml:"game_plan"`
 	Stage        string          `json:"stage" yaml:"stage"`
 	Value        string          `json:"value" yaml:"value"`
 	Currency     string          `json:"currency" yaml:"currency"`
@@ -90,6 +99,12 @@ type Prospect struct {
 
 	// Served by the single-prospect route only; empty on a listing.
 	Journey []SalesJourneyStep `json:"journey,omitempty" yaml:"journey,omitempty"`
+	// Likewise — and it is here because sales #34 and #33 were both filed as
+	// "the prospect record holds nothing about the people" while `contacts` had
+	// held name/role/email/phone/notes since day one. They were reachable only
+	// through `bk sales contact list <n>`, which is a command you have to know
+	// exists. `prospect show` prints them now.
+	Contacts []SalesContact `json:"contacts,omitempty" yaml:"contacts,omitempty"`
 
 	// There is no `Links` field, and `SalesLink` is gone (2026-08-12). The
 	// prospect route stopped serving `links` on 2026-08-10 when this app
@@ -177,6 +192,10 @@ type CreateProspectRequest struct {
 	Name     string `json:"name"`
 	City     string `json:"city,omitempty"`
 	Sector   string `json:"sector,omitempty"`
+	Website  string `json:"website,omitempty"`
+	Address  string `json:"address,omitempty"`
+	Strategy int    `json:"strategy,omitempty"`
+	GamePlan string `json:"game_plan,omitempty"`
 	Stage    string `json:"stage,omitempty"`
 	Value    string `json:"value,omitempty"`
 	Currency string `json:"currency,omitempty"`
@@ -223,9 +242,16 @@ func Set(v string) *NullString { n := NullString(v); return &n }
 
 // UpdateProspectRequest is the PATCH body. See NullString for the three states.
 type UpdateProspectRequest struct {
-	Name     *NullString `json:"name,omitempty"`
-	City     *NullString `json:"city,omitempty"`
-	Sector   *NullString `json:"sector,omitempty"`
+	Name    *NullString `json:"name,omitempty"`
+	City    *NullString `json:"city,omitempty"`
+	Sector  *NullString `json:"sector,omitempty"`
+	Website *NullString `json:"website,omitempty"`
+	Address *NullString `json:"address,omitempty"`
+	// `*NullString` rather than `*int` so `--strategy ""` can UNLINK: the same
+	// three states every other patchable field has. The route reads a JSON
+	// number, a numeric string or null.
+	Strategy *NullString `json:"strategy,omitempty"`
+	GamePlan *NullString `json:"game_plan,omitempty"`
 	Value    *NullString `json:"value,omitempty"`
 	Currency *NullString `json:"currency,omitempty"`
 	Owner    *NullString `json:"owner,omitempty"`
@@ -295,22 +321,30 @@ func salesPath(slugOrID, suffix string) string {
 // row id is never exposed; a record without one is reached through its parent.
 
 type SalesContact struct {
-	ID        int    `json:"id" yaml:"id"`
-	Name      string `json:"name" yaml:"name"`
-	Role      string `json:"role" yaml:"role"`
-	Email     string `json:"email" yaml:"email"`
-	Phone     string `json:"phone" yaml:"phone"`
-	IsPrimary bool   `json:"is_primary" yaml:"is_primary"`
-	Notes     string `json:"notes" yaml:"notes"`
+	ID    int    `json:"id" yaml:"id"`
+	Name  string `json:"name" yaml:"name"`
+	Role  string `json:"role" yaml:"role"`
+	Email string `json:"email" yaml:"email"`
+	Phone string `json:"phone" yaml:"phone"`
+	// Migration 0008. LinkedIn is sales #34's one genuinely homeless identity
+	// field; DecisionPower is #33's structured half — what this person can DO
+	// in the deal, as opposed to `Notes`, which is the freeform half and
+	// predates the issue.
+	LinkedIn      string `json:"linkedin" yaml:"linkedin"`
+	DecisionPower string `json:"decision_power" yaml:"decision_power"`
+	IsPrimary     bool   `json:"is_primary" yaml:"is_primary"`
+	Notes         string `json:"notes" yaml:"notes"`
 }
 
 type ContactRequest struct {
-	Name      string `json:"name,omitempty"`
-	Role      string `json:"role,omitempty"`
-	Email     string `json:"email,omitempty"`
-	Phone     string `json:"phone,omitempty"`
-	IsPrimary *bool  `json:"is_primary,omitempty"`
-	Notes     string `json:"notes,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Role          string `json:"role,omitempty"`
+	Email         string `json:"email,omitempty"`
+	Phone         string `json:"phone,omitempty"`
+	LinkedIn      string `json:"linkedin,omitempty"`
+	DecisionPower string `json:"decision_power,omitempty"`
+	IsPrimary     *bool  `json:"is_primary,omitempty"`
+	Notes         string `json:"notes,omitempty"`
 }
 
 func (c *Client) ListContacts(ws string, prospect int) ([]SalesContact, error) {
@@ -494,6 +528,181 @@ func (c *Client) SetMatch(ws string, prospect int, req SetMatchRequest) (*SalesM
 		return nil, err
 	}
 	return &out, nil
+}
+
+// SalesStrategy is a segment strategy (#37): WHY a vertical/area was chosen and
+// what we lead with. Reusable across prospects, and addressable — it has a
+// #number and a URN, unlike the five prospect children.
+type SalesStrategy struct {
+	Number      int                    `json:"number" yaml:"number"`
+	Name        string                 `json:"name" yaml:"name"`
+	Vertical    string                 `json:"vertical" yaml:"vertical"`
+	Area        string                 `json:"area" yaml:"area"`
+	Rationale   string                 `json:"rationale" yaml:"rationale"`
+	CaseStudies string                 `json:"case_studies" yaml:"case_studies"`
+	Products    []SalesStrategyProduct `json:"products" yaml:"products"`
+	// How many live deals this segment covers. The number you want before
+	// retiring one — the server reports it rather than making the caller count.
+	ProspectCount int    `json:"prospect_count" yaml:"prospect_count"`
+	URN           string `json:"urn" yaml:"urn"`
+	CreatedAt     string `json:"created_at" yaml:"created_at"`
+	UpdatedAt     string `json:"updated_at" yaml:"updated_at"`
+	DeletedAt     string `json:"deleted_at" yaml:"deleted_at"`
+
+	// Served by the single-strategy route only; empty on a listing.
+	Prospects []SalesStrategyProspect `json:"prospects,omitempty" yaml:"prospects,omitempty"`
+}
+
+type SalesStrategyProduct struct {
+	Number int    `json:"number" yaml:"number"`
+	Name   string `json:"name" yaml:"name"`
+}
+
+type SalesStrategyProspect struct {
+	Number int    `json:"number" yaml:"number"`
+	Name   string `json:"name" yaml:"name"`
+	Stage  string `json:"stage" yaml:"stage"`
+}
+
+// StrategyRequest is both the POST body and the PATCH body.
+//
+// `Products` is a POINTER to a slice so the three states stay distinct on the
+// wire: nil omits the key (leave the set alone), an empty non-nil slice
+// marshals to `[]` (clear it), and a populated one replaces it. A plain
+// `[]int` with `omitempty` would make "clear" unexpressible — the same trap
+// NullString exists for on the string fields.
+type StrategyRequest struct {
+	Name        string      `json:"name,omitempty"`
+	Vertical    *NullString `json:"vertical,omitempty"`
+	Area        *NullString `json:"area,omitempty"`
+	Rationale   *NullString `json:"rationale,omitempty"`
+	CaseStudies *NullString `json:"case_studies,omitempty"`
+	Products    *[]int      `json:"products,omitempty"`
+}
+
+func (c *Client) ListStrategies(ws, query string) ([]SalesStrategy, error) {
+	var resp struct {
+		Data []SalesStrategy `json:"data"`
+	}
+	p := salesPath(ws, "strategies")
+	if q := strings.TrimSpace(query); q != "" {
+		p += "?q=" + url.QueryEscape(q)
+	}
+	if err := c.get(p, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) GetStrategy(ws string, number int) (*SalesStrategy, error) {
+	var out SalesStrategy
+	if err := c.get(salesPath(ws, fmt.Sprintf("strategies/%d", number)), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) CreateStrategy(ws string, req StrategyRequest) (*SalesStrategy, error) {
+	var out SalesStrategy
+	if err := c.postJSON(salesPath(ws, "strategies"), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) UpdateStrategy(ws string, number int, req StrategyRequest) (*SalesStrategy, error) {
+	var out SalesStrategy
+	p := salesPath(ws, fmt.Sprintf("strategies/%d", number))
+	if err := c.patchJSON(p, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SalesStrategyDeleted carries `prospect_count` because binning a segment leaves
+// that many live deals pointing at something no longer in the listing, and the
+// caller should learn it from the command rather than from a prospect page
+// three days later.
+type SalesStrategyDeleted struct {
+	Deleted       bool   `json:"deleted" yaml:"deleted"`
+	Type          string `json:"type" yaml:"type"`
+	Number        int    `json:"number" yaml:"number"`
+	Name          string `json:"name" yaml:"name"`
+	ProspectCount int    `json:"prospect_count" yaml:"prospect_count"`
+}
+
+func (c *Client) DeleteStrategy(ws string, number int) (*SalesStrategyDeleted, error) {
+	var out SalesStrategyDeleted
+	p := salesPath(ws, fmt.Sprintf("strategies/%d", number))
+	if err := c.deleteJSON(p, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SalesProspectNote is one entry of a prospect's research log (#39).
+//
+// `ID`, not `Number`: a note is never addressed on its own, so it has no
+// #number — the same call the four other prospect children make.
+//
+// There is NO UpdateProspectNote and no `edit` command. The log is append-only:
+// `prospect edit --summary` is the field you overwrite, and this is the one you
+// add to. See the route header.
+type SalesProspectNote struct {
+	ID        int    `json:"id" yaml:"id"`
+	Body      string `json:"body" yaml:"body"`
+	Kind      string `json:"kind" yaml:"kind"`
+	Author    string `json:"author" yaml:"author"`
+	CreatedAt string `json:"created_at" yaml:"created_at"`
+}
+
+type AddProspectNoteRequest struct {
+	Body string `json:"body"`
+	Kind string `json:"kind,omitempty"`
+}
+
+func (c *Client) ListProspectNotes(ws string, prospect int) ([]SalesProspectNote, error) {
+	var resp struct {
+		Data []SalesProspectNote `json:"data"`
+	}
+	p := salesPath(ws, fmt.Sprintf("prospects/%d/notes", prospect))
+	if err := c.get(p, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) AddProspectNote(ws string, prospect int, req AddProspectNoteRequest) (*SalesProspectNote, error) {
+	var out SalesProspectNote
+	p := salesPath(ws, fmt.Sprintf("prospects/%d/notes", prospect))
+	if err := c.postJSON(p, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DeleteProspectNote destroys a note. `confirm` must be the note's own id and is
+// checked BY THE SERVER before anything is removed — sending it from here is not
+// the guard, it is how the guard is satisfied.
+func (c *Client) DeleteProspectNote(ws string, prospect, noteID int, confirm string) (*SalesDeletedNote, error) {
+	var out SalesDeletedNote
+	p := salesPath(ws, fmt.Sprintf("prospects/%d/notes/%d", prospect, noteID)) +
+		"?confirm=" + url.QueryEscape(confirm)
+	if err := c.deleteJSON(p, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SalesDeletedNote is the RECEIPT for an irreversible delete: the row is gone,
+// so this is the last record of what it said. CLAUDE.md — an irreversible
+// command reports WHAT it did, not how many.
+type SalesDeletedNote struct {
+	Deleted bool   `json:"deleted" yaml:"deleted"`
+	Type    string `json:"type" yaml:"type"`
+	ID      int    `json:"id" yaml:"id"`
+	Kind    string `json:"kind" yaml:"kind"`
+	Body    string `json:"body" yaml:"body"`
 }
 
 func (c *Client) ClearMatch(ws string, prospect, product int) error {
@@ -774,11 +983,32 @@ type SalesProduct struct {
 	Pitch       string   `json:"pitch" yaml:"pitch"`
 	StatusLabel string   `json:"status_label" yaml:"status_label"`
 	Refs        []string `json:"refs" yaml:"refs"`
-	URN         string   `json:"urn" yaml:"urn"`
-	DeletedAt   string   `json:"deleted_at" yaml:"deleted_at"`
+
+	// ── INTERNAL-ONLY (migration 0011, sales #27) ────────────────────────
+	// What to quote if somebody asks. Served to an authenticated workspace
+	// member and to nothing else — if a public product page is ever built
+	// (#26) it needs its own projection that omits these three.
+	InternalPriceMin  string `json:"internal_price_min" yaml:"internal_price_min"`
+	InternalPriceMax  string `json:"internal_price_max" yaml:"internal_price_max"`
+	InternalPriceNote string `json:"internal_price_note" yaml:"internal_price_note"`
+
+	// How far our own site carries it (sales #29): `internal | external`.
+	// `ExternalURL` is where an external product actually lives — its own
+	// field rather than an entry in Refs, which is reference CUSTOMERS.
+	Reach       string `json:"reach" yaml:"reach"`
+	ExternalURL string `json:"external_url" yaml:"external_url"`
+
+	URN       string `json:"urn" yaml:"urn"`
+	DeletedAt string `json:"deleted_at" yaml:"deleted_at"`
 }
 
 type ProductRequest struct {
+	InternalPriceMin  string `json:"internal_price_min,omitempty"`
+	InternalPriceMax  string `json:"internal_price_max,omitempty"`
+	InternalPriceNote string `json:"internal_price_note,omitempty"`
+	Reach             string `json:"reach,omitempty"`
+	ExternalURL       string `json:"external_url,omitempty"`
+
 	Category    string   `json:"category,omitempty"`
 	Name        string   `json:"name,omitempty"`
 	PriceLabel  string   `json:"price_label,omitempty"`

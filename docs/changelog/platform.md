@@ -7,6 +7,49 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-17 — `bk meta --contract-version`: poll for drift in one line
+
+**Additive, nothing breaking.** Agents write per-app skill files that hardcode
+command lists and vocabularies, and every server change risks one going silently
+stale. The alternatives were to trust wrong information or to re-read the whole
+`--help` tree and `bk meta` defensively on every run.
+
+`GET /api/meta` now serves **`apps.<slug>.contract_version`** — a 16-character
+fingerprint of that app's vocabularies, limits and type lists — and the CLI
+prints it alone:
+
+```bash
+now=$(bk meta --contract-version)
+[ "$now" = "$(cat .bk-contract)" ] || { bk meta; bk guide; echo "$now" > .bk-contract; }
+```
+
+Unchanged means nothing in that app's contract has moved and the full re-read
+can be skipped. Served by **both** `apps/issues` and `apps/sales`.
+
+**It is DERIVED, not hand-bumped**, and that is the design rather than a
+shortcut. The issue asked for "an incrementing int or semver"; a hand-maintained
+number is a second copy of a fact, and its failure mode is the worst one
+available — it says "nothing changed" while something did, so an agent that
+trusts it skips the re-read it would otherwise have done. A hash over the
+contract cannot be forgotten.
+
+Two properties it is safe to rely on, both pinned by tests
+(`packages/platform-api/test/contract-version.test.ts`):
+
+- **it moves** when a vocabulary gains or renames a value, a limit changes, a
+  type list grows, or an ordered list is reordered;
+- **it does not move** on a redeploy that changed nothing, on a per-user
+  difference, or when object keys are merely reordered in source. A version that
+  changed on every deploy would always say "re-read everything" — the exact cost
+  it exists to remove, while looking like it worked.
+
+Nothing per-user and nothing per-deploy is folded in. A server that predates the
+field makes `--contract-version` an error naming the fallback, rather than
+printing an empty line: `""` and "unchanged" must not look alike to a caller
+diffing two runs.
+
+---
+
 ## 2026-08-14 — two apps on localhost no longer share one session
 
 **Local development only. Nothing changes on a deployed host.**

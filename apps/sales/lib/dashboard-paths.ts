@@ -43,6 +43,11 @@ export const ENTITY_TYPES = [
   'product',
   'template',
   'document',
+  // Migration 0010 (#37). Independently addressable — you browse the list and
+  // cite one — which is the test this comment states. `prospect_note` arrived
+  // in the same week and is deliberately NOT here for the same reason contacts
+  // are not: it is only ever reached through its prospect.
+  'strategy',
 ] as const
 export type SalesEntityType = (typeof ENTITY_TYPES)[number]
 
@@ -73,6 +78,7 @@ export const LISTING_SEGMENT: Record<Exclude<SalesEntityType, 'prospect'>, strin
   product: 'products',
   template: 'templates',
   document: 'documents',
+  strategy: 'strategies',
 }
 
 /**
