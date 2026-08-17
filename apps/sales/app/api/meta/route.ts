@@ -34,7 +34,7 @@
 // before the nested one existed; this app has never had a caller, so shipping
 // the deprecated spelling would be creating something to remove.
 import { NextRequest, NextResponse } from 'next/server'
-import { Errors, platformMetaBlock } from '@blackcode/platform-api'
+import { Errors, contractVersion, platformMetaBlock } from '@blackcode/platform-api'
 import { apiHandler, appContext } from '@/lib/api'
 import { listLabels } from '@/lib/db/queries/labels'
 import { publicLabel } from '@/lib/views'
@@ -63,7 +63,25 @@ export const GET = apiHandler(async (request: NextRequest) => {
     retention_days: RETENTION_DAYS,
   }
 
-  const { meta, workspace } = await platformMetaBlock(appContext, request, user, { currentApp })
+  /**
+   * One value an agent can poll instead of re-reading this whole block (#31).
+   *
+   * DERIVED from `currentApp`, never typed: a hand-bumped integer is a second
+   * copy of a fact, and the failure of a second copy here is the worst one
+   * available — it says "nothing changed" while something did, and an agent
+   * that trusts it skips the re-read it would otherwise have done.
+   *
+   * It is computed AFTER `currentApp` and over exactly that object, so a
+   * vocabulary or limit added to the module that owns it moves this with no
+   * second edit. **Nothing per-user or per-deploy may be folded in** — see
+   * `contractVersion`'s header for why that would look like it was working
+   * while being useless.
+   */
+  const contract_version = contractVersion(currentApp)
+
+  const { meta, workspace } = await platformMetaBlock(appContext, request, user, {
+    currentApp: { ...currentApp, contract_version },
+  })
 
   // The one app-scoped list worth grounding an agent on before its first write.
   // Prospects are NOT listed here: a workspace can hold thousands and `bk sales

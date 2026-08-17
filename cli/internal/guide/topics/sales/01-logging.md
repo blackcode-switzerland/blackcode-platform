@@ -83,11 +83,63 @@ counters actually worked.
 one thing in this app with no recycle bin behind them. If it stopped mattering,
 resolve it instead.
 
+## What you know about them, as a log
+
+```bash
+bk sales prospect note add 12 --kind "site audit" --text "Wix site. 4 console errors on load, no SSL on booking."
+bk sales prospect note list 12
+```
+
+**This is append-only, and it is the difference between it and `--summary`.**
+`bk sales prospect edit --summary` OVERWRITES: "where this deal stands" has one
+answer at a time, and replacing it is correct. A research log is the other
+shape — a sequence of observations, each true when it was written — and before
+this existed, recording a second finding meant destroying the first.
+
+So: no `note edit`. If a finding turns out to be wrong, append the correction;
+the log is what tells you what was known and when, and an editable one stops
+being able to answer that. `--kind` is a free-text bucket, not a vocabulary.
+
+`bk sales prospect note rm` **destroys the entry permanently** — the log has no
+recycle bin — and requires `--confirm <note-id>`. It prints the whole note it
+destroyed, which is the real protection: a wrong `rm` is visible in the next
+line rather than in a month. Reach for it when a note landed on the wrong
+prospect, not when a note turned out to be wrong.
+
+Notes are searchable with `bk sales search`, which is often how you get back to
+one: a half-remembered name from a site audit is exactly what the log holds and
+nothing else does.
+
 ## The people
 
 ```bash
-bk sales contact add 12 --name "Julien Roches" --role "Co-founder" --primary
+bk sales contact add 12 --name "Julien Roches" --role "Co-founder" --primary \
+  --email j@acme.ch --phone "+41 79 000 00 00" \
+  --linkedin https://www.linkedin.com/in/julien-roches \
+  --decision-power champion --notes "Wants it. Cannot sign for it."
 bk sales contact list 12
+```
+
+**The person fields are on the CONTACT, not on the prospect.** A prospect is the
+company and the deal in one row; a phone number, an email, a LinkedIn profile
+and a role belong to a human being, and that is a contact. Two issues were filed
+saying the app could not hold any of it, because the prospect is where you look
+and the contacts were one command away. `bk sales prospect show <n>` prints them
+now, so the record is not silent about the people at it.
+
+`--decision-power` records what somebody can **do** in the deal rather than
+where they sit on an org chart — run `bk meta` for the current values. It is
+worth filling in even when it feels obvious: the person who wants the thing and
+the person who can sign for it are usually different people, and a rep who has
+not written down which is which spends three meetings with somebody delighted
+and powerless. `--notes` stays the freeform half — background, negotiation
+history, how they behave in a room.
+
+The company's own details — its site and its postal address — are on the
+prospect, because a company has one of each and its people share them:
+
+```bash
+bk sales prospect edit 12 --website https://acme.ch --address "Rue du Rhône 42, 1204 Genève"
 ```
 
 Contacts are listed with an **ID**, and that id is what `edit` and `rm` take. A

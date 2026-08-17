@@ -88,7 +88,7 @@ func newJourneyAddCmd() *cobra.Command {
 		Use: "add <prospect> --stage <stage>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n}," +
 			"POST /api/workspaces/{ws}/prospects/{n}/journey"},
-		Short:       "Record a journey step WITHOUT moving the deal",
+		Short: "Record a journey step WITHOUT moving the deal",
 		Long: `Add a step to the ladder without changing the prospect's stage.
 
 To MOVE the deal, use "bk sales prospect stage <n> <stage>" — that writes the

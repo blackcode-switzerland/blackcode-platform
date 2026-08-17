@@ -71,6 +71,12 @@ export interface ProductInput {
   fit?: string[] | null
   pitch?: string | null
   statusLabel?: string | null
+  /** Migration 0011 — internal-only guidance (#27) and reach (#29). */
+  internalPriceMin?: string | null
+  internalPriceMax?: string | null
+  internalPriceNote?: string | null
+  reach?: string
+  externalUrl?: string | null
   refs?: string[] | null
 }
 
@@ -98,6 +104,11 @@ export async function createProduct(
         pitch: input.pitch ?? null,
         status_label: input.statusLabel ?? null,
         refs: input.refs ?? null,
+        internal_price_min: input.internalPriceMin ?? null,
+        internal_price_max: input.internalPriceMax ?? null,
+        internal_price_note: input.internalPriceNote ?? null,
+        reach: input.reach ?? 'internal',
+        external_url: input.externalUrl ?? null,
       })
       .returning()
     if (!row) throw new Error('product insert returned nothing')
@@ -136,6 +147,11 @@ export async function updateProduct(
     if (input.pitch !== undefined) values.pitch = input.pitch
     if (input.statusLabel !== undefined) values.status_label = input.statusLabel
     if (input.refs !== undefined) values.refs = input.refs
+    if (input.internalPriceMin !== undefined) values.internal_price_min = input.internalPriceMin
+    if (input.internalPriceMax !== undefined) values.internal_price_max = input.internalPriceMax
+    if (input.internalPriceNote !== undefined) values.internal_price_note = input.internalPriceNote
+    if (input.reach !== undefined) values.reach = input.reach
+    if (input.externalUrl !== undefined) values.external_url = input.externalUrl
 
     const [row] = await tx
       .update(products)

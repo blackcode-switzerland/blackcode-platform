@@ -34,7 +34,7 @@ import (
 // two together — a `--type` this binary accepts and the server does not would
 // fail on a round trip, and one the server accepts and this does not is a
 // capability nobody can reach.
-var trashTypes = []string{"prospect", "meeting", "communication", "product", "template", "document"}
+var trashTypes = []string{"prospect", "meeting", "communication", "product", "template", "document", "strategy"}
 
 // THE SUBSET THIS APP SERVES, AND WHY EACH ABSENCE IS PERMANENT (D-36).
 //

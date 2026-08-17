@@ -395,6 +395,14 @@ describe('read-only is a property of the tree', () => {
         // the reason this case reads `codeOf(...)` rather than the file.
         'components/prospects/prospect-detail.tsx',
       ],
+      [
+        'components/strategies/strategy-forms.tsx',
+        // Same shape again (#37). `AddStrategyForm` is mounted only inside the
+        // page's `WriteGate`, and `EditStrategyForm` only inside its
+        // `canWrite &&` branch — so the forms are the editing surface, never a
+        // thing a read-only viewer can reach.
+        'components/strategies/strategies-page.tsx',
+      ],
     ])
 
     const ungated: string[] = []

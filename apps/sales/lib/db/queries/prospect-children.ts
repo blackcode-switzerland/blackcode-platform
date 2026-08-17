@@ -38,11 +38,12 @@ import {
   matches,
   objections,
   products,
+  prospectNotes,
   prospects,
   stageEntries,
   templates,
 } from '../schema'
-import type { Contact, Match, Objection, StageEntry } from '../schema'
+import type { Contact, Match, Objection, ProspectNote, StageEntry } from '../schema'
 import { recordEvent } from './events'
 import type { Actor } from '@/lib/actor'
 
@@ -86,6 +87,9 @@ export interface ContactInput {
   phone?: string | null
   isPrimary?: boolean
   notes?: string | null
+  /** Migration 0008 — the identity card (#34) and #33's structured half. */
+  linkedin?: string | null
+  decisionPower?: string | null
 }
 
 export async function addContact(
@@ -108,6 +112,8 @@ export async function addContact(
         phone: input.phone ?? null,
         is_primary: input.isPrimary ?? false,
         notes: input.notes ?? null,
+        linkedin: input.linkedin ?? null,
+        decision_power: input.decisionPower ?? null,
       })
       .returning()
     if (!row) throw new Error('contact insert returned nothing')
@@ -150,6 +156,8 @@ export async function updateContact(
     if (input.email !== undefined) values.email = input.email
     if (input.phone !== undefined) values.phone = input.phone
     if (input.notes !== undefined) values.notes = input.notes
+    if (input.linkedin !== undefined) values.linkedin = input.linkedin
+    if (input.decisionPower !== undefined) values.decision_power = input.decisionPower
     if (input.isPrimary !== undefined) values.is_primary = input.isPrimary
 
     const [row] = await tx
@@ -487,6 +495,152 @@ export async function deleteObjection(
     })
     return { status: 'deleted' as const, row }
   })
+}
+
+// ---------------------------------------------------------------------------
+// prospect_notes — the research log (#39). APPEND-ONLY: no update function
+// ---------------------------------------------------------------------------
+//
+//   ┌────────────────────────────────────────────────────────────────────────┐
+//   │ THERE IS NO `updateProspectNote`, AND ADDING ONE UNDOES THIS TABLE.    │
+//   └────────────────────────────────────────────────────────────────────────┘
+//
+// `prospects.summary` is the field you overwrite; this is the one you add to.
+// The issue that produced it was filed because there was only the former, and a
+// researcher had to destroy a prior finding to record a new one. An editable log
+// answers "what do we think now" — which `summary` already answers — and stops
+// answering "what did we know, and when", which is the only thing it is for.
+// `schema.ts` at `prospectNotes` has the rest.
+
+export async function listProspectNotes(prospectId: number): Promise<ProspectNote[]> {
+  const db = getDb()
+  return await db
+    .select()
+    .from(prospectNotes)
+    .where(eq(prospectNotes.prospect_id, prospectId))
+    // Newest first: a research log is read from the top, and the reader wants
+    // the most recent observation before the oldest one.
+    .orderBy(desc(prospectNotes.created_at), desc(prospectNotes.id))
+}
+
+export async function addProspectNote(
+  workspaceId: number,
+  prospectId: number,
+  input: { body: string; kind?: string | null },
+  actor: Actor
+): Promise<ProspectNote> {
+  const db = getDb()
+  return await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(prospectNotes)
+      .values({
+        workspace_id: workspaceId,
+        prospect_id: prospectId,
+        body: input.body,
+        kind: input.kind ?? null,
+        author_user_id: actor.userId,
+        // Always the label, never only the FK — an agent writes most of these
+        // and "Companion" is not a platform user.
+        author_label: actor.label,
+      })
+      .returning()
+    if (!row) throw new Error('prospect note insert returned nothing')
+    await recordEvent(tx, {
+      workspaceId,
+      actorUserId: actor.userId,
+      actorTokenId: actor.tokenId,
+      entityType: 'prospect_note',
+      entityId: row.id,
+      action: 'created',
+      // The note has no URN of its own, so the prospect's id is what makes the
+      // activity feed able to say what this was added TO.
+      meta: { kind: row.kind, prospect_id: prospectId },
+    })
+    return row
+  })
+}
+
+export type DeleteProspectNoteResult =
+  | { status: 'not_found' }
+  | { status: 'deleted'; row: ProspectNote }
+
+/**
+ * Destroy a note. HARD — this table has no `deleted_at` and no trash.
+ *
+ * ---------------------------------------------------------------------------
+ * THE CONFIRMATION IS THE NOTE'S OWN id, AND THE ROUTE CHECKS IT BEFORE THIS
+ * ---------------------------------------------------------------------------
+ * `deleteObjection` above confirms on the objection's `type`, which is a value
+ * the caller can only supply by having LOOKED at the row. That is the stronger
+ * shape and it is not available here: `kind` is nullable, so on the common note
+ * the confirmation would be `--confirm ""` — unconfirmable in practice, and a
+ * guard nobody can satisfy gets removed rather than obeyed.
+ *
+ * So this takes CLAUDE.md's other documented shape — "require the caller to
+ * repeat the target back", the same one `bk workspace delete <slug> --confirm
+ * <slug>` uses. **It is honestly a weaker guard and it is worth saying what it
+ * does and does not buy:** it stops `Confirm()` auto-approving under
+ * `BK_NO_PROMPT=1` and on a non-TTY, which is exactly how agents run, and it
+ * stops a bare `rm` typed by reflex. It does NOT catch a caller who has the
+ * wrong id, because the wrong id is what they would repeat.
+ *
+ * What covers that gap is the RECEIPT rather than the guard: the delete returns
+ * the row, the event records the whole body, and `bk` echoes what it destroyed.
+ * A wrong `rm` is visible in the next line of output instead of in a month.
+ *
+ * The read is `FOR UPDATE` and the delete is in the same transaction, so a
+ * concurrent write cannot slip between them.
+ */
+export async function deleteProspectNote(
+  workspaceId: number,
+  prospectId: number,
+  noteId: number,
+  actor: Actor
+): Promise<DeleteProspectNoteResult> {
+  const db = getDb()
+  return await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(prospectNotes)
+      .where(and(eq(prospectNotes.id, noteId), eq(prospectNotes.prospect_id, prospectId)))
+      .limit(1)
+      .for('update')
+    if (!existing) return { status: 'not_found' as const }
+
+    const [row] = await tx
+      .delete(prospectNotes)
+      .where(and(eq(prospectNotes.id, noteId), eq(prospectNotes.prospect_id, prospectId)))
+      .returning()
+    if (!row) return { status: 'not_found' as const }
+    await recordEvent(tx, {
+      workspaceId,
+      actorUserId: actor.userId,
+      actorTokenId: actor.tokenId,
+      entityType: 'prospect_note',
+      entityId: row.id,
+      action: 'purged',
+      // The row is gone, so this event is the only surviving record of what it
+      // said — see the receipt argument above. The route echoes the same body
+      // back to the caller.
+      meta: { kind: row.kind, body: row.body, prospect_id: prospectId },
+      subjectUrn: null,
+    })
+    return { status: 'deleted' as const, row }
+  })
+}
+
+/** One note, by its row id, scoped to its prospect — what the route reads to
+ *  check the confirmation before calling the delete above. */
+export async function getProspectNote(
+  prospectId: number,
+  noteId: number
+): Promise<ProspectNote | null> {
+  const [row] = await getDb()
+    .select()
+    .from(prospectNotes)
+    .where(and(eq(prospectNotes.id, noteId), eq(prospectNotes.prospect_id, prospectId)))
+    .limit(1)
+  return row ?? null
 }
 
 // ---------------------------------------------------------------------------

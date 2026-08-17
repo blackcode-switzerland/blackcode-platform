@@ -117,8 +117,33 @@ func newProductShowCmd() *cobra.Command {
 				if len(p.Refs) > 0 {
 					fmt.Fprintf(tw, "references\t%s\n", strings.Join(p.Refs, ", "))
 				}
+				// `external` is printed even though `internal` is the default and
+				// the common case: the whole content of the field is "our page is
+				// not the whole story here", and a reader who does not see it
+				// stated will write the full page anyway.
+				if p.Reach == "external" || p.ExternalURL != "" {
+					fmt.Fprintf(tw, "reach\t%s%s\n", dashIf(p.Reach), suffix(p.ExternalURL))
+				}
 				if err := tw.Flush(); err != nil {
 					return err
+				}
+				// ── INTERNAL ONLY ────────────────────────────────────────────
+				// Labelled on screen, every time, and not merely stored under an
+				// internal-sounding key. This is the number a rep reads out
+				// loud, and the one context where it must not be read out loud
+				// is the one where somebody forgot which field it came from.
+				if p.InternalPriceMin != "" || p.InternalPriceMax != "" || p.InternalPriceNote != "" {
+					fmt.Fprintf(w, "\nINTERNAL — do not quote this to a customer as our list price\n")
+					it := output.Tabwriter(w)
+					if p.InternalPriceMin != "" || p.InternalPriceMax != "" {
+						fmt.Fprintf(it, "  guidance\t%s\n", internalRange(p))
+					}
+					if p.InternalPriceNote != "" {
+						fmt.Fprintf(it, "  note\t%s\n", p.InternalPriceNote)
+					}
+					if err := it.Flush(); err != nil {
+						return err
+					}
 				}
 				if p.Pitch != "" {
 					fmt.Fprintf(w, "\n%s\n", p.Pitch)
@@ -143,7 +168,26 @@ func productFlags(cmd *cobra.Command, req *client.ProductRequest, fit, refs *[]s
 	cmd.Flags().StringVar(&req.Pitch, "pitch", "", "The one-line pitch")
 	cmd.Flags().StringVar(&req.StatusLabel, "status", "", "Maturity note (\"v1.3 · shipped internally\")")
 	cmd.Flags().StringSliceVar(fit, "fit", nil, "Who it suits (repeatable)")
-	cmd.Flags().StringSliceVar(refs, "ref", nil, "Reference customers, by name (repeatable)")
+	cmd.Flags().StringSliceVar(refs, "ref", nil, "Reference customers, by name (repeatable) — NOT a place for a url")
+	cmd.Flags().StringVar(&req.InternalPriceMin, "internal-price-min", "", "INTERNAL ONLY: the floor you may quote")
+	cmd.Flags().StringVar(&req.InternalPriceMax, "internal-price-max", "", "INTERNAL ONLY: the ceiling you may quote")
+	cmd.Flags().StringVar(&req.InternalPriceNote, "internal-price-note", "", "INTERNAL ONLY: the negotiating context a number cannot carry")
+	cmd.Flags().StringVar(&req.Reach, "reach", "", "How far our own site carries it — "+vocab("product_reaches", "default: internal"))
+	cmd.Flags().StringVar(&req.ExternalURL, "external-url", "", "An external product's own site, full url including https://")
+}
+
+// internalRange renders a one- or two-ended price range. A floor with no
+// ceiling ("never below 8k") is a legitimate answer, so it must not print as
+// "CHF 8'000 – " with nothing after the dash.
+func internalRange(p *client.SalesProduct) string {
+	switch {
+	case p.InternalPriceMin != "" && p.InternalPriceMax != "":
+		return money(p.InternalPriceMin, p.Currency) + " – " + money(p.InternalPriceMax, p.Currency)
+	case p.InternalPriceMin != "":
+		return "from " + money(p.InternalPriceMin, p.Currency)
+	default:
+		return "up to " + money(p.InternalPriceMax, p.Currency)
+	}
 }
 
 func newProductCreateCmd() *cobra.Command {

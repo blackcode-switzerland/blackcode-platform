@@ -11,6 +11,11 @@ import { publicProduct } from '@/lib/views'
 import { PRODUCT_NAME_MAX } from '@/lib/limits'
 import { nullableStr, requireMaxLength, requireMoney, requireNumberParam, str } from '@/lib/http-input'
 import { PRODUCT_CATEGORY_VALUES } from '@/lib/pipeline'
+import {
+  requireExternalUrl,
+  requireInternalPriceRange,
+  requireReach,
+} from '@/lib/api/product-fields'
 
 interface Params {
   params: Promise<{ ws: string; n: string }>
@@ -56,6 +61,17 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
   if (from) requireMoney(from)
   if (to) requireMoney(to)
 
+  // Migration 0011. Three-way like the rest — `--internal-price-min ""` clears
+  // the floor, omitting it leaves it. The ordering check reads the INCOMING
+  // values only, so clearing one end never trips it.
+  const internalMin = nullableStr(body?.internal_price_min)
+  const internalMax = nullableStr(body?.internal_price_max)
+  requireInternalPriceRange(internalMin, internalMax)
+  const reach = str(body?.reach)
+  if (reach) requireReach(reach)
+  const externalUrl = nullableStr(body?.external_url)
+  if (externalUrl) requireExternalUrl(externalUrl)
+
   const actor = await resolveActor(getDb(), req, ctx.user)
   const row = await updateProduct(
     ctx.workspace.id,
@@ -72,6 +88,11 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
       pitch: nullableStr(body?.pitch),
       statusLabel: nullableStr(body?.status_label),
       refs: strings(body?.refs),
+      internalPriceMin: internalMin,
+      internalPriceMax: internalMax,
+      internalPriceNote: nullableStr(body?.internal_price_note),
+      reach,
+      externalUrl,
     },
     actor
   )

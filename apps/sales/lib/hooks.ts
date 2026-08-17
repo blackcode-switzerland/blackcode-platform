@@ -163,6 +163,12 @@ export interface JourneyStep {
 /** One prospect, plus its journey. */
 export type ProspectDetail = PublicProspect & {
   journey: JourneyStep[]
+  /** Served by the single-prospect route since 2026-08-17 (#34, #33). See that
+   *  route's header: the people at a prospect were reachable only through a
+   *  sub-route nobody had reason to guess at, and both issues were filed
+   *  because of it. `useContacts` is still the paged read this page uses; this
+   *  field exists so the record is not silent about them. */
+  contacts: Contact[]
 }
 
 export function useProspect(ws: string, n: number) {
@@ -178,6 +184,10 @@ export interface Contact {
   role: string | null
   email: string | null
   phone: string | null
+  /** Migration 0008 — sales #34 and #33. `notes` is the freeform intel and
+   *  predates both; `decision_power` is the structured half. */
+  linkedin: string | null
+  decision_power: string | null
   is_primary: boolean
   notes: string | null
 }
@@ -209,6 +219,25 @@ export function useContacts(ws: string, n: number) {
     queryKey: ['contacts', ws, n],
     queryFn: async () =>
       (await apiGet<ListPage<Contact>>(wsPath(ws, `/prospects/${n}/contacts`))).data,
+  })
+}
+
+/** One entry of a prospect's research log (#39). No `updated_at` — the log is
+ *  append-only and there is no route that could produce one. */
+export interface ProspectNote {
+  id: number
+  body: string
+  kind: string | null
+  /** Who observed it — an agent, usually. Verbatim, from the token's name. */
+  author: string | null
+  created_at: string
+}
+
+export function useProspectNotes(ws: string, n: number) {
+  return useQuery({
+    queryKey: ['prospect-notes', ws, n],
+    queryFn: async () =>
+      (await apiGet<ListPage<ProspectNote>>(wsPath(ws, `/prospects/${n}/notes`))).data,
   })
 }
 
@@ -292,6 +321,17 @@ export interface Product {
   pitch: string | null
   status_label: string | null
   refs: string[]
+  /**
+   * INTERNAL ONLY (#27). What to quote if somebody asks — never a customer-
+   * facing number. Served to authenticated workspace members; if a public
+   * product page is ever built (#26) it must not reuse this type or its route.
+   */
+  internal_price_min: string | null
+  internal_price_max: string | null
+  internal_price_note: string | null
+  /** `internal | external` — how far our own site carries it (#29). */
+  reach: string
+  external_url: string | null
   urn: string | null
   deleted_at: string | null
 }
@@ -363,6 +403,31 @@ export function useProducts(ws: string) {
     queryKey: ['products', ws],
     queryFn: async () =>
       (await apiGet<ListPage<Product>>(wsPath(ws, '/products') + query({ limit: 100 }))).data,
+  })
+}
+
+/** One segment strategy (#37). `number`, never a row id. */
+export interface Strategy {
+  number: number
+  name: string
+  vertical: string | null
+  area: string | null
+  rationale: string | null
+  case_studies: string | null
+  products: Array<{ number: number; name: string }>
+  /** Live deals pointing at this segment — the number you want before retiring
+   *  one. Served rather than derived; see the route. */
+  prospect_count: number
+  urn: string | null
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+}
+
+export function useStrategies(ws: string) {
+  return useQuery({
+    queryKey: ['strategies', ws],
+    queryFn: async () => (await apiGet<ListPage<Strategy>>(wsPath(ws, '/strategies'))).data,
   })
 }
 

@@ -15,8 +15,15 @@ import {
   updateContact,
 } from '@/lib/db/queries/prospect-children'
 import { publicContact } from '@/lib/views'
-import { CONTACT_NAME_MAX } from '@/lib/limits'
-import { nullableStr, requireMaxLength, requireNumberParam, str } from '@/lib/http-input'
+import { CONTACT_NAME_MAX, CONTACT_URL_MAX } from '@/lib/limits'
+import {
+  nullableStr,
+  requireDecisionPower,
+  requireHttpUrl,
+  requireMaxLength,
+  requireNumberParam,
+  str,
+} from '@/lib/http-input'
 
 interface Params {
   params: Promise<{ ws: string; n: string; cid: string }>
@@ -59,6 +66,15 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
   const name = str(body?.name)
   if (name) requireMaxLength(name, CONTACT_NAME_MAX, 'name')
 
+  // Migration 0008. Three-way like the rest, so `--linkedin ""` clears one.
+  const linkedin = nullableStr(body?.linkedin)
+  if (linkedin) {
+    requireMaxLength(linkedin, CONTACT_URL_MAX, 'linkedin')
+    requireHttpUrl(linkedin, 'linkedin', 'a LinkedIn profile', 'pass the full url including https://')
+  }
+  const decisionPower = nullableStr(body?.decision_power)
+  if (decisionPower) requireDecisionPower(decisionPower)
+
   const actor = await resolveActor(getDb(), req, ctx.user)
   const row = await updateContact(
     ctx.workspace.id,
@@ -70,6 +86,8 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
       email: nullableStr(body?.email),
       phone: nullableStr(body?.phone),
       notes: nullableStr(body?.notes),
+      linkedin,
+      decisionPower,
       isPrimary: body?.is_primary === undefined ? undefined : body.is_primary === true,
     },
     actor

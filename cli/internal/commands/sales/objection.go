@@ -99,7 +99,7 @@ func newObjectionRaiseCmd() *cobra.Command {
 		Use: "raise <prospect> --type <type>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n}," +
 			"POST /api/workspaces/{ws}/prospects/{n}/objections"},
-		Short:       "Record an objection",
+		Short: "Record an objection",
 		Long: `Record something they pushed back on.
 
 --spoken is what they SAID; --real-fear is what you think is really going on.

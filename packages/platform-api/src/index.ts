@@ -53,5 +53,6 @@ export type { WorkspaceContext } from './handler'
 // The platform half of /api/meta. A HELPER, not a factory: /api/meta is Class C
 // (D-20) — each app writes its own route, because its vocabulary is the reason
 // the route exists rather than a contribution to a shared one.
+export { contractVersion } from './contract-version'
 export { platformMetaBlock } from './meta'
 export type { PlatformMetaOptions, PlatformMetaResult } from './meta'

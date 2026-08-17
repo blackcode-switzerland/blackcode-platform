@@ -22,6 +22,237 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-17 — products: internal price guidance, and whose page it is
+
+**Additive, nothing breaking.** Two product-model gaps (#27 part 1, #29).
+
+**Internal-only price guidance.** `--price` is what the catalogue says;
+`--internal-price-min` / `--internal-price-max` / `--internal-price-note` are
+what a rep may quote. Without them "every rep negotiates blind or has to ask
+Andrea directly every time".
+
+```bash
+bk sales product edit 3 --internal-price-min 8000 --internal-price-max 12000 \
+  --internal-price-note "Hold at 12k unless they commit to the retainer."
+```
+
+A RANGE, not a number — a floor with no ceiling is a legitimate answer, and so
+is a note instead of either. A floor above the ceiling is refused
+(`400 invalid_internal_price`): it is the one mistake this pair can carry that
+nothing downstream would notice.
+
+`bk sales product show` prints them under an explicit `INTERNAL — do not quote
+this to a customer as our list price` heading; the web catalog shows them in a
+labelled block. Both surfaces are behind workspace auth. **If public product
+pages are ever built (#26) they must not reuse `publicProduct` or this route** —
+they need their own projection that omits these three. That is a rule a person
+keeps, not one the database enforces; it is written at the columns, at the view,
+and at the type.
+
+**`--reach` and `--external-url`** (#29). `internal` (the default) means the
+full page belongs on our domain. `external` means the product has its own brand
+and site — AIOS Companion → aioscompanion.com — so our page is a teaser plus an
+outbound link rather than a copy of their marketing that goes stale on their next
+update. New vocabulary `product_reaches`, served by `bk meta`.
+
+`--external-url` is its own field and **not** a `--ref`. `refs` is reference
+CUSTOMERS by name; `aioscompanion.com` was living there, which quietly changed
+what that array meant for every reader of it.
+
+**Still open on #27:** product families / bundles (b/suite as a parent of seven
+child products). Deliberately not half-built — a `parent_id` with no roll-up
+pricing and no UI is the shape that gets found later and mistaken for a finished
+feature.
+
+---
+
+## 2026-08-17 — segment strategies, and a per-prospect game plan
+
+**Additive, nothing breaking.** Two issues, and they are two shapes (#37, #35).
+
+**`bk sales strategy` — a new noun.** Why a whole segment was chosen and what it
+leads with: "watch & jewellery boutiques in Lausanne, pitched with the AP
+configurator demo plus the consciencegems.ch case study". Reusable across ten
+prospects, so it is a record with its own #number and URN rather than a field —
+copied onto each prospect it would go stale nine times.
+
+```bash
+bk sales strategy add --name "…" --vertical "…" --area "…" --why "…" \
+  --case-studies "…" --product 3 --product 8
+bk sales strategy list | show <n> | edit <n> | rm <n> --confirm <name>
+```
+
+Routes: `GET|POST /api/workspaces/{ws}/strategies`,
+`GET|PATCH|DELETE …/strategies/{n}`. Web: a **Strategies** page in the sidebar.
+Searchable (`bk sales search` gained the `strategy` type) and binnable
+(`bk sales trash restore strategy:<n>`).
+
+**`--game-plan` on a prospect** — the other half. What to say to THIS company on
+the way into THIS meeting: the upsell angle, the talking points, the objections
+to expect. It renders above the ledgers on the prospect page, because it is read
+before a meeting rather than after one, and `bk sales prospect show` prints it in
+a `GAME PLAN` block.
+
+```bash
+bk sales prospect edit 12 --strategy 1 --game-plan "…"
+```
+
+Things worth knowing:
+
+- **`--product` REPLACES the set**, it does not add to it. Pass every product the
+  strategy leads with; `--no-products` clears it. A product number that names
+  nothing is a `404 product_not_found` and **nothing is changed** — the resolve
+  is all-or-nothing, so a strategy can never silently store two products when
+  three were named.
+- **`--strategy ""` unlinks**, like every other patchable field.
+- **Binning a strategy does NOT unlink its prospects.** It is a soft delete, and
+  detaching them would make it unrestorable — putting the strategy back would
+  not put the links back. `strategy rm` reports how many deals still point at it.
+- `rationale`, `case_studies` and `game_plan` all carry `platform.blob_references`
+  triggers. New limits: `limits.strategy_name_max`, `limits.game_plan_max`.
+
+---
+
+## 2026-08-17 — prospects carry an append-only research log
+
+**Additive, nothing breaking.** Until now `prospects.summary` was the only
+free-text field on a prospect, and PATCH **overwrites** it — so recording a
+second research finding meant destroying the first. #39 was filed from a real
+session where exactly that happened.
+
+New (migration 0009):
+
+```bash
+bk sales prospect note add <n> --text "…" [--kind "site audit"]
+bk sales prospect note list <n>
+bk sales prospect note rm <n> <note-id> --confirm <note-id>
+```
+
+Routes: `GET|POST /api/workspaces/{ws}/prospects/{n}/notes`,
+`DELETE …/notes/{noteId}`. Web: a **Research** tab on the prospect page, second
+after Overview. Notes are full-text searchable — `bk sales search` gained the
+`prospect_note` type.
+
+**It is append-only, and there is deliberately no way to edit one.** There is no
+PATCH route, no `note edit`, and no pencil in the web UI. `--summary` remains
+the field that states the current position and replaces itself; this is the one
+that accumulates. An editable log answers "what do we think now", which
+`--summary` already answers, and stops answering "what did we know, and when" —
+the only question it exists for. If a finding turns out to be wrong, append the
+correction.
+
+`rm` **destroys the entry permanently** — this table has no recycle bin, so
+`bk sales trash restore` has nothing to take — and requires `--confirm` naming
+the note's own id. It prints the whole note it destroyed. The confirmation is
+the weaker of this repo's two shapes (it cannot catch a wrong id, since a wrong
+id is what you would repeat); the printed receipt is what covers that, so a
+mistake shows up in the next line of output.
+
+Each note records **who** wrote it, from the API token's name — most of these are
+agent-written, and a log you cannot attribute is one you cannot weigh.
+
+`body` is covered by a `platform.blob_references` trigger, so a screenshot url
+pasted into a site audit is accounted for by the blob delete gate. Caps are
+`limits.prospect_note_body_max` and `limits.prospect_note_kind_max`; `bk meta`
+carries them.
+
+---
+
+## 2026-08-17 — every web listing prints the #number
+
+**Additive, nothing breaking.** Filed as a sorting bug (#30): "`bk sales product
+list` sorts alphabetically, the web page doesn't, so 'the third one' means
+different things to a human and to an agent."
+
+**Measured, the two surfaces were already in the same order.** Both render
+`GET …/products` verbatim, ordered `(category, name)`, and the CLI applies no
+sort of its own. The real defect was that **no listing in the web app printed
+the #number at all** — so the only way a human could name a row was by its
+position, and a position is not an address: it moves on a rename, on an insert,
+and whenever a filter is on.
+
+The #number now appears on prospects (table and board), products, templates,
+meetings, communications, documents, and the prospect detail header — the same
+number `bk` prints. A human reads "#1" off the screen and an agent resolves it
+without translation.
+
+Neither fix the issue proposed was taken, and both are now unnecessary: a
+`position` column and "sort the CLI like the web" would each have made two
+already-identical orders identical, and left the human with nothing to say but
+"the third one". **No sort order changed**, so any script or agent relying on the
+current ordering is unaffected.
+
+---
+
+## 2026-08-17 — the identity card: a company's site and address, a person's LinkedIn and decision power
+
+**Additive, nothing breaking.** Two issues (#34, #33) were filed the same day
+saying the app holds nothing about the people at a prospect — "reps can't call,
+email, or look up their own contact without hunting elsewhere".
+
+**Half of that was already built and nobody could find it.** `sales.contacts`
+has carried `name`, `role`, `email`, `phone` and `notes` since day one, served
+by `bk sales contact add/edit/list/rm`. A prospect is where you look; the
+contacts were one level down behind a sub-route there was no reason to guess at.
+So the discoverability half is fixed where the problem actually was:
+
+- `GET /api/workspaces/{ws}/prospects/{n}` now serves a **`contacts`** array
+  alongside `journey`. `…/prospects/{n}/contacts` is unchanged and remains the
+  write surface.
+- `bk sales prospect show <n>` prints a **CONTACTS** block.
+- The web prospect page renders email as `mailto:` and phone as `tel:` — a
+  number you can ring from the page you are already on, rather than text.
+
+Four columns genuinely had nowhere to go, and they are new (migration 0008):
+
+| Field | Where | Flag |
+|---|---|---|
+| `website` | prospect — the COMPANY's site | `bk sales prospect add/edit --website` |
+| `address` | prospect — one postal line | `bk sales prospect add/edit --address` |
+| `linkedin` | contact — the PERSON's profile | `bk sales contact add/edit --linkedin` |
+| `decision_power` | contact | `bk sales contact add/edit --decision-power` |
+
+`decision_power` is a new vocabulary — `economic | champion | influencer |
+gatekeeper | user` — served by `GET /api/meta` under `vocabulary.decision_powers`
+and by `bk meta`. It records what somebody can **do** in a deal rather than
+their job title. The freeform person intel stays `--notes`, which predates both
+issues.
+
+`--website` and `--linkedin` are refused unless they are `http` or `https` URLs
+(`400 invalid_website` / `400 invalid_linkedin`). That is not fussiness: both are
+rendered as anchors by the web app, and `javascript:…` is a well-formed URL.
+Both are capped at `limits.contact_url_max`, `address` at
+`limits.prospect_address_max`; `bk meta` carries the numbers.
+
+**Adapting:** nothing is required. On PATCH all four are three-way like every
+other field — passing `""` clears one, omitting the flag leaves it alone. All
+four columns are covered by `platform.blob_references` triggers, so a file url
+pasted into any of them is still accounted for by the delete gate.
+
+---
+
+## 2026-08-17 — `bk sales match set` works again: a numeric body field is a number
+
+**Bug fix, not breaking.** `bk sales match set <prospect> --product <n>` had
+never worked from the CLI. It answered `400 missing_product` naming a product
+that exists — the most misleading shape a 400 can take, because it told the
+caller to go look up a number they had already passed correctly. `--template`
+had the identical defect.
+
+The route read its two numeric body fields through the free-text trimmer
+(`numberOr(str(body?.product))`), which returns undefined for anything that is
+not a string. `bk` sends `{"product": 8}` — a JSON **number** — so the field
+read as absent. Every other route in this app reads its numbers from the query
+string, where that pairing is correct; this is the only one that reads them
+from a JSON body, and it was the only one carrying the bug.
+
+**Nothing to adapt.** Both spellings are accepted: `{"product": 8}` and
+`{"product": "8"}`. A non-numeric value is still a `400 missing_product`, and a
+number that names no product in the workspace is still a `404 product_not_found`
+— previously unreachable, because the request never got that far.
+
+---
+
 ## 2026-08-12 — `prospect show` stops promising a LINKED section it cannot print
 
 **Not breaking**, and the visible output is unchanged for everyone — because the

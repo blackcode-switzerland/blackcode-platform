@@ -67,6 +67,7 @@ import {
   prospects,
   salesEvents,
   salesWorkspaces,
+  strategies,
   templates,
 } from '../schema'
 import type { SalesEvent, NewSalesEvent } from '../schema'
@@ -115,6 +116,13 @@ export const SALES_EVENT_ENTITY_TYPES = [
   'document',
   'match',
   'label',
+  // Migration 0009 (#39). Like `contact` and `objection` above it, this is not
+  // projected into `platform.entities` and has no URN — a research note was
+  // still ADDED to a prospect, and the feed has to be able to say so. Its
+  // events carry `subject_urn: null`.
+  'prospect_note',
+  // Migration 0010 (#37). This one IS projected and has a URN.
+  'strategy',
 ] as const
 
 export type EntityType = PlatformEntityType | (typeof SALES_EVENT_ENTITY_TYPES)[number]
@@ -224,20 +232,34 @@ export async function recordEvent(tx: PlatformTx, input: RecordEventInput): Prom
 // every create, update and delete this app performs, and a URN that cannot be
 // built must cost an untagged event rather than a failed write.
 //
-// Null is also the CORRECT answer, not a gap, for the four sales entity types
-// with no #number — a contact, a stage entry, an objection and a match are all
-// reached through their prospect and have no address of their own. `entityType`
-// is a plain string for exactly that reason: the caller's union is wider than
-// the addressable six, and narrowing it is the whole job.
+// Null is also the CORRECT answer, not a gap, for the sales entity types with
+// no #number — a contact, a stage entry, an objection, a match and a research
+// note are all reached through their prospect and have no address of their own.
+// `entityType` is a plain string for exactly that reason: the caller's union is
+// wider than the addressable set, and narrowing it is the whole job.
 
-/** The source table behind each addressable type. `Record<>` so a seventh is a compile error. */
-const URN_SOURCE: Record<SalesEntityType, typeof prospects | typeof meetings | typeof communications | typeof products | typeof templates | typeof documents> = {
+/**
+ * The source table behind each addressable type. `Record<>` so a new one is a
+ * COMPILE error rather than a silently untagged event — which is exactly what it
+ * did when migration 0010 added `strategy` to `ENTITY_TYPES`.
+ */
+const URN_SOURCE: Record<
+  SalesEntityType,
+  | typeof prospects
+  | typeof meetings
+  | typeof communications
+  | typeof products
+  | typeof templates
+  | typeof documents
+  | typeof strategies
+> = {
   prospect: prospects,
   meeting: meetings,
   communication: communications,
   product: products,
   template: templates,
   document: documents,
+  strategy: strategies,
 }
 
 function isAddressableType(t: string): t is SalesEntityType {
@@ -349,6 +371,7 @@ const SEQ_SOURCE = {
   product: products,
   template: templates,
   document: documents,
+  strategy: strategies,
 } as const satisfies Record<SalesEntityType, unknown>
 
 /**
@@ -363,7 +386,7 @@ const SEQ_SOURCE = {
  * projected type would otherwise be one that quietly kept serving its row id —
  * and a leaked serial does not look wrong, it looks like a number, which is how
  * it ends up in somebody's script and becomes a contract. The four types with no
- * #number (contact, stage entry, objection, match) are absent for the same reason
+ * #number (contact, stage entry, objection, match, prospect note) are absent for the same reason
  * they are absent from the projection: their row id IS their address, so it is
  * correct to pass it through, and the route only substitutes for the types the
  * mount lists in `numberedEntityTypes`.

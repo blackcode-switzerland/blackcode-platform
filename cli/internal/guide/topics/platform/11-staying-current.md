@@ -77,6 +77,37 @@ bk skill install
 bk guide
 ```
 
+## Checking cheaply, on every run
+
+`bk skill sync` answers "is my SKILL FILE current". This answers the other half —
+"did the SERVER's contract move since I last looked":
+
+```bash
+bk meta --contract-version      # one line: 16 hex characters
+```
+
+It is a short fingerprint of the current app's vocabularies, limits and type
+lists. Record it, and on your next run compare:
+
+```bash
+now=$(bk meta --contract-version)
+[ "$now" = "$(cat .bk-contract)" ] || { bk meta; bk guide; echo "$now" > .bk-contract; }
+```
+
+If it has not moved, nothing in that app's contract has, and you can skip
+re-reading `bk meta` and the `--help` tree. If it has, do the fuller pass once
+and record the new value.
+
+Two properties worth relying on. It is **derived from the contract itself**, so
+nobody can add a vocabulary value and forget to bump it — the failure a
+hand-maintained number has, where the version says "nothing changed" while
+something did. And it does **not** move on a redeploy that changed nothing, so
+it will not send you back for a full re-read every time somebody ships.
+
+It is per app: `bk meta` answers for the app you are homed on, so use
+`--app-server` or a pinned invocation to ask a different one. An older
+deployment that predates the field says so rather than printing an empty line.
+
 ## The dated record
 
 ```bash

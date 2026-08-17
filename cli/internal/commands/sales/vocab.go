@@ -48,17 +48,26 @@ var vocabularies = map[string][]string{
 	"meeting_types":        {"video", "call", "in_person"},
 	"meeting_statuses":     {"upcoming", "done", "cancelled"},
 	"objection_types":      {"pricing", "complexity", "existing_solution", "timing", "decision_pending"},
-	"product_categories":   {"module", "service", "licence"},
-	"template_channels":    {"email", "whatsapp", "call"},
-	"template_categories":  {"intro", "follow_up", "objection", "meeting", "kickoff"},
-	"document_kinds":       {"pdf", "deck", "image", "video", "link"},
-	"next_action_types":    {"email", "call", "demo", "demo_prep", "follow_up", "check_in", "wait"},
-	"ui_modes":             {"read_only", "full"},
+	// What a contact can DO in a deal, not where they sit on an org chart —
+	// migration 0008, sales #33. `champion` (wants it) and `economic` (signs
+	// for it) are rarely the same person, and confusing them is the mistake
+	// this vocabulary exists to make expressible.
+	"decision_powers":    {"economic", "champion", "influencer", "gatekeeper", "user"},
+	"product_categories": {"module", "service", "licence"},
+	// How far OUR site carries a product — migration 0011, sales #29. About
+	// ownership of the STORY, not of the build: blackcode built AIOS Companion
+	// and its page still is not ours to write.
+	"product_reaches":     {"internal", "external"},
+	"template_channels":   {"email", "whatsapp", "call"},
+	"template_categories": {"intro", "follow_up", "objection", "meeting", "kickoff"},
+	"document_kinds":      {"pdf", "deck", "image", "video", "link"},
+	"next_action_types":   {"email", "call", "demo", "demo_prep", "follow_up", "check_in", "wait"},
+	"ui_modes":            {"read_only", "full"},
 
 	// ── apps/sales/lib/db/queries/search.ts → SEARCH_TYPES ──────────────────
 	// Not a pipeline vocabulary and deliberately WIDER than the addressable
 	// types: a contact and an objection are searchable and have no #number.
-	"search_types": {"prospect", "contact", "meeting", "communication", "objection", "product", "template", "document", "match"},
+	"search_types": {"prospect", "contact", "meeting", "communication", "objection", "product", "template", "document", "match", "prospect_note", "strategy"},
 }
 
 // vocab renders a flag description's value half: the values, then any notes,

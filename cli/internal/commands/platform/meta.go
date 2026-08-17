@@ -19,6 +19,7 @@ import (
 // opaque numeric id (the most common cause of writing to the wrong workspace).
 func newMetaCmd() *cobra.Command {
 	var vocabKey string
+	var contractOnly bool
 	cmd := &cobra.Command{
 		Use:         "meta",
 		Annotations: map[string]string{"routes": "GET /api/meta"},
@@ -44,6 +45,13 @@ numeric id (ids are opaque and easy to confuse). Then target it with
 workspace is only a default, not necessarily where you mean to write.
 
 Use --ws <slug|id> to preview another workspace's context without switching.
+
+--contract-version prints ONE line: a short fingerprint of this app's
+vocabularies, limits and type lists. Poll it instead of re-reading this whole
+document and the --help tree behind it — if it has not moved since your last
+run, nothing in this app's contract has. It is derived from the contract itself,
+so it cannot be forgotten the way a hand-bumped number can, and it does NOT
+change on a redeploy that changed nothing.
 
 --vocab <key> prints ONE vocabulary as a flat list — the values, one per line,
 and a plain array under --json so it pipes. It is the answer to "what are the
@@ -81,6 +89,10 @@ An unknown key is an error naming the keys that exist.`,
 			meta, err := c.Meta(cmdutil.ClientWorkspaceSlug(cfg))
 			if err != nil {
 				return err
+			}
+
+			if contractOnly {
+				return renderContractVersion(cmd, format, meta)
 			}
 
 			if cmd.Flags().Changed("vocab") {
@@ -227,6 +239,8 @@ An unknown key is an error naming the keys that exist.`,
 			})
 		},
 	}
+	cmd.Flags().BoolVar(&contractOnly, "contract-version", false,
+		"Print ONLY this app's contract fingerprint — poll it to detect drift cheaply")
 	cmd.Flags().StringVar(&vocabKey, "vocab", "",
 		"Print ONE vocabulary as a flat list; pass no key to list the keys this server serves")
 	// Makes a bare `bk meta --vocab` legal. The cost is that `--vocab stages`
@@ -245,4 +259,32 @@ func sortedAppSlugs(apps map[string]client.MetaApp) []string {
 	}
 	sort.Strings(slugs)
 	return slugs
+}
+
+// renderContractVersion prints the current app's contract fingerprint (#31).
+//
+// One line on stdout and nothing else, because the whole value of this command
+// is that it is cheap to run and trivial to compare:
+//
+//	prev=$(cat .bk-contract); now=$(bk meta --contract-version)
+//	[ "$prev" = "$now" ] || bk guide   # only then pay for the full re-read
+//
+// An EMPTY value from an older server is an error rather than an empty line.
+// "" and "unchanged" must not look alike to a caller diffing two runs — that is
+// the one way this command could silently tell somebody their contract is
+// stable when it has no idea.
+func renderContractVersion(cmd *cobra.Command, format output.Format, meta *client.Meta) error {
+	app, ok := meta.Apps[meta.CurrentApp]
+	if !ok || app.ContractVersion == "" {
+		return fmt.Errorf(
+			"this server does not serve a contract version — it predates the field; " +
+				"re-read `bk meta` in full, and `bk guide` for current usage")
+	}
+	return output.Render(format, map[string]string{
+		"app":              meta.CurrentApp,
+		"contract_version": app.ContractVersion,
+	}, func(w io.Writer) error {
+		_, err := fmt.Fprintln(w, app.ContractVersion)
+		return err
+	})
 }
