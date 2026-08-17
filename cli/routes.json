@@ -3,6 +3,60 @@
   "routes": [
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}/invitations/{id}",
+      "command": "bk books invite revoke",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "command": "bk books workspace list, bk books workspace use",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk books workspace show",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk books invite list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/members",
+      "command": "bk books member list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/notes",
+      "command": "bk books note list",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/active-workspace",
+      "command": "bk books workspace use",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk books invite send",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/notes",
+      "command": "bk books note create",
+      "app": "books"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}",
       "command": "bk issues workspace delete",
       "app": "issues"
