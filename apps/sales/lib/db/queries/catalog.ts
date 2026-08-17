@@ -379,6 +379,17 @@ export type DocumentRow = SalesDocument & {
   product_numbers: number[]
   /** Migration 0012 — the fourth attachment point (#40). */
   strategy_numbers: number[]
+  /**
+   * Templates this document is attached to.
+   *
+   * `templateDocuments` has existed since 0001 and `doc link --template` has
+   * always written it — but nothing ever READ it back. The link was
+   * write-only: it returned 200 and was invisible from every surface, which is
+   * a capability nobody can verify. Found on 2026-08-17 while testing #40's
+   * multi-attach; adding `strategy_numbers` beside it made the asymmetry
+   * obvious.
+   */
+  template_numbers: number[]
 }
 
 export async function listDocuments(opts: {
@@ -388,6 +399,9 @@ export async function listDocuments(opts: {
   prospectSeq?: number
   /** Only documents linked to this product #number. */
   productSeq?: number
+  /** Only documents linked to this template #number. The read half of a link
+   *  `doc link --template` could always write. */
+  templateSeq?: number
   /**
    * Only documents carrying at least ONE of these tags.
    *
@@ -415,6 +429,13 @@ export async function listDocuments(opts: {
   if (!opts.includeDeleted) where.push(isNull(documents.deleted_at))
   if (opts.kind) where.push(eq(documents.kind, opts.kind))
   if (opts.q?.trim()) where.push(ilike(documents.title, `%${opts.q.trim()}%`))
+  if (opts.templateSeq != null) {
+    where.push(sql`EXISTS (
+      SELECT 1 FROM ${templateDocuments} td
+      JOIN ${templates} t ON t.id = td.template_id
+      WHERE td.document_id = ${documents.id} AND t.seq = ${opts.templateSeq}
+        AND t.workspace_id = ${opts.workspaceId})`)
+  }
   if (opts.prospectSeq != null) {
     where.push(sql`EXISTS (
       SELECT 1 FROM ${documentProspects} dp
@@ -502,6 +523,11 @@ async function decorateDocuments(rows: SalesDocument[]): Promise<DocumentRow[]> 
     .from(documentStrategies)
     .innerJoin(strategies, eq(strategies.id, documentStrategies.strategy_id))
     .where(inArray(documentStrategies.document_id, ids))
+  const tpls = await db
+    .select({ document_id: templateDocuments.document_id, seq: templates.seq })
+    .from(templateDocuments)
+    .innerJoin(templates, eq(templates.id, templateDocuments.template_id))
+    .where(inArray(templateDocuments.document_id, ids))
 
   const byDoc = (list: Array<{ document_id: number; seq: number }>) => {
     const m = new Map<number, number[]>()
@@ -511,11 +537,13 @@ async function decorateDocuments(rows: SalesDocument[]): Promise<DocumentRow[]> 
   const pMap = byDoc(pros)
   const dMap = byDoc(prods)
   const sMap = byDoc(strats)
+  const tMap = byDoc(tpls)
   return rows.map((r) => ({
     ...r,
     prospect_numbers: (pMap.get(r.id) ?? []).sort((a, b) => a - b),
     product_numbers: (dMap.get(r.id) ?? []).sort((a, b) => a - b),
     strategy_numbers: (sMap.get(r.id) ?? []).sort((a, b) => a - b),
+    template_numbers: (tMap.get(r.id) ?? []).sort((a, b) => a - b),
   }))
 }
 
@@ -595,6 +623,11 @@ export async function updateDocument(
     if (input.kind !== undefined) values.kind = input.kind
     if (input.description !== undefined) values.description = input.description
     if (input.tags !== undefined) values.tags = input.tags
+    // `mime_type` was in `DocumentInput` and in `addDocument` from the start,
+    // and this line was missing — so every UPDATE that set it silently did
+    // nothing. Found on 2026-08-17 when `doc recheck` detected `video/mp4` for
+    // a Drive link, reported success, and changed no row.
+    if (input.mimeType !== undefined) values.mime_type = input.mimeType
     if (input.storageProvider !== undefined) values.storage_provider = input.storageProvider
     if (input.externalId !== undefined) values.external_id = input.externalId
     if (input.previewStatus !== undefined) values.preview_status = input.previewStatus

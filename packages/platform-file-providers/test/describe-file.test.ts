@@ -131,7 +131,11 @@ describe('describeFile — Google Drive', () => {
       mode: 'iframe',
       url: `https://drive.google.com/file/d/${DRIVE_ID}/preview`,
     })
-    expect(d.thumbnail_url).toContain(DRIVE_ID)
+    // NULL, and that is a measured decision rather than an omission: Drive
+    // thumbnails are blocked by the browser's Opaque Response Blocking in every
+    // variant tried, so emitting one costs a request per row and renders a
+    // broken-image glyph. See `google-drive.ts` at `thumbnail`.
+    expect(d.thumbnail_url).toBeNull()
   })
 
   it('recognises the older /open?id= and /uc?id= shapes', () => {
@@ -155,6 +159,21 @@ describe('describeFile — Google Drive', () => {
     const slides = describeFile(`https://docs.google.com/presentation/d/${DRIVE_ID}/edit`)
     expect(slides.media_kind).toBe('slides')
     expect(slides.embed.url).toBe(`https://docs.google.com/presentation/d/${DRIVE_ID}/embed`)
+  })
+
+  it('emits NO thumbnail for any Drive shape — ORB blocks them all', () => {
+    // Pinned so nobody re-adds it from the server side, where `curl` makes it
+    // look like it works.
+    for (const u of [
+      `https://drive.google.com/file/d/${DRIVE_ID}/view`,
+      `https://docs.google.com/document/d/${DRIVE_ID}/edit`,
+      `https://docs.google.com/presentation/d/${DRIVE_ID}/edit`,
+    ]) {
+      expect(describeFile(u).thumbnail_url, u).toBeNull()
+    }
+    // The preview itself is NOT affected — that is the thing that matters, and
+    // it was verified in a browser against a real link-shared file.
+    expect(describeFile(`https://drive.google.com/file/d/${DRIVE_ID}/view`).embed.mode).toBe('iframe')
   })
 
   it('recognises a folder and refuses to embed it', () => {

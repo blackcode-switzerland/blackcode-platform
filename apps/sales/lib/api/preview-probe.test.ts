@@ -45,7 +45,7 @@
 //     asserting, the shape a write path would take.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { probePreview, previewStatusNote } from './preview-probe'
+import { probeMimeType, probePreview, previewStatusNote } from './preview-probe'
 
 const DRIVE_ID = '1a2B3c4D5e6F7g8H9i0JkLmNoPqRsTuV'
 
@@ -171,5 +171,61 @@ describe('previewStatusNote', () => {
     expect(previewStatusNote('unknown', 'google_drive')).not.toEqual(
       previewStatusNote('restricted', 'google_drive')
     )
+  })
+})
+
+describe('probeMimeType — what kind of file is behind a Drive link', () => {
+  it('reads the real type from the download endpoint', async () => {
+    // Measured live 2026-08-17: a link-shared mp4 answers `206 video/mp4` and a
+    // jpeg answers `206 image/jpeg`. This is what turns a Drive link into a
+    // *video* rather than the generic `other` the url alone can produce.
+    stubFetch(() => ({ status: 206, headers: new Headers({ 'content-type': 'video/mp4' }) }))
+    expect(await probeMimeType('google_drive', DRIVE_ID)).toBe('video/mp4')
+  })
+
+  it('REFUSES the virus-scan interstitial — the branch that would be confidently wrong', async () => {
+    // Drive answers a LARGE file with an HTML confirmation page instead of the
+    // bytes. `mediaKindOf` maps `text/*` to `doc`, so an unguarded version would
+    // type every big video as a document — worse than not detecting at all,
+    // because it is wrong with conviction and nothing looks broken.
+    stubFetch(() => ({
+      status: 200,
+      headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+    }))
+    expect(await probeMimeType('google_drive', DRIVE_ID)).toBeNull()
+  })
+
+  it('refuses the generic types that are not answers', async () => {
+    // `application/binary` is what the 303 hop reports before the real type.
+    for (const ct of ['application/binary', 'application/octet-stream', '']) {
+      stubFetch(() => ({ status: 206, headers: new Headers(ct ? { 'content-type': ct } : {}) }))
+      expect(await probeMimeType('google_drive', DRIVE_ID), ct || '(none)').toBeNull()
+    }
+  })
+
+  it('asks for ONE BYTE, so a 4 GB video costs the same as a thumbnail', async () => {
+    const calls = stubFetch(() => ({
+      status: 206,
+      headers: new Headers({ 'content-type': 'video/mp4' }),
+    }))
+    await probeMimeType('google_drive', DRIVE_ID)
+    expect((calls[0]!.init.headers as Record<string, string>).Range).toBe('bytes=0-0')
+    // FOLLOW here, unlike probePreview: the type is only revealed after the 303
+    // to drive.usercontent.google.com.
+    expect(calls[0]!.init.redirect).toBe('follow')
+    expect(calls[0]!.init.credentials).toBe('omit')
+  })
+
+  it('is null for anything it cannot ask, and never hits the network', async () => {
+    const calls = stubFetch(() => ({ status: 206, headers: new Headers() }))
+    expect(await probeMimeType('blob', null)).toBeNull()
+    expect(await probeMimeType('external', null)).toBeNull()
+    expect(await probeMimeType('google_drive', null)).toBeNull()
+    expect(calls).toHaveLength(0)
+  })
+
+  it('a network failure is null, never a throw — it runs inside a write path', async () => {
+    stubFetch(() => new Error('ECONNREFUSED'))
+    expect(await probeMimeType('google_drive', DRIVE_ID)).toBeNull()
   })
 })

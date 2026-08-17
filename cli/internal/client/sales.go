@@ -1191,6 +1191,10 @@ type SalesDocument struct {
 	Prospects   []int    `json:"prospects" yaml:"prospects"`
 	Products    []int    `json:"products" yaml:"products"`
 	Strategies  []int    `json:"strategies" yaml:"strategies"`
+	// Readable since 2026-08-17. `doc link --template` has written this link
+	// since day one and nothing ever served it back — a link you could create
+	// and never see.
+	Templates []int `json:"templates" yaml:"templates"`
 
 	// Where the bytes live and how a web surface shows it (sales #40).
 	// DERIVED by the server on every read from the url, so a document added
@@ -1263,6 +1267,7 @@ type ListDocsOpts struct {
 	// different job, deliberately different shape.
 	Prospect int
 	Product  int
+	Template int
 	// Tags match with OR: a document carrying ANY of them. Sent as one
 	// comma-separated `tag` parameter, which is the shape `parseList` reads on
 	// the server and the same one `--status` uses on `meeting list`.
@@ -1283,6 +1288,9 @@ func (c *Client) ListDocuments(ws string, opts ListDocsOpts) ([]SalesDocument, e
 	}
 	if opts.Product > 0 {
 		q.Set("product", strconv.Itoa(opts.Product))
+	}
+	if opts.Template > 0 {
+		q.Set("template", strconv.Itoa(opts.Template))
 	}
 	if len(opts.Tags) > 0 {
 		q.Set("tag", strings.Join(opts.Tags, ","))

@@ -29,6 +29,7 @@
 // both identically — which is what this app did until now — hides all three.
 
 import { ExternalLink, File, FileSpreadsheet, FileText, Film, Folder, Image as ImageIcon, Lock, Music, Presentation } from 'lucide-react'
+import { MediaLightbox } from '@blackcode/platform-ui/media-lightbox'
 import type { SalesDocument } from '@/lib/hooks'
 
 /** One icon per media kind. `other` gets the generic file. */
@@ -105,73 +106,67 @@ export function SourceBadge({ doc }: { doc: SalesDocument }) {
 }
 
 /**
- * The preview itself.
+ * Can this document be previewed at all?
  *
- * `embed_mode` comes from the shared package and already encodes what CAN be
- * shown; `preview_status` gates whether we SHOULD. Both have to agree before an
- * iframe appears.
+ * TWO conditions, and they answer different questions. `embed_mode` is what the
+ * file CAN do — a folder and an unrecognised host can do nothing. `preview_status`
+ * is whether we may — an external file is embedded only on an explicit `public`
+ * verdict, because anything else renders the provider's sign-in page inside our
+ * chrome. Our own files carry `null` and are always embeddable; there is no
+ * external permission system in the way.
  */
-export function FilePreview({ doc }: { doc: SalesDocument }) {
+export function canPreview(doc: SalesDocument): boolean {
   const f = doc.file
-  // An external file is embedded ONLY on an explicit `public` verdict. Our own
-  // files have `preview_status: null` and are always embeddable — there is no
-  // external permission system in the way.
   const mayEmbed = f.internal || f.preview_status === 'public'
-  if (!mayEmbed || f.embed_mode === 'none' || !f.embed_url) {
-    return <PreviewFallback doc={doc} />
-  }
-
-  const frame = 'w-full overflow-hidden rounded-lg border border-border bg-muted'
-  switch (f.embed_mode) {
-    case 'image':
-      return (
-        <a href={f.open_url} target="_blank" rel="noreferrer" className={`block ${frame}`}>
-          {/* Not next/image: the source is a blob host or a provider we do not
-              control, and the loader would need every one allowlisted in
-              next.config — a config edit per provider, which is exactly the
-              adaptability this feature is supposed to have. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={f.embed_url}
-            alt={doc.title}
-            loading="lazy"
-            className="max-h-80 w-full object-contain"
-          />
-        </a>
-      )
-    case 'video':
-      return (
-        <video src={f.embed_url} controls preload="metadata" className={`max-h-80 ${frame}`} />
-      )
-    case 'audio':
-      return <audio src={f.embed_url} controls className="w-full" />
-    case 'iframe':
-      return (
-        <iframe
-          src={f.embed_url}
-          title={doc.title}
-          loading="lazy"
-          // `allow="fullscreen"` so a Drive video can go full screen. No
-          // `allow-same-origin` sandbox relaxation and no `allow-top-navigation`:
-          // this is somebody else's document and it does not get to move our page.
-          allow="fullscreen"
-          referrerPolicy="no-referrer"
-          className={`h-80 ${frame}`}
-        />
-      )
-    default:
-      return <PreviewFallback doc={doc} />
-  }
+  return mayEmbed && f.embed_mode !== 'none' && Boolean(f.embed_url)
 }
 
 /**
- * What to show when there is no preview — and it must never be a blank box.
+ * The preview, FULL SCREEN.
+ *
+ * It used to expand inline, inside the list row, and that read badly: a player
+ * between two rows pushes the page around, competes with its own row for
+ * attention, and is stuck at the width of a list never designed to hold a
+ * video. `MediaLightbox` is the shared overlay; this component only decides
+ * WHAT to hand it.
+ *
+ * Callers must gate on `canPreview` — this returns null rather than a fallback,
+ * because an overlay is opened by an explicit click and there is nothing to
+ * show if there was nothing to open.
+ */
+export function FilePreviewModal({
+  doc,
+  onClose,
+}: {
+  doc: SalesDocument
+  onClose: () => void
+}) {
+  const f = doc.file
+  if (!canPreview(doc) || !f.embed_url) return null
+  return (
+    <MediaLightbox
+      mode={f.embed_mode as 'image' | 'video' | 'audio' | 'iframe'}
+      src={f.embed_url}
+      title={doc.title}
+      openUrl={f.open_url}
+      // Whose system is about to render. If it asks for a login, this is what
+      // tells the reader whose login it is.
+      sourceLabel={f.label}
+      onClose={onClose}
+    />
+  )
+}
+
+/**
+ * What to show INLINE when there is no preview — and it must never be a blank
+ * box. This is the only thing that still renders in the row itself; an actual
+ * preview goes full screen.
  *
  * Three different reasons land here and the card says which, because the
  * remedy differs: a folder has no preview by nature, a restricted file needs
  * sharing changed at the provider, and an unchecked one needs a recheck.
  */
-function PreviewFallback({ doc }: { doc: SalesDocument }) {
+export function PreviewFallback({ doc }: { doc: SalesDocument }) {
   const f = doc.file
   // FOLDER FIRST, and the order is the fix for a bug caught in the browser: a
   // folder was reporting `restricted` and telling somebody to share it "anyone

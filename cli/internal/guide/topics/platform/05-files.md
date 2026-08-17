@@ -119,8 +119,10 @@ bk sales doc add --title "AP configurator walkthrough" \
   --prospect 12 --product 3
 ```
 
-`--kind` is optional — the type is derived from the url. The command prints what
-it recognised and, more importantly, **whether the file can actually be shown**:
+`--kind` is optional. For a Drive link the type is not in the url — a video, a
+pdf and a sheet all look the same — so the server asks the provider for it with
+a one-byte request. The command prints what it worked out and, more importantly,
+**whether the file can actually be shown**:
 
 ```
 added document #14: AP configurator walkthrough
@@ -157,6 +159,25 @@ second prospect does not copy it.
 bk sales doc link 14 --prospect 12
 bk sales doc link 14 --product 3
 bk sales doc link 14 --strategy 1
+bk sales doc link 14 --template 3
 ```
 
-`doc add` takes the same flags, repeatably, to do it in one call.
+`doc add` takes the same flags, repeatably, to do it in one call. `doc show`
+lists all four, and `doc list --prospect|--product|--template` filters by any of
+them — the same one library seen from different sides, never copies.
+
+### What a preview looks like
+
+Previews are a WEB affordance; there is nothing to render in a terminal. On the
+web, clicking Preview opens the file **full screen** over the page, with the
+provider named and a link to the original.
+
+Two limits worth knowing, both measured rather than assumed:
+
+- **A Drive file shows no thumbnail in the list.** Drive's thumbnail endpoint
+  cannot be hot-linked into a browser — every variant is refused by Opaque
+  Response Blocking — so the row shows a type icon instead of a broken image.
+  The preview itself is unaffected.
+- **The preview is the provider's own viewer**, so it renders for a viewer who
+  can already open the file. That is why `doc add` tells you the sharing status
+  up front.

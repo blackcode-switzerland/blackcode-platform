@@ -572,7 +572,7 @@ func newDocCmd() *cobra.Command {
 func newDocListCmd() *cobra.Command {
 	var kind, query string
 	var tags []string
-	var prospect, product, limit int
+	var prospect, product, template, limit int
 	cmd := &cobra.Command{
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/documents"},
@@ -603,6 +603,7 @@ tags are in use.`,
 				Query:    query,
 				Prospect: prospect,
 				Product:  product,
+				Template: template,
 				Tags:     splitAll(tags),
 				Limit:    limit,
 			})
@@ -614,7 +615,8 @@ tags are in use.`,
 				fmt.Fprintln(tw, "#\tKIND\tSOURCE\tTITLE\tLINKED TO\tADDED BY")
 				restricted := 0
 				for _, r := range rows {
-					linked := fmt.Sprintf("%dp %dpr %ds", len(r.Prospects), len(r.Products), len(r.Strategies))
+					linked := fmt.Sprintf("%dp %dpr %ds %dt",
+						len(r.Prospects), len(r.Products), len(r.Strategies), len(r.Templates))
 					if r.File.PreviewStatus == "restricted" {
 						restricted++
 					}
@@ -654,6 +656,7 @@ tags are in use.`,
 	// look meaningful, and the route has no answer for it.
 	cmd.Flags().IntVar(&prospect, "prospect", 0, "Only documents linked to this prospect (its #number)")
 	cmd.Flags().IntVar(&product, "product", 0, "Only documents linked to this product (its #number)")
+	cmd.Flags().IntVar(&template, "template", 0, "Only documents linked to this template (its #number)")
 	cmd.Flags().StringSliceVar(&tags, "tag", nil,
 		"Only documents carrying any of these tags (repeatable; case-insensitive)")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Max documents to return")
@@ -726,6 +729,7 @@ func newDocShowCmd() *cobra.Command {
 				fmt.Fprintf(tw, "prospects\t%s\n", numbersOrDash(d.Prospects))
 				fmt.Fprintf(tw, "products\t%s\n", numbersOrDash(d.Products))
 				fmt.Fprintf(tw, "strategies\t%s\n", numbersOrDash(d.Strategies))
+				fmt.Fprintf(tw, "templates\t%s\n", numbersOrDash(d.Templates))
 				if err := tw.Flush(); err != nil {
 					return err
 				}
@@ -1083,9 +1087,11 @@ to the others.`,
 				return err
 			}
 			return output.Render(format, d, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "%sed document #%d (%s) — now on prospects %s, products %s, strategies %s\n",
+				_, err := fmt.Fprintf(w,
+					"%sed document #%d (%s)\n  prospects %s · products %s · strategies %s · templates %s\n",
 					verb, d.Number, d.Title,
-					numbersOrDash(d.Prospects), numbersOrDash(d.Products), numbersOrDash(d.Strategies))
+					numbersOrDash(d.Prospects), numbersOrDash(d.Products),
+					numbersOrDash(d.Strategies), numbersOrDash(d.Templates))
 				return err
 			})
 		},

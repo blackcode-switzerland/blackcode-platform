@@ -896,8 +896,18 @@ lying to the reader:
   can delete the file and who controls who sees it, and a listing that rendered
   them identically — which this app did until now — hid both.
 
-Thumbnail in the row, player on request: ten iframes to a third party is ten
-round trips before the page settles, for previews nobody asked to watch.
+**The preview is FULL SCREEN**, not inline. It expanded in the row at first and
+read badly — a player between two rows pushes the page around, competes with its
+own row for attention, and is stuck at the width of a list never meant to hold a
+video. `MediaLightbox` in `@blackcode/platform-ui` is the shared overlay; the
+only thing still rendered inline is the "cannot be previewed, and here is why"
+card, which is exactly what a reader needs in the row.
+
+**A Drive file shows no thumbnail**, and that is measured rather than missing:
+Drive's thumbnail endpoint is refused by the browser's Opaque Response Blocking
+in every variant tried, while `curl` fetches it happily — so it looked correct
+from the server and from every test. `google-drive.ts` records the four variants
+and the proxy that would fix it. The preview itself is unaffected.
 
 A folder never gets a preview and never gets a "Restricted" chip — it has no
 embed at any permission level, and saying "share it to preview it here" would

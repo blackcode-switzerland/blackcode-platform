@@ -75,15 +75,42 @@ function segments(url: URL): string[] {
 }
 
 /**
- * The thumbnail Drive serves without credentials, for anything link-shared.
+ * ===========================================================================
+ * DRIVE THUMBNAILS CANNOT BE HOT-LINKED INTO A BROWSER. MEASURED.
+ * ===========================================================================
+ * This used to return `https://drive.google.com/thumbnail?id=<id>&sz=w800`, and
+ * the row rendered it as an `<img>`. `curl` fetches that URL happily — 200,
+ * `image/jpeg`, 100 KB — so it looked correct from the server side and from
+ * every test.
  *
- * `sz=w800` rather than the default: the default is small enough to look broken
- * on a card. This is also the endpoint the server-side renderability probe hits
- * — it answers 200 for a shared file and redirects for a restricted one, which
- * is the cheapest credential-free signal available.
+ * **In a browser it fails, every time, with `net::ERR_BLOCKED_BY_ORB`.** Drive
+ * redirects to `lh3.googleusercontent.com`, and Chrome's Opaque Response
+ * Blocking refuses the cross-origin response for an `<img>` load. Four variants
+ * were tried in a real page against a genuinely link-shared file:
+ *
+ *     drive.google.com/thumbnail                  BLOCKED
+ *     drive.google.com/thumbnail + no-referrer    BLOCKED
+ *     lh3.googleusercontent.com/d/<id>            BLOCKED
+ *     lh3.googleusercontent.com/d/<id> + no-ref   BLOCKED
+ *
+ * So this returns **null**, and the row shows a type icon instead. A URL we
+ * know cannot load is worse than none: it costs a request per row and renders
+ * a broken-image glyph.
+ *
+ * WHAT STILL WORKS, and is what actually matters: the `/preview` iframe. The
+ * modal was verified against the same file — Drive's own player loaded and
+ * fetched the media. The preview is not lost, only the row thumbnail.
+ *
+ * THE FIX, IF A THUMBNAIL IS EVER WANTED: proxy it. Our SERVER can fetch the
+ * image (that is what `curl` proved), so an endpoint that streams it back
+ * same-origin would defeat ORB. It is not built because it puts third-party
+ * bytes and their bandwidth through our infrastructure for a decoration, and
+ * because the id is caller-supplied — safe here only because the host is
+ * hardcoded and the id is regex-constrained, which a proxy would have to keep
+ * true. One function, one file, when somebody wants it.
  */
-function thumbnail(id: string): string {
-  return `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w800`
+function thumbnail(_id: string): string | null {
+  return null
 }
 
 function fileMatch(id: string, hints: DescribeHints): Match {

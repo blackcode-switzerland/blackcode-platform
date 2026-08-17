@@ -22,6 +22,51 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-17 (later) — Drive files know their type, previews go full screen
+
+**Additive.** Three fixes on top of the file-provider work, all found by testing
+against real Google Drive files.
+
+**A Drive link now knows what it points at.** `drive.google.com/file/d/<id>/`
+carries no type — a video, a pdf and a sheet are the same url shape — so every
+Drive document typed as `other` and got a generic icon. The server now asks the
+provider with a **one-byte range request** and gets the real mime back
+(`video/mp4`, `image/jpeg`, measured). `--kind` stays optional and an explicit
+one still wins.
+
+`bk sales doc recheck <n|all>` **backfills** this for documents attached before
+the detection existed, and upgrades `kind` from the neutral `link` — never from
+a label somebody chose.
+
+**`doc link --template` was write-only.** It has written the link since day one
+and nothing ever read it back: not `doc show`, not `template show`, and there
+was no filter. A link you could create and never see. `templates` is now served
+on the document, printed by `doc show`, and `doc list --template <n>` filters by
+it — matching prospects, products and strategies.
+
+**Previews open full screen** instead of expanding inside the list row, over a
+dimmed backdrop, with the provider named and a link to the original. Escape or a
+click outside closes it. `MediaLightbox` in `@blackcode/platform-ui` is shared,
+so any app can use it.
+
+**Two measured limits, recorded because they look like bugs:**
+
+- **A Drive file shows no thumbnail in the list.** Drive's thumbnail endpoint
+  cannot be hot-linked into a browser — four variants all refused with
+  `ERR_BLOCKED_BY_ORB`, though `curl` fetches it happily, which is why it looked
+  fine from the server. The row shows a type icon rather than a broken image.
+  **The preview itself is unaffected** — Drive's player was verified loading
+  inside the modal.
+- A large Drive file answers the type probe with an HTML virus-scan
+  interstitial. That is refused rather than mapped, because `text/*` would have
+  typed every big video as a document — wrong with conviction.
+
+Also fixed: `updateDocument` never persisted `mime_type`, so any update setting
+it silently did nothing. Found when `doc recheck` detected `video/mp4`, reported
+success, and changed no row.
+
+---
+
 ## 2026-08-17 — the document library previews files and knows where they live
 
 **Additive, nothing breaking** (sales #40). The library rendered every entry as

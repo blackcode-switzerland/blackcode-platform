@@ -52,7 +52,12 @@ import {
   RemoveCommunicationButton,
 } from '@/components/ledgers/ledger-forms'
 import { MeetingLink } from '@/components/ledgers/ledger-pages'
-import { FilePreview, SourceBadge } from '@/components/documents/file-preview'
+import {
+  FilePreviewModal,
+  PreviewFallback,
+  SourceBadge,
+  canPreview,
+} from '@/components/documents/file-preview'
 import { useCanWrite } from '@/lib/ui-mode'
 import { usePageTitle } from '@/components/sales-shell'
 import {
@@ -884,8 +889,7 @@ function DocumentRow({
   }, [focused])
   const [open, setOpen] = useState(false)
   const f = doc.file
-  const mayEmbed = f.internal || f.preview_status === 'public'
-  const hasPlayer = mayEmbed && f.embed_mode !== 'none' && Boolean(f.embed_url)
+  const hasPlayer = canPreview(doc)
 
   return (
     <div
@@ -900,7 +904,9 @@ function DocumentRow({
         <RecordNumber n={doc.number} />
         {/* The thumbnail IS the recognisability #40 is about: a video that
             looks like a video before you click anything. */}
-        {f.thumbnail_url && mayEmbed && (
+        {/* Gated on the same rule as the player: a thumbnail we are not allowed
+            to fetch renders as a broken image icon, which is worse than none. */}
+        {f.thumbnail_url && (f.internal || f.preview_status === 'public') && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={f.thumbnail_url}
@@ -924,7 +930,7 @@ function DocumentRow({
             aria-expanded={open}
             className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-accent"
           >
-            {open ? 'Hide' : 'Preview'}
+            Preview
           </button>
         )}
         <a
@@ -937,18 +943,15 @@ function DocumentRow({
           <ArrowUpRight size={14} />
         </a>
       </div>
-      {/* The fallback card renders WITHOUT expanding, because "this cannot be
-          previewed and here is why" is the thing a reader most needs to see. */}
+      {/* The only thing that still renders INLINE: "this cannot be previewed,
+          and here is why". A reader needs that in the row; a preview does not
+          belong there and now opens full screen. */}
       {!hasPlayer && (f.preview_status === 'restricted' || f.preview_status === 'unknown') && (
         <div className="mt-2">
-          <FilePreview doc={doc} />
+          <PreviewFallback doc={doc} />
         </div>
       )}
-      {open && hasPlayer && (
-        <div className="mt-2">
-          <FilePreview doc={doc} />
-        </div>
-      )}
+      {open && <FilePreviewModal doc={doc} onClose={() => setOpen(false)} />}
     </div>
   )
 }

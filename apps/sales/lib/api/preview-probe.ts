@@ -110,6 +110,78 @@ export async function probePreview(
   }
 }
 
+/**
+ * What kind of file is behind a Drive link — the type the url refuses to say.
+ *
+ * ===========================================================================
+ * WHY THIS EXISTS
+ * ===========================================================================
+ * `drive.google.com/file/d/<id>/view` carries no type. A video, a pdf and a
+ * spreadsheet are the same url shape, so the recogniser can only answer
+ * `other`, and sales #40's central ask — "auto-detect its type (video, doc,
+ * sheet, image, pdf) and render it properly" — cannot be met from the url
+ * alone. The thumbnail does not help either: the thumbnail OF a video is a
+ * jpeg, so content-sniffing it reports every video as an image.
+ *
+ * Drive's download endpoint does say, without credentials, if you ask for one
+ * byte. Measured 2026-08-17 against two real link-shared files:
+ *
+ *     .../uc?export=download&id=<image>  → 206 image/jpeg
+ *     .../uc?export=download&id=<video>  → 206 video/mp4
+ *
+ * ===========================================================================
+ * THE INTERSTITIAL IS THE FAILURE TO GUARD AGAINST
+ * ===========================================================================
+ * For a large file Drive answers with an HTML "can't scan this for viruses"
+ * confirmation page instead of the bytes. That page is `text/html`, and
+ * `mediaKindOf` maps `text/*` to `doc` — so an unguarded version would
+ * confidently type every large video as a document. Worse than not detecting,
+ * because it is wrong with conviction.
+ *
+ * So `text/html` is REFUSED rather than mapped, and so is anything empty or
+ * generic (`application/binary` is what the 303 hop reports before the real
+ * type). Undetected returns null and the caller keeps `other`, which renders a
+ * card — the same honest outcome as before this function existed.
+ *
+ * Never throws, for `probePreview`'s reason: it runs inside a write path.
+ */
+export async function probeMimeType(
+  provider: string,
+  externalId: string | null
+): Promise<string | null> {
+  if (provider !== 'google_drive' || !externalId) return null
+
+  const url = `https://drive.google.com/uc?export=download&id=${encodeURIComponent(externalId)}`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  try {
+    const res = await fetch(url, {
+      // ONE BYTE. The point is the Content-Type header, not the file — and a
+      // range request means a 4 GB video costs the same as a thumbnail.
+      headers: { Range: 'bytes=0-0' },
+      // `follow` here, unlike `probePreview`: the type is only revealed after
+      // the 303 to `drive.usercontent.google.com`. There is no sign-in trap on
+      // this path — a private file answers with HTML, which is refused below.
+      redirect: 'follow',
+      credentials: 'omit',
+      signal: controller.signal,
+    })
+    if (res.status !== 200 && res.status !== 206) return null
+    const raw = res.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase()
+    if (!raw) return null
+    // The three that are not answers. See the header — `text/html` is the
+    // virus-scan interstitial and would type a large video as a document.
+    if (raw.startsWith('text/html') || raw === 'application/binary' || raw === 'application/octet-stream') {
+      return null
+    }
+    return raw
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** The human/agent-facing sentence for a status. Used by the route's response
  *  and echoed by `bk`, so both surfaces say the same thing. */
 export function previewStatusNote(status: PreviewStatus | null, provider: string): string | null {

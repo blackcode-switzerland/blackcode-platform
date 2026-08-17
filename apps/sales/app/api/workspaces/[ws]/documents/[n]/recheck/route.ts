@@ -33,8 +33,9 @@ import { resolveActor } from '@/lib/actor'
 import { getDocumentBySeq, listDocuments, updateDocument } from '@/lib/db/queries/catalog'
 import { publicDocument } from '@/lib/views'
 import { describeFile } from '@blackcode/platform-file-providers'
-import { previewStatusNote, probePreview } from '@/lib/api/preview-probe'
+import { previewStatusNote, probeMimeType, probePreview } from '@/lib/api/preview-probe'
 import { requireNumberParam } from '@/lib/http-input'
+import { defaultKindFor } from '@/lib/api/document-kind'
 
 interface Params {
   params: Promise<{ ws: string; n: string }>
@@ -44,12 +45,30 @@ interface Params {
 async function recheckOne(
   workspaceId: number,
   seq: number,
-  doc: { upload_url: string | null; external_url: string | null; mime_type: string | null; title: string; preview_status: string | null },
+  doc: {
+    upload_url: string | null
+    external_url: string | null
+    mime_type: string | null
+    title: string
+    preview_status: string | null
+    kind: string
+  },
   actor: Parameters<typeof updateDocument>[3]
 ) {
   // No `filename` hint — the title is a label, not a filename. See
   // `publicDocument` for the bug that taught us.
-  const file = describeFile(doc.upload_url ?? doc.external_url ?? '', { mime: doc.mime_type })
+  let mime = doc.mime_type
+  let file = describeFile(doc.upload_url ?? doc.external_url ?? '', { mime })
+  // Detect the type for a Drive link that has none yet. This is also the
+  // BACKFILL path for documents attached before detection existed — which is
+  // why `doc recheck all` is the documented post-upgrade sweep.
+  if (!mime && file.provider === 'google_drive') {
+    const detected = await probeMimeType(file.provider, file.external_id)
+    if (detected) {
+      mime = detected
+      file = describeFile(doc.upload_url ?? doc.external_url ?? '', { mime })
+    }
+  }
   // Same rule as the create path: nothing to embed means a verdict would say
   // nothing. A folder is the case that matters — it can never be previewed, so
   // "restricted" would advise a fix that changes nothing.
@@ -63,6 +82,24 @@ async function recheckOne(
       externalId: file.external_id,
       previewStatus: status,
       previewCheckedAt: status ? new Date() : null,
+      // Only when we learnt something — `undefined` leaves the column alone.
+      mimeType: mime !== doc.mime_type ? mime : undefined,
+      /**
+       * Upgrade `kind` ONLY from the neutral value.
+       *
+       * `kind` is the author's label and a recheck must not overwrite a
+       * judgement — `deck` is something a person decided and no probe can
+       * know. But `link` is precisely the value the create path writes when it
+       * could NOT tell, so replacing it with a type we have since measured is
+       * filling a blank rather than contradicting anybody.
+       *
+       * Without this, a document attached before detection existed keeps
+       * `kind: link` for ever and `doc list --kind video` never finds it.
+       */
+      kind:
+        doc.kind === 'link' && mime && mime !== doc.mime_type
+          ? defaultKindFor(file.media_kind)
+          : undefined,
     },
     actor
   )
@@ -71,7 +108,8 @@ async function recheckOne(
     provider: file.provider,
     was: doc.preview_status,
     now: status,
-    changed: (doc.preview_status ?? null) !== (status ?? null),
+    changed: (doc.preview_status ?? null) !== (status ?? null) || mime !== doc.mime_type,
+    media_kind: file.media_kind,
     note: previewStatusNote(status, file.provider),
   }
 }

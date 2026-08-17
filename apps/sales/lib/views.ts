@@ -460,6 +460,7 @@ export function publicDocument(
     prospect_numbers: number[]
     product_numbers: number[]
     strategy_numbers: number[]
+    template_numbers: number[]
     storage_provider: string | null
     external_id: string | null
     preview_status: string | null
@@ -498,6 +499,9 @@ export function publicDocument(
     prospects: d.prospect_numbers,
     products: d.product_numbers,
     strategies: d.strategy_numbers,
+    // Read back at last (2026-08-17). `doc link --template` has written this
+    // since 0001 and nothing served it, so the link was unverifiable.
+    templates: d.template_numbers,
     /**
      * Everything a surface needs to SHOW the file, in one block.
      *

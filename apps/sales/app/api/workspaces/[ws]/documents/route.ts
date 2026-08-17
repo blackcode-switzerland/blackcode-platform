@@ -23,7 +23,8 @@ import { resolveActor } from '@/lib/actor'
 import { addDocument, listDocuments } from '@/lib/db/queries/catalog'
 import { publicDocument } from '@/lib/views'
 import { describeFile } from '@blackcode/platform-file-providers'
-import { previewStatusNote, probePreview } from '@/lib/api/preview-probe'
+import { previewStatusNote, probeMimeType, probePreview } from '@/lib/api/preview-probe'
+import { defaultKindFor } from '@/lib/api/document-kind'
 import { DOCUMENT_TITLE_MAX } from '@/lib/limits'
 import { numberOr, parseList, requireMaxLength, str } from '@/lib/http-input'
 import { DOCUMENT_KIND_VALUES } from '@/lib/pipeline'
@@ -58,6 +59,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     kind,
     prospectSeq: numberOr(q.get('prospect')),
     productSeq: numberOr(q.get('product')),
+    templateSeq: numberOr(q.get('template')),
     tags: parseList(q.get('tag')),
     q: str(q.get('q')),
     includeDeleted: q.get('include_deleted') === 'true',
@@ -107,10 +109,29 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   // Derived from the url, never taken from the caller. A client that could
   // declare its own link `blob` would be declaring itself under the delete
   // gate's protection, which is a claim only we get to make.
-  const mimeType = str(body?.mime_type) ?? null
+  let mimeType = str(body?.mime_type) ?? null
   // No `filename` hint: the TITLE is a label, not a filename, and passing it
   // makes it beat the url's own path. See `publicDocument`.
-  const file = describeFile(uploadUrl ?? externalUrl ?? '', { mime: mimeType })
+  let file = describeFile(uploadUrl ?? externalUrl ?? '', { mime: mimeType })
+
+  // A Drive url says nothing about what it points AT — a video, a pdf and a
+  // sheet are the same url shape — so the recogniser can only answer `other`.
+  // Ask the provider once, with a one-byte range request; see `probeMimeType`
+  // for why the thumbnail cannot answer this and what the HTML interstitial
+  // would do to us.
+  //
+  // Only when the caller did not already say. An explicit `mime_type` is
+  // information we did not have to guess at, and it wins.
+  if (!mimeType && file.provider === 'google_drive') {
+    const detected = await probeMimeType(file.provider, file.external_id)
+    if (detected) {
+      mimeType = detected
+      // Re-derive. The first descriptor was built without a mime, so its
+      // `media_kind` is `other` — this is the line that turns a Drive link
+      // into a *video*.
+      file = describeFile(uploadUrl ?? externalUrl ?? '', { mime: mimeType })
+    }
+  }
 
   // `kind` became OPTIONAL in this change. It is the author's own label and
   // still wins when given; when it is absent we default it from what the file
@@ -153,7 +174,13 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   return NextResponse.json(
     {
       ...publicDocument(
-        { ...row, prospect_numbers: [], product_numbers: [], strategy_numbers: [] },
+        {
+          ...row,
+          prospect_numbers: [],
+          product_numbers: [],
+          strategy_numbers: [],
+          template_numbers: [],
+        },
         ctx.workspace.slug
       ),
       // THE SENTENCE THE AGENT READS. A `restricted` verdict is the whole
@@ -168,31 +195,4 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
 /** Is there anything a preview verdict could change? See the call site. */
 function shouldProbe(file: { internal: boolean; embed: { mode: string } }): boolean {
   return !file.internal && file.embed.mode !== 'none'
-}
-
-/**
- * A `kind` for a file whose author did not name one.
- *
- * `document_kinds` is the AUTHOR's vocabulary and is shaped differently from the
- * derived media kind: `deck` is a judgement about purpose and `link` is one
- * about location, and no recogniser can infer either. So this maps only the four
- * that are genuinely the same question and falls back to `link` for everything
- * else — recording "we could not tell" as the neutral value rather than as a
- * guess the author would then have to notice and correct.
- *
- * An explicit `--kind` always wins. This only fills a blank.
- */
-function defaultKindFor(mediaKind: string): string {
-  switch (mediaKind) {
-    case 'image':
-      return 'image'
-    case 'video':
-      return 'video'
-    case 'pdf':
-      return 'pdf'
-    case 'slides':
-      return 'deck'
-    default:
-      return 'link'
-  }
 }
