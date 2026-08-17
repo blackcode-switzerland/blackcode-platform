@@ -2,6 +2,10 @@
 //
 //   npm run db:seed:books            (idempotent: replaces the seeded workspace)
 //
+// A LOCAL DATABASE ONLY. See `seedRefusal` below: this deletes and rebuilds the
+// workspace slugged `blackcode`, so it refuses any host that is not this machine.
+// Production books are not seeded at all, they are created and posted to.
+//
 // ===========================================================================
 // THE SEED IS A REAL CLIENT OF THE SCHEMA, WHICH IS THE POINT
 // ===========================================================================
@@ -113,7 +117,91 @@ const F = fixture as unknown as {
 
 export const SEED_SLUG = 'blackcode'
 
+// ===========================================================================
+// WHERE THIS MAY RUN, AND WHY THE GATE IS TIGHTER THAN THE SALES ONE
+// ===========================================================================
+// b/sales gates its seed on `NODE_ENV !== 'production'` AND `SALES_SEED=1`, and
+// says of itself: "it never deletes anything it did not create".
+//
+// This seed does the opposite. It DELETES the workspace slugged `blackcode` and
+// everything under it, with all six protective triggers switched off, and then
+// rebuilds it. Against production that is not a duplicate row next to real data,
+// it is Andrea's books gone — and it is one wrong `DATABASE_URL` away, because
+// the destructive path is the NORMAL path here. Re-running the seed is how it is
+// meant to be used.
+//
+// So the target host is checked as well, which is the gate that actually matches
+// the hazard: `NODE_ENV` reflects how the process was launched, and a `.env.local`
+// edited to point at a real database says nothing about `NODE_ENV` at all.
+//
+// Failing closed is the rule throughout: an absent or unparseable URL is refused
+// rather than assumed local.
+
+/** Loopback in the four forms a connection string can spell it, plus the empty host of a unix socket. */
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0', ''])
+
+/** The one deliberate escape hatch, for a dev database that genuinely is not on this machine. */
+export const ALLOW_REMOTE_ENV = 'BOOKS_SEED_ALLOW_REMOTE_HOST'
+
+/**
+ * Why this seed must not run against `url`, or `null` if it may.
+ *
+ * Pure and parameterised rather than reading `process.env` directly, so
+ * `seed-guard.test.ts` can check the refusals without mutating global env — a
+ * guard nobody can test is a guard nobody can trust.
+ */
+export function seedRefusal(
+  url: string | undefined,
+  env: Record<string, string | undefined> = {}
+): string | null {
+  // Production is refused outright. The remote-host override does NOT reach this:
+  // "my dev database is elsewhere" and "this is production" are different claims
+  // and one must never be usable as the other.
+  if (env.NODE_ENV === 'production' || env.VERCEL_ENV === 'production') {
+    return 'NODE_ENV or VERCEL_ENV says production. This seed deletes the workspace slugged `blackcode`.'
+  }
+
+  if (!url) {
+    return 'DATABASE_URL is not set. Refusing rather than guessing where it would have written.'
+  }
+
+  // BELOW the production gate on purpose. "My dev database is elsewhere" and
+  // "this is production" are different claims, and one must never be usable as
+  // the other, so this waives the host check and nothing above it.
+  if (env[ALLOW_REMOTE_ENV] === '1') return null
+
+  let host: string
+  try {
+    host = new URL(url).hostname.toLowerCase()
+  } catch {
+    return 'DATABASE_URL could not be parsed, so its target host is unknown. Refusing.'
+  }
+
+  if (!LOCAL_HOSTS.has(host)) {
+    return (
+      `DATABASE_URL points at "${host}", which is not this machine.\n` +
+      '  This seed DELETES the workspace slugged `blackcode` and everything under it,\n' +
+      '  with every protective trigger disabled, and then rebuilds it from the mockup.\n' +
+      '  Production books do not come from here: they are created with `bk books entity\n' +
+      '  create` and posted to entry by entry.\n' +
+      `  If that host really is a development database, set ${ALLOW_REMOTE_ENV}=1.`
+    )
+  }
+
+  return null
+}
+
+/** Throws with the reason if this database must not be seeded. */
+export function assertSeedable(env: Record<string, string | undefined> = process.env): void {
+  const refusal = seedRefusal(env.DATABASE_URL, env)
+  if (refusal) throw new Error(`refusing to seed: ${refusal}`)
+}
+
 export async function seed(ownerUserId: number): Promise<{ workspaceId: number }> {
+  // Checked here and not only in `scripts/seed.ts`, so no future caller can reach
+  // the teardown by importing this function directly.
+  assertSeedable()
+
   const db = getDb()
 
   // ---- idempotence -------------------------------------------------------
