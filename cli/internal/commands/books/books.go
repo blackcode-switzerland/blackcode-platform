@@ -49,7 +49,16 @@ A BOOK is one legal entity's set of accounts: a company, or a person's
 self-employment activity. A user may have as many as they need, and nothing in
 this app assumes a particular number.
 
-  bk books note       placeholder entity, phase 0 only (see below)
+THE STATUTORY CORE — phase 1, and here now:
+
+  bk books entity     list, create      a book. Arrives with the PME chart in it
+  bk books exercice   list, create      a fiscal year. Needed before anything posts
+  bk books account    list              that book's chart of accounts
+  bk books entry      list, show        the grand livre
+  bk books bilan                        balance sheet, art. 959a
+  bk books cr                           compte de résultat, art. 959b
+  bk books patrimoine                   net worth, for a sole proprietorship
+  bk books overview                     every book, with the statement its form has
 
 THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
@@ -59,18 +68,16 @@ THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
 "bk books workspace use x" sets THIS app's active workspace and no other's.
 
-WHAT IS NOT HERE YET, and deliberately so. Phase 0 has built the app skeleton,
-its schema and this command group; the bookkeeping nouns land in phases 1 and 2:
+WHAT IS NOT HERE YET, and deliberately so:
 
-  entry, account, exercice, bilan, cr   phase 1 — the statutory core
   rule, worklist, resolve               phase 2 — recognition
-  source, piece                        phase 3
-  analyse, tax                         phase 4
+  source, piece                        phase 3 — provenance and the proof
+  analyse, tax                         phase 4 — management view and write-back
 
-"note" is the scaffold's placeholder entity. It is carried so this app has a
-route and a command that can be parity-checked while phase 0 is in progress, and
-it is REMOVED in phase 1 when the ledger entry replaces it. Do not build anything
-on it.
+CREATING A BOOK GIVES YOU TWO THINGS, and you need a third. "entity create"
+installs the Swiss PME chart of accounts, because a book with no accounts can
+hold no entry. It does NOT open a fiscal year — run "exercice create" next, or
+every read will tell you the book has no exercice.
 
 THE DOCTRINE, because it explains the shape: this app holds no intelligence. It
 stores legible records and derives statements; the judgement lives in the agent

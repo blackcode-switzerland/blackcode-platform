@@ -107,7 +107,11 @@ func newEntityCreateCmd() *cobra.Command {
 			"The bookkeeping regime follows from the legal form unless you state it: a capital\n" +
 			"company is always double-entry (art. 957 al. 1 ch. 2 CO, no exceptions at any\n" +
 			"turnover) and a sole proprietorship defaults to simplified. The server refuses a\n" +
-			"simplified SA with a database constraint rather than a warning.",
+			"simplified SA with a database constraint rather than a warning.\n\n" +
+			"The book arrives with the Swiss PME chart of accounts already in it, because a\n" +
+			"book with no accounts cannot take a posting. Those accounts are then this book's\n" +
+			"own: editing them affects no other book. It still needs a fiscal year before\n" +
+			"anything can be posted — see `bk books exercice create`.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -123,8 +127,14 @@ func newEntityCreateCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, e, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "created book #%d: %s (%s, %s)\n",
-					e.Number, e.Slug, e.LegalForm, e.BookkeepingRegime)
+				if _, err := fmt.Fprintf(w, "created book #%d: %s (%s, %s)\n",
+					e.Number, e.Slug, e.LegalForm, e.BookkeepingRegime); err != nil {
+					return err
+				}
+				// Say what is still missing. The book has a chart and no fiscal
+				// year, so nothing can be posted to it yet, and a reader who is
+				// not told that reads "created" as "ready".
+				_, err := fmt.Fprintf(w, "chart of accounts installed. Next: bk books exercice create --entity %s --year <yyyy>\n", e.Slug)
 				return err
 			})
 		},
