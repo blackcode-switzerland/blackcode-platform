@@ -7,6 +7,7 @@ import (
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/books"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/issues"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/platform"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/sales"
@@ -227,7 +228,7 @@ func NewRoot() *cobra.Command {
 	// it there rather than here is what lets an app add its own entity-specific
 	// subcommands to those groups (`bk issues label attach`) without this file
 	// knowing any app's nouns.
-	for _, group := range []*cobra.Command{issues.NewGroup(), sales.NewGroup(), scaffold.NewCmd()} {
+	for _, group := range []*cobra.Command{issues.NewGroup(), sales.NewGroup(), books.NewGroup(), scaffold.NewCmd()} {
 		pinApp(group, group.Name())
 		root.AddCommand(group)
 	}
