@@ -159,6 +159,15 @@ Three things about these that will bite otherwise:
 **Zero-balance legal lines still exist.** They may be collapsed visually. They
 are never absent from the model.
 
+**Three figures will not match the static mockup, on purpose.** blackcode has
+two entries dated 2025, and the API keeps them in a closed exercice 2025 while
+the mockup summed both years into one statement. The 2026 bilan totals are
+identical to the rappen, but résultat de l'exercice, résultat reporté and the
+CR's autres charges each differ by the 2025 result (4850.00). If you are
+comparing a screen against the mockup and one of those three is off by exactly
+that amount, the API is right. The full reasoning is in
+[`lib/db/seed.ts`](../lib/db/seed.ts), and `lib/db/seed-parity.test.ts` pins it.
+
 ## 7. What was missing, and what the frontend chose — settled 2026-08-17
 
 > **This section described an absence. The absence was filled on 2026-08-17 by

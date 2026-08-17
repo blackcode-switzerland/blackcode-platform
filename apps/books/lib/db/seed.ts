@@ -22,26 +22,57 @@
 //   * Amounts are written as fixed-2 STRINGS, never JavaScript numbers.
 //
 // ===========================================================================
-// ONE EXERCICE, AND THE COMPROMISE IN IT
+// TWO EXERCICES FOR BLACKCODE, AND THE REPRISE BETWEEN THEM
 // ===========================================================================
 // `ENTITIES` declares `exercice: 2026`, and the transaction data spans TWO years:
-// fifteen entries in 2026 and two in 2025 (1001 and 1009, both frozen-UBS
-// history). The mockup's own derivations have no year boundary at all, which is
-// why nobody noticed.
+// fifteen entries in 2026 and two in 2025 (1001 and 1009, both posted, both
+// frozen-UBS history, both blackcode's). The mockup's own derivations have no
+// year boundary at all, which is why nobody noticed.
 //
-// A faithful 2025/2026 split needs a YEAR-END CLOSE: 2025's closing balances become
-// 2026's opening, with the year's result rolled into `résultat reporté`. Phase 1
-// does not build that (see week-one.md, "no multi year and no year end close").
+// This seed used to put all seventeen into one exercice labelled 2026, stretched
+// backwards to contain them. That was the documented compromise, and it is gone:
+// an entry dated 2025 sitting in exercice 2026 is exactly the kind of wrong this
+// app exists to refuse.
 //
-// So the seed creates ONE exercice per book, labelled 2026 as declared, starting
-// early enough to contain the pre-migration entries. That reproduces the mockup's
-// numbers exactly, which is the phase 1 acceptance criterion, and it is written
-// down here rather than hidden because a reader will otherwise see a 2025 entry in
-// exercice 2026 and think it a bug.
+// So blackcode gets exercice 2025 (CLOSED) holding its two 2025 entries, and
+// exercice 2026 (open) holding the rest. AIOS and the RI have 2026 data only and
+// get one exercice each. Every window is a clean calendar year.
 //
-// The SCHEMA is not compromised: every derivation already takes
-// `(entityId, exerciceId)`, so adding 2025 later is data plus a close routine, not
-// a migration.
+// ── THE CLOSE IS DATA, NOT A FEATURE ────────────────────────────────────────
+// 2026's opening balances are COMPUTED below from 2025's: closing balance per
+// bilan account, with the 2025 result folded into 2970 (résultat reporté). The
+// arithmetic is `closeYear`, built on the same audited derive functions the
+// statements use.
+//
+// The app itself still has NO year-end close routine — that stays out of phase 1,
+// per week-one.md. What this seed does is what onboarding any real client
+// mid-life looks like: the prior year was closed elsewhere (here, by arithmetic;
+// for Andrea, by the fiduciary), and its closing balances are keyed in as the new
+// year's openings. `opening_balance` is a table for exactly this reason.
+//
+// `closed_at` stays NULL on the closed exercice: the close was not performed
+// in-system, so a timestamp for it would be invention.
+//
+// ── WHAT THIS CHANGES AGAINST THE STATIC MOCKUP'S SCREENS ───────────────────
+// The 2026 bilan TOTALS are unchanged to the rappen: openings absorb the 2025
+// movements, so both sides land where they always did. But the mockup computed
+// one statement over both years, so the RESULT lines move, all by the 2025
+// result (-4850.00: rent 1850 + admin 3000, both charges, no produits):
+//
+//   résultat de l'exercice    2026-only, so 4850.00 higher than the mockup's
+//   résultat reporté          4850.00 lower, holding the folded 2025 loss
+//   CR autres charges         4850.00 smaller; the two charges sit on exercice
+//                             2025's own compte de résultat instead
+//
+// That is the statutorily correct allocation: a December 2025 rent belongs to
+// 2025's result, which by 2026 lives in retained earnings. The mockup's version
+// was an artefact of having no year boundary. `seed-parity.test.ts` pins the
+// invariant totals AND the shifted lines, each derived from the fixture rather
+// than hardcoded.
+//
+// The 2025 statements are real and queryable: `bk books bilan --entity blackcode
+// --exercice 2025` balances, and its closing balances are 2026's openings line
+// for line.
 
 import { eq, sql } from 'drizzle-orm'
 import { getDb } from './client'
@@ -59,6 +90,14 @@ import {
   booksRiEntry,
   booksPatrimoine,
 } from './schema'
+import {
+  accountBalance,
+  crFor,
+  toCentimes,
+  fromCentimes,
+  type ChartAccount,
+  type PostingLine,
+} from '../derive'
 import fixture from '../../fixtures/mockup.json'
 
 /** Fixed-2 string, which is what `numeric(14,2)` wants. Never a float. */
@@ -116,6 +155,59 @@ const F = fixture as unknown as {
 }
 
 export const SEED_SLUG = 'blackcode'
+
+// ---------------------------------------------------------------------------
+// The reprise: closing one year to open the next
+// ---------------------------------------------------------------------------
+
+/** The fixture's chart in the shape the derive functions take. */
+const CHART: ChartAccount[] = F.ACCOUNTS.map((a) => ({
+  no: a.no,
+  class: a.class,
+  statement: a.statement,
+  statement_position: a.statement_position,
+}))
+
+/** One book's posting lines for one calendar year, as the derivations see them. */
+function fxLines(entityFxId: number, year: number, tx: FxTx[]): PostingLine[] {
+  const out: PostingLine[] = []
+  for (const t of tx) {
+    if (t.entity_id !== entityFxId) continue
+    if (Number(t.date.slice(0, 4)) !== year) continue
+    for (const l of t.lines) {
+      out.push({ account_no: l.account, debit: money(l.debit), credit: money(l.credit), status: t.status })
+    }
+  }
+  return out
+}
+
+/**
+ * Close a year: openings in, next year's openings out. Centimes throughout.
+ *
+ * Per bilan account, the closing balance (class 2 sign handled by
+ * `accountBalance`); then the year's result folded into 2970, résultat reporté —
+ * which is what closing an exercice MEANS, and why CR accounts start the new
+ * year at zero without appearing here at all.
+ *
+ * Zero closings are dropped rather than written: a missing `opening_balance`
+ * row means zero by contract, stated on the table itself in 0003.
+ */
+function closeYear(openings: Map<string, bigint>, lines: PostingLine[]): Map<string, bigint> {
+  const next = new Map<string, bigint>()
+  for (const a of CHART) {
+    if (a.statement !== 'bilan') continue
+    const closing = accountBalance(lines, a, openings.get(a.no) ?? 0n)
+    if (closing !== 0n) next.set(a.no, closing)
+  }
+  const resultat = toCentimes(crFor(lines, CHART).resultat)
+  const reporte = CHART.find((a) => a.statement_position === 'resultat_reporte')
+  if (reporte && resultat !== 0n) {
+    const folded = (next.get(reporte.no) ?? 0n) + resultat
+    if (folded === 0n) next.delete(reporte.no)
+    else next.set(reporte.no, folded)
+  }
+  return next
+}
 
 // ===========================================================================
 // WHERE THIS MAY RUN, AND WHY THE GATE IS TIGHTER THAN THE SALES ONE
@@ -286,11 +378,10 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
 
   // ---- books -------------------------------------------------------------
   const entityId = new Map<number, number>()
-  const exerciceId = new Map<number, number>()
-
-  // Earliest posting across the whole fixture, so the single exercice contains
-  // the pre-migration entries. See the header.
-  const earliest = F.TX.map((t) => t.date).sort()[0] ?? '2026-01-01'
+  // `${fixture entity id}/${year}` -> exercice row id. Keyed per year because a
+  // book may have several, and blackcode does.
+  const exerciceIdByYear = new Map<string, number>()
+  const CURRENT_YEAR = 2026
 
   for (const e of F.ENTITIES) {
     const [row] = await db
@@ -319,19 +410,6 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
       .returning()
     entityId.set(e.id, row.id)
 
-    const [ex] = await db
-      .insert(booksExercice)
-      .values({
-        workspace_id: ws.id,
-        entity_id: row.id,
-        year: 2026,
-        starts_on: earliest < '2026-01-01' ? earliest : '2026-01-01',
-        ends_on: '2026-12-31',
-        status: 'open',
-      })
-      .returning()
-    exerciceId.set(e.id, ex.id)
-
     // ---- chart of accounts, per book ------------------------------------
     // The mockup has one shared chart; each book gets its own copy, because
     // `account` is per entity and two books may diverge.
@@ -347,20 +425,51 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
       }))
     )
 
-    // ---- opening balances ------------------------------------------------
-    // Absent for the RI, which is correct rather than missing data: art. 957 al. 2
-    // bookkeeping has no balance sheet to open.
-    const opening = F.OPENING[e.slug]
-    if (opening) {
-      await db.insert(booksOpeningBalance).values(
-        Object.entries(opening).map(([no, amount]) => ({
+    // ---- exercices and opening balances, year by year --------------------
+    // One exercice per calendar year the book has entries in, plus the current
+    // one. Past years are CLOSED, `closed_at` NULL — see the header for why.
+    //
+    // The FIRST year's openings are the fixture's `OPENING` (absent for the RI,
+    // which is correct rather than missing data: art. 957 al. 2 bookkeeping has
+    // no balance sheet to open). Every later year's openings are the previous
+    // year's close, computed by `closeYear` — the reprise.
+    const years = [
+      ...new Set([CURRENT_YEAR, ...F.TX.filter((t) => t.entity_id === e.id).map((t) => Number(t.date.slice(0, 4)))]),
+    ].sort()
+
+    let opening = new Map<string, bigint>()
+    for (const [no, amount] of Object.entries(F.OPENING[e.slug] ?? {})) {
+      opening.set(no, toCentimes(amount))
+    }
+
+    for (const year of years) {
+      const [ex] = await db
+        .insert(booksExercice)
+        .values({
           workspace_id: ws.id,
           entity_id: row.id,
-          exercice_id: ex.id,
-          account_no: no,
-          amount: money(amount),
-        }))
-      )
+          year,
+          starts_on: `${year}-01-01`,
+          ends_on: `${year}-12-31`,
+          status: year < CURRENT_YEAR ? 'closed' : 'open',
+        })
+        .returning()
+      exerciceIdByYear.set(`${e.id}/${year}`, ex.id)
+
+      if (opening.size > 0) {
+        await db.insert(booksOpeningBalance).values(
+          [...opening].map(([no, cents]) => ({
+            workspace_id: ws.id,
+            entity_id: row.id,
+            exercice_id: ex.id,
+            account_no: no,
+            amount: fromCentimes(cents),
+          }))
+        )
+      }
+
+      // Roll forward. For the last year this feeds nobody and costs nothing.
+      opening = closeYear(opening, fxLines(e.id, year, F.TX))
     }
   }
 
@@ -426,14 +535,17 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
   // (entity, exercice), so it is assigned in date order rather than from the
   // mockup's ids.
   const entryId = new Map<number, number>()
-  const byEntity = new Map<number, FxTx[]>()
+  // Grouped per (entity, YEAR): the journal restarts at 1 each exercice, which
+  // is what per-year statutory numbering means.
+  const byBookYear = new Map<string, FxTx[]>()
   for (const t of F.TX) {
-    const list = byEntity.get(t.entity_id) ?? []
+    const k = `${t.entity_id}/${t.date.slice(0, 4)}`
+    const list = byBookYear.get(k) ?? []
     list.push(t)
-    byEntity.set(t.entity_id, list)
+    byBookYear.set(k, list)
   }
 
-  for (const [fxEntity, txs] of byEntity) {
+  for (const [, txs] of byBookYear) {
     txs.sort((a, b) => (a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1))
     let entryNo = 0
     for (const t of txs) {
@@ -443,7 +555,7 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
         .values({
           workspace_id: ws.id,
           entity_id: entityId.get(t.entity_id)!,
-          exercice_id: exerciceId.get(t.entity_id)!,
+          exercice_id: exerciceIdByYear.get(`${t.entity_id}/${t.date.slice(0, 4)}`)!,
           seq: nextSeq('entry'),
           entry_no: entryNo,
           date: t.date,
@@ -518,7 +630,9 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
   const ri = F.ENTITIES.find((e) => e.legal_form === 'RI')
   if (ri) {
     const riEntity = entityId.get(ri.id)!
-    const riExercice = exerciceId.get(ri.id)!
+    // Every RI entry is 2026; the patrimoine's `as_of` of 2025-12-31 is the
+    // opening net-worth snapshot of that same exercice, not a 2025 record.
+    const riExercice = exerciceIdByYear.get(`${ri.id}/${CURRENT_YEAR}`)!
     for (const r of F.RI_ENTRIES) {
       await db.insert(booksRiEntry).values({
         workspace_id: ws.id,
