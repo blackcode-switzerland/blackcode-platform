@@ -310,9 +310,26 @@ export class MatchRefused extends Error {
   }
 }
 
+/** History is append-only; a pre-existing narrative object becomes the first element — resolve.ts's rule. */
+function appendHistory(prior: unknown, event: Record<string, unknown>): unknown[] {
+  return Array.isArray(prior) ? [...prior, event] : prior ? [prior, event] : [event]
+}
+
 /**
  * Attach a piece to an entry. The entry's `piece_*` columns are interpretation
  * — open on posted entries by design — and the piece leaves the inbox count.
+ *
+ * The number must live in the piece's OWN book. `entry.seq` is
+ * workspace-unique, so any book's number resolves here — but two legal
+ * entities' records never mix, and an attributed piece reaches only its own
+ * entity's journal. An UNATTRIBUTED piece may match any grand-livre entry,
+ * and the match is what attributes it: saying which entry a document proves
+ * is saying whose it is.
+ *
+ * An entry that already carries a pièce refuses a second one: evidence is
+ * never replaced silently. And the match lands in the entry's history — the
+ * same append-only trail resolveEntry keeps — so an attached document has a
+ * when and a record of what was there before (nothing, the guard proves).
  *
  * The evidence TIER is deliberately not touched: whether a matched receipt
  * upgrades `partial` to `full` is a judgment about sufficiency, and judgments
@@ -360,6 +377,13 @@ export async function matchPiece(
         throw new MatchRefused('entry_not_found', `no entry #${entrySeq} in this book's recettes-dépenses journal`, 'the worklist shows the numbers')
       }
       if (ri.deleted_at) throw new MatchRefused('entry_deleted', `entry #${entrySeq} is deleted`, 'match against a live entry')
+      if (ri.piece_drive_ref !== null) {
+        throw new MatchRefused(
+          'entry_documented',
+          `entry #${entrySeq} already carries a pièce`,
+          'an entry cites one document; replacing evidence is not built until somebody needs it, on purpose'
+        )
+      }
 
       const [updatedPiece] = await tx
         .update(booksPieceInbox)
@@ -373,6 +397,12 @@ export async function matchPiece(
           piece_drive_ref: piece.web_view_link ?? `drive://${piece.drive_file_id}`,
           piece_hash: piece.md5_checksum ? `md5:${piece.md5_checksum}` : null,
           piece_captured: piece.received,
+          history: appendHistory(ri.history, {
+            at: new Date().toISOString(),
+            event: 'piece_matched',
+            piece: piece.seq,
+            was: { piece_drive_ref: ri.piece_drive_ref, piece_hash: ri.piece_hash, piece_captured: ri.piece_captured },
+          }),
         })
         .where(eq(booksRiEntry.id, ri.id))
 
@@ -394,9 +424,32 @@ export async function matchPiece(
     if (!entry) throw new MatchRefused('entry_not_found', `no entry #${entrySeq}`, 'bk books entry list shows the numbers')
     if (entry.deleted_at) throw new MatchRefused('entry_deleted', `entry #${entrySeq} is deleted`, 'match against a live entry')
 
+    // The boundary. `seq` is workspace-unique, so another book's number
+    // resolves to a row right here — and an attributed piece must refuse it.
+    if (piece.entity_id !== null && entry.entity_id !== piece.entity_id) {
+      throw new MatchRefused(
+        'entry_other_book',
+        `entry #${entrySeq} belongs to another book: two legal entities' records never mix`,
+        "the worklist suggests candidates from the piece's own book"
+      )
+    }
+    if (entry.piece_drive_ref !== null) {
+      throw new MatchRefused(
+        'entry_documented',
+        `entry #${entrySeq} already carries a pièce`,
+        'an entry cites one document; replacing evidence is not built until somebody needs it, on purpose'
+      )
+    }
+
     const [updatedPiece] = await tx
       .update(booksPieceInbox)
-      .set({ status: 'matched', matched_entry_id: entry.id, matched_at: new Date() })
+      .set({
+        status: 'matched',
+        matched_entry_id: entry.id,
+        matched_at: new Date(),
+        // Matching an unattributed piece IS the attribution.
+        entity_id: piece.entity_id ?? entry.entity_id,
+      })
       .where(eq(booksPieceInbox.id, piece.id))
       .returning()
 
@@ -408,6 +461,12 @@ export async function matchPiece(
         piece_drive_ref: piece.web_view_link ?? `drive://${piece.drive_file_id}`,
         piece_hash: piece.md5_checksum ? `md5:${piece.md5_checksum}` : null,
         piece_captured: piece.received,
+        history: appendHistory(entry.history, {
+          at: new Date().toISOString(),
+          event: 'piece_matched',
+          piece: piece.seq,
+          was: { piece_drive_ref: entry.piece_drive_ref, piece_hash: entry.piece_hash, piece_captured: entry.piece_captured },
+        }),
       })
       .where(eq(booksEntry.id, entry.id))
 
