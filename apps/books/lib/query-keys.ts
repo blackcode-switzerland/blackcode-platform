@@ -84,3 +84,29 @@ export function booksGlobalKey(
 ): readonly unknown[] {
   return [BOOKS_KEY_ROOT, resource, { ...(filters ?? {}) }]
 }
+
+/**
+ * Every read in this app, as a TanStack Query filter — what a WRITE invalidates.
+ *
+ * ── WHY A WRITE INVALIDATES THE ROOT AND NOT FOUR NAMED KEYS ──────────────
+ * Resolving one entry moves further than it looks: the row leaves the worklist,
+ * the overview's count follows it, the rules list may have gained a taught rule,
+ * the ledger and the entry both carry a new explanation and a new `history`, and
+ * a staged line that had no account now has one — which changes a DERIVED
+ * STATEMENT. Enumerating that is a list which goes stale the first time the
+ * server derives something new, and the failure is silent: a screen showing the
+ * figure from before the write, with nothing to say so.
+ *
+ * The whole cache under this app's root is a few queries. Refetching them is
+ * cheap; being wrong about which of them a write touched is not.
+ *
+ * ── AND IT LIVES HERE BECAUSE THIS IS THE MODULE THAT SPELLS KEYS ─────────
+ * `lib/query-keys.test.ts` fails any `queryKey:` outside this file that is not
+ * `booksKey(...)` or `booksGlobalKey(...)`. A component writing
+ * `invalidateQueries({ queryKey: [BOOKS_KEY_ROOT] })` trips it — correctly, and
+ * for the right reason: a key spelled in a component is a key nobody checks. So
+ * the filter is built here and the component names it.
+ */
+export function booksCacheFilter(): { queryKey: readonly unknown[] } {
+  return { queryKey: [BOOKS_KEY_ROOT] }
+}

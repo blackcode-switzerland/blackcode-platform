@@ -45,23 +45,40 @@ curl -s localhost:3200/api/meta | head -c 300
 
 ## 2. What is actually live
 
-**One books route: `GET /api/meta`.** It is unauthenticated on purpose, the same
-as the platform's own. It serves:
+> **Rewritten 2026-08-18.** This section described phase 0, when `/api/meta` was
+> the only books route and carried the books themselves. Phases 1 and 2 landed
+> twelve more and moved the books OUT of that payload — and the stale version of
+> this table is exactly what the overview was built against when it rendered
+> "You have no books yet" over a workspace holding three books and seventeen
+> entries. Nothing threw.
+
+**`GET /api/meta` is unauthenticated on purpose**, the same as the platform's
+own, and it is the DYNAMIC CONTRACT — never the data:
 
 | Key | What |
 |---|---|
-| `entities` | the books. `source: "fixture"` today, `"database"` from phase 1 |
-| `exercices` | the fiscal years present |
+| `entities` | **a POINTER, not a list.** `{source, table, note}`. The books are workspace-scoped; read them with `GET /api/workspaces/{ws}/entities` |
 | `vocabularies` | seven of them, colour and icon included |
 | `tva_rates` | 8.1, 2.6, 3.8, 0 |
 | `statements` | the legal line structures of the bilan and the compte de résultat |
 
-Everything else under `app/api/` is platform scaffold: auth, `/api/me`,
-workspaces, members, invitations. `notes` is a placeholder and is deleted in
-phase 1. Do not build on it.
+There is no `exercices` key. Fiscal years are per book and per workspace:
+`GET /api/workspaces/{ws}/exercices?entity=`.
 
-`entities.source` is the field to watch. A screen that ships against fixture data
-believing it is real is the failure that field exists to prevent.
+The books' own routes, all workspace-scoped under `/api/workspaces/{ws}/`:
+
+| Phase | Routes |
+|---|---|
+| 1 | `entities`, `exercices`, `accounts`, `entries`, `entries/{n}`, `bilan`, `compte-resultat`, `overview`, `patrimoine` |
+| 2 | `worklist`, `rules` (GET, POST), `entries/{n}/resolve` (POST) |
+
+Everything else under `app/api/` is platform scaffold: auth, `/api/me`,
+workspaces, members, invitations.
+
+`entities.source` is still the field to watch, and
+[`components/states.tsx`](../components/states.tsx)'s `<FixtureNotice>` renders
+it. A screen that ships against fixture data believing it is real is the failure
+that field exists to prevent.
 
 ## 3. Two rules
 
@@ -130,9 +147,53 @@ user owns the client. Authorisation is workspace membership and the role, on the
 server. What the gate buys is that a missed affordance fails loudly instead of
 writing.
 
-The four write hooks in [`lib/mutations.ts`](../lib/mutations.ts) are written and
-commented out. They arrive with the tables they act on. They are not stubbed,
-because a stub that returns success is a lie a component builds on.
+**Two of the four write hooks are real as of phase 2** (2026-08-18):
+`useResolveEntry` and `useCreateRule`, both in
+[`lib/mutations.ts`](../lib/mutations.ts). `usePostEntry` and
+`useApproveComplianceRule` are still commented out and arrive with the screens
+that need them. They are commented rather than stubbed, because a stub that
+returns success is a lie a component builds on.
+
+### A write answers with a RESULT, not with `null` and a flag
+
+`run` resolves to `WriteResult<T>` — `{ok: true, data}` or
+`{ok: false, error, message}` — and `message` already carries the route's own
+`suggestion` joined onto its reason.
+
+**Read the failure off that return value, never off `mutation.error`.** `error`
+is React state and is null in the tick its setter ran, so a submit handler that
+reads it shows a generic fallback while the server's sentence is discarded. That
+bug shipped once on the sign-up form ("Could not create your account." over
+"Email already registered. Sign in instead, or use a different email."), and
+[`lib/account.ts`](../lib/account.ts) carries the full account of it.
+
+It matters more on recognition than anywhere else, because every refusal that
+route can raise is one a person can act on:
+
+| code | what the reader must be told |
+|---|---|
+| `bad_recognition` | unrecognized and inferred are the states resolve moves AWAY from |
+| `bad_rule` | a taught rule needs a counterparty fragment |
+| `posted_lines_frozen` | a correction is a reversing entry; explanation, counterparty and recognition still apply |
+| `missing_counterparty` | a rule needs a counterparty fragment |
+
+A screen rendering "Could not save" over the third one tells an accountant the
+app is broken when what happened is the law working.
+
+### `useCanWrite()` still returns `true`, and that is now a statement
+
+Phase 0 wrote "phase 2 replaces this with the workspace role". Phase 2 read the
+wire and could not: **no route this app serves tells the browser the signed-in
+person's role in this workspace.** `books.workspace_members.role` exists and is
+read only on the server, inside `resolveWorkspace`. Inventing a role client-side
+would be a gate that guesses. The frontend report asks for `role` on
+`GET /api/workspaces/{ws}`; until it lands, everyone who can reach a workspace
+can write in it, which is what the server already enforces.
+
+**Gate every affordance on it anyway** — including the button that opens a form,
+not only the form. A button that renders and then explains it cannot do anything
+is a dead affordance, and the reader learns the app is broken rather than that
+they lack a permission.
 
 ## 6. What phase 0 gave you to build with
 
@@ -212,22 +273,25 @@ not going to edit `lib/types.ts`.
 
 ## 8. The thirteen screens, and when each gets real data
 
-| Screen | Live at |
-|---|---|
-| Vue d'ensemble, Grand Livre, Transaction, Bilan, Compte de résultat | phase 1 |
-| Reconnaissance | phase 2 |
-| Comptes & sources, Source detail, Pièces justificatives | phase 3 |
-| Compta analytique, Analyses, Analyse detail, Impôts | phase 4 |
+> **This is a map of screens to PHASES. It is not a route map** — the per-route
+> mapping lives with each phase's own plan. And the paragraph that used to sit
+> here advising "build analytique early against fixtures" has been **deleted
+> rather than annotated**, because it prescribed a design this app rejected:
+> components never import `fixtures/mockup.json` (§3), and analytique has no
+> route until phase 4. Rewritten 2026-08-18.
 
-Every layout is buildable now, against `/api/meta` and the shapes above.
+| Screen | Live at | Built |
+|---|---|---|
+| Vue d'ensemble, Grand Livre, Transaction, Bilan, Compte de résultat | phase 1 | yes |
+| Patrimoine, Accounts | phase 1 | yes |
+| Reconnaissance | phase 2 | **yes, 2026-08-18** |
+| Comptes & sources, Source detail, Pièces justificatives | phase 3 | no |
+| Compta analytique, Analyses, Analyse detail, Impôts | phase 4 | no |
 
-**Do not build in phase order.** Compta analytique is the flagship and the longest
-job in the project, and it lands last because it depends on everything. Its shapes
-exist today, so build it early against fixtures and phase 4 becomes a data swap.
-Build in phase order and you idle between phases.
-
-A workable order: shell and vocabulary chrome, then analytique, then the five
-phase 1 screens as they come live, then sources and pièces.
+**Build against the ROUTE, in phase order, and open the page.** A screen built
+ahead of its route is a screen built against a shape nobody has served, and a
+wire shape that changes does not fail to compile — it renders `undefined` and an
+accounting screen makes something up.
 
 ## 9. Language
 

@@ -41,6 +41,13 @@
 // distinction, and it is checked by opening the page, not by this file.
 
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+/** The app root, for the one case here that reads a route file rather than a
+ *  shaping function. See `the worklist envelope is not the list envelope`. */
+const APP_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 import {
   publicAccount,
   publicEntity,
@@ -49,7 +56,16 @@ import {
   publicPatrimoine,
   publicRiEntry,
 } from './db/queries/statutory'
-import type { Account, Entity, Entry, PatrimoineSnapshot } from './types'
+import { publicRule } from './db/queries/rules'
+import type { WorklistRow as WorklistRowWire } from './db/queries/worklist'
+import type {
+  Account,
+  Entity,
+  Entry,
+  PatrimoineSnapshot,
+  RecognitionRule,
+  WorklistRow,
+} from './types'
 
 /**
  * A row, shaped enough for a pure mapping function.
@@ -111,9 +127,35 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
       publicExercice,
       publicPatrimoine,
       publicRiEntry,
+      publicRule,
     })) {
       expect(typeof fn, `${name} is not a function — this file is stale`).toBe('function')
     }
+  })
+
+  // ── THE RESPONSES BUILT INLINE IN A ROUTE, WHICH THIS FILE CANNOT REACH ────
+  // Everything above reads a shaping function. `POST /entries/{n}/resolve`
+  // builds its response inline in the route handler, so there is no function to
+  // import and the review proved the consequence: renaming `taught_rule` to
+  // `rule_taught` server-side left 194/194 green and the typecheck clean, while
+  // the screen rendered "rule # taught" for an entry resolved with the box
+  // unticked — `undefined !== null` is true. F-2.
+  //
+  // Reading the route's SOURCE is a weaker check than calling a function, and it
+  // is said plainly here rather than implied: it sees that file and nothing else,
+  // and it would not notice a change made anywhere but there. It is still the
+  // difference between a rename being caught and a false statement shipping.
+  it('the resolve route serves exactly the fields ResolveResult declares', () => {
+    const src = readFileSync(
+      join(APP_ROOT, 'app/api/workspaces/[ws]/entries/[number]/resolve/route.ts'),
+      'utf8'
+    )
+    const body = src.slice(src.indexOf('return NextResponse.json({'))
+    const served = [...body.slice(0, body.indexOf('})')).matchAll(/^\s*(\w+):/gm)].map((m) => m[1])
+    expect(served.length, 'found no fields — the response moved and this test is stale').toBeGreaterThan(3)
+    expect(served.sort()).toEqual(
+      ['explanation', 'history', 'number', 'recognition', 'taught_rule'].sort()
+    )
   })
 
   // Mutation watched: deleted `accent` from `publicEntity`. Red, naming it.
@@ -231,6 +273,102 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
       ].sort()
     )
   })
+  // ===========================================================================
+  // PHASE 2 — the recognition payloads
+  // ===========================================================================
+
+  // Mutation watched (2026-08-18): renamed `source_id` back to `source` in
+  // `publicRule`. Red, naming both the missing key and the surplus one. Then
+  // deleted `created_on`. Red again.
+  //
+  // FOUR of this payload's nine fields were wrong in `lib/types.ts` until this
+  // case was written — `source`/`source_id`, `source_kind`/`learned_from`,
+  // `created`/`created_on`, and a phantom `entity`. Every one would have
+  // rendered `undefined` in the rules table.
+  it('publicRule serves exactly these fields', () => {
+    const out = publicRule(
+      row({
+        seq: 1,
+        active: true,
+        source_id: 3,
+        learned_from: 'contract',
+        pattern: { counterparty: 'IMMOREGIE', amount_chf: 1850, tolerance_chf: 0, interval: 'monthly' },
+        explanation: { fr: 'Loyer', en: 'Rent' },
+        account_no: '6000',
+        created_from_entry_id: 7,
+        created_on: '2026-01-06',
+        note: null,
+      }),
+      2
+    )
+    expect(Object.keys(out).sort()).toEqual(
+      [
+        'number',
+        'active',
+        'source_id',
+        'learned_from',
+        'pattern',
+        'explanation',
+        'account',
+        'created_from',
+        'created_on',
+        'note',
+      ].sort()
+    )
+  })
+
+  // `created_from` is the TEACHING ENTRY'S #number, resolved by `teachingSeqs`,
+  // and is null when nothing taught the rule. `publicRule` takes it as an
+  // argument rather than reading a column, so a caller that forgets to resolve
+  // it gets null and not a serial id — which is the failure that matters, since
+  // the rules table renders it as a link to `/ledger/{n}`.
+  it('a rule never leaks the teaching entry\'s serial id', () => {
+    const r = row({ seq: 1, created_from_entry_id: 4242, pattern: {}, account_no: null })
+    expect(publicRule(r, 9).created_from, 'the #number, not the id').toBe(9)
+    expect(publicRule(r).created_from, 'no seq resolved means null, never 4242').toBe(null)
+  })
+
+  // ── THE WORKLIST HAS NO SHAPING FUNCTION, SO THIS IS THE OTHER HALF ──────
+  // `getWorklist` builds its rows inline and needs a database, so there is
+  // nothing pure to call here. The KEY SET is pinned against the interface the
+  // query layer exports instead, at compile time (`_WorklistKeys` below), and
+  // this asserts the two facts a type cannot: that the interface still exists
+  // with the two kinds in it, and that the ENVELOPE is not `{data, next_cursor}`.
+  //
+  // The envelope matters more than it looks. `apiList` would find no `data` key,
+  // substitute `[]`, and the screen would say "everything is explained" over a
+  // book with unexplained money in it.
+  it('the worklist envelope is not the list envelope', () => {
+    const route = readFileSync(
+      join(APP_ROOT, 'app/api/workspaces/[ws]/worklist/route.ts'),
+      'utf8'
+    )
+    // Anti-vacuous: if this file stops calling the query, every assertion below
+    // is about something that is no longer the worklist.
+    expect(route, 'the worklist route is gone — this case is stale').toContain('getWorklist')
+
+    // ── WHAT THIS CHECK ACTUALLY ASKS ────────────────────────────────────
+    // It reads the ROUTE FILE as text. It cannot tell you what a live response
+    // looks like, and it would not see a change made anywhere else. What it can
+    // see is the one thing that matters here: whether this route still returns
+    // its bespoke object or has been moved onto the shared list envelope. If it
+    // ever is, `useWorklist` must stop reading `.rows` — and the failure would
+    // otherwise be an EMPTY worklist on a book with unexplained money in it,
+    // which is the confident wrong answer this whole file exists to catch.
+    //
+    // Mutation watched (2026-08-18): replaced the `NextResponse.json({...})`
+    // with `jsonList(rows, null)`. Red on both assertions.
+    expect(
+      route.includes('jsonList'),
+      'the worklist now serves {data, next_cursor} and lib/hooks.ts still reads {rows} — ' +
+        'useWorklist must switch to apiList or it will render an empty worklist'
+    ).toBe(false)
+    expect(
+      route.replace(/\s+/g, ' '),
+      'the envelope no longer answers with {entity, exercice, count, rows}'
+    ).toMatch(/NextResponse\.json\(\s*\{ entity: [^}]*exercice: [^}]*count: [^}]*rows,/)
+  })
+
 })
 
 // ===========================================================================
@@ -255,6 +393,7 @@ type EntityWire = ReturnType<typeof publicEntity>
 type AccountWire = ReturnType<typeof publicAccount>
 type EntryWire = ReturnType<typeof publicEntry>
 type PatrimoineWire = ReturnType<typeof publicPatrimoine>
+type RuleWire = ReturnType<typeof publicRule>
 
 /**
  * The KEY SETS, at compile time.
@@ -267,6 +406,17 @@ type _AccountKeys = Mutual<keyof AccountWire, keyof Account>
 type _EntryKeys = Mutual<keyof EntryWire, keyof Entry>
 type _PatrimoineKeys = Mutual<keyof PatrimoineWire, keyof PatrimoineSnapshot>
 type _VatKeys = Mutual<keyof EntityWire['vat'], keyof Entity['vat']>
+type _RuleKeys = Mutual<keyof RuleWire, keyof RecognitionRule>
+/**
+ * The worklist row, pinned against the query layer's own interface.
+ *
+ * There is no `publicWorklistRow` to call, so this is the whole check for that
+ * payload's key set — and it is the one that would have caught `status`, which
+ * is `string | null` on the wire because every `ri_entry` row hardcodes null,
+ * and which a screen typing as `EntryStatus` would render as a `staged` chip on
+ * a book that has no staging step.
+ */
+type _WorklistKeys = Mutual<keyof WorklistRowWire, keyof WorklistRow>
 
 /**
  * The SCALAR TYPES, field by field, for every field where the wire type is not
@@ -332,21 +482,43 @@ type _Scalars = [
   Mutual<PatrimoineWire['total'], PatrimoineSnapshot['total']>,
   // A JSON number, and the only one in the app. See `PatrimoineItem`.
   Mutual<PatrimoineWire['items'][number]['amount'], PatrimoineSnapshot['items'][number]['amount']>,
+
+  // ── PHASE 2 ────────────────────────────────────────────────────────────
+  Mutual<RuleWire['number'], RecognitionRule['number']>,
+  Mutual<RuleWire['active'], RecognitionRule['active']>,
+  // The half of the match key that was declared as `source`. Blank on every row.
+  Mutual<RuleWire['source_id'], RecognitionRule['source_id']>,
+  Mutual<RuleWire['account'], RecognitionRule['account']>,
+  Mutual<RuleWire['created_from'], RecognitionRule['created_from']>,
+
+  Mutual<WorklistRowWire['number'], WorklistRow['number']>,
+  Mutual<WorklistRowWire['date'], WorklistRow['date']>,
+  Mutual<WorklistRowWire['raw_label'], WorklistRow['raw_label']>,
+  Mutual<WorklistRowWire['counterparty'], WorklistRow['counterparty']>,
+  // `numeric(14,2)` for an RI row, `fromCentimes(...)` for an entry. A STRING
+  // either way, and it must stay one — `<Money>` has no numeric overload.
+  Mutual<WorklistRowWire['amount'], WorklistRow['amount']>,
+  Mutual<WorklistRowWire['suggested_rules'], WorklistRow['suggested_rules']>,
 ]
 
 // Referencing them is what turns a `never` above into an error at THIS line,
 // with the failing member named, rather than an unused type alias nobody sees.
-const _keys: [_EntityKeys, _AccountKeys, _EntryKeys, _PatrimoineKeys, _VatKeys] = [
-  true,
-  true,
-  true,
-  true,
-  true,
-]
+const _keys: [
+  _EntityKeys,
+  _AccountKeys,
+  _EntryKeys,
+  _PatrimoineKeys,
+  _VatKeys,
+  _RuleKeys,
+  _WorklistKeys,
+] = [true, true, true, true, true, true, true]
 const _scalars: _Scalars = [
   true, true, true, true, true, true, true, true, true, true, true, true, true,
   true, true, true,
   true, true, true, true, true, true, true, true, true, true, true, true,
   true, true, true, true, true,
+  // phase 2: five rule fields, six worklist fields
+  true, true, true, true, true,
+  true, true, true, true, true, true,
 ]
 void [_keys, _scalars]
