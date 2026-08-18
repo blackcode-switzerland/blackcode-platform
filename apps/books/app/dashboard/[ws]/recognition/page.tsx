@@ -38,6 +38,7 @@ import { ScreenFrame } from '@/components/screen-frame'
 import { ErrorState, Loading } from '@/components/states'
 import { NoExerciceNotice, isNoExerciceRefusal } from '@/components/no-exercice-notice'
 import { Worklist, type ResolvedMap } from '@/components/worklist'
+import { isResolvable } from '@/lib/resolvable'
 import { RulesPanel } from '@/components/rules-panel'
 import type { ResolveResult, WorklistRow } from '@/lib/types'
 
@@ -84,6 +85,19 @@ export default function Page() {
     const seen = new Set(live.map((r) => `${r.kind}:${r.number}`))
     return [...live, ...resolvedRows.filter((r) => !seen.has(`${r.kind}:${r.number}`))]
   }, [worklist.data, resolvedRows])
+
+  /**
+   * How many of the payload's rows can actually be explained.
+   *
+   * From `isResolvable`, the same predicate the rows themselves branch on, so
+   * the heading and the rows can never disagree about which kinds those are.
+   * Counted off the PAYLOAD, not `rows`, which carries this session's resolved
+   * rows too and would keep them in the count.
+   */
+  const explainable = useMemo(
+    () => (worklist.data?.rows ?? []).filter(isResolvable).length,
+    [worklist.data]
+  )
 
   /**
    * The name of the book the worklist payload says it answered for.
@@ -134,15 +148,36 @@ export default function Page() {
 
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-[15px] font-semibold text-foreground">
-          To explain
-          {/* The payload's own count. Not `rows.length`, which now includes the
-              rows this session resolved and would therefore never shrink. */}
+          {/* ── "NEEDS A HUMAN", NOT "TO EXPLAIN" ─────────────────────────────
+              This read "To explain" over the payload's whole count. The list
+              holds three kinds and only one of them CAN be explained: on the
+              seeded books it said "To explain 9" above three explainable
+              entries and six pièces, each of which says, in its own row,
+              "Explaining is not what it needs."
+
+              The count was right and the word was wrong — the same defect Agent
+              1 fixed on the overview one screen away, from the other direction.
+              `bk books worklist` makes no such claim, and the page disagreeing
+              with the CLI is the test that condemned the overview's number.
+
+              The split is rendered rather than the total alone, because "nine
+              things need you" and "three to explain, six to match" are different
+              instructions. Cleanup review, 2026-08-18. */}
+          Needs a human
           {worklist.data && (
             <span className="ml-2 text-[13px] font-normal text-muted-foreground">
               {worklist.data.count}
             </span>
           )}
         </h2>
+        {worklist.data && worklist.data.count > 0 && (
+          <p className="text-[12.5px] text-muted-foreground">
+            {explainable} to explain
+            {worklist.data.count - explainable > 0 && (
+              <> · {worklist.data.count - explainable} awaiting a document match</>
+            )}
+          </p>
+        )}
       </div>
 
       {worklist.isLoading && <Loading rows={4} label="Loading the worklist" />}
