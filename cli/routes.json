@@ -86,6 +86,18 @@
       "app": "books"
     },
     {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/rules",
+      "command": "bk books rule list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/worklist",
+      "command": "bk books worklist",
+      "app": "books"
+    },
+    {
       "method": "POST",
       "path": "/api/me/active-workspace",
       "command": "bk books workspace use",
@@ -99,6 +111,12 @@
     },
     {
       "method": "POST",
+      "path": "/api/workspaces/{ws}/entries/{number}/resolve",
+      "command": "bk books resolve",
+      "app": "books"
+    },
+    {
+      "method": "POST",
       "path": "/api/workspaces/{ws}/exercices",
       "command": "bk books exercice create",
       "app": "books"
@@ -107,6 +125,12 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/invitations",
       "command": "bk books invite send",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/rules",
+      "command": "bk books rule create",
       "app": "books"
     },
     {

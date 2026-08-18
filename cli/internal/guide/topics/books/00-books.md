@@ -12,7 +12,8 @@ and where the proof is. Unexplained money is a worklist, never a buried column.
 Related commands: `bk books entity list`, `bk books entity create`, `bk books
 exercice list`, `bk books exercice create`, `bk books account list`, `bk books
 entry list`, `bk books entry show`, `bk books bilan`, `bk books cr`, `bk books
-patrimoine`, `bk books overview`, `bk books workspace use`.
+patrimoine`, `bk books overview`, `bk books worklist`, `bk books rule list`,
+`bk books rule create`, `bk books resolve`, `bk books workspace use`.
 
 ## This app holds no intelligence, and that is the design
 
@@ -24,16 +25,33 @@ automatically.
 So there is no chat here, no in-app assistant, and no scenario buttons. You read
 the data through these commands, reason outside, and write the conclusion back.
 
-## Status: phase 1
+## Status: phase 2
 
-The statutory core is here: books, fiscal years, the chart of accounts, the grand
-livre, and the two statements derived from it. What lands next:
+The statutory core (books, fiscal years, the chart, the grand livre, the two
+statements) and recognition (the worklist, the rules, resolve — the first write)
+are here. What lands next:
 
 | Phase | Commands |
 |---|---|
-| 2 | `rule`, `worklist`, `resolve` — recognition |
 | 3 | `source`, `piece` — where money came from, and the proof |
 | 4 | `analyse`, `tax` — the management view and agent write-back |
+
+## The recognition loop
+
+```bash
+bk books worklist                        # what needs a human, with suggestions
+bk books resolve 12 --explanation "office rent" --account 6000 \
+  --rule-counterparty IMMOREGIE --rule-amount 1850   # explain it, teach a rule
+bk books rule list                       # the remembered judgments
+```
+
+Resolve keeps the old state in history forever: a resolved row still shows
+"was: unrecognized". A taught rule is keyed to the SOURCE the entry came
+through, never the merchant name alone — the same name on an untracked card
+stays unrecognized, which is what keeps the completeness signal honest.
+
+The machine never applies a rule by itself. The worklist SUGGESTS, computed
+live; a human or an agent resolves.
 
 `bk books note`, the scaffold's placeholder entity, is gone. Phase 1 removed the
 command and the table with it.
@@ -81,8 +99,10 @@ reference plus a hash, never the file. There is no `bk books upload`.
 **No trash and no purge.** Accounting records carry a ten-year retention duty
 (art. 958f CO). Nothing here can be hard-deleted, so there is no bin to empty.
 
-**No editing a posted entry.** A correction is a reversing entry. That will be
-enforced by the database, not by this binary.
+**No editing a posted entry.** A correction is a reversing entry, and the
+database enforces it (a trigger, not app code). Interpretation stays open:
+`bk books resolve` works on posted entries for explanation and recognition, and
+refuses only the account.
 
 ## Output and exit codes
 
