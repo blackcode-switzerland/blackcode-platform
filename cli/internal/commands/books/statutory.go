@@ -729,7 +729,8 @@ func newEntryDeclareCmd() *cobra.Command {
 			}
 			return output.Render(format, r, func(w io.Writer) error {
 				if r.Journal == "recettes_depenses" {
-					_, err := fmt.Fprintf(w, "declared entry #%d in the recettes-dépenses journal (staged)\n", r.Number)
+					// No "(staged)" here: an RI journal has no posting lifecycle.
+					_, err := fmt.Fprintf(w, "declared entry #%d in the recettes-dépenses journal\n", r.Number)
 					return err
 				}
 				no := 0
