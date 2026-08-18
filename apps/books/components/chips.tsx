@@ -51,7 +51,7 @@ const PILL =
  * vocabulary has no colours" (source types, source layers) is not a special case
  * anybody has to write.
  */
-function tint(color: string | undefined): React.CSSProperties | undefined {
+function tint(color: string | null | undefined): React.CSSProperties | undefined {
   if (!color) return undefined
   return {
     // The ratio is `--chip-mix` and NOT a literal, because it has to differ per

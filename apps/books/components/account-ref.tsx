@@ -21,8 +21,8 @@
 
 import Link from 'next/link'
 import { scopedHref } from '@/lib/nav'
-import { en } from '@/lib/label'
-import type { StatementLabel } from '@/lib/statements'
+import { accountLabelEn } from '@/lib/label'
+import type { AccountLabel } from '@/lib/types'
 
 export function AccountRef({
   no,
@@ -33,7 +33,12 @@ export function AccountRef({
 }: {
   /** `"1020"`. Null renders the unmapped marker rather than a broken link. */
   no: string | null
-  label?: StatementLabel | null
+  /**
+   * `{fr, enSuffix}` — an `AccountLabel`, NOT a `StatementLabel`. The two are
+   * separate types precisely so this prop cannot be handed the wrong one and
+   * silently render French; see `lib/label.ts`.
+   */
+  label?: AccountLabel | null
   /** `/dashboard/{ws}` — the shell knows it; a page passes it down. */
   base: string
   scope: { entity: string | null; exercice: number | null }
@@ -62,7 +67,7 @@ export function AccountRef({
       <span className="font-mono text-[12.5px] tabular-nums">{no}</span>
       {label && (
         <span className="text-[13px] text-muted-foreground group-hover:text-primary-strong">
-          {en(label)}
+          {accountLabelEn(label)}
         </span>
       )}
     </Link>

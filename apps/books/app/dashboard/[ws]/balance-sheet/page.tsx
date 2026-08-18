@@ -1,88 +1,122 @@
 'use client'
 
-// Balance sheet — **the legal structure, rendered, with no amounts.**
+// Balance sheet — art. 959a CO, with its amounts.
 //
 // ===========================================================================
-// WHY THIS PAGE HAS CONTENT WHEN THE OTHER SIX PLACEHOLDERS DO NOT
+// THREE THINGS THIS PAGE MUST DO, AND ONE IT MUST NOT
 // ===========================================================================
-// `01-foundation.md` §6 says `<StatementTable>` is "renderable against
-// `/api/meta` alone", and it is: the route serves `statements.bilan`, the art.
-// 959a group and line structure in the article's order, because
-// `lib/statements.ts` is a code constant rather than data. So the one thing
-// sprint 1 can honestly put on this page is the document's SHAPE.
+//   1. **Render every legal line, including the zeroes.** `<StatementTable>`
+//      owns that; the collapse it offers is visual and off by default.
+//   2. **Render the actif = passif check.** The route serves `balanced` and
+//      `ecart` precisely so a disagreement is visible rather than a 500 that
+//      hides which book is broken. It is shown whichever way it comes out —
+//      a check that only appears when it fails is a check nobody believes.
+//   3. **Treat the RI's refusal as a screen, not an error.** See
+//      `<SimplifiedBookNotice>`.
 //
-// That is not filler. It is the check that the shared component renders the real
-// legal structure — every group, every line, in order — before thirteen screens
-// are written on top of it, and it is what `01-foundation.md` §5 means by "a
-// book with no entries is not an empty screen: the legal line list is fixed and
-// a zero line is shown, never dropped".
+// And the one it must not: **restructure a legal category to fix a number.**
+// If a figure looks wrong the entry's account is wrong, or its
+// `statement_position` is. Not this file.
 //
-// ===========================================================================
-// THE AMOUNTS ARE `null`, WHICH IS NOT ZERO, AND THE DIFFERENCE IS THE POINT
-// ===========================================================================
-// §5 asks a book with no entries to render its lines at ZERO. That is right —
-// and it is not this situation. **We do not know whether this book has entries.**
-// There is no route that serves a derived bilan; it arrives with the backend's
-// phase 1.
+// ── THE AMOUNTS ARE STRINGS AND STAY STRINGS ──────────────────────────────
+// The phase-0 version of this page rendered `null` for every line and said so in
+// a banner. That banner is gone because the route landed. What has NOT changed
+// is that nothing here parses an amount: `<Money>` takes the wire string, and
+// the only arithmetic on the page is `ecart`, which the SERVER computed in
+// centimes.
 //
-// So every line renders an em dash (`<Money value={null}>`), and the banner says
-// why. Filling the column with `"0.00"` would have been one line of code and
-// would have put a balance sheet on the screen claiming every account in the
-// company is empty. In an accounting product that is not a placeholder, it is a
-// false statement — and it is one nobody would notice was false, because a
-// balance sheet of zeroes is exactly what a new company's looks like.
-//
-// **When the route lands, the amounts come from it and this banner goes.** The
-// zero-lines rule then applies for real: a line the derivation returns as
-// `"0.00"` renders as `0.00` and is never dropped.
+// ── THREE FIGURES DELIBERATELY DIFFER FROM THE MOCKUP, BY 4850.00 ─────────
+// *Résultat de l'exercice*, *résultat reporté*, and the CR's *autres charges*.
+// blackcode's two 2025-dated entries live in a CLOSED exercice 2025 where the
+// mockup summed both years. `lib/db/seed.ts` explains it; `seed-parity.test.ts`
+// pins it. If you see that number, the API is right.
 
-import { useScope } from '@/lib/scope'
 import { useParams } from 'next/navigation'
-import { StatementTable, type StatementGroupView } from '@/components/statement-table'
+import { useScope } from '@/lib/scope'
+import { useBilan, isSimplifiedRefusal } from '@/lib/hooks'
+import { bilanGroups } from '@/lib/statement-view'
+import { StatementTable } from '@/components/statement-table'
 import { ScreenFrame } from '@/components/screen-frame'
+import { SimplifiedBookNotice } from '@/components/simplified-notice'
+import { ErrorState, Loading } from '@/components/states'
+import { Money } from '@/components/money'
+import { StatementHeading } from '@/components/statement-heading'
+import { BalanceCheck } from '@/components/balance-check'
 
 export default function Page() {
   const params = useParams<{ ws: string }>()
   const scope = useScope()
   const base = `/dashboard/${params.ws}`
-
-  // Straight from `/api/meta` — the structure the SERVER serves, not a second
-  // copy of `lib/statements.ts` imported into the bundle. A frontend that
-  // imported the constant would keep rendering last week's legal structure after
-  // the server's changed, with nothing to say so.
-  const groups: StatementGroupView[] =
-    scope.meta?.statements.bilan.map((g) => ({
-      group: g.group,
-      side: g.side as 'actif' | 'passif',
-      lines: g.lines.map((l) => ({
-        pos: l.pos,
-        label: l.label,
-        amount: null,
-        related: l.related,
-        derived: l.derived,
-      })),
-    })) ?? []
+  const bilan = useBilan(params.ws, scope)
 
   return (
     <ScreenFrame title="Balance sheet">
-      <div className="mb-4">
-        <h1 className="text-lg font-semibold text-foreground">
-          Bilan <span className="ml-2 text-sm font-normal text-muted-foreground">Balance sheet</span>
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {scope.record?.name} · exercice {scope.exercice} · art. 959a CO
-        </p>
-      </div>
+      <StatementHeading
+        fr="Bilan"
+        en="Balance sheet"
+        article="art. 959a CO"
+        bookName={scope.record?.name}
+        exercice={scope.exercice}
+      />
 
-      <p className="mb-5 rounded-md border border-border bg-secondary px-3 py-2 text-xs text-muted-foreground">
-        <span className="font-semibold text-foreground">Structure only.</span> This is the statutory
-        line list in its legal order. There is no route serving derived amounts yet, so every line
-        shows an em dash — <span className="font-semibold">not a zero</span>, because &ldquo;we do
-        not know&rdquo; and &ldquo;it is nothing&rdquo; are different facts. The actif = passif check
-        arrives with the amounts.
-      </p>
+      {bilan.isLoading && <Loading rows={8} label="Loading the balance sheet" />}
 
-      <StatementTable groups={groups} base={base} scope={scope} />
+      {/* The refusal is checked BEFORE the generic error, because it is not one.
+          Ordering these the other way round would put a red box on a book whose
+          books are in perfect order. */}
+      {isSimplifiedRefusal(bilan.error) && (
+        <SimplifiedBookNotice
+          error={bilan.error}
+          statement="balance sheet"
+          because="there are no balances to arrange into the art. 959a groups"
+          base={base}
+          scope={scope}
+          bookName={scope.record?.name}
+        />
+      )}
+
+      {bilan.error && !isSimplifiedRefusal(bilan.error) && (
+        <ErrorState error={bilan.error} title="The balance sheet could not be derived" />
+      )}
+
+      {bilan.data && (
+        <>
+          <BalanceCheck
+            balanced={bilan.data.balanced}
+            ecart={bilan.data.ecart}
+            actif={bilan.data.totalActif}
+            passif={bilan.data.totalPassif}
+          />
+
+          <StatementTable
+            groups={bilanGroups(bilan.data, scope.meta)}
+            base={base}
+            scope={scope}
+          />
+
+          {/* The two side totals, spelled out under the table. `<StatementTable>`
+              takes ONE footer and the bilan has two sides, so they are rendered
+              here rather than bending the shared component into a shape only
+              this screen needs. */}
+          <dl className="mt-4 border-t border-border pt-3 text-[13px]">
+            <div className="flex items-baseline justify-between py-0.5">
+              <dt className="font-medium text-foreground">Total actif</dt>
+              <dd className="num-total"><Money value={bilan.data.totalActif} /></dd>
+            </div>
+            <div className="flex items-baseline justify-between py-0.5">
+              <dt className="font-medium text-foreground">Total passif</dt>
+              <dd className="num-total"><Money value={bilan.data.totalPassif} /></dd>
+            </div>
+            <div className="flex items-baseline justify-between border-t border-border/60 py-0.5 pt-2">
+              <dt className="text-muted-foreground">
+                Résultat de l&apos;exercice
+                <span className="ml-2 text-[11.5px]">injected into equity from the income statement</span>
+              </dt>
+              <dd className="num"><Money value={bilan.data.resultat} /></dd>
+            </div>
+          </dl>
+        </>
+      )}
     </ScreenFrame>
   )
 }

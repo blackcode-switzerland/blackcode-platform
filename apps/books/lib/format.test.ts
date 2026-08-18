@@ -210,4 +210,36 @@ describe('percent', () => {
     expect(percent(null)).toBe('—')
     expect(percent(undefined)).toBe('—')
   })
+
+  // ── THE WIRE FORM, ADDED 2026-08-18 ──────────────────────────────────────
+  // `entry.tva.rate` is `numeric(4,2)` and arrives as `"8.10"`, not `8.1`
+  // (verified against `GET …/entries`). `lib/types.ts` declared it as a `number`
+  // and was corrected; `percent()` handles the string HERE so no call site has
+  // to reach for `Number()`.
+  //
+  // Mutation watched: removed the string branch, leaving `percent(rate as number)`.
+  // Red — `"8.10"` rendered `8.10%` instead of `8.1%`, and `"0.00"` rendered
+  // `0.00%` instead of `0%`.
+  it('takes the numeric string the wire actually sends', () => {
+    expect(percent('8.10')).toBe('8.1%')
+    expect(percent('2.60')).toBe('2.6%')
+    expect(percent('0.00')).toBe('0%')
+    expect(percent('3.80')).toBe('3.8%')
+  })
+
+  it('trims only trailing zeros, never a significant digit', () => {
+    expect(percent('10.00')).toBe('10%')
+    expect(percent('8.05')).toBe('8.05%')
+    expect(percent('100')).toBe('100%')
+  })
+
+  // A rate this function does not recognise must look ABSENT. Rendering `0%`
+  // for a malformed value is a legally different claim from "no rate recorded":
+  // 0% VAT is a real rate (an exempt supply), and no rate is no answer.
+  it('refuses anything that is not a plain decimal, rather than printing 0%', () => {
+    expect(percent('')).toBe('—')
+    expect(percent('eight')).toBe('—')
+    expect(percent('8,1')).toBe('—')
+    expect(percent('1e1')).toBe('—')
+  })
 })

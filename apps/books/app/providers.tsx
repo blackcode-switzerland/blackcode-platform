@@ -32,11 +32,31 @@
 // is showing one book's numbers under another book's name, and no `staleTime`
 // prevents that — the QUERY KEY does. See `lib/query-keys.ts`.
 
+//
+// ===========================================================================
+// A 4xx IS AN ANSWER. IT IS NOT RETRIED — ADDED 2026-08-18
+// ===========================================================================
+// TanStack's default is three retries with backoff, which is right for a network
+// blip and wrong for every refusal this API serves deliberately. The one that
+// forced the change: `GET …/bilan` returns **400 `no_bilan_for_simplified`** for
+// the sole proprietorship, and that is a first-class screen state — "this book
+// legally has no balance sheet, here is its patrimoine" — not a failure. Under
+// the default it was requested four times over about four seconds before the
+// explanation rendered, so the correct screen arrived looking like a slow error.
+//
+// It also mattered for the book switcher: four in-flight retries against the
+// PREVIOUS book are four chances for a late response to land after the switch.
+// The query key is what makes that safe (`lib/query-keys.ts`), but not asking is
+// better than being protected from having asked.
+//
+// 408 and 429 are retried, because those two genuinely mean "ask again".
+
 import { SessionProvider } from 'next-auth/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
 import { useState } from 'react'
 import { ConfirmProvider } from '@blackcode/platform-ui/ui/confirm-dialog'
+import { ApiRequestError } from '@/lib/client'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // Created inside state, not at module scope. A module-scope client is shared
@@ -49,6 +69,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: {
             staleTime: 1000 * 120,
             refetchOnWindowFocus: true,
+            retry: (failureCount, error) => {
+              if (error instanceof ApiRequestError) {
+                const retryable = error.status === 408 || error.status === 429
+                if (error.status >= 400 && error.status < 500 && !retryable) return false
+              }
+              return failureCount < 3
+            },
           },
         },
       })

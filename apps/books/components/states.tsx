@@ -144,18 +144,35 @@ export function FixtureNotice({ source }: { source: 'fixture' | 'database' | nul
  * of the product from the person using it, and the shape is nine items in a
  * reviewed order (`lib/nav.ts`).
  *
- * So: every item routes, and the ones sprint 2 has not built yet say exactly
- * what they are waiting for. It is a deliberately conspicuous screen. Nothing
- * here should survive sprint 2 — a page still rendering this when its screen is
- * built is a page somebody forgot.
+ * So: every item routes, and the ones that are not built yet say exactly what
+ * they are waiting for. It is a deliberately conspicuous screen. A page still
+ * rendering this once its route exists is a page somebody forgot.
+ *
+ * ── IT NAMES THE ROUTE IT IS WAITING FOR, NOT A SPRINT ────────────────────
+ * The copy said "the screen itself is sprint 2" until 2026-08-18, by which point
+ * phase 1 had built five of the screens that sentence covered and the five left
+ * were waiting on completely different things — recognition's routes exist but
+ * on an unmerged branch, and the other four have no route at all. A page that
+ * blames a sprint number tells the reader nothing they can act on, and it goes
+ * stale silently. `blocker` is the sentence that says what is actually missing.
  */
-export function NotBuiltYet({ screen, mockup }: { screen: string; mockup: string }) {
+export function NotBuiltYet({
+  screen,
+  mockup,
+  blocker,
+}: {
+  screen: string
+  mockup: string
+  /** What this screen is waiting for, in one sentence. Required — see above. */
+  blocker: string
+}) {
   return (
     <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
       <p className="text-sm font-medium text-foreground">{screen} is not built yet.</p>
+      <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">{blocker}</p>
       <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
-        Sprint 1 built the shell this page sits in. The screen itself is sprint 2 — its layout is
-        specified by <span className="font-mono text-[12.5px]">{mockup}</span> in the mockup.
+        Its layout is specified by{' '}
+        <span className="font-mono text-[12.5px]">{mockup}</span> in the mockup.
       </p>
       {/* **No `bk` command is named here, and that is checked rather than
           assumed.** The obvious sentence to write was "until then, read it from

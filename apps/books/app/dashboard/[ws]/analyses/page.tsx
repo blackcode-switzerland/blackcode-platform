@@ -18,7 +18,11 @@ import { NotBuiltYet } from '@/components/states'
 export default function Page() {
   return (
     <ScreenFrame title="Analyses">
-      <NotBuiltYet screen="Analyses" mockup="app-analyses.html" />
+      <NotBuiltYet
+        screen="Analyses"
+        mockup="app-analyses.html"
+        blocker="No route serves the analysis journal yet. It is written back by agents from outside and is read-only here."
+      />
     </ScreenFrame>
   )
 }

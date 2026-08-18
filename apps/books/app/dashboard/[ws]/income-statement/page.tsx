@@ -1,68 +1,89 @@
 'use client'
 
-// Income statement — the art. 959b line list, rendered, with no amounts.
+// Income statement — art. 959b CO, par nature, with its amounts.
 //
-// Same argument as the balance sheet page next door, and the same restraint: the
-// structure is real (`/api/meta` serves it), the amounts are `null` rather than
-// `"0.00"`, and the banner says which. Read that file's header for why the
-// distinction is not pedantry.
+// Ten lines, in the article's order, each carrying a `sign` (+1 produit, −1
+// charge) and an `accounts` array. That array is the drill-down: it turns
+// "Autres charges d'exploitation, CHF 3'063.60" into the three accounts behind
+// it and a link into the ledger filtered by each. `<StatementTable>` renders
+// them through `<AccountRef>` — this page's job is to hand them over unchanged.
 //
-// ── ONE DIFFERENCE: THE CR IS A FLAT LIST, NOT GROUPS ──────────────────────
-// Art. 959b gives an ordered sequence of lines, each with a `sign` (+1 revenue,
-// −1 expense) rather than the actif/passif split the bilan has. `<StatementTable>`
-// takes groups, so this passes a single unnamed group — which is the honest
-// mapping and keeps one component instead of two.
+// ── LINES 7 TO 9 ARE NEVER MERGED ─────────────────────────────────────────
+// `financier`, `hors_exploitation`, `exceptionnel` are a hard legal requirement
+// and collapsing them into one "other" bucket is the commonest way a small
+// company's compte de résultat stops being compliant while still adding up
+// (`lib/statements.ts`). They are three lines here, all three at zero on the
+// seeded books, and all three rendered.
 //
-// ── THE `accounts` ARRAY IS THE DRILL-DOWN AND IT IS ABSENT HERE ───────────
-// `CrLineResult.accounts` is what turns a line into a link into the ledger, and
-// it is a property of the DERIVED statement, not of the legal structure — the
-// structure does not know which accounts a given book maps onto a line. So there
-// are no `<AccountRef>`s on this page yet. They arrive with the amounts, from the
-// same route, and `<StatementTable>` already renders them when a line carries
-// them.
+// ── THE AMOUNTS ARE ALL POSITIVE, AND THAT IS THE STATEMENT'S CONVENTION ──
+// `crFor` negates a produit's movement so a revenue account's credit balance
+// prints positive, and leaves a charge as its debit movement. So the column is
+// magnitudes and the `sign` says which way each one pulls; only `resultat` at
+// the bottom is signed. This is why the total is not the sum of the column, and
+// why nothing here adds the column up — the server did, in centimes.
+//
+// The RI refusal is the same shape as the balance sheet's, with a different
+// code (`no_cr_for_simplified`). Same treatment: an explanation, not a red box.
 
 import { useParams } from 'next/navigation'
 import { useScope } from '@/lib/scope'
-import { StatementTable, type StatementGroupView } from '@/components/statement-table'
+import { useCompteResultat, isSimplifiedRefusal } from '@/lib/hooks'
+import { crGroups } from '@/lib/statement-view'
+import { StatementTable } from '@/components/statement-table'
 import { ScreenFrame } from '@/components/screen-frame'
+import { SimplifiedBookNotice } from '@/components/simplified-notice'
+import { ErrorState, Loading } from '@/components/states'
+import { StatementHeading } from '@/components/statement-heading'
 
 export default function Page() {
   const params = useParams<{ ws: string }>()
   const scope = useScope()
   const base = `/dashboard/${params.ws}`
-
-  const groups: StatementGroupView[] = scope.meta
-    ? [
-        {
-          group: { fr: 'Compte de résultat', en: 'Income statement' },
-          lines: scope.meta.statements.cr.map((l) => ({
-            pos: l.pos,
-            label: l.label,
-            amount: null,
-          })),
-        },
-      ]
-    : []
+  const cr = useCompteResultat(params.ws, scope)
 
   return (
     <ScreenFrame title="Income statement">
-      <div className="mb-4">
-        <h1 className="text-lg font-semibold text-foreground">
-          Compte de résultat{' '}
-          <span className="ml-2 text-sm font-normal text-muted-foreground">Income statement</span>
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {scope.record?.name} · exercice {scope.exercice} · art. 959b CO
-        </p>
-      </div>
+      <StatementHeading
+        fr="Compte de résultat"
+        en="Income statement"
+        article="art. 959b CO, par nature"
+        bookName={scope.record?.name}
+        exercice={scope.exercice}
+      />
 
-      <p className="mb-5 rounded-md border border-border bg-secondary px-3 py-2 text-xs text-muted-foreground">
-        <span className="font-semibold text-foreground">Structure only.</span> The statutory line
-        list in its legal order. Amounts, and the per-line drill-down into the ledger, arrive with
-        the route that derives them.
-      </p>
+      {cr.isLoading && <Loading rows={8} label="Loading the income statement" />}
 
-      <StatementTable groups={groups} base={base} scope={scope} />
+      {isSimplifiedRefusal(cr.error) && (
+        <SimplifiedBookNotice
+          error={cr.error}
+          statement="income statement"
+          because="there are no expense and revenue accounts to arrange into the art. 959b lines"
+          base={base}
+          scope={scope}
+          bookName={scope.record?.name}
+        />
+      )}
+
+      {cr.error && !isSimplifiedRefusal(cr.error) && (
+        <ErrorState error={cr.error} title="The income statement could not be derived" />
+      )}
+
+      {cr.data && (
+        <>
+          <p className="mb-3 text-[12px] text-muted-foreground">
+            Each line lists the accounts feeding it. Follow one to see its postings in the general
+            ledger. Amounts are magnitudes — the sign of each line is fixed by the article, and only
+            the result at the foot is signed.
+          </p>
+
+          <StatementTable
+            groups={crGroups(cr.data, scope.meta)}
+            base={base}
+            scope={scope}
+            footer={{ label: "Résultat de l'exercice", amount: cr.data.resultat }}
+          />
+        </>
+      )}
     </ScreenFrame>
   )
 }

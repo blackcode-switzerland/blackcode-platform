@@ -18,7 +18,11 @@ import { NotBuiltYet } from '@/components/states'
 export default function Page() {
   return (
     <ScreenFrame title="Management view">
-      <NotBuiltYet screen="Management view" mockup="app-analytique.html" />
+      <NotBuiltYet
+        screen="Management view"
+        mockup="app-analytique.html"
+        blocker="No route serves monthly flows or a cost breakdown yet. It reads from everything else, so it is the last of the screens rather than the first."
+      />
     </ScreenFrame>
   )
 }

@@ -18,7 +18,11 @@ import { NotBuiltYet } from '@/components/states'
 export default function Page() {
   return (
     <ScreenFrame title="Taxes">
-      <NotBuiltYet screen="Taxes" mockup="app-taxes.html" />
+      <NotBuiltYet
+        screen="Taxes"
+        mockup="app-taxes.html"
+        blocker="No route serves the statutory tax snapshot yet. Its parameters come from the book — canton and commune — and never from anything hardcoded here, so there is nothing honest to render until that route exists."
+      />
     </ScreenFrame>
   )
 }
