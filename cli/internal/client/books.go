@@ -22,7 +22,11 @@
 // Keep every amount and every date a string in this file.
 package client
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+	"net/url"
+)
 
 // ===========================================================================
 // THE STATUTORY CORE (phase 1)
@@ -127,6 +131,14 @@ type BooksEntryLine struct {
 	Credit  string `json:"credit"`
 }
 
+// BooksFx is the original-currency story (0011): {original, rate, source},
+// e.g. {"USD 5.00", "0.894", "card statement"}. All strings, all display.
+type BooksFx struct {
+	Original string `json:"original"`
+	Rate     string `json:"rate"`
+	Source   string `json:"source"`
+}
+
 // BooksEntry is one écriture.
 //
 // Note BOTH numbers. `Number` is the workspace #number this CLI addresses rows
@@ -153,6 +165,10 @@ type BooksEntry struct {
 		DriveRef string `json:"drive_ref"`
 		Captured string `json:"captured"`
 	} `json:"piece"`
+	// The original-currency story (0011). Display-only: `amount` is CHF — what
+	// the card was actually charged — and this is the evidence of what it was
+	// before the issuer converted.
+	Fx *BooksFx `json:"fx"`
 	// Provenance. Resolutions append here and the old state is kept forever;
 	// without this field `--json` silently drops the one thing that proves a
 	// resolved row was once unrecognized.
@@ -385,6 +401,8 @@ type BooksWorklistRow struct {
 	EvidenceTier   string `json:"evidence_tier"`
 	Amount         string `json:"amount"`
 	SuggestedRules []int  `json:"suggested_rules"`
+	// Pieces only: entry #numbers this document could prove.
+	SuggestedEntries []int `json:"suggested_entries"`
 }
 
 func (c *Client) GetBooksWorklist(ws string, s BooksScope) ([]BooksWorklistRow, error) {
@@ -483,6 +501,174 @@ type BooksResolveResult struct {
 func (c *Client) ResolveBooksEntry(ws string, number int, req ResolveBooksEntryRequest) (*BooksResolveResult, error) {
 	var out BooksResolveResult
 	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/entries/%d/resolve", ws, number), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: the sources register and the pièces pipeline
+// ---------------------------------------------------------------------------
+
+// BooksSourceRow is one line of the register. `Status` is computed server-side
+// from cadence against last_import and is not stored anywhere — which is the
+// register's whole point.
+type BooksSourceRow struct {
+	Number         int      `json:"number"`
+	Name           string   `json:"name"`
+	Type           string   `json:"type"`
+	Layer          *string  `json:"layer"`
+	Entity         *string  `json:"entity"`
+	Method         *string  `json:"method"`
+	Expected       *string  `json:"expected"`
+	LastImport     *string  `json:"last_import"`
+	Retired        bool     `json:"retired"`
+	LedgerAccounts []string `json:"ledger_accounts"`
+	Status         string   `json:"status"`
+	Windows        struct {
+		StaleAfterDays int `json:"stale_after_days"`
+		GapAfterDays   int `json:"gap_after_days"`
+	} `json:"windows"`
+}
+
+func (c *Client) ListBooksSources(ws, entity string) ([]BooksSourceRow, error) {
+	q := ""
+	if entity != "" {
+		q = "?entity=" + entity
+	}
+	var resp struct {
+		Data []BooksSourceRow `json:"data"`
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/sources%s", ws, q), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+// BooksSourceDetail adds what hangs off one source: the raw files pulled and
+// the runbook. `Runbook.CredentialRef` is a vault reference, never a secret.
+type BooksSourceDetail struct {
+	BooksSourceRow
+	Pulls []struct {
+		File     string  `json:"file"`
+		Period   *string `json:"period"`
+		Format   *string `json:"format"`
+		Hash     *string `json:"hash"`
+		DriveRef *string `json:"drive_ref"`
+		Pulled   *string `json:"pulled"`
+	} `json:"pulls"`
+	Runbook *struct {
+		Version       string   `json:"version"`
+		Updated       *string  `json:"updated"`
+		LoginURL      *string  `json:"login_url"`
+		CredentialRef *string  `json:"credential_ref"`
+		Steps         []string `json:"steps"`
+		Output        *string  `json:"output"`
+	} `json:"runbook"`
+}
+
+func (c *Client) GetBooksSource(ws string, number int) (*BooksSourceDetail, error) {
+	var out BooksSourceDetail
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/sources/%d", ws, number), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// BooksManifestFile is one Drive file in the worker's ledger.
+type BooksManifestFile struct {
+	FileID     string  `json:"file_id"`
+	Name       *string `json:"name"`
+	State      string  `json:"state"`
+	Fetched    *string `json:"fetched"`
+	Archived   bool    `json:"archived"`
+	ArchiveRef *string `json:"archive_ref"`
+	Piece      *int    `json:"piece"`
+}
+
+func (c *Client) GetBooksManifest(ws string, sourceNumber int) ([]BooksManifestFile, error) {
+	var resp struct {
+		Files []BooksManifestFile `json:"files"`
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/sources/%d/manifest", ws, sourceNumber), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Files, nil
+}
+
+// BooksPiece is one inbox document. `Validation` is THE SERVER'S verdict; the
+// worker's own claim sits inside `extraction` and is read by nothing.
+type BooksPiece struct {
+	Number       int     `json:"number"`
+	Entity       *string `json:"entity"`
+	Status       string  `json:"status"`
+	Received     string  `json:"received"`
+	DocumentType string  `json:"document_type"`
+	Merchant     *string `json:"merchant"`
+	Total        *string `json:"total"`
+	Date         *string `json:"date"`
+	NeedsReview  bool    `json:"needs_review"`
+	DuplicateOf  *int    `json:"duplicate_of"`
+	MatchedEntry *int    `json:"matched_entry"`
+	// Which journal MatchedEntry's number lives in: "grand_livre" or, for a
+	// simplified book, "recettes_depenses". Nil until matched.
+	MatchedJournal *string `json:"matched_journal"`
+	Validation     struct {
+		Passed   bool     `json:"passed"`
+		Problems []string `json:"problems"`
+	} `json:"validation"`
+}
+
+func (c *Client) ListBooksPieces(ws, entity, status string) ([]BooksPiece, error) {
+	q := url.Values{}
+	if entity != "" {
+		q.Set("entity", entity)
+	}
+	if status != "" {
+		q.Set("status", status)
+	}
+	qs := ""
+	if len(q) > 0 {
+		qs = "?" + q.Encode()
+	}
+	var resp struct {
+		Data []BooksPiece `json:"data"`
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/pieces%s", ws, qs), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+// BooksIngestResult reports what the door decided: created or converged,
+// the server's verdict, and the duplicate it flagged if any.
+type BooksIngestResult struct {
+	Number      int  `json:"number"`
+	Created     bool `json:"created"`
+	NeedsReview bool `json:"needs_review"`
+	DuplicateOf *int `json:"duplicate_of"`
+	Validation  struct {
+		Passed   bool     `json:"passed"`
+		Problems []string `json:"problems"`
+	} `json:"validation"`
+}
+
+// IngestBooksPiece posts a raw ExtractionResult payload. The payload travels
+// as-is: the CLI does not pre-validate, because the SERVER's verdict is the
+// only one that counts and a CLI that filtered first would hide exactly the
+// documents a human must see.
+func (c *Client) IngestBooksPiece(ws string, payload json.RawMessage) (*BooksIngestResult, error) {
+	var out BooksIngestResult
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/pieces/ingest", ws), payload, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) MatchBooksPiece(ws string, piece, entry int) (*BooksPiece, error) {
+	var out BooksPiece
+	body := map[string]int{"entry": entry}
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/pieces/%d/match", ws, piece), body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

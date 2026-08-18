@@ -57,13 +57,22 @@ func newWorklistCmd() *cobra.Command {
 			}
 			return output.Render(format, rows, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "#\tDATE\tKIND\tLABEL\tAMOUNT\tRECOGNITION\tSUGGESTED RULES")
+				fmt.Fprintln(tw, "#\tDATE\tKIND\tLABEL\tAMOUNT\tRECOGNITION\tSUGGESTED")
 				for _, r := range rows {
+					// Entries suggest RULES that would explain them; pieces
+					// suggest ENTRIES they could prove. One column, labelled
+					// by what each row is.
 					suggested := "—"
 					if len(r.SuggestedRules) > 0 {
 						parts := make([]string, len(r.SuggestedRules))
 						for i, n := range r.SuggestedRules {
-							parts[i] = "#" + strconv.Itoa(n)
+							parts[i] = "rule #" + strconv.Itoa(n)
+						}
+						suggested = strings.Join(parts, " ")
+					} else if len(r.SuggestedEntries) > 0 {
+						parts := make([]string, len(r.SuggestedEntries))
+						for i, n := range r.SuggestedEntries {
+							parts[i] = "entry #" + strconv.Itoa(n)
 						}
 						suggested = strings.Join(parts, " ")
 					}

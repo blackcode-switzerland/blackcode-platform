@@ -5,11 +5,10 @@
 model in [`docs/platform-db.md`](../../../docs/platform-db.md). Neither is
 repeated here.
 
-**Status: phase 1 slice A, 2026-08-17.** Schema and guards exist and are migrated.
-No derivations, no queries, no routes beyond `/api/meta` yet. What each phase adds
+**Status: phase 3, 2026-08-18.** The statutory core, recognition, the sources register and the pièces pipeline exist and are migrated (0001-0011; 0010 lets a pièce match into the RI journal, found by the first real RI use; 0011 adds `fx`, the display-only original-currency story — the book stays CHF, phase 4's bank ingest is the intended writer). What each phase adds
 is in [`docs/books-app-plan/`](../../../docs/books-app-plan/README.md).
 
-Migrations applied: 5 of 5, `__drizzle_migrations_books`.
+Migrations applied: 11 of 11, `__drizzle_migrations_books`.
 
 ---
 
@@ -44,6 +43,15 @@ erDiagram
   SOURCE   |o--o{ RULE : "keyed on (source, counterparty)"
 
   STATEMENT_POSITION ||--o{ ACCOUNT : "art. 959a/959b line"
+
+  SOURCE ||--o{ SOURCE_PULL : "raw files, our copy"
+  SOURCE ||--o| RUNBOOK : "how to pull, no secrets"
+  SOURCE ||--o{ DRIVE_MANIFEST : "every file seen"
+  ENTITY ||--o{ PIECE_INBOX : "attribution, nullable"
+  PIECE_INBOX ||--o| PIECE_INBOX : "duplicate_of, flagged never dropped"
+  PIECE_INBOX ||--o| ENTRY : "matched: writes the entry piece_* columns"
+  PIECE_INBOX ||--o| RI_ENTRY : "matched (0010): one journal or the other, never both"
+  DRIVE_MANIFEST ||--o| PIECE_INBOX : "extracted into"
 
   USERS {
     int id PK "platform.users, shared"

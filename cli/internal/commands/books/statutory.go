@@ -390,6 +390,9 @@ func newEntryShowCmd() *cobra.Command {
 				} else {
 					fmt.Fprintf(w, "  pièce        none on record\n")
 				}
+				if e.Fx != nil {
+					fmt.Fprintf(w, "  fx           %s\n", fxLine(e.Fx))
+				}
 				fmt.Fprintln(w)
 				tw := output.Tabwriter(w)
 				fmt.Fprintln(tw, "  ACCOUNT\tDEBIT\tCREDIT")
@@ -600,4 +603,17 @@ func newPatrimoineCmd() *cobra.Command {
 	}
 	scopeFlags(cmd, &scope)
 	return cmd
+}
+
+// fxLine renders the original-currency story: the amount column is CHF (what
+// the card was actually charged); this is where "it was USD 5.00" survives.
+func fxLine(fx *client.BooksFx) string {
+	s := fx.Original
+	if fx.Rate != "" {
+		s += " at " + fx.Rate
+	}
+	if fx.Source != "" {
+		s += " (" + fx.Source + ")"
+	}
+	return s
 }

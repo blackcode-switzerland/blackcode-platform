@@ -438,6 +438,8 @@ export const booksEntry = booksSchema.table(
     piece_drive_ref: text('piece_drive_ref'),
     piece_hash: varchar('piece_hash', { length: 80 }),
     piece_captured: date('piece_captured'),
+    /** 0011: the original-currency story, display-only. Nothing computes with it. */
+    fx: jsonb('fx'),
     /** The only correction path. */
     reverses_entry_id: integer('reverses_entry_id'),
     history: jsonb('history'),
@@ -514,6 +516,8 @@ export const booksRiEntry = booksSchema.table(
     piece_drive_ref: text('piece_drive_ref'),
     piece_hash: varchar('piece_hash', { length: 80 }),
     piece_captured: date('piece_captured'),
+    /** 0011: the original-currency story, display-only. Nothing computes with it. */
+    fx: jsonb('fx'),
     history: jsonb('history'),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -560,7 +564,143 @@ export type BooksEntity = typeof booksEntity.$inferSelect
 export type BooksExercice = typeof booksExercice.$inferSelect
 export type BooksAccount = typeof booksAccount.$inferSelect
 export type BooksOpeningBalance = typeof booksOpeningBalance.$inferSelect
+
+// ---------------------------------------------------------------------------
+// Phase 3: what hangs off the sources register, and the pièces pipeline
+// ---------------------------------------------------------------------------
+// None of these is read by any derivation: a staged piece cannot reach a
+// statement by construction. Migration 0008 carries the full reasoning.
+
+/** Raw files pulled from a source. `hash` is of OUR copy, taken at download. */
+export const booksSourcePull = booksSchema.table(
+  'source_pull',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    source_id: integer('source_id')
+      .notNull()
+      .references(() => booksSource.id, { onDelete: 'cascade' }),
+    file: varchar('file', { length: 200 }).notNull(),
+    period: varchar('period', { length: 60 }),
+    format: varchar('format', { length: 40 }),
+    hash: varchar('hash', { length: 80 }),
+    drive_ref: text('drive_ref'),
+    pulled: date('pulled'),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    unique('source_pull_source_id_file_unique').on(t.source_id, t.file),
+    index('idx_books_source_pull_source').on(t.source_id),
+  ]
+)
+
+/** How to pull a source, versioned in place. `credential_ref` is a REFERENCE, never a secret. */
+export const booksRunbook = booksSchema.table('runbook', {
+  id: serial('id').primaryKey(),
+  workspace_id: integer('workspace_id')
+    .notNull()
+    .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+  source_id: integer('source_id')
+    .notNull()
+    .unique()
+    .references(() => booksSource.id, { onDelete: 'cascade' }),
+  version: varchar('version', { length: 20 }).notNull().default('1.0'),
+  updated: date('updated'),
+  login_url: text('login_url'),
+  credential_ref: text('credential_ref'),
+  steps: jsonb('steps').notNull().default([]),
+  output: varchar('output', { length: 80 }),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+/**
+ * One row per document the worker delivered. Always staged on arrival.
+ *
+ * `extraction` is the worker's payload VERBATIM; `validation` is THE SERVER'S
+ * verdict, recomputed from the payload's own arithmetic, and the only one
+ * anything trusts. Idempotency lives in a COALESCE unique index the migration
+ * owns — Drizzle cannot express it, so do not "fix" its absence here.
+ */
+export const booksPieceInbox = booksSchema.table(
+  'piece_inbox',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    /** Attribution. NULLABLE: a scanned receipt does not always say whose it is. */
+    entity_id: integer('entity_id').references(() => booksEntity.id, { onDelete: 'set null' }),
+    seq: integer('seq').notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('staged'),
+    received: date('received').notNull(),
+    pipeline: varchar('pipeline', { length: 120 }),
+    drive_file_id: varchar('drive_file_id', { length: 120 }).notNull(),
+    file_name: varchar('file_name', { length: 300 }),
+    mime_type: varchar('mime_type', { length: 120 }),
+    md5_checksum: varchar('md5_checksum', { length: 64 }),
+    drive_created_time: timestamp('drive_created_time', { withTimezone: true }),
+    web_view_link: text('web_view_link'),
+    extraction: jsonb('extraction').notNull(),
+    validation: jsonb('validation').notNull(),
+    needs_review: boolean('needs_review').notNull().default(false),
+    duplicate_of_id: integer('duplicate_of_id'),
+    matched_entry_id: integer('matched_entry_id').references(() => booksEntry.id, {
+      onDelete: 'set null',
+    }),
+    /** The RI journal's half of the match. 0010's CHECK: never both. */
+    matched_ri_entry_id: integer('matched_ri_entry_id').references(() => booksRiEntry.id, {
+      onDelete: 'set null',
+    }),
+    matched_at: timestamp('matched_at', { withTimezone: true }),
+    note: jsonb('note'),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    unique('piece_inbox_workspace_id_seq_unique').on(t.workspace_id, t.seq),
+    index('idx_books_piece_inbox_ws').on(t.workspace_id, t.status),
+  ]
+)
+
+/** The worker's ledger of the Drive inbox: one row per file, six states. */
+export const booksDriveManifest = booksSchema.table(
+  'drive_manifest',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    source_id: integer('source_id')
+      .notNull()
+      .references(() => booksSource.id, { onDelete: 'cascade' }),
+    file_id: varchar('file_id', { length: 120 }).notNull(),
+    name: varchar('name', { length: 300 }),
+    mime_type: varchar('mime_type', { length: 120 }),
+    drive_created_time: timestamp('drive_created_time', { withTimezone: true }),
+    fetched: date('fetched'),
+    extracted_piece_id: integer('extracted_piece_id').references(() => booksPieceInbox.id, {
+      onDelete: 'set null',
+    }),
+    state: varchar('state', { length: 20 }).notNull().default('discovered'),
+    archived: boolean('archived').notNull().default(false),
+    archive_ref: text('archive_ref'),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    unique('drive_manifest_workspace_id_file_id_unique').on(t.workspace_id, t.file_id),
+    index('idx_books_drive_manifest_source').on(t.source_id, t.state),
+  ]
+)
+
 export type BooksSource = typeof booksSource.$inferSelect
+export type BooksSourcePull = typeof booksSourcePull.$inferSelect
+export type BooksRunbook = typeof booksRunbook.$inferSelect
+export type BooksPieceInbox = typeof booksPieceInbox.$inferSelect
+export type BooksDriveManifest = typeof booksDriveManifest.$inferSelect
 export type BooksRule = typeof booksRule.$inferSelect
 export type BooksEntry = typeof booksEntry.$inferSelect
 export type BooksEntryLine = typeof booksEntryLine.$inferSelect
