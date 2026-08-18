@@ -48,6 +48,8 @@ means something against the app it was resolved in.`, cfg.App, cfg.App),
 			newWorkspaceTransferCmd(cfg),
 			newWorkspaceDeleteCmd(cfg),
 		)
+	} else if cfg.WorkspaceCreate {
+		cmd.AddCommand(newWorkspaceCreateCmd(cfg))
 	}
 	return cmd
 }

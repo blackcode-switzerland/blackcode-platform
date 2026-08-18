@@ -129,6 +129,12 @@
     },
     {
       "method": "POST",
+      "path": "/api/workspaces",
+      "command": "bk books workspace create",
+      "app": "books"
+    },
+    {
+      "method": "POST",
       "path": "/api/workspaces/{ws}/entities",
       "command": "bk books entity create",
       "app": "books"

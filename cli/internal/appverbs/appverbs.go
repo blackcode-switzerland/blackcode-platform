@@ -137,6 +137,14 @@ type Config struct {
 	// (D-3). Ignored unless Workspace is set.
 	WorkspaceAdmin bool
 
+	// WorkspaceCreate adds CREATE alone, for an app that serves POST
+	// /api/workspaces and none of the other admin methods. `apps/books` is why
+	// it exists: its workspaces can be made but never deleted (statutory
+	// records, art. 958f CO — the same doctrine that keeps Trash off there),
+	// so the four-verb bundle above would claim three routes that can only
+	// 404. Ignored unless Workspace is set; redundant when WorkspaceAdmin is.
+	WorkspaceCreate bool
+
 	// Members mounts `bk <app> member` — LIST only.
 	//
 	// Split from the two writes below because they are three routes, and

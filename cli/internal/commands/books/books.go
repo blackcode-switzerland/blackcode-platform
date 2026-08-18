@@ -155,14 +155,19 @@ func nouns() []*cobra.Command {
 // `/api/me/pending-invitations` here. Flipping a flag without its route claims
 // something that can only 404.
 //
-// `WorkspaceAdmin` is off because this app serves GET on /api/workspaces and no
-// other method; `MemberLeave` because there is no /leave route.
+// `WorkspaceCreate`, not `WorkspaceAdmin`: this app serves GET and POST on
+// /api/workspaces and no other method. Create arrived for the person whose
+// second venture needs its own set of books; edit and transfer wait for
+// somebody to need them, and DELETE is permanently absent — a workspace holds
+// statutory records (art. 958f CO), the same doctrine that keeps `Trash` off.
+// `MemberLeave` is off because there is no /leave route.
 func appOwnedVerbs() []*cobra.Command {
 	return appverbs.New(appverbs.Config{
-		App:       Slug,
-		Workspace: true,
-		Members:   true,
-		Invites:   true,
+		App:             Slug,
+		Workspace:       true,
+		WorkspaceCreate: true,
+		Members:         true,
+		Invites:         true,
 	}).All()
 }
 

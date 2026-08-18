@@ -213,31 +213,63 @@ export async function ensureWorkspaceForUser(
       if (ws) return { workspace: ws, created: false }
     }
 
-    // Slug collision: `slug` is UNIQUE and two people called Anna would collide.
-    // The suffix comes from the attempt counter rather than a random string so
-    // the slug stays typeable — somebody has to be able to say it out loud.
-    let slug = base
-    for (let attempt = 0; attempt < 25; attempt++) {
-      const clash = await tx
-        .select({ id: booksWorkspaces.id })
-        .from(booksWorkspaces)
-        .where(eq(booksWorkspaces.slug, slug))
-        .limit(1)
-      if (!clash[0]) break
-      slug = `${base}-${attempt + 2}`
-    }
-
-    const [ws] = await tx
-      .insert(booksWorkspaces)
-      .values({ name: `${label}'s workspace`, slug, owner_id: userId })
-      .returning(WS_COLUMNS)
-
-    await tx
-      .insert(booksWorkspaceMembers)
-      .values({ workspace_id: ws.id, user_id: userId, role: 'owner' })
-
-    return { workspace: { ...ws, member_role: 'owner' as const }, created: true }
+    return { workspace: await mintWorkspace(tx, userId, `${label}'s workspace`, base), created: true }
   })
+}
+
+/**
+ * The two writes that make a workspace exist — row and owner membership, one
+ * transaction, because a workspace without its membership row locks its own
+ * owner out (`ensureWorkspaceForUser`'s header tells the story; the seed
+ * shipped that exact bug once).
+ *
+ * Slug collision: `slug` is UNIQUE and two people called Anna would collide.
+ * The suffix comes from the attempt counter rather than a random string so
+ * the slug stays typeable — somebody has to be able to say it out loud.
+ */
+type Tx = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0]
+async function mintWorkspace(
+  tx: Tx,
+  userId: number,
+  name: string,
+  slugBase: string
+): Promise<WorkspaceMembershipRef> {
+  let slug = slugBase
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const clash = await tx
+      .select({ id: booksWorkspaces.id })
+      .from(booksWorkspaces)
+      .where(eq(booksWorkspaces.slug, slug))
+      .limit(1)
+    if (!clash[0]) break
+    slug = `${slugBase}-${attempt + 2}`
+  }
+
+  const [ws] = await tx
+    .insert(booksWorkspaces)
+    .values({ name, slug, owner_id: userId })
+    .returning(WS_COLUMNS)
+
+  await tx
+    .insert(booksWorkspaceMembers)
+    .values({ workspace_id: ws.id, user_id: userId, role: 'owner' })
+
+  return { ...ws, member_role: 'owner' as const }
+}
+
+/**
+ * Manual creation: `bk books workspace create --name X` — a SECOND (or tenth)
+ * workspace for somebody who already has one. Unlike `ensureWorkspaceForUser`
+ * this always creates: the caller said "create", not "sign me in". The name is
+ * used as given (no "'s workspace" suffix — the person named it), the slug is
+ * derived from it.
+ */
+export async function createWorkspaceForUser(
+  userId: number,
+  name: string
+): Promise<WorkspaceMembershipRef> {
+  const trimmed = name.trim()
+  return getDb().transaction((tx) => mintWorkspace(tx, userId, trimmed, slugify(trimmed)))
 }
 
 /**
