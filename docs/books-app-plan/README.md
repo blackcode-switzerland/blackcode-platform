@@ -222,7 +222,7 @@ Three of these block migration 0001.
 |---|---|---|---|
 | D1 | Workspace = one client's books with an `entity_id` column, or workspace = legal entity? | **Settled: one workspace, `entity_id` column.** See D1 in full below, because the appealing answer is the wrong one. | migration 0001 |
 | D2 | One number or two: platform `seq` vs a gapless per exercice `entry_no`? | Two. `seq` addresses a row. `entry_no` is the statutory journal number. | migration 0001 |
-| D3 | Language | UI and CLI in English. Statutory line names stay French (they are legal text and the filed PDF must be French). Needs a one line confirmation from Andrea. | phase 0 |
+| D3 | Language | UI and CLI in English. Statutory line names stay French (they are legal text and the filed PDF must be French). **Confirmed by Andrea 2026-08-18: English first.** | phase 0 |
 | D4 | URL and CLI grammar for exercice | `?entity=...&exercice=2026` on routes. `--entity` and `--exercice` flags with remembered defaults. | phase 1 routes |
 | D5 | Does the frontend call routes directly? | Yes. Frontend uses routes, agents use `bk`, both over the same query layer. | phase 0 |
 
@@ -291,11 +291,29 @@ the two that matter most.
 
 ## Status
 
-This plan is a draft written on 2026-08-17, before `apps/books` exists. Two of
-its decisions (D1 and D3 above) are still unconfirmed by Andrea, and the mockup
-it derives from has three slices still pending: prior year backfill, multi year
-navigation, and the statutory PDF export. Those will add screens beyond the 13
-counted here.
+This plan is a draft written on 2026-08-17, before `apps/books` exists. The
+mockup it derives from has three slices still pending: prior year backfill,
+multi year navigation, and the statutory PDF export. Those will add screens
+beyond the 13 counted here.
+
+### Andrea's answers, 2026-08-18
+
+Five questions went to Andrea after phase 2; all five are settled:
+
+1. **Language: English first** (D3 confirmed as written).
+2. **The RI stays simplified.** No double-entry election. New rule from the
+   same answer: a transfer between her own accounts (bank 1 to bank 2, or a
+   personal spend from a business account) is LOGGED BUT NEUTRAL — it appears
+   in the book and counts in neither recettes nor dépenses. This needs a third
+   `direction` value: the CHECK in 0003 allows only recette/depense, and
+   `riTotals` today would count a neutral row as a dépense, which is exactly
+   the silent misstatement to refuse. Tracked as its own ticket.
+3. **No raw-data screen** («état brut» dropped for now).
+4. **Phase 5 approval arrangement stands** (Andrea approves; the fiduciary
+   has no login).
+5. **The exercice split is confirmed**: December 2025 and January 2026 rents
+   are separate years; the mockup's single-period statement was the mockup's
+   issue, not a requirement.
 
 When `apps/books` exists, this folder moves to `apps/books/docs/`, per the
 placement rule in `working-in-this-repo.md`. It sits in root docs for now because
