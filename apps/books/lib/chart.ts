@@ -83,9 +83,13 @@ export interface ChartTemplateAccount {
  */
 export const PME_CHART: readonly ChartTemplateAccount[] = [
   // ── Class 1, actif ────────────────────────────────────────────────────────
-  { no: '1020', class: 1, label: { fr: 'Banque WIR', enSuffix: 'WIR bank' }, statement: 'bilan', statement_position: 'tresorerie' },
-  { no: '1021', class: 1, label: { fr: 'Banque UBS (gelée)', enSuffix: 'UBS bank (frozen)' }, statement: 'bilan', statement_position: 'tresorerie' },
-  { no: '1022', class: 1, label: { fr: 'Yapeal', enSuffix: 'Yapeal' }, statement: 'bilan', statement_position: 'tresorerie' },
+  // ONE neutral bank account. The mockup fixture names three ('Banque WIR',
+  // 'Banque UBS (gelée)', 'Yapeal') because that chart IS blackcode's book —
+  // its banks, its frozen account. Those are book-local customizations the
+  // SEED applies from the fixture; a template that shipped them would open
+  // every new company's books with another company's bank names. Found by
+  // the first fresh-company simulation, 2026-08-18.
+  { no: '1020', class: 1, label: { fr: 'Banque', enSuffix: 'Bank' }, statement: 'bilan', statement_position: 'tresorerie' },
   { no: '1100', class: 1, label: { fr: 'Créances clients', enSuffix: 'Trade receivables' }, statement: 'bilan', statement_position: 'creances_clients' },
   { no: '1141', class: 1, label: { fr: 'Prêts aux entités liées', enSuffix: 'Loans to related entities' }, statement: 'bilan', statement_position: 'autres_creances_ct_liees' },
   { no: '1300', class: 1, label: { fr: 'Actifs de régularisation', enSuffix: 'Accrued assets' }, statement: 'bilan', statement_position: 'regularisation_actif' },

@@ -35,15 +35,36 @@ interface FxAccount {
 
 const FX = (fixture as unknown as { ACCOUNTS: FxAccount[] }).ACCOUNTS
 
+// The fixture is BLACKCODE'S chart: the template plus that book's treasury
+// customization (three named banks where the template has one neutral
+// 'Banque'). The seed applies the fixture verbatim, so the seeded books keep
+// their banks; the template must NOT ship them to every new company. The
+// delta is pinned here so it can never grow silently.
+const BLACKCODE_ONLY = new Set(['1021', '1022'])
+const CUSTOMIZED_LABEL = new Set(['1020'])
+
 describe('the PME chart template', () => {
-  it('has the accounts the fixture has, in the same order', () => {
+  it('has the accounts the fixture has minus blackcode treasury customization, in order', () => {
     expect(FX.length, 'the fixture itself changed shape').toBe(26)
-    expect(PME_CHART.map((a) => a.no)).toEqual(FX.map((a) => a.no))
+    expect(PME_CHART.map((a) => a.no)).toEqual(FX.filter((a) => !BLACKCODE_ONLY.has(a.no)).map((a) => a.no))
   })
 
-  it('matches field for field', () => {
+  it('pins the customization delta: exactly two extra banks, one relabeled bank', () => {
+    // 1021 'Banque UBS (gelée)' and 1022 'Yapeal' are blackcode's accounts —
+    // present in the fixture (and so in the seeded books), absent from the
+    // template. 1020 exists in both but the fixture names blackcode's bank.
+    for (const no of BLACKCODE_ONLY) {
+      expect(FX.find((a) => a.no === no), `${no} left the fixture; update this pin`).toBeTruthy()
+      expect(PME_CHART.find((a) => a.no === no), `${no} is a book customization, not template material`).toBeUndefined()
+    }
+    expect(FX.find((a) => a.no === '1020')!.label.fr).toBe('Banque WIR')
+    expect(PME_CHART.find((a) => a.no === '1020')!.label.fr, 'the template bank is nobody in particular').toBe('Banque')
+  })
+
+  it('matches field for field (labels too, outside the pinned customization)', () => {
     const problems: string[] = []
     for (const fx of FX) {
+      if (BLACKCODE_ONLY.has(fx.no)) continue
       const t = PME_CHART.find((a) => a.no === fx.no)
       if (!t) {
         problems.push(`${fx.no} is in the fixture and not in PME_CHART`)
@@ -54,6 +75,7 @@ describe('the PME chart template', () => {
       if (t.statement_position !== fx.statement_position) {
         problems.push(`${fx.no}: position ${t.statement_position} vs ${fx.statement_position}`)
       }
+      if (CUSTOMIZED_LABEL.has(fx.no)) continue
       // The label is what a screen prints, so a typo here is a typo on a filing.
       if (t.label.fr !== fx.label.fr) problems.push(`${fx.no}: fr "${t.label.fr}" vs "${fx.label.fr}"`)
       if (t.label.enSuffix !== fx.label.enSuffix) {
