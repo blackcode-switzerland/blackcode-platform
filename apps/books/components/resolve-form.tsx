@@ -58,6 +58,7 @@
 
 import { useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import type { ResolvableRow } from '@/lib/resolvable'
 import { useAccounts } from '@/lib/hooks'
 import { useCanWrite, useResolveEntry, type ResolveBody } from '@/lib/mutations'
 import { booksCacheFilter } from '@/lib/query-keys'
@@ -66,7 +67,14 @@ import type { ResolveResult, WorklistRow } from '@/lib/types'
 import { accountLabelEn } from '@/lib/label'
 
 /** A worklist row this form is allowed to act on. See the header. */
-export type ResolvableRow = WorklistRow & { kind: 'entry' }
+/**
+ * Re-exported from `lib/resolvable.ts`, which now owns both the type and the
+ * PREDICATE that produces it. The predicate is the half that can be tested —
+ * `lib/resolvable.test.ts` calls it over every kind the worklist serves — and
+ * splitting them would put the type and the rule that enforces it in two
+ * places. See that file's header for the bug this arrangement exists after.
+ */
+export type { ResolvableRow }
 
 const FIELD =
   'w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-[13px] text-foreground ' +

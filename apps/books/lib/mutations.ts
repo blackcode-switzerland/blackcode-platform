@@ -1,14 +1,38 @@
 // The ONLY module that sends `apiSend` at a record path.
 //
 // ===========================================================================
-// THE FOUR WRITES, AND WHY THERE ARE ONLY FOUR
+// THE FIVE WRITES, AND WHY THERE ARE ONLY FIVE
 // ===========================================================================
-// b/books has thirteen screens and four buttons that change data:
+// b/books has thirteen screens and five buttons that change data:
 //
 //   1. resolve an entry        say what a transaction means      (phase 2)
 //   2. create a rule           teach it, so the next one is automatic (phase 2)
 //   3. post a staged entry     move it into the books            (phase 1)
 //   4. approve a rule          fiduciary sign-off on a check     (phase 5)
+//   5. match a pièce           say what a document proves        (phase 3)
+//
+// ── IT WAS FOUR UNTIL 2026-08-18, AND THE FIFTH IS A RECORDED DECISION ────
+// `apps/books/docs/frontend.md` §5 and this header both said four, and phase 3
+// forced the question rather than answering it (DECISIONS.md D-G): either the
+// count becomes five and both files say so, or matching stays a CLI act. **A
+// fifth write appearing while two files still claim four is how a documented
+// invariant quietly stops being one**, so the two moved together, in this
+// change, and this paragraph is the record.
+//
+// What decided it was CLAUDE.md's START-ANYWHERE-FINISH-IN-SYNC rule rather
+// than the count. `POST /pieces/{n}/match` and `bk books piece match` both
+// shipped with phase 3's backend. A capability that exists in `bk` and not in
+// the web UI is a gap unless it is a deliberate, recorded decision — and the
+// two that ARE recorded (`DELETE /api/me`, the board-ordering reorders) are
+// both destruction the product keeps human. This is the opposite: it is the
+// judgment the inbox exists to collect.
+//
+// And it is the same CLASS as resolve, which is what makes it safe to add
+// rather than merely consistent to add. It writes no amount, no account and no
+// balance; it fills the entry's `piece_*` interpretation columns and
+// **deliberately does not touch the evidence tier**, because whether a receipt
+// turns `partial` into `full` is a sufficiency judgment and judgments stay
+// human. Nothing derived reads `books.piece_inbox`.
 //
 // Everything else on every screen is read. That is not minimalism for its own
 // sake: the app is a tool an agent drives from outside, and the human surface is
@@ -33,12 +57,12 @@
 // gate buys is that a missed affordance FAILS LOUDLY instead of writing.
 //
 // ===========================================================================
-// PHASE 2 LANDED THE FIRST TWO. THE OTHER TWO ARE STILL COMMENTED.
+// THREE OF THE FIVE ARE REAL. THE OTHER TWO ARE STILL COMMENTED.
 // ===========================================================================
-// `useResolveEntry` and `useCreateRule` are real as of 2026-08-18. Posting and
-// compliance approval are not, and they stay COMMENTED rather than stubbed for
-// the reason that has not changed: a stub that returns success is a lie a
-// component builds on.
+// `useResolveEntry` and `useCreateRule` landed with phase 2; `useMatchPiece`
+// with phase 3, both on 2026-08-18. Posting and compliance approval are not
+// real, and they stay COMMENTED rather than stubbed for the reason that has not
+// changed: a stub that returns success is a lie a component builds on.
 //
 // ===========================================================================
 // A WRITE ANSWERS WITH A RESULT. IT DOES NOT ANSWER WITH `null` AND A FLAG.
@@ -203,7 +227,12 @@ function useRecordMutation<T>(
 }
 
 // ---------------------------------------------------------------------------
-// The four writes. Each lands with its phase.
+// The five writes. Each lands with its phase.
+//
+// It was four until 2026-08-18, when `useMatchPiece` landed with phase 3.
+// The count is stated in `apps/books/docs/frontend.md` too, and both were
+// moved in the same change — a fifth write appearing while a file still says
+// four is how a documented invariant quietly stops being one.
 // ---------------------------------------------------------------------------
 
 /**
@@ -279,6 +308,72 @@ export function useCreateRule(ws: string | undefined, entity: string | null) {
     'POST',
     `/api/workspaces/${ws}/rules${entity ? `?entity=${encodeURIComponent(entity)}` : ''}`
   )
+}
+
+/**
+ * Phase 3. Say what a document proves.
+ *
+ * ── THE #NUMBER IS DISAMBIGUATED BY THE PIÈCE'S OWN BOOK ──────────────────
+ * This is the thing ticket #51 got wrong and this route got right, and it is
+ * worth understanding rather than merely using. `matchPiece` asks
+ * `journalOf(piece.entity_id)` FIRST: a simplified book's entries are
+ * `ri_entry` rows, a double-entry book's are the grand livre's, and an
+ * unattributed pièce reads as the grand livre — *"until somebody says whose it
+ * is, it cannot reach a personal recettes-dépenses book."*
+ *
+ * So `entry` is resolved against context the CALLER ALREADY SUPPLIED, rather
+ * than against a number the caller had to get right. `useResolveEntry` above
+ * has the opposite shape and that is exactly why it can rewrite an unrelated
+ * journal entry. **The screen still has to say which journal the number will be
+ * read in**, because the caller cannot see `journalOf` and a number typed
+ * against the wrong journal is a refusal, not a wrong write — the route answers
+ * `entry_not_found`.
+ *
+ * ── THE REFUSALS ARE ALL ACTIONABLE, SO THE SCREEN MUST PRINT THEM ────────
+ *   missing_entry     no `entry` in the body, or not a positive integer
+ *   piece_not_found   no pièce with that #number
+ *   entry_not_found   no entry #n — **in this pièce's journal**, which is the
+ *                     half a generic "not found" throws away
+ *   entry_deleted     the entry is deleted
+ *   already_matched   a pièce documents one entry; unmatching is not built
+ *
+ * Read them off the `WriteResult`, never off `mutation.error` — see this file's
+ * header. `already_matched` is the one a person is most likely to hit and its
+ * suggestion says why there is no undo.
+ *
+ * ── WHAT IT DOES NOT DO ──────────────────────────────────────────────────
+ * It does not change the entry's `evidence_tier`, and no screen may offer to.
+ * A matched receipt may or may not be sufficient evidence, that is a judgment,
+ * and the pièce reference is what gives a human the material to make it.
+ */
+export function useMatchPiece(ws: string | undefined, number: number) {
+  return useRecordMutation<MatchResult>(
+    'POST',
+    `/api/workspaces/${ws}/pieces/${number}/match`
+  )
+}
+
+/**
+ * What `POST /pieces/{n}/match` answers with.
+ *
+ * ── BUILT INLINE IN THE ROUTE, SO `wire-parity` CANNOT SEE IT ─────────────
+ * There is no `publicMatch` to import, exactly like the resolve response — and
+ * that is the payload where renaming a field server-side left 194/194 green
+ * while the screen rendered a false statement (F-2). `lib/wire-parity.test.ts`
+ * reads this route's SOURCE for its field list, which is a weaker check than
+ * calling a function and is said plainly there.
+ *
+ * `matched_journal` is the field to respect: it says which journal
+ * `matched_entry` lives in, and a screen that linked to `/ledger/{n}` for a
+ * `recettes_depenses` number would open a DIFFERENT record.
+ */
+export interface MatchResult {
+  /** The pièce's #number. */
+  number: number
+  /** `matched`. */
+  status: string
+  matched_entry: number
+  matched_journal: 'grand_livre' | 'recettes_depenses'
 }
 
 /**

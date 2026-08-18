@@ -23,10 +23,16 @@ import type {
   CrResult,
   Entity,
   Entry,
+  InboxPiece,
+  ManifestResult,
   OverviewBook,
   OverviewResult,
   PatrimoineSnapshot,
+  PieceExtraction,
+  PieceTransaction,
   RecognitionRule,
+  Source,
+  SourceDetail,
   Term,
   WorklistResult,
   WorklistRow,
@@ -542,3 +548,127 @@ export function suggestionsFor(
 
 /** Re-exported so a page reading the overview needs one import, not two. */
 export type { OverviewBook }
+
+// ===========================================================================
+// SOURCES AND PIÈCES — phase 3's four reads
+// ===========================================================================
+// ── THESE ARE THE FIRST READS IN THE APP THAT ARE NOT PER-BOOK ────────────
+// A source belongs to the WORKSPACE, not to a book: one card can attribute
+// spend across several books, and `books.source.entity_id` is nullable because
+// an unattributed source is legitimate (seeded #9, PostFinance, has no book).
+// The inbox is the same — a scanned receipt does not always say whose it is.
+//
+// So `entity` here is a FILTER, not a scope: passing it narrows the register,
+// and omitting it is the honest default for a register that answers "do I have
+// everything" across every book at once. It still goes in the key — two filters
+// are two results — and the exercice is null in all four keys because none of
+// these routes reads `?exercice=` and a year in the key would be a claim the
+// URL does not make.
+//
+// **`booksKey` and not `booksGlobalKey`**, for the reason at the top of
+// `lib/query-keys.ts`: two workspaces hold different sources and their #numbers
+// overlap. "Every source" is not a global fact.
+
+/**
+ * The sources register. `GET …/sources`, optionally narrowed to one book.
+ *
+ * Every row carries a `status` the SERVER computed from cadence against
+ * `last_import`, and the thresholds it used. Nothing here is settable and the
+ * screen must not draw it as if it were — see `lib/derive/sources.ts`.
+ */
+export function useSources(ws: string | undefined, entity: string | null = null) {
+  return useQuery({
+    queryKey: booksKey('sources', { entity, exercice: null }, { ws }),
+    queryFn: () =>
+      apiList<Source>(
+        `/api/workspaces/${ws}/sources${entity ? `?entity=${encodeURIComponent(entity)}` : ''}`
+      ).then((r) => r.data),
+    enabled: !!ws,
+  })
+}
+
+/**
+ * One source in full. `GET …/sources/{number}` — the register row, its pulls
+ * and its runbook.
+ *
+ * The runbook carries `credential_ref`, a vault reference. It is rendered as a
+ * reference and nothing in this app masks it: see `SourceRunbook` in
+ * `lib/types.ts` for why a masking component would be worse than none.
+ */
+export function useSource(ws: string | undefined, number: number | null) {
+  return useQuery({
+    queryKey: booksKey('source', { entity: null, exercice: null }, { number, ws }),
+    queryFn: () => apiGet<SourceDetail>(`/api/workspaces/${ws}/sources/${number}`),
+    enabled: !!ws && number !== null && Number.isInteger(number),
+  })
+}
+
+/**
+ * The worker's ledger of one source's Drive folder. `GET …/sources/{n}/manifest`.
+ *
+ * ── IT DOES NOT SERVE `{data, next_cursor}`, SO `apiList` IS WRONG HERE ────
+ * The envelope is `{source, files}`. `apiList` would find no `data` key,
+ * substitute `[]`, and the screen would say "no files on record" over a folder
+ * holding six — the same confident wrong answer as the worklist, and
+ * `lib/wire-parity.test.ts` cannot see it because it reads shaping functions and
+ * not envelopes. So the whole envelope is kept, and `source` is shown: it is the
+ * #number the server answered for, which is the only way to notice a request
+ * that resolved to a different source than the URL asked for.
+ *
+ * **An empty `files` array is a real answer.** Most seeded sources have one.
+ */
+export function useManifest(ws: string | undefined, number: number | null) {
+  return useQuery({
+    queryKey: booksKey('manifest', { entity: null, exercice: null }, { number, ws }),
+    queryFn: () => apiGet<ManifestResult>(`/api/workspaces/${ws}/sources/${number}/manifest`),
+    enabled: !!ws && number !== null && Number.isInteger(number),
+  })
+}
+
+/**
+ * The receipts inbox. `GET …/pieces`, optionally narrowed by book and status.
+ *
+ * `{data, next_cursor}` — this one IS a list route, so `apiList`.
+ *
+ * `status` is a filter on the pièce's own lifecycle (`staged`, `matched`), not
+ * on the validation verdict. A flagged pièce is `staged` like any other: the
+ * flag is `needs_review`, and it is normal traffic rather than an error state.
+ */
+export function usePieces(
+  ws: string | undefined,
+  entity: string | null = null,
+  status?: string
+) {
+  return useQuery({
+    queryKey: booksKey('pieces', { entity, exercice: null }, { status, ws }),
+    queryFn: () => {
+      const q = new URLSearchParams()
+      if (entity) q.set('entity', entity)
+      if (status) q.set('status', status)
+      const qs = q.toString()
+      return apiList<InboxPiece>(
+        `/api/workspaces/${ws}/pieces${qs ? `?${qs}` : ''}`
+      ).then((r) => r.data)
+    },
+    enabled: !!ws,
+  })
+}
+
+/**
+ * The transaction block of an extraction, whichever way the worker spelled it.
+ *
+ * ── BOTH SPELLINGS ARE REAL, IN THE SAME TABLE ────────────────────────────
+ * `lib/validate/extraction.ts` records that the ExtractionResult schema says
+ * `transaction` and the mockup's seeded pièces say `tx`, and that `ingestPiece`
+ * accepts either — **and does not normalise the stored payload.** So the column
+ * carries whichever the writer used: seeded pièce #1 has only `tx`, #5 has both.
+ * `publicPiece` already reads both for the fields it lifts out (`total`,
+ * `date`); a detail panel reading `extraction.transaction` alone would render an
+ * empty card over a document with every field on it.
+ *
+ * Not a hook and not a fetch — the caller already has the pièce.
+ */
+export function transactionOf(x: PieceExtraction | null | undefined): PieceTransaction | null {
+  if (!x) return null
+  return x.transaction ?? x.tx ?? null
+}

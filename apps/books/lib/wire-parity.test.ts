@@ -57,13 +57,25 @@ import {
   publicRiEntry,
 } from './db/queries/statutory'
 import { publicRule } from './db/queries/rules'
+import {
+  publicSource,
+  publicPull,
+  publicRunbook,
+  publicManifestRow,
+} from './db/queries/sources'
+import { publicPiece } from './db/queries/pieces'
 import type { WorklistRow as WorklistRowWire } from './db/queries/worklist'
 import type {
   Account,
   Entity,
   Entry,
+  InboxPiece,
+  ManifestFile,
   PatrimoineSnapshot,
   RecognitionRule,
+  Source,
+  SourcePull,
+  SourceRunbook,
   WorklistRow,
 } from './types'
 
@@ -130,6 +142,11 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
       publicPatrimoine,
       publicRiEntry,
       publicRule,
+      publicSource,
+      publicPull,
+      publicRunbook,
+      publicManifestRow,
+      publicPiece,
     })) {
       expect(typeof fn, `${name} is not a function — this file is stale`).toBe('function')
     }
@@ -373,6 +390,273 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     ).toMatch(/NextResponse\.json\(\s*\{ entity: [^}]*exercice: [^}]*count: [^}]*rows,/)
   })
 
+  // ===========================================================================
+  // PHASE 3 — the sources register and the pièces inbox
+  // ===========================================================================
+
+  // Mutation watched (2026-08-18): deleted `windows` from `publicSource`. Red,
+  // naming it. Then renamed `status` to `computed_status` (the mockup's own
+  // spelling, which is the rename somebody will make). Red on both keys.
+  //
+  // `status` and `windows` are the two fields that exist ONLY on the wire —
+  // neither is a column, both are computed per request from `expected` against
+  // `last_import`. A screen that lost them silently would have nothing to draw
+  // the register's entire point from.
+  it('publicSource serves exactly these fields, including the two computed ones', () => {
+    const out = publicSource(
+      row({ seq: 1, name: 'WIR Bank', type: 'bank', expected: 'weekly', last_import: '2026-08-07', retired: false, ledger_accounts: ['1020'] }),
+      '2026-08-18',
+      'blackcode'
+    )
+    expect(Object.keys(out).sort()).toEqual(
+      [
+        'number',
+        'name',
+        'type',
+        'layer',
+        'entity',
+        'method',
+        'expected',
+        'last_import',
+        'retired',
+        'ledger_accounts',
+        'status',
+        'windows',
+        'notes_freeform',
+      ].sort()
+    )
+    expect(Object.keys(out.windows).sort()).toEqual(['gap_after_days', 'stale_after_days'])
+  })
+
+  // ── THE MOCKUP DRAWS THREE THINGS THIS PAYLOAD DOES NOT CARRY ────────────
+  // `draws_from` is a real COLUMN on `books.source` and is not served, so the
+  // mockup's card→bank CHAIN cannot be drawn — only each source's own `layer`.
+  // A screen written from the mockup would read `source.draws_from` as
+  // `undefined` and render the chain as absent rather than as unavailable,
+  // which is a different claim. `drive` and a per-source book balance were
+  // never columns at all.
+  //
+  // Mutation watched: added `draws_from: s.draws_from` to `publicSource`. Red —
+  // which is the right way round: the day it IS served, this case is what says
+  // so, and the register grows its chain.
+  it('a source payload carries no draws_from, no drive block and no balance', () => {
+    const out = publicSource(row({ seq: 1, draws_from: 7, ledger_accounts: [] }), '2026-08-18', null)
+    expect('draws_from' in out, 'the layer chain is on the wire now — draw it').toBe(false)
+    expect('drive' in out).toBe(false)
+    expect('balance' in out).toBe(false)
+  })
+
+  // `retired` beats every cadence. Seeded source #4 last imported 31.01.2026 —
+  // months past every window — and is `retired`, not `gap`.
+  //
+  // Mutation watched: dropped the `retired` branch from `sourceStatus`. Red,
+  // reporting `gap`.
+  it('a retired source is retired whatever its cadence says', () => {
+    const out = publicSource(
+      row({ seq: 4, retired: true, expected: 'none', last_import: '2026-01-31', ledger_accounts: [] }),
+      '2026-08-18',
+      'blackcode'
+    )
+    expect(out.status).toBe('retired')
+  })
+
+  // Mutation watched: dropped `drive_ref` from `publicPull`. Red.
+  it('publicPull serves exactly these fields', () => {
+    const out = publicPull(row({ file: 'x.csv' }))
+    expect(Object.keys(out).sort()).toEqual(
+      ['file', 'period', 'format', 'hash', 'drive_ref', 'pulled'].sort()
+    )
+  })
+
+  // Mutation watched: renamed `credential_ref` to `credentials`. Red, naming
+  // both. The field is a VAULT REFERENCE and the screen labels it as one; a
+  // rename that slipped through would leave the screen calling something else a
+  // reference, which is the one label on this payload that must not be wrong.
+  it('publicRunbook serves exactly these fields, credential_ref among them', () => {
+    const out = publicRunbook(row({ version: '0.9', steps: [] }))
+    expect(Object.keys(out).sort()).toEqual(
+      ['version', 'updated', 'login_url', 'credential_ref', 'steps', 'output'].sort()
+    )
+  })
+
+  // Mutation watched: dropped `archived` from `publicManifestRow`. Red.
+  it('publicManifestRow serves exactly these fields', () => {
+    const out = publicManifestRow(row({ file_id: 'abc', state: 'discovered' }), 5)
+    expect(Object.keys(out).sort()).toEqual(
+      ['file_id', 'name', 'mime_type', 'created_time', 'fetched', 'state', 'archived', 'archive_ref', 'piece'].sort()
+    )
+    expect(out.piece, 'the pièce #number, not the serial id').toBe(5)
+  })
+
+  // ── THE ONE DATE IN THIS APP THAT IS NOT A POSTGRES `date` ───────────────
+  // `drive_manifest.drive_created_time` and `piece_inbox.drive_created_time`
+  // are `timestamp with time zone`, so the column type is a `Date` and the WIRE
+  // carries `"2026-08-13T13:46:00.000Z"` — ten characters of date and then a
+  // time. Every other date in this app arrives as `"2026-08-13"`.
+  //
+  // `format.date()` slices the first ten characters and never parses, so it is
+  // correct for both. That is luck the app earned on purpose (see
+  // `<DateText>`'s header) and it is pinned here rather than assumed: if this
+  // ever becomes a `date` column, `lib/types.ts` should drop the timestamp note.
+  //
+  // Mutation watched: changed the field to `m.fetched` (a real `date`). Red —
+  // the assertion below stopped seeing a `Date`.
+  it('a manifest created_time is a timestamp, unlike every other date here', () => {
+    const out = publicManifestRow(row({ file_id: 'a', state: 'discovered', drive_created_time: new Date('2026-08-13T13:46:00Z') }), null)
+    expect(out.created_time instanceof Date, 'created_time stopped being a timestamp').toBe(true)
+    expect(out.piece, 'no piece resolved means null, never a serial id').toBe(null)
+  })
+
+  // Mutation watched: dropped `needs_review` from `publicPiece`. Red. Then
+  // renamed `validation` to `server_validation`. Red on both keys.
+  //
+  // `duplicate_of` is declared `number | null` HERE and filled by the route,
+  // not by this function — `publicPiece` always returns null for it. That is
+  // why the key must be present: a route that stopped spreading its own value
+  // would leave a piece looking un-flagged rather than looking broken.
+  it('publicPiece serves exactly these fields', () => {
+    const out = publicPiece(
+      row({ seq: 1, status: 'staged', received: '2026-08-13', extraction: { tx: { total: 79.05, date: '2026-08-05' }, merchant: { name: 'X' }, document_type: 'receipt' }, validation: { passed: true } }),
+      'blackcode',
+      null
+    )
+    expect(Object.keys(out).sort()).toEqual(
+      [
+        'number',
+        'entity',
+        'status',
+        'received',
+        'pipeline',
+        'source',
+        'document_type',
+        'merchant',
+        'total',
+        'date',
+        'validation',
+        'needs_review',
+        'duplicate_of',
+        'matched_entry',
+        'matched_journal',
+        'extraction',
+        'note',
+      ].sort()
+    )
+    expect(Object.keys(out.source).sort()).toEqual(
+      ['file_id', 'file_name', 'mime_type', 'md5_checksum', 'created_time', 'web_view_link'].sort()
+    )
+  })
+
+  // ── THE SEED SPELLS IT `tx`; THE SCHEMA SAYS `transaction` ──────────────
+  // `lib/validate/extraction.ts` records that `ingestPiece` accepts either and
+  // does NOT normalise what it stores, so the column carries whichever the
+  // writer used. Seeded pièce #1 has only `tx`. `publicPiece` reads both for
+  // the fields it lifts out, and `transactionOf()` in `lib/hooks.ts` is what
+  // keeps a detail panel from rendering an empty card over a full document.
+  //
+  // Mutation watched: removed the `?? x.tx` fallback from `publicPiece`. Red on
+  // both — `total` became null and `date` became null, which is exactly what
+  // the inbox would have rendered for every seeded row.
+  it('publicPiece reads the total and the date under EITHER spelling', () => {
+    const asTx = publicPiece(row({ seq: 1, extraction: { tx: { total: 79.05, date: '2026-08-05' } }, validation: {} }), null, null)
+    expect(asTx.total).toBe('79.05')
+    expect(asTx.date).toBe('2026-08-05')
+    const asTransaction = publicPiece(row({ seq: 2, extraction: { transaction: { total: 30.05, date: '2026-08-05' } }, validation: {} }), null, null)
+    expect(asTransaction.total).toBe('30.05')
+  })
+
+  // A TOTAL IS A STRING, like every other amount in this app. `<Money>` has no
+  // numeric overload and `lib/format.ts` is float-free; the extraction's own
+  // `total` is a JSON number (79.05) and `fromCentimes(toCentimes(...))` is
+  // what turns it into `"79.05"` before it reaches the wire.
+  //
+  // Mutation watched: `total: tx ? tx.total : null`. Red, reporting a number.
+  it('a pièce total crosses the wire as a string', () => {
+    const out = publicPiece(row({ seq: 1, extraction: { tx: { total: 79.05 } }, validation: {} }), null, null)
+    expect(typeof out.total).toBe('string')
+  })
+
+  // ── THE MANIFEST ENVELOPE IS NOT THE LIST ENVELOPE ──────────────────────
+  // Same failure shape as the worklist, one route along: `{source, files}`, so
+  // `apiList` would find no `data` key, substitute `[]`, and the screen would
+  // render "no files on record" over a folder holding six. There is no shaping
+  // function for the envelope, so this reads the route's source — a weaker
+  // check than calling a function, and it is said plainly: it sees that file
+  // and nothing else.
+  //
+  // Mutation watched (2026-08-18): replaced the `NextResponse.json({source,
+  // files})` with `jsonList(rows, null)`. Red on both assertions.
+  it('the manifest envelope is not the list envelope', () => {
+    const route = readFileSync(
+      join(APP_ROOT, 'app/api/workspaces/[ws]/sources/[number]/manifest/route.ts'),
+      'utf8'
+    )
+    expect(route, 'the manifest route is gone — this case is stale').toContain('manifestOf')
+    expect(
+      route.includes('jsonList'),
+      'the manifest now serves {data, next_cursor} and useManifest still reads {files} — ' +
+        'it would render "no files on record" over a folder that has some'
+    ).toBe(false)
+    expect(
+      route.replace(/\s+/g, ' '),
+      'the envelope no longer answers with {source, files}'
+    ).toMatch(/NextResponse\.json\(\s*\{ source: [^}]*files:/)
+  })
+
+  // ── THE MATCH RESPONSE IS BUILT INLINE, LIKE RESOLVE'S ─────────────────
+  // Same class of payload as `POST /entries/{n}/resolve` above, and the same
+  // weakness: there is no shaping function to call, so this reads the route's
+  // SOURCE. Reading a file is weaker than calling a function — it sees that file
+  // and nothing else — and it is still the difference between a rename being
+  // caught and a false statement shipping. F-2 is what happens without it:
+  // renaming `taught_rule` server-side left 194/194 green while the screen
+  // rendered "rule # taught" for a rule nobody taught.
+  //
+  // `matched_journal` is the field that matters most here. `<PiecesInbox>` links
+  // to `/ledger/{n}` only when it says `grand_livre`; a `recettes_depenses`
+  // number in that link would open a DIFFERENT record.
+  //
+  // Mutation watched (2026-08-18): renamed `matched_journal` to `journal` in the
+  // route. Red, naming both the missing key and the surplus one.
+  it('the match route serves exactly the fields MatchResult declares', () => {
+    const src = readFileSync(
+      join(APP_ROOT, 'app/api/workspaces/[ws]/pieces/[number]/match/route.ts'),
+      'utf8'
+    )
+    const body = src.slice(src.indexOf('return NextResponse.json({'))
+    const served = [...body.slice(0, body.indexOf('})')).matchAll(/(\w+):/g)].map((m) => m[1])
+    expect(served.length, 'found no fields — the response moved and this test is stale').toBeGreaterThan(3)
+    expect([...new Set(served)].sort()).toEqual(
+      ['matched_entry', 'matched_journal', 'number', 'status'].sort()
+    )
+  })
+
+  // The pièces list IS a list route, and that is worth pinning for the same
+  // reason in reverse: `usePieces` uses `apiList`, so a route that moved OFF
+  // the shared envelope would make the inbox permanently empty.
+  //
+  // ── AND THIS CASE WAS INERT WHEN IT WAS FIRST WRITTEN ──────────────────
+  // It asserted `route.includes('jsonList')`. Replacing the RETURN with
+  // `NextResponse.json(rows)` left the suite 29/29 GREEN, because the file
+  // still says `import { Errors, jsonList } from '@blackcode/platform-api'` at
+  // the top and the substring was satisfied by the import. The check could see
+  // that the identifier was in the file and not that anything called it —
+  // CLAUDE.md finding #4's mechanism, in a guard written the same hour as this
+  // comment and found by running the mutation rather than by reading it.
+  //
+  // It matches the RETURN now.
+  //
+  // Mutation watched (2026-08-18), twice: `return jsonList(` →
+  // `return NextResponse.json(`. Green on the first version, RED on this one.
+  it('the pièces list IS the list envelope', () => {
+    const route = readFileSync(join(APP_ROOT, 'app/api/workspaces/[ws]/pieces/route.ts'), 'utf8')
+    expect(route, 'the pièces route is gone — this case is stale').toContain('listPieces')
+    expect(
+      /return\s+jsonList\(/.test(route),
+      'the pièces list left {data, next_cursor} and usePieces still calls apiList — ' +
+        'the inbox would render empty over a workspace with documents in it'
+    ).toBe(true)
+  })
+
 })
 
 // ===========================================================================
@@ -398,6 +682,11 @@ type AccountWire = ReturnType<typeof publicAccount>
 type EntryWire = ReturnType<typeof publicEntry>
 type PatrimoineWire = ReturnType<typeof publicPatrimoine>
 type RuleWire = ReturnType<typeof publicRule>
+type SourceWire = ReturnType<typeof publicSource>
+type PullWire = ReturnType<typeof publicPull>
+type RunbookWire = ReturnType<typeof publicRunbook>
+type ManifestWire = ReturnType<typeof publicManifestRow>
+type PieceWire = ReturnType<typeof publicPiece>
 
 /**
  * The KEY SETS, at compile time.
@@ -411,6 +700,14 @@ type _EntryKeys = Mutual<keyof EntryWire, keyof Entry>
 type _PatrimoineKeys = Mutual<keyof PatrimoineWire, keyof PatrimoineSnapshot>
 type _VatKeys = Mutual<keyof EntityWire['vat'], keyof Entity['vat']>
 type _RuleKeys = Mutual<keyof RuleWire, keyof RecognitionRule>
+// ── PHASE 3 ────────────────────────────────────────────────────────────────
+type _SourceKeys = Mutual<keyof SourceWire, keyof Source>
+type _WindowKeys = Mutual<keyof SourceWire['windows'], keyof Source['windows']>
+type _PullKeys = Mutual<keyof PullWire, keyof SourcePull>
+type _RunbookKeys = Mutual<keyof RunbookWire, keyof SourceRunbook>
+type _ManifestKeys = Mutual<keyof ManifestWire, keyof ManifestFile>
+type _PieceKeys = Mutual<keyof PieceWire, keyof InboxPiece>
+type _PieceSourceKeys = Mutual<keyof PieceWire['source'], keyof InboxPiece['source']>
 /**
  * The worklist row, pinned against the query layer's own interface.
  *
@@ -479,6 +776,19 @@ type _Scalars = [
   Mutual<EntryWire['tva']['rate'], Entry['tva']['rate']>,
   Mutual<EntryWire['tva']['amount'], Entry['tva']['amount']>,
   Mutual<EntryWire['tva']['input_claimed'], Entry['tva']['input_claimed']>,
+  // ── THE NESTED `piece` FIELDS, ADDED 2026-08-18 AFTER A WHITE SCREEN ────
+  // `piece` was in ENTRY_KEYS and its INSIDE was checked by nothing. Both
+  // columns are nullable and `lib/types.ts` declared both non-null, which was
+  // unreachable while every pièce came from the seed and became reachable the
+  // moment phase 3's `match` write could attach one with a NULL checksum.
+  // `<DriveLink>` called `.slice()` on it and the entry page went blank.
+  //
+  // Mutation watched: restored `hash: string` in `lib/types.ts`. Red at
+  // typecheck, naming the field. The nested object is a different assertion
+  // from its parent key, and that is the whole lesson here.
+  Mutual<NonNullable<EntryWire['piece']>['drive_ref'], NonNullable<Entry['piece']>['drive_ref']>,
+  Mutual<NonNullable<EntryWire['piece']>['hash'], NonNullable<Entry['piece']>['hash']>,
+  Mutual<NonNullable<EntryWire['piece']>['captured'], NonNullable<Entry['piece']>['captured']>,
 
   Mutual<PatrimoineWire['number'], PatrimoineSnapshot['number']>,
   Mutual<PatrimoineWire['as_of'], PatrimoineSnapshot['as_of']>,
@@ -503,6 +813,71 @@ type _Scalars = [
   // either way, and it must stay one — `<Money>` has no numeric overload.
   Mutual<WorklistRowWire['amount'], WorklistRow['amount']>,
   Mutual<WorklistRowWire['suggested_rules'], WorklistRow['suggested_rules']>,
+
+  // ── PHASE 3 ────────────────────────────────────────────────────────────
+  Mutual<SourceWire['number'], Source['number']>,
+  Mutual<SourceWire['name'], Source['name']>,
+  Mutual<SourceWire['type'], Source['type']>,
+  Mutual<SourceWire['layer'], Source['layer']>,
+  Mutual<SourceWire['entity'], Source['entity']>,
+  Mutual<SourceWire['method'], Source['method']>,
+  Mutual<SourceWire['expected'], Source['expected']>,
+  Mutual<SourceWire['last_import'], Source['last_import']>,
+  Mutual<SourceWire['retired'], Source['retired']>,
+  Mutual<SourceWire['ledger_accounts'], Source['ledger_accounts']>,
+  // The two computed ones. `status` is a UNION on both sides deliberately: it
+  // is what the screens decide layout from, so a state the server adds must
+  // fail the build rather than fall into an `else`.
+  Mutual<SourceWire['status'], Source['status']>,
+  Mutual<SourceWire['windows']['stale_after_days'], Source['windows']['stale_after_days']>,
+  Mutual<SourceWire['windows']['gap_after_days'], Source['windows']['gap_after_days']>,
+
+  Mutual<PullWire['file'], SourcePull['file']>,
+  Mutual<PullWire['period'], SourcePull['period']>,
+  Mutual<PullWire['format'], SourcePull['format']>,
+  Mutual<PullWire['hash'], SourcePull['hash']>,
+  Mutual<PullWire['drive_ref'], SourcePull['drive_ref']>,
+  Mutual<PullWire['pulled'], SourcePull['pulled']>,
+
+  Mutual<RunbookWire['version'], SourceRunbook['version']>,
+  Mutual<RunbookWire['updated'], SourceRunbook['updated']>,
+  Mutual<RunbookWire['login_url'], SourceRunbook['login_url']>,
+  // A vault reference, and a string. Never a secret; see SourceRunbook.
+  Mutual<RunbookWire['credential_ref'], SourceRunbook['credential_ref']>,
+  Mutual<RunbookWire['output'], SourceRunbook['output']>,
+
+  Mutual<ManifestWire['file_id'], ManifestFile['file_id']>,
+  Mutual<ManifestWire['name'], ManifestFile['name']>,
+  Mutual<ManifestWire['mime_type'], ManifestFile['mime_type']>,
+  Mutual<ManifestWire['fetched'], ManifestFile['fetched']>,
+  Mutual<ManifestWire['state'], ManifestFile['state']>,
+  Mutual<ManifestWire['archived'], ManifestFile['archived']>,
+  Mutual<ManifestWire['archive_ref'], ManifestFile['archive_ref']>,
+  Mutual<ManifestWire['piece'], ManifestFile['piece']>,
+  // `created_time` is DELIBERATELY absent from this list and asserted against
+  // `Date` instead, in the case above: the column is a timestamp, so the
+  // shaping function's type is `Date` while the wire — after JSON — is a
+  // string. `lib/types.ts` declares the wire form, so the two cannot match and
+  // pretending they do would be the vacuous half of a real difference.
+
+  Mutual<PieceWire['number'], InboxPiece['number']>,
+  Mutual<PieceWire['entity'], InboxPiece['entity']>,
+  Mutual<PieceWire['status'], InboxPiece['status']>,
+  Mutual<PieceWire['received'], InboxPiece['received']>,
+  Mutual<PieceWire['pipeline'], InboxPiece['pipeline']>,
+  Mutual<PieceWire['document_type'], InboxPiece['document_type']>,
+  Mutual<PieceWire['merchant'], InboxPiece['merchant']>,
+  // A STRING, like every other amount. `<Money>` has no numeric overload.
+  Mutual<PieceWire['total'], InboxPiece['total']>,
+  Mutual<PieceWire['date'], InboxPiece['date']>,
+  Mutual<PieceWire['needs_review'], InboxPiece['needs_review']>,
+  Mutual<PieceWire['duplicate_of'], InboxPiece['duplicate_of']>,
+  Mutual<PieceWire['matched_entry'], InboxPiece['matched_entry']>,
+  Mutual<PieceWire['matched_journal'], InboxPiece['matched_journal']>,
+  Mutual<PieceWire['source']['file_id'], InboxPiece['source']['file_id']>,
+  Mutual<PieceWire['source']['file_name'], InboxPiece['source']['file_name']>,
+  Mutual<PieceWire['source']['md5_checksum'], InboxPiece['source']['md5_checksum']>,
+  Mutual<PieceWire['source']['web_view_link'], InboxPiece['source']['web_view_link']>,
 ]
 
 // Referencing them is what turns a `never` above into an error at THIS line,
@@ -515,14 +890,31 @@ const _keys: [
   _VatKeys,
   _RuleKeys,
   _WorklistKeys,
-] = [true, true, true, true, true, true, true]
+  _SourceKeys,
+  _WindowKeys,
+  _PullKeys,
+  _RunbookKeys,
+  _ManifestKeys,
+  _PieceKeys,
+  _PieceSourceKeys,
+] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true]
 const _scalars: _Scalars = [
   true, true, true, true, true, true, true, true, true, true, true, true, true,
   true, true, true,
   true, true, true, true, true, true, true, true, true, true, true, true,
+  // the three nested `piece` fields
+  true, true, true,
   true, true, true, true, true,
   // phase 2: five rule fields, six worklist fields
   true, true, true, true, true,
   true, true, true, true, true, true,
+  // phase 3: thirteen source fields, six pull, five runbook, eight manifest,
+  // sixteen pièce
+  true, true, true, true, true, true, true, true, true, true, true, true, true,
+  true, true, true, true, true, true,
+  true, true, true, true, true,
+  true, true, true, true, true, true, true, true,
+  true, true, true, true, true, true, true, true, true, true, true, true, true,
+  true, true, true, true,
 ]
 void [_keys, _scalars]

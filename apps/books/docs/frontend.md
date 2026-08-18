@@ -71,6 +71,21 @@ The books' own routes, all workspace-scoped under `/api/workspaces/{ws}/`:
 |---|---|
 | 1 | `entities`, `exercices`, `accounts`, `entries`, `entries/{n}`, `bilan`, `compte-resultat`, `overview`, `patrimoine` |
 | 2 | `worklist`, `rules` (GET, POST), `entries/{n}/resolve` (POST) |
+| 3 | `sources`, `sources/{n}`, `sources/{n}/manifest`, `pieces`, `pieces/{n}/match` (POST), `pieces/ingest` (POST — the robot door, no UI) |
+
+Three of these do **not** use the shared `{data, next_cursor}` envelope, and a
+hook that reached for `apiList` would render an empty screen over a full one:
+`…/worklist` is `{entity, exercice, count, rows}` and `…/sources/{n}/manifest`
+is `{source, files}`. `…/sources` and `…/pieces` ARE list routes. All four are
+pinned in `lib/wire-parity.test.ts`.
+
+**Phase 3 also changed a phase-2 payload without changing a route.** `getWorklist`
+gained `kind: 'piece'` rows and a `suggested_entries` field. `lib/types.ts` said
+two kinds, so `npm run typecheck` was red on `_WorklistKeys` for the whole merge
+— and the recognition screen, whose branch was `kind === 'ri_entry' ? readOnly :
+resolveForm`, offered "Explain this" on every pièce. Pressing it would have
+POSTed `/entries/{piece.number}/resolve`, rewriting the journal entry of the same
+number. The branch is a tested predicate now: `lib/resolvable.ts`.
 
 Everything else under `app/api/` is platform scaffold: auth, `/api/me`,
 workspaces, members, invitations.
@@ -129,8 +144,31 @@ workspace appears nowhere on it.
 
 ## 5. The surface is read-mostly, and that is checked
 
-Thirteen screens, four writes: resolve an entry, create a rule, post a staged
-entry, approve a compliance rule. Everything else reads.
+Thirteen screens, **five** writes: resolve an entry, create a rule, post a
+staged entry, approve a compliance rule, **match a pièce to an entry**.
+Everything else reads.
+
+> **It was four until 2026-08-18, and the fifth is a recorded decision.**
+> `POST /pieces/{n}/match` landed with phase 3's backend along with
+> `bk books piece match`, and this section and `lib/mutations.ts` both said
+> four. Either the count became five and both files said so, or matching stayed
+> a CLI act — what was not acceptable was a fifth write appearing while two
+> files still claimed four, which is how a documented invariant quietly stops
+> being one. Both moved in the same change.
+>
+> What decided it was the START-ANYWHERE-FINISH-IN-SYNC rule rather than the
+> count: a capability that exists in `bk` and not in the web UI is a gap unless
+> it is a deliberate, recorded decision, and the two decisions of that kind in
+> this repo (`DELETE /api/me`, the board-ordering reorders) are both destruction
+> the product keeps human. This is the opposite — it is the judgment the
+> receipts inbox exists to collect.
+>
+> And it is the same CLASS as resolve, which is what makes it safe to add rather
+> than merely consistent to add. **It writes no amount, no account and no
+> balance**: it fills the entry's `piece_*` interpretation columns and
+> deliberately does not touch the `evidence_tier`, because whether a receipt
+> turns `partial` into `full` is a sufficiency judgment and judgments stay
+> human. Nothing derived reads `books.piece_inbox`.
 
 ```
 lib/client.ts     the ONLY fetch(). Transport, consults nothing.
@@ -147,12 +185,19 @@ user owns the client. Authorisation is workspace membership and the role, on the
 server. What the gate buys is that a missed affordance fails loudly instead of
 writing.
 
-**Two of the four write hooks are real as of phase 2** (2026-08-18):
-`useResolveEntry` and `useCreateRule`, both in
+**Three of the five write hooks are real** (2026-08-18): `useResolveEntry` and
+`useCreateRule` from phase 2, and `useMatchPiece` from phase 3, all in
 [`lib/mutations.ts`](../lib/mutations.ts). `usePostEntry` and
 `useApproveComplianceRule` are still commented out and arrive with the screens
 that need them. They are commented rather than stubbed, because a stub that
 returns success is a lie a component builds on.
+
+`useMatchPiece` is worth reading for one property the others do not have: **the
+entry #number is disambiguated by the pièce's own book.** `matchPiece` asks
+`journalOf(piece.entity_id)` first — a simplified book's entries are `ri_entry`
+rows, a double-entry book's are the grand livre's, and an unattributed pièce
+reads as the grand livre. The caller supplies context rather than having to get
+a number right, which is the shape ticket #51's `resolve` should be fixed into.
 
 ### A write answers with a RESULT, not with `null` and a flag
 
@@ -260,7 +305,8 @@ Two things a backend reader should know because they touch this file's contract:
 - **`lib/read-only.test.ts` now permits a SECOND write module**, `lib/account.ts`
   — for `POST /api/auth/register` and `PATCH /api/me`, neither of which touches
   `books.*`. `lib/mutations.ts` is still the only module that writes to the
-  books, and the four writes are still four. The reasoning is in both files'
+  books. **The writes are five since 2026-08-18** — see §5 for what added the
+  fifth and why. The reasoning is in both files'
   headers.
 
 **One correction this section owes you:** §2's table and `lib/types.ts` both
@@ -285,8 +331,21 @@ not going to edit `lib/types.ts`.
 | Vue d'ensemble, Grand Livre, Transaction, Bilan, Compte de résultat | phase 1 | yes |
 | Patrimoine, Accounts | phase 1 | yes |
 | Reconnaissance | phase 2 | **yes, 2026-08-18** |
-| Comptes & sources, Source detail, Pièces justificatives | phase 3 | no |
+| Comptes & sources, Source detail, Pièces justificatives | phase 3 | **yes, 2026-08-18** |
 | Compta analytique, Analyses, Analyse detail, Impôts | phase 4 | no |
+
+**Two of phase 3's screens are NOT book-scoped, and `lib/nav.ts` says so.** A
+source can feed more than one book and `books.source.entity_id` is nullable; a
+scanned receipt does not always say whose it is and `books.piece_inbox.entity_id`
+is nullable too. A book filter would hide exactly the rows a person is on those
+screens to find. `/documents` is therefore `scoped: false`, and the sources
+register on `/sources` ignores the scope while the chart of accounts above it
+does not — a half-scoped screen, named in the copy rather than hidden.
+
+**The pièces inbox lives at `/dashboard/{ws}/documents`, not `/pieces`.** The nav
+has had a `paperclip` item there since phase 0, sitting third on purpose;
+building at `/pieces` would have left it pointing at `<NotBuiltYet>` and put the
+real screen at an address nothing links to.
 
 **Build against the ROUTE, in phase order, and open the page.** A screen built
 ahead of its route is a screen built against a shape nobody has served, and a
