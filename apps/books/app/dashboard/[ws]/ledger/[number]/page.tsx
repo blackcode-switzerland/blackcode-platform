@@ -102,13 +102,39 @@ export default function Page() {
             {/* The bank's words, verbatim, at full size. */}
             <h1 className="mt-2 text-lg font-semibold text-foreground">{entry.data.raw_label}</h1>
 
+            {/* ── THE BOOK AND THE YEAR ARE NOT STATED, AND THAT IS THE FIX ──
+                This line read `{scope.record?.name} · exercice {scope.exercice}`
+                until 2026-08-18, taking both from the URL. **This route is not
+                scoped by either.** `getEntryByNumber` matches on
+                `workspace_id + seq` alone — correctly, because `books.entry.seq`
+                is workspace-wide — so `/ledger/{n}` opens the same écriture
+                whatever `?entity=` says, and the heading described the FILTER
+                rather than the record.
+
+                Reproduced in a browser, in one click: open blackcode SA's
+                entry #3 (a rent payment to IMMOREGIE SA), change the book
+                switcher to AIOS, and the same unchanged entry is relabelled
+                "AIOS Companion SA". Nothing refetched, nothing threw, and the
+                screen made a false statement about which legal entity an
+                écriture belongs to. Entry #14 is AIOS's and read "blackcode SA";
+                entry #1 is in exercice 2025 and read "exercice 2026", beside its
+                own date of 12.09.2025.
+
+                The payload carries NEITHER field — see `publicEntry` — so this
+                screen cannot state them, and inventing them from the scope is
+                what it was doing. `GET /entries/{n}` serving `entity` and
+                `exercice` is a backend ask and is in the report; until then the
+                honest rendering is the record's own facts and a line saying the
+                switcher does not filter here, which is the same treatment
+                `lib/nav.ts` gives the half-scoped sources screen. */}
             <p className="mt-1 text-sm text-muted-foreground">
               <DateText value={entry.data.date} />
-              {' · '}
-              {scope.record?.name ?? '—'}
-              {' · exercice '}
-              {scope.exercice ?? '—'}
               {entry.data.counterparty && <> · {entry.data.counterparty}</>}
+            </p>
+            <p className="mt-1 text-[11.5px] text-muted-foreground">
+              An entry is addressed by its workspace #number, so the book and fiscal year
+              selectors above do not filter this screen and it does not name a book — this
+              record does not carry one.
             </p>
           </header>
 
@@ -136,6 +162,37 @@ export default function Page() {
               <EntryLines lines={entry.data.lines} base={base} scope={scope} detailed />
             </div>
           </section>
+
+          {/* ── THE ORIGINAL CURRENCY, WHICH NOTHING RENDERED UNTIL 2026-08-18 ──
+              `fx` arrived with migration 0011, is in `publicEntry`, is declared
+              in `lib/types.ts` as **"display-only"** — and no screen displayed
+              it. A field whose entire purpose is to be shown, and which was not
+              shown, is the third bug class this phase's sweep was looking for:
+              the amounts on this page are CHF and correct, and a reader could
+              not tell that a CHF 43.70 line was USD 49.00 at the issuer's rate.
+
+              Rendered only when the entry has one, and field by field, because
+              the writer may omit any of the three — an em dash for a missing
+              `rate` would claim a rate was recorded and lost. Nothing computes
+              with these: they are free-text strings from the issuer, and
+              `lib/format.ts` never sees them.
+
+              No seeded entry carries `fx`, so this was verified by writing one
+              into `books.entry` #4 by hand and opening the page. */}
+          {entry.data.fx && (entry.data.fx.original || entry.data.fx.rate || entry.data.fx.source) && (
+            <section className="mt-5">
+              <H2>Original currency</H2>
+              <dl className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3">
+                {entry.data.fx.original && <Fact label="Original amount" value={entry.data.fx.original} />}
+                {entry.data.fx.rate && <Fact label="Rate" value={entry.data.fx.rate} />}
+                {entry.data.fx.source && <Fact label="Rate source" value={entry.data.fx.source} />}
+              </dl>
+              <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+                Recorded as the issuer stated it. The écriture above is in CHF and is what the
+                books hold; nothing here is used to derive a figure.
+              </p>
+            </section>
+          )}
 
           <section className="mt-5">
             <H2>VAT</H2>

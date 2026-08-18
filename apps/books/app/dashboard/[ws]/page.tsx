@@ -199,9 +199,16 @@ function BookCard({
         )}
 
         {!loading && row && row.exercice !== null && (
+          // `worklist`, not `unrecognized`. The two are different predicates and
+          // the difference is an INFERRED row — one the machine guessed at and
+          // nobody has confirmed, which still needs a human and which
+          // `unrecognized` excludes. The recognition screen lists both, and
+          // `bk books overview` prints this figure under TO RESOLVE, so showing
+          // the smaller one here made the page disagree with the CLI and with
+          // the screen it links to. Seeded blackcode: 2 against 3.
           <p className="mt-2 flex flex-wrap gap-x-4 text-[11.5px] text-muted-foreground">
             <span>{row.entries} entries</span>
-            <span>{row.unrecognized} unrecognized</span>
+            <span>{row.worklist} to resolve</span>
             <span>{row.staged} staged</span>
           </p>
         )}
@@ -236,8 +243,11 @@ function RollupPanel({ totals }: { totals: ReturnType<typeof rollup> }) {
           <dd className="num text-foreground">{totals.entries}</dd>
         </div>
         <div>
+          {/* `worklist`, not `unrecognized` — see `lib/rollup.ts`. This label is
+              a claim about work outstanding, and the field that answers it
+              includes the inferred rows a rule guessed at. */}
           <Dt>Need a human</Dt>
-          <dd className="num text-foreground">{totals.unrecognized}</dd>
+          <dd className="num text-foreground">{totals.worklist}</dd>
         </div>
       </dl>
 

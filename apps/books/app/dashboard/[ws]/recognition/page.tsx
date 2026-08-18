@@ -36,6 +36,7 @@ import { useScope } from '@/lib/scope'
 import { useRules, useWorklist } from '@/lib/hooks'
 import { ScreenFrame } from '@/components/screen-frame'
 import { ErrorState, Loading } from '@/components/states'
+import { NoExerciceNotice, isNoExerciceRefusal } from '@/components/no-exercice-notice'
 import { Worklist, type ResolvedMap } from '@/components/worklist'
 import { RulesPanel } from '@/components/rules-panel'
 import type { ResolveResult, WorklistRow } from '@/lib/types'
@@ -84,16 +85,45 @@ export default function Page() {
     return [...live, ...resolvedRows.filter((r) => !seen.has(`${r.kind}:${r.number}`))]
   }, [worklist.data, resolvedRows])
 
+  /**
+   * The name of the book the worklist payload says it answered for.
+   *
+   * Falls back to the URL's book only while the payload is in flight, and to an
+   * em dash only when there is neither — which is a state `<ScreenFrame>` holds
+   * a skeleton over.
+   */
+  const answeredBook =
+    (worklist.data
+      ? (scope.entities.find((e) => e.slug === worklist.data!.entity)?.name ?? worklist.data.entity)
+      : scope.record?.name) ?? '—'
+
   return (
     <ScreenFrame title="Recognition">
       <div className="mb-4">
         <h1 className="text-lg font-semibold text-foreground">Recognition</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {/* The book the SERVER answered for, once it has answered. Before that
-              it is the book the URL asked for — and the two are distinguishable
-              because this line changes if they differ. */}
-          {worklist.data?.entity ?? scope.record?.name ?? '—'} · exercice{' '}
-          {worklist.data?.exercice ?? scope.exercice ?? '—'}
+          {/* ── THE BOOK THE SERVER ANSWERED FOR, RESOLVED TO ITS NAME ───────
+              Reading `worklist.data.entity` rather than the URL is right and is
+              kept: it is the only way to see that a request whose `?entity=`
+              was dropped came back answered for a DIFFERENT book.
+
+              But this slot held `worklist.data?.entity ?? scope.record?.name`
+              until 2026-08-18, and those are two different KINDS of string — a
+              slug (`blackcode`) and a company name (`blackcode SA`). The
+              comment here claimed the two were "distinguishable because this
+              line changes if they differ", and they are not: the line changes
+              on EVERY load, because the fallback renders while the payload is
+              in flight and then the slug replaces it. A real disagreement and
+              an ordinary first paint looked identical, which is the same defect
+              as a check that cannot tell a denial from an absent subject.
+
+              Resolving the slug through the book list fixes both halves: the
+              slot always holds a name, so a server that answered for another
+              book now reads as another COMPANY, which is a thing a reader
+              notices. The raw slug is kept when it resolves to nothing — a book
+              the list does not have is worth showing exactly as it arrived
+              rather than replaced by an em dash. */}
+          {answeredBook} · exercice {worklist.data?.exercice ?? scope.exercice ?? '—'}
         </p>
         <p className="mt-2 max-w-2xl text-[12.5px] text-muted-foreground">
           Money that moved without an agreed meaning waits here. Explaining a row is the whole
@@ -116,7 +146,27 @@ export default function Page() {
       </div>
 
       {worklist.isLoading && <Loading rows={4} label="Loading the worklist" />}
-      {worklist.error && (
+
+      {/* ── A BOOK WITH NO FISCAL YEAR IS NOT A FAILED WORKLIST ────────────
+          `<NoExerciceNotice>`'s own header says the statement screens were the
+          sibling that got this right and calls out that the case "was handled
+          and this sibling was missed". Recognition was the next one missed.
+
+          Reproduced 2026-08-18: `bk books entity create --slug noyear` and then
+          this screen, on a brand-new book in perfect order, rendered TWO red
+          `role="alert"` boxes — "The worklist could not be loaded" and, from
+          `<RulesPanel>`, "This could not be loaded" — each printing the server's
+          machine code `bad_scope` to the reader. Every book starts in this
+          state, so this is the FIRST screen a new book shows and it said the app
+          was broken.
+
+          Checked before the generic error, for the reason the balance sheet
+          gives: ordering these the other way round puts a red box on a book
+          whose books are in perfect order. */}
+      {isNoExerciceRefusal(worklist.error) && (
+        <NoExerciceNotice error={worklist.error} statement="worklist" bookName={answeredBook} />
+      )}
+      {worklist.error && !isNoExerciceRefusal(worklist.error) && (
         <ErrorState error={worklist.error} title="The worklist could not be loaded" />
       )}
       {worklist.data && (
@@ -136,14 +186,21 @@ export default function Page() {
         and is waiting for a person to agree with it.
       </p>
 
-      <RulesPanel
-        ws={params.ws}
-        scope={scope}
-        base={base}
-        rules={rules.data}
-        isLoading={rules.isLoading}
-        error={rules.error}
-      />
+      {/* The rules panel is suppressed under the same refusal rather than shown
+          with its own red box: a book with no fiscal year has no rules to list
+          and no entry to teach one from, so the panel would offer "Add a rule"
+          against a scope the server refuses. One explanation above, not two
+          errors. */}
+      {!isNoExerciceRefusal(worklist.error) && (
+        <RulesPanel
+          ws={params.ws}
+          scope={scope}
+          base={base}
+          rules={rules.data}
+          isLoading={rules.isLoading}
+          error={rules.error}
+        />
+      )}
     </ScreenFrame>
   )
 }
