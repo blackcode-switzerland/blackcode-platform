@@ -95,6 +95,8 @@ const ENTRY_KEYS = [
   'tva',
   'related_party',
   'piece',
+  // 0011: the original-currency story, {original, rate, source} | null.
+  'fx',
   'reverses_entry_id',
   'history',
 ]
@@ -228,6 +230,8 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
         'evidence_tier',
         'evidence_note',
         'piece',
+        // 0011: same story, same shape, on the RI journal.
+        'fx',
       ].sort()
     )
   })

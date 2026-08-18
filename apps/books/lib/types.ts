@@ -282,6 +282,18 @@ export interface Piece {
 }
 
 /**
+ * The original-currency story (migration 0011): "this CHF 398.75 was EUR
+ * 420.00 at the issuer's rate". Display-only — amounts stay CHF and nothing
+ * computes with this. Free-text strings; the writer may omit any field, so
+ * render what is present.
+ */
+export interface Fx {
+  original?: string
+  rate?: string
+  source?: string
+}
+
+/**
  * art. 959a al. 4 — the counterparty is a shareholder, a board member or another
  * book of the same owner.
  *
@@ -346,6 +358,8 @@ export interface Entry {
   tva: Vat
   related_party: RelatedParty | null
   piece: Piece | null
+  /** The original-currency story (0011). Null for almost everything. */
+  fx: Fx | null
   /** The entry this one reverses, as a serial id. Null for almost everything. */
   reverses_entry_id: number | null
   /**
