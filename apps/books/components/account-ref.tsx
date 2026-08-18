@@ -58,7 +58,17 @@ export function AccountRef({
 
   return (
     <Link
-      href={scopedHref(base, '/ledger', scope, { account: no })}
+      // ── `status: 'posted'` IS WHAT MAKES THE DRILL-DOWN RECONCILE ──────────
+      // Statements derive from posted entries only. Without this filter, this
+      // link takes a reader from a figure built one way to a list built another:
+      // on the seeded books, *Autres charges d'exploitation* reads 3'063.60 and
+      // following 6570 listed postings totalling 147.10, because the ledger
+      // included a 13.50 STAGED row the statement had correctly ignored. Both
+      // sides right, neither reconcilable. F1 of the phase-1 review.
+      //
+      // The ledger's own filter is still there, so a reader who wants the staged
+      // rows can clear it — the default just matches where they came from.
+      href={scopedHref(base, '/ledger', scope, { account: no, status: 'posted' })}
       className={
         'group inline-flex items-baseline gap-1.5 hover:text-primary-strong ' + className
       }

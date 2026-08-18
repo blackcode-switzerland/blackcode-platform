@@ -75,6 +75,12 @@ export function ErrorState({ error, title = 'This could not be loaded' }: { erro
           {api?.suggestion && (
             <p className="mt-1.5 text-sm text-foreground">{api.suggestion}</p>
           )}
+          {/* The machine code STAYS here, and only here. F5 of the review asked
+              whether it belongs in human copy; the answer differs by box. In the
+              two calm notices — a simplified book, a book with no exercice —
+              nothing failed, so a code reads as though something did, and they
+              dropped it. This box means something genuinely broke, and the code
+              is what makes it reportable. */}
           {api?.code && (
             <p className="mt-2 font-mono text-[11px] text-muted-foreground">{api.code}</p>
           )}

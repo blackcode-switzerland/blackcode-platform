@@ -93,7 +93,11 @@ export function SimplifiedBookNotice({
               From the terminal: {error.suggestion}
             </p>
           )}
-          <p className="mt-1.5 font-mono text-[11px] text-muted-foreground">{error.code}</p>
+          {/* `no_bilan_for_simplified` used to print here. It is the machine
+              code and the reader is not the machine: the three sentences above
+              already say it in English, and a `bad_scope`-shaped string in
+              human copy reads as something having gone wrong. It stays in the
+              response for an agent and for the console; the page drops it. F5. */}
         </div>
       </div>
     </section>
