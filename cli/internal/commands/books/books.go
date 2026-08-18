@@ -60,6 +60,12 @@ THE STATUTORY CORE — phase 1, and here now:
   bk books patrimoine                   net worth, for a sole proprietorship
   bk books overview                     every book, with the statement its form has
 
+RECOGNITION — phase 2, here now. The first write path:
+
+  bk books worklist                     what needs a human, with live suggestions
+  bk books rule       list, create      remembered judgments, keyed to the pair
+  bk books resolve    <n>               say what the money was; history kept
+
 THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
   bk books workspace  list, show, use
@@ -70,7 +76,6 @@ THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
 WHAT IS NOT HERE YET, and deliberately so:
 
-  rule, worklist, resolve               phase 2 — recognition
   source, piece                        phase 3 — provenance and the proof
   analyse, tax                         phase 4 — management view and write-back
 
@@ -116,6 +121,10 @@ func nouns() []*cobra.Command {
 		newCrCmd(),
 		newOverviewCmd(),
 		newPatrimoineCmd(),
+		// Recognition — see recognition.go.
+		newWorklistCmd(),
+		newRuleCmd(),
+		newResolveCmd(),
 	}
 }
 

@@ -397,8 +397,15 @@ export interface OverviewBook {
   /** Present for the single-entry book instead. */
   ri: { recettes: string; depenses: string; resultat: string } | null
   entries: number
-  /** Entries needing a human. This is the Reconnaissance worklist's count. */
+  /** Strictly `recognition = 'unrecognized'`. */
   unrecognized: number
+  /**
+   * What the Reconnaissance worklist actually lists: unrecognized AND inferred
+   * (an inference nobody confirmed still needs a human). Counted with the same
+   * states the worklist filters on, so the overview's number and the list's
+   * length cannot drift apart.
+   */
+  worklist: number
   staged: number
 }
 
@@ -426,6 +433,7 @@ export async function getOverview(workspaceId: number): Promise<OverviewBook[]> 
         ri: null,
         entries: 0,
         unrecognized: 0,
+        worklist: 0,
         staged: 0,
       })
       continue
@@ -449,18 +457,26 @@ export async function getOverview(workspaceId: number): Promise<OverviewBook[]> 
       }
     }
 
+    // The RI's records are ri_entries; counting books.entry for it reported a
+    // book with six records as empty. Found 2026-08-18 by `bk books overview`.
+    // An ri_entry has no staged state: single-entry cash records are facts on
+    // arrival, so `staged` is structurally 0 for a simplified book.
+    const countsTable = simplified ? booksRiEntry : booksEntry
     const counts = await getDb()
       .select({
         total: sql<number>`count(*)::int`,
-        unrecognized: sql<number>`count(*) FILTER (WHERE ${booksEntry.recognition} = 'unrecognized')::int`,
-        staged: sql<number>`count(*) FILTER (WHERE ${booksEntry.status} = 'staged')::int`,
+        unrecognized: sql<number>`count(*) FILTER (WHERE ${countsTable.recognition} = 'unrecognized')::int`,
+        worklist: sql<number>`count(*) FILTER (WHERE ${countsTable.recognition} IN ('unrecognized', 'inferred'))::int`,
+        staged: simplified
+          ? sql<number>`0`
+          : sql<number>`count(*) FILTER (WHERE ${booksEntry.status} = 'staged')::int`,
       })
-      .from(booksEntry)
+      .from(countsTable)
       .where(
         and(
-          eq(booksEntry.entity_id, e.id),
-          eq(booksEntry.exercice_id, x.id),
-          isNull(booksEntry.deleted_at)
+          eq(countsTable.entity_id, e.id),
+          eq(countsTable.exercice_id, x.id),
+          isNull(countsTable.deleted_at)
         )
       )
 
@@ -473,6 +489,7 @@ export async function getOverview(workspaceId: number): Promise<OverviewBook[]> 
       ri,
       entries: counts[0]?.total ?? 0,
       unrecognized: counts[0]?.unrecognized ?? 0,
+      worklist: counts[0]?.worklist ?? 0,
       staged: counts[0]?.staged ?? 0,
     })
   }

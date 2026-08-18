@@ -153,6 +153,10 @@ type BooksEntry struct {
 		DriveRef string `json:"drive_ref"`
 		Captured string `json:"captured"`
 	} `json:"piece"`
+	// Provenance. Resolutions append here and the old state is kept forever;
+	// without this field `--json` silently drops the one thing that proves a
+	// resolved row was once unrecognized.
+	History any `json:"history"`
 }
 
 // BooksBilanLine is one legal line of the balance sheet. Zero-balance lines ARE
@@ -218,7 +222,9 @@ type BooksOverviewBook struct {
 	} `json:"ri"`
 	Entries      int `json:"entries"`
 	Unrecognized int `json:"unrecognized"`
-	Staged       int `json:"staged"`
+	// What the worklist actually lists: unrecognized AND inferred.
+	Worklist int `json:"worklist"`
+	Staged   int `json:"staged"`
 }
 
 func (c *Client) ListBooksEntities(ws string) ([]BooksEntity, error) {
@@ -359,4 +365,125 @@ func (c *Client) ListBooksPatrimoine(ws string, s BooksScope) ([]BooksPatrimoine
 		return nil, err
 	}
 	return resp.Data, nil
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: recognition — the worklist, the rules, and the first write
+// ---------------------------------------------------------------------------
+
+// BooksWorklistRow is one thing needing a human, from either bookkeeping
+// regime. `SuggestedRules` is the machine's opinion, computed live server-side
+// and applied by nobody until a human resolves.
+type BooksWorklistRow struct {
+	Kind           string `json:"kind"`
+	Number         int    `json:"number"`
+	Date           string `json:"date"`
+	Status         string `json:"status"`
+	RawLabel       string `json:"raw_label"`
+	Counterparty   string `json:"counterparty"`
+	Recognition    string `json:"recognition"`
+	EvidenceTier   string `json:"evidence_tier"`
+	Amount         string `json:"amount"`
+	SuggestedRules []int  `json:"suggested_rules"`
+}
+
+func (c *Client) GetBooksWorklist(ws string, s BooksScope) ([]BooksWorklistRow, error) {
+	var resp struct {
+		Entity   string             `json:"entity"`
+		Exercice int                `json:"exercice"`
+		Rows     []BooksWorklistRow `json:"rows"`
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/worklist%s", ws, s.query()), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Rows, nil
+}
+
+// BooksRule is a remembered judgment. The match key is the PAIR (source,
+// counterparty), and `CreatedFrom` is the workspace #number of the entry that
+// taught it, when one did.
+type BooksRule struct {
+	Number      int    `json:"number"`
+	Active      bool   `json:"active"`
+	SourceID    *int   `json:"source_id"`
+	LearnedFrom string `json:"learned_from"`
+	Pattern     struct {
+		Counterparty string   `json:"counterparty"`
+		AmountChf    *float64 `json:"amount_chf"`
+		ToleranceChf *float64 `json:"tolerance_chf"`
+		Interval     string   `json:"interval"`
+	} `json:"pattern"`
+	Explanation map[string]any `json:"explanation"`
+	Account     string         `json:"account"`
+	CreatedFrom *int           `json:"created_from"`
+	CreatedOn   string         `json:"created_on"`
+}
+
+func (c *Client) ListBooksRules(ws string, s BooksScope) ([]BooksRule, error) {
+	var resp struct {
+		Data []BooksRule `json:"data"`
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/rules%s", ws, s.query()), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+// CreateBooksRuleRequest teaches a rule with no teaching entry: a contract or
+// subscription known before the first franc moves.
+type CreateBooksRuleRequest struct {
+	Entity       string   `json:"-"`
+	Counterparty string   `json:"counterparty"`
+	SourceID     *int     `json:"source_id,omitempty"`
+	AmountChf    *float64 `json:"amount_chf,omitempty"`
+	ToleranceChf *float64 `json:"tolerance_chf,omitempty"`
+	Interval     string   `json:"interval,omitempty"`
+	Account      string   `json:"account,omitempty"`
+	LearnedFrom  string   `json:"learned_from,omitempty"`
+}
+
+func (c *Client) CreateBooksRule(ws string, req CreateBooksRuleRequest) (*BooksRule, error) {
+	var out BooksRule
+	q := ""
+	if req.Entity != "" {
+		q = "?entity=" + req.Entity
+	}
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/rules%s", ws, q), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ResolveBooksEntryRequest is the first write: what this money was. `Rule`
+// teaches one from the resolution; the server keys it to the entry's source.
+type ResolveBooksEntryRequest struct {
+	Explanation  map[string]any `json:"explanation"`
+	Recognition  string         `json:"recognition,omitempty"`
+	Counterparty string         `json:"counterparty,omitempty"`
+	Account      string         `json:"account,omitempty"`
+	Rule         *struct {
+		Counterparty string   `json:"counterparty"`
+		AmountChf    *float64 `json:"amount_chf,omitempty"`
+		ToleranceChf *float64 `json:"tolerance_chf,omitempty"`
+		Interval     string   `json:"interval,omitempty"`
+		LearnedFrom  string   `json:"learned_from,omitempty"`
+	} `json:"rule,omitempty"`
+}
+
+// BooksResolveResult is what changed, including the taught rule when there is
+// one, so an agent can report the whole consequence of its action.
+type BooksResolveResult struct {
+	Number      int            `json:"number"`
+	Recognition string         `json:"recognition"`
+	TaughtRule  *int           `json:"taught_rule"`
+	History     []any          `json:"history"`
+	Explanation map[string]any `json:"explanation"`
+}
+
+func (c *Client) ResolveBooksEntry(ws string, number int, req ResolveBooksEntryRequest) (*BooksResolveResult, error) {
+	var out BooksResolveResult
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/entries/%d/resolve", ws, number), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }

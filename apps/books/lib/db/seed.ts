@@ -59,10 +59,14 @@
 // one statement over both years, so the RESULT lines move, all by the 2025
 // result (-4850.00: rent 1850 + admin 3000, both charges, no produits):
 //
-//   résultat de l'exercice    2026-only, so 4850.00 higher than the mockup's
-//   résultat reporté          4850.00 lower, holding the folded 2025 loss
+//   résultat de l'exercice    -15843.60 whole-period -> -10993.60 for 2026
+//   résultat reporté          -6000.00 -> -10850.00, holding the folded loss
 //   CR autres charges         4850.00 smaller; the two charges sit on exercice
 //                             2025's own compte de résultat instead
+//
+// (Figures restated from the live statements on 2026-08-18; an earlier draft of
+// this header carried estimates. seed-parity.test.ts derives them, never trusts
+// this comment.)
 //
 // That is the statutorily correct allocation: a December 2025 rent belongs to
 // 2025's result, which by 2026 lives in retained earnings. The mockup's version
@@ -78,6 +82,7 @@ import { eq, sql } from 'drizzle-orm'
 import { getDb } from './client'
 import {
   booksWorkspaces,
+  booksWorkspaceMembers,
   booksCounters,
   booksEntity,
   booksExercice,
@@ -368,6 +373,16 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
     .insert(booksWorkspaces)
     .values({ name: 'blackcode', slug: SEED_SLUG, owner_id: ownerUserId })
     .returning()
+
+  // The owner's MEMBERSHIP row, without which the workspace does not exist as
+  // far as the API is concerned: every read joins through workspace_members and
+  // `owner_id` grants nothing by itself. Found on 2026-08-18 by the first real
+  // CLI session against a seeded database — `bk books workspace list` as the
+  // owner returned an empty table, because every automated test enters below
+  // the membership gate. Same shape `ensureWorkspaceForUser` writes.
+  await db
+    .insert(booksWorkspaceMembers)
+    .values({ workspace_id: ws.id, user_id: ownerUserId, role: 'owner' })
 
   const counters = new Map<string, number>()
   const nextSeq = (type: string): number => {
