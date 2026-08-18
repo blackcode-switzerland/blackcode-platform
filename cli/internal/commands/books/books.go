@@ -66,6 +66,12 @@ RECOGNITION — phase 2, here now. The first write path:
   bk books rule       list, create      remembered judgments, keyed to the pair
   bk books resolve    <n>               say what the money was; history kept
 
+SOURCES AND PIÈCES — phase 3, here now. Provenance and the proof:
+
+  bk books source     list, show        the register: computed completeness status
+  bk books manifest   <n>               every Drive file one source has seen
+  bk books piece      list, ingest, match   the receipts inbox and the robot door
+
 THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
   bk books workspace  list, show, use
@@ -76,7 +82,6 @@ THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
 WHAT IS NOT HERE YET, and deliberately so:
 
-  source, piece                        phase 3 — provenance and the proof
   analyse, tax                         phase 4 — management view and write-back
 
 CREATING A BOOK GIVES YOU TWO THINGS, and you need a third. "entity create"
@@ -125,6 +130,10 @@ func nouns() []*cobra.Command {
 		newWorklistCmd(),
 		newRuleCmd(),
 		newResolveCmd(),
+		// Sources and pièces — see source.go, piece.go, manifest.go.
+		newSourceCmd(),
+		newPieceCmd(),
+		newManifestCmd(),
 	}
 }
 

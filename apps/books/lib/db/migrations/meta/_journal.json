@@ -50,6 +50,13 @@
       "when": 1786955400000,
       "tag": "0007_drop_notes_placeholder",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787000000000,
+      "tag": "0008_sources_pieces",
+      "breakpoints": true
     }
   ]
 }

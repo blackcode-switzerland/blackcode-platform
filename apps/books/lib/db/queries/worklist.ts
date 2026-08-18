@@ -23,24 +23,34 @@
 
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { getDb } from '../client'
-import { booksEntry, booksEntryLine, booksRiEntry } from '../schema'
+import { booksEntry, booksEntryLine, booksRiEntry, booksPieceInbox } from '../schema'
 import { listRules } from './rules'
 import { suggestFor, WORKLIST_STATES } from '../../derive/recognition'
 import { entryAmount } from '../../derive/recognition'
-import { fromCentimes } from '../../derive'
+import { fromCentimes, toCentimes } from '../../derive'
+import { candidatesFor } from './pieces'
+import type { Extraction } from '../../validate/extraction'
 
 export interface WorklistRow {
-  kind: 'entry' | 'ri_entry'
+  kind: 'entry' | 'ri_entry' | 'piece'
   number: number
   date: string
   status: string | null
   raw_label: string
   counterparty: string | null
+  /**
+   * Why this row needs a human. For entries and ri_entries it is the
+   * recognition state (unrecognized | inferred); for pieces it is
+   * `unmatched` or `needs_review` — a different vocabulary on purpose,
+   * because a document is not a transaction.
+   */
   recognition: string
   evidence_tier: string
   amount: string
   /** Rule #numbers that would explain this row, in rule order. Often empty. */
   suggested_rules: number[]
+  /** Pieces only: entry #numbers this document could prove (amount + ±3 days). */
+  suggested_entries: number[]
 }
 
 export async function getWorklist(entityId: number, exerciceId: number): Promise<WorklistRow[]> {
@@ -76,6 +86,7 @@ export async function getWorklist(entityId: number, exerciceId: number): Promise
       recognition: e.recognition,
       evidence_tier: e.evidence_tier,
       amount: fromCentimes(entryAmount({ lines })),
+      suggested_entries: [],
       suggested_rules: suggestFor(
         { source_id: e.source_id, raw_label: e.raw_label, lines },
         rules.map((r) => ({
@@ -112,8 +123,9 @@ export async function getWorklist(entityId: number, exerciceId: number): Promise
       recognition: r.recognition,
       evidence_tier: r.evidence_tier,
       amount: r.amount,
-      // An RI entry has no source register yet (phase 3): match against the
-      // book's sourceless rules on the label alone, which is what rule 107 is.
+      suggested_entries: [],
+      // An RI entry has no source register yet: match against the book's
+      // sourceless rules on the label alone, which is what rule 107 is.
       suggested_rules: suggestFor(
         { source_id: null, raw_label: r.raw_label, lines: [{ debit: r.amount, credit: 0 }] },
         rules.map((x) => ({
@@ -123,6 +135,38 @@ export async function getWorklist(entityId: number, exerciceId: number): Promise
           seq: x.seq,
         }))
       ).map((x) => x.seq),
+    })
+  }
+
+  // ---- the documents waiting for their transactions -----------------------
+  // Phase 3: unmatched pieces sit on the SAME list, because document matching
+  // happens here rather than in a second review queue (the spec's own words).
+  // Suggestions are candidate ENTRIES: same amount to the rappen, ±3 days.
+  // Scoped by ENTITY, like everything else on this list; an unattributed
+  // piece (entity NULL) belongs to the inbox screen until somebody says whose
+  // it is, not to a book's worklist it may not concern.
+  const pieces = await getDb()
+    .select()
+    .from(booksPieceInbox)
+    .where(and(eq(booksPieceInbox.entity_id, entityId), eq(booksPieceInbox.status, 'staged')))
+    .orderBy(asc(booksPieceInbox.received), asc(booksPieceInbox.seq))
+
+  for (const p of pieces) {
+    const x = p.extraction as unknown as Extraction & { tx?: Extraction['transaction'] }
+    const t = x.transaction ?? x.tx
+    const candidates = await candidatesFor(p.workspace_id, p)
+    out.push({
+      kind: 'piece',
+      number: p.seq,
+      date: t?.date ?? p.received,
+      status: p.status,
+      raw_label: `${x.merchant?.name ?? p.file_name ?? p.drive_file_id}`,
+      counterparty: x.merchant?.name ?? null,
+      recognition: p.needs_review ? 'needs_review' : 'unmatched',
+      evidence_tier: '',
+      amount: t ? fromCentimes(toCentimes(t.total)) : '0.00',
+      suggested_rules: [],
+      suggested_entries: candidates.map((c) => c.number),
     })
   }
 

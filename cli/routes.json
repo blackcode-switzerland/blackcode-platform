@@ -87,8 +87,32 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/pieces",
+      "command": "bk books piece list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/rules",
       "command": "bk books rule list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/sources",
+      "command": "bk books source list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/sources/{number}",
+      "command": "bk books source show",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/sources/{number}/manifest",
+      "command": "bk books manifest",
       "app": "books"
     },
     {
@@ -125,6 +149,18 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/invitations",
       "command": "bk books invite send",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/pieces/ingest",
+      "command": "bk books piece ingest",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/pieces/{number}/match",
+      "command": "bk books piece match",
       "app": "books"
     },
     {

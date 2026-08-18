@@ -13,7 +13,9 @@ Related commands: `bk books entity list`, `bk books entity create`, `bk books
 exercice list`, `bk books exercice create`, `bk books account list`, `bk books
 entry list`, `bk books entry show`, `bk books bilan`, `bk books cr`, `bk books
 patrimoine`, `bk books overview`, `bk books worklist`, `bk books rule list`,
-`bk books rule create`, `bk books resolve`, `bk books workspace use`.
+`bk books rule create`, `bk books resolve`, `bk books source list`, `bk books
+source show`, `bk books manifest`, `bk books piece list`, `bk books piece
+ingest`, `bk books piece match`, `bk books workspace use`.
 
 ## This app holds no intelligence, and that is the design
 
@@ -25,16 +27,35 @@ automatically.
 So there is no chat here, no in-app assistant, and no scenario buttons. You read
 the data through these commands, reason outside, and write the conclusion back.
 
-## Status: phase 2
+## Status: phase 3
 
-The statutory core (books, fiscal years, the chart, the grand livre, the two
-statements) and recognition (the worklist, the rules, resolve — the first write)
+The statutory core, recognition, the sources register and the pièces pipeline
 are here. What lands next:
 
 | Phase | Commands |
 |---|---|
-| 3 | `source`, `piece` — where money came from, and the proof |
 | 4 | `analyse`, `tax` — the management view and agent write-back |
+
+## Sources and pièces
+
+```bash
+bk books source list                  # completeness: current / stale / gap
+bk books source show 1                # one source: pulls, runbook, windows
+bk books manifest 8                   # every Drive file that source has seen
+bk books piece list                   # the receipts inbox
+bk books piece ingest --file out.json # what the Drive worker does, by hand
+bk books piece match 3 --entry 12     # say what the document proves
+```
+
+Source status is COMPUTED from cadence against the last import and stored
+nowhere, so nothing can flip a late source green by hand. The ingest door
+re-validates every payload's arithmetic server-side and ignores the worker's
+own verdict; a bad document lands STAGED and FLAGGED rather than refused,
+because a bad sum is exactly what a human must see. Duplicates are flagged and
+never dropped — a refund looks identical to a re-scan. Unmatched pieces sit on
+the same worklist as unrecognized money, with candidate entries suggested by
+amount and date; matching writes the entry's pièce reference and deliberately
+leaves the evidence tier to you.
 
 ## The recognition loop
 

@@ -103,6 +103,9 @@ import {
   type ChartAccount,
   type PostingLine,
 } from '../derive'
+import { booksSourcePull, booksRunbook } from './schema'
+import { ingestPiece } from './queries/pieces'
+import type { Extraction } from '../validate/extraction'
 import fixture from '../../fixtures/mockup.json'
 
 /** Fixed-2 string, which is what `numeric(14,2)` wants. Never a float. */
@@ -120,6 +123,13 @@ interface FxSource {
   id: number; entity_id: number | null; name: string; type: string; layer: string
   draws_from: number | null; ledger_accounts?: string[]; method: string | null
   expected: string | null; last_import: string | null; retired: boolean; notes_freeform?: Json
+  pulls?: { file: string; period?: string; format?: string; hash?: string; drive_ref?: string; pulled?: string }[]
+  runbook?: { version?: string; updated?: string; login_url?: string; credential_ref?: string; steps?: unknown[]; output?: string }
+}
+interface FxPiece {
+  id: number; entity_id: number | null; status: string; received: string; pipeline?: string
+  source: { file_id: string; file_name?: string; mime_type?: string; md5_checksum?: string; created_time?: string; web_view_link?: string }
+  extraction: Record<string, unknown> & { tx?: Record<string, unknown> }
 }
 interface FxRule {
   id: number; entity_id: number; source_id: number | null; active: boolean
@@ -157,6 +167,7 @@ const F = fixture as unknown as {
   TX: FxTx[]
   RI_ENTRIES: FxRi[]
   PATRIMOINE: FxPatrimoine[]
+  PIECE_INBOX: FxPiece[]
 }
 
 export const SEED_SLUG = 'blackcode'
@@ -519,6 +530,57 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
       .update(booksSource)
       .set({ draws_from: target })
       .where(eq(booksSource.id, sourceId.get(s.id)!))
+  }
+
+  // ---- what hangs off each source: pulls and the runbook -------------------
+  for (const src of F.SOURCES) {
+    const sid = sourceId.get(src.id)!
+    if (src.pulls?.length) {
+      await db.insert(booksSourcePull).values(
+        src.pulls.map((pl) => ({
+          workspace_id: ws.id,
+          source_id: sid,
+          file: pl.file,
+          period: pl.period ?? null,
+          format: pl.format ?? null,
+          hash: pl.hash ?? null,
+          drive_ref: pl.drive_ref ?? null,
+          pulled: pl.pulled ?? null,
+        }))
+      )
+    }
+    if (src.runbook) {
+      await db.insert(booksRunbook).values({
+        workspace_id: ws.id,
+        source_id: sid,
+        version: src.runbook.version ?? '1.0',
+        updated: src.runbook.updated ?? null,
+        login_url: src.runbook.login_url ?? null,
+        credential_ref: src.runbook.credential_ref ?? null,
+        steps: src.runbook.steps ?? [],
+        output: src.runbook.output ?? null,
+      })
+    }
+  }
+
+  // ---- the pièces, through the REAL ingest pipeline ------------------------
+  // Not raw inserts, on purpose: the seed is the first honest client of the
+  // ingest path, exactly as the entry seed is of 0004. The server RE-VALIDATES
+  // each of the mockup's real extractions and lands them staged; the Drive
+  // manifest rows come out of the same call, so the manifest states in the
+  // database are the pipeline's own verdicts, not copied fixture data — and
+  // they had better agree with `DRIVE_MANIFEST` in the fixture, which is what
+  // pieces.test.ts pins.
+  for (const p of F.PIECE_INBOX) {
+    const extraction = { ...p.extraction, transaction: p.extraction.tx } as unknown as Extraction
+    await ingestPiece(
+      ws.id,
+      p.entity_id === null ? null : (entityId.get(p.entity_id) ?? null),
+      p.source,
+      extraction,
+      p.received,
+      p.pipeline ?? null
+    )
   }
 
   // ---- recognition rules -------------------------------------------------
