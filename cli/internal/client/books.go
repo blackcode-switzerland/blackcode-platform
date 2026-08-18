@@ -153,6 +153,10 @@ type BooksEntry struct {
 		DriveRef string `json:"drive_ref"`
 		Captured string `json:"captured"`
 	} `json:"piece"`
+	// Provenance. Resolutions append here and the old state is kept forever;
+	// without this field `--json` silently drops the one thing that proves a
+	// resolved row was once unrecognized.
+	History any `json:"history"`
 }
 
 // BooksBilanLine is one legal line of the balance sheet. Zero-balance lines ARE
@@ -218,7 +222,9 @@ type BooksOverviewBook struct {
 	} `json:"ri"`
 	Entries      int `json:"entries"`
 	Unrecognized int `json:"unrecognized"`
-	Staged       int `json:"staged"`
+	// What the worklist actually lists: unrecognized AND inferred.
+	Worklist int `json:"worklist"`
+	Staged   int `json:"staged"`
 }
 
 func (c *Client) ListBooksEntities(ws string) ([]BooksEntity, error) {

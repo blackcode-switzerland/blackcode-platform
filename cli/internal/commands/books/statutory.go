@@ -549,7 +549,7 @@ func newOverviewCmd() *cobra.Command {
 						balance = "n/a (art. 957 al. 2)"
 					}
 					fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%s\t%d\t%d\n",
-						b.Slug, b.LegalForm, b.Exercice, result, balance, b.Entries, b.Unrecognized)
+						b.Slug, b.LegalForm, b.Exercice, result, balance, b.Entries, b.Worklist)
 				}
 				return tw.Flush()
 			})
