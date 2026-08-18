@@ -252,10 +252,17 @@ function ShellBody({
           >
             <Menu size={17} />
           </button>
-          <h1 className="truncate text-sm font-medium text-foreground">
+          {/* `min-w-0` on both halves, so the flex row can actually shrink.
+              Without it the header was 402px wide in a 390px viewport and the
+              whole PAGE scrolled sideways — measured at 390×844 on 2026-08-18.
+              A page that scrolls horizontally on a phone is the platform's one
+              hard layout rule (docs/frontend.md), and the title, not the
+              controls, is what gives way: the book and the year are the two
+              facts that say which document is on screen. */}
+          <h1 className="min-w-0 truncate text-sm font-medium text-foreground">
             {title ?? current?.label ?? 'b/books'}
           </h1>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex min-w-0 shrink items-center gap-2">
             {/* Only on pages whose numbers actually change with the book. A
                 titled subtree (settings) is not one of them: it is the account,
                 not a book, so the switcher would be a control with no effect. */}
@@ -339,13 +346,13 @@ function EntitySwitcher({ scope }: { scope: ReturnType<typeof useScope> }) {
   }
 
   return (
-    <label className="relative flex items-center">
+    <label className="relative flex min-w-0 shrink items-center">
       <span className="sr-only">Book</span>
       <Dot color={record?.accent} className="pointer-events-none absolute left-2.5" />
       <select
         value={entity ?? ''}
         onChange={(e) => setEntity(e.target.value)}
-        className="appearance-none rounded-md border border-border bg-card py-1 pl-6 pr-7 text-[13px] text-foreground outline-none hover:bg-accent focus:border-ring"
+        className="max-w-[6.5rem] appearance-none truncate sm:max-w-[12rem] rounded-md border border-border bg-card py-1 pl-6 pr-7 text-[13px] text-foreground outline-none hover:bg-accent focus:border-ring"
       >
         {/* An unknown slug from the URL is kept as an option so the control
             shows what was asked for rather than silently snapping to another
@@ -384,7 +391,7 @@ function ExerciceSwitcher({ scope }: { scope: ReturnType<typeof useScope> }) {
   }
 
   return (
-    <label className="relative flex items-center">
+    <label className="relative flex min-w-0 shrink items-center">
       <span className="sr-only">Fiscal year</span>
       <select
         value={exercice}
@@ -402,7 +409,15 @@ function ExerciceSwitcher({ scope }: { scope: ReturnType<typeof useScope> }) {
   )
 }
 
-function Dot({ color, className = '' }: { color?: string; className?: string }) {
+/**
+ * The book's accent dot.
+ *
+ * `color` is `string | null | undefined` because `entity.accent` is NULLABLE on
+ * the wire — only the seeded books carry one, and `bk books entity create` sets
+ * none. A book with no accent gets the muted foreground, which reads as "no
+ * colour chosen" rather than as a rendering failure.
+ */
+function Dot({ color, className = '' }: { color?: string | null; className?: string }) {
   return (
     <span
       aria-hidden

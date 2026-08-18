@@ -69,6 +69,34 @@ export interface ScopeState extends Scope {
   entities: Entity[]
   /** Every fiscal year this book has. One today; the control is built for more. */
   exercices: number[]
+  /**
+   * Have this book's fiscal years ARRIVED?
+   *
+   * ── WHY A SCREEN NEEDS THIS AND CANNOT DERIVE IT ──────────────────────────
+   * `exercice` is null in two completely different situations: the years have
+   * not loaded yet, and the book genuinely has none (`entity create` does not
+   * open one). A screen reading only `exercice === null` cannot tell them apart.
+   *
+   * **It was found by the cache test, on 2026-08-18.** Switching book, this is
+   * the sequence of frames the instrumented switch recorded:
+   *
+   *     blackcode SA · exercice 2026    ← before
+   *     AIOS Companion SA · exercice —  ← the new book, its years still in flight
+   *     AIOS Companion SA · exercice 2026
+   *
+   * In that middle frame every statutory hook was enabled with `exercice: null`,
+   * so it requested `…/bilan?entity=aios` with no year — and `resolveScope` on
+   * the server answers a missing year with **the book's newest exercice**. That
+   * answer is a real balance sheet for a year the reader did not choose, cached
+   * under `{entity:'aios', exercice:null}`, and it would render under a heading
+   * reading "exercice —". It did not render here only because the request had
+   * not come back before the year resolved.
+   *
+   * A default taken on the server is exactly the failure the phase-1 README
+   * names ("a year defaulting to a closed exercice"), arriving one layer down.
+   * So the statutory hooks wait for this flag; see `lib/hooks.ts`.
+   */
+  exercicesReady: boolean
   /** Where the books really come from, as `/api/meta` reports it. Surfaced. */
   source: 'fixture' | 'database' | null
   meta: MetaPayload | undefined
@@ -95,7 +123,10 @@ export function useScope(): ScopeState {
   // Scoped to the resolved book, because each one keeps its own years and they
   // are not the same set — a book opened this year has one where an older one
   // has several.
-  const { data: years } = useExercices(ws, record?.slug ?? null)
+  const { data: years, isPending: yearsPending, isFetched: yearsFetched } = useExercices(
+    ws,
+    record?.slug ?? null
+  )
 
   /**
    * The years, deduplicated and newest first.
@@ -160,6 +191,13 @@ export function useScope(): ScopeState {
     record,
     entities,
     exercices,
+    // `isFetched` and not `!isPending`: a query that is DISABLED is "pending"
+    // forever, and the years query is disabled until `ws` is known. Reading
+    // `!isPending` would hold every statement read on a page that has a
+    // workspace but is still resolving one, which is a permanent skeleton. What
+    // this must mean is "this book's years have been answered for", and once
+    // there is no book to ask about there is nothing to wait for either.
+    exercicesReady: record === null ? true : yearsFetched && !yearsPending,
     source: meta?.entities.source ?? null,
     meta,
     isLoading,

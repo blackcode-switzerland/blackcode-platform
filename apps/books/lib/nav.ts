@@ -58,7 +58,14 @@ export const NAV: readonly NavItem[] = [
   { seg: '/recognition', label: 'Recognition', icon: 'scan-search', scoped: true },
   { seg: '/documents', label: 'Supporting documents', icon: 'paperclip', scoped: true },
   { seg: '/ledger', label: 'General ledger', icon: 'book-open', scoped: true },
-  { seg: '/sources', label: 'Accounts & sources', icon: 'landmark', scoped: false },
+  // `scoped: true` since 2026-08-18, when the CHART half of this screen was
+  // built. It was `false` on the reasoning that a source is a channel money
+  // arrives through and one channel feeds several books — true of sources, and
+  // not true of the chart of accounts, which is copied per book at creation.
+  // The flag is what hides the book switcher, so leaving it would have shipped a
+  // page whose content changes per book with no control to change it. Phase 3
+  // puts the sources on the same screen and makes this a real question again.
+  { seg: '/sources', label: 'Accounts & sources', icon: 'landmark', scoped: true },
   { seg: '/balance-sheet', label: 'Balance sheet', icon: 'scale', scoped: true },
   { seg: '/income-statement', label: 'Income statement', icon: 'trending-up', scoped: true },
   { seg: '/management', label: 'Management view', icon: 'calculator', scoped: true },
@@ -72,6 +79,19 @@ export const NAV: readonly NavItem[] = [
  */
 export const OFF_NAV: readonly NavItem[] = [
   { seg: '/taxes', label: 'Taxes', icon: 'calculator', scoped: true },
+  /**
+   * Patrimoine — art. 957 al. 2's other half, and a screen the mockup never had.
+   *
+   * OFF-NAV rather than a tenth item, on the same reasoning that keeps Taxes
+   * out: it applies to SIMPLIFIED books only, and a permanent sidebar item that
+   * is meaningless for most of a person's books is a control that teaches the
+   * reader to ignore the sidebar. It is reached from the two places it is
+   * actually the answer — the balance sheet's refusal for a simplified book, and
+   * that book's card on the overview.
+   *
+   * `scoped: true`: it is entirely a property of one book.
+   */
+  { seg: '/patrimoine', label: 'Patrimoine', icon: 'scale', scoped: true },
 ]
 
 export const ALL_NAV: readonly NavItem[] = [...NAV, ...OFF_NAV]

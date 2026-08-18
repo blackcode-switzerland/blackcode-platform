@@ -18,7 +18,11 @@ import { NotBuiltYet } from '@/components/states'
 export default function Page() {
   return (
     <ScreenFrame title="Supporting documents">
-      <NotBuiltYet screen="Supporting documents" mockup="app-pieces.html" />
+      <NotBuiltYet
+        screen="Supporting documents"
+        mockup="app-pieces.html"
+        blocker="No route serves the receipts inbox yet. Documents are Drive references and a hash, never uploads, so this screen needs the provenance layer behind it before it can show anything true."
+      />
     </ScreenFrame>
   )
 }

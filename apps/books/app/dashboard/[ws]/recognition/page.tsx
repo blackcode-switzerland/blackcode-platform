@@ -18,7 +18,11 @@ import { NotBuiltYet } from '@/components/states'
 export default function Page() {
   return (
     <ScreenFrame title="Recognition">
-      <NotBuiltYet screen="Recognition" mockup="app-recognition.html" />
+      <NotBuiltYet
+        screen="Recognition"
+        mockup="app-recognition.html"
+        blocker="Its three routes — the worklist, the rules, and resolving an entry — are written, but on a branch that has not been merged here. It also carries the first write path in the product, so it lands with its own review."
+      />
     </ScreenFrame>
   )
 }

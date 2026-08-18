@@ -194,8 +194,31 @@ export function date(iso: string | null | undefined): string {
   return `${d}.${m}.${y}`
 }
 
-/** A percentage for a VAT rate: `8.1%`, and `0%` rather than `0.0%`. */
-export function percent(rate: number | null | undefined): string {
-  if (rate === null || rate === undefined) return '—'
-  return `${Number.isInteger(rate) ? rate : rate.toFixed(1)}%`
+/**
+ * A percentage for a VAT rate: `8.1%`, and `0%` rather than `0.0%`.
+ *
+ * ── IT TAKES THE WIRE STRING, BECAUSE THAT IS WHAT THE WIRE SENDS ─────────
+ * `entry.tva.rate` is `numeric(4,2)` and arrives as `"8.10"`, not `8.1`
+ * (verified against `GET …/entries` on 2026-08-18; `lib/types.ts` declared it as
+ * a `number` and was corrected). Taking only a `number` here would have put a
+ * `Number()` at every call site — the precise thing this file's header exists to
+ * prevent — so the string is handled HERE, by trimming digits rather than by
+ * parsing.
+ *
+ * The `number` overload stays for a rate a view computed. A malformed value is
+ * an em dash, like `money()`: a rate this function does not recognise must look
+ * absent, never render as `0%`, which is a legally different claim.
+ */
+export function percent(rate: string | number | null | undefined): string {
+  if (rate === null || rate === undefined || rate === '') return '—'
+  if (typeof rate === 'number') {
+    return Number.isFinite(rate) ? `${Number.isInteger(rate) ? rate : rate.toFixed(1)}%` : '—'
+  }
+  const t = rate.trim()
+  if (!DECIMAL.test(t)) return '—'
+  // Trim the trailing zeros off the fraction, then the point if nothing is left.
+  // `"8.10"` → `8.1`, `"0.00"` → `0`, `"2.60"` → `2.6`. No float is constructed,
+  // so a rate cannot round on its way to the screen.
+  const trimmed = t.includes('.') ? t.replace(/0+$/, '').replace(/\.$/, '') : t
+  return `${trimmed === '' || trimmed === '-' ? '0' : trimmed}%`
 }

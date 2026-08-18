@@ -15,19 +15,30 @@
 // key that quietly omits which BOOK it is about.
 
 import { useQuery } from '@tanstack/react-query'
-import { apiGet, apiList } from './client'
+import { apiGet, apiList, ApiRequestError } from './client'
 import { booksGlobalKey, booksKey, type Scope } from './query-keys'
-import type { Entity, Term } from './types'
+import type {
+  Account,
+  BilanResult,
+  CrResult,
+  Entity,
+  Entry,
+  OverviewBook,
+  OverviewResult,
+  PatrimoineSnapshot,
+  Term,
+} from './types'
 import type { BilanGroup, CrLine } from './statements'
 
 /**
  * `GET /api/meta`, exactly as the route serves it.
  *
- * ── THIS IS NOT `BooksMeta` FROM lib/types.ts, AND THAT IS A REAL MISMATCH ──
- * `lib/types.ts` still declares `entities: Entity[]` and an `exercices` array.
- * The route serves neither. This interface describes what is actually on the
- * wire, because typing against the declaration would make every screen compile
- * and then read `undefined` at runtime. It is the backend dev's file to correct.
+ * ── IT USED TO HAVE A RIVAL IN lib/types.ts, AND THE RIVAL IS GONE ─────────
+ * `BooksMeta` there declared `entities: Entity[]` and an `exercices` array. The
+ * route serves neither, and typing against it would make every screen compile
+ * and then read `undefined` at runtime. It was DELETED on 2026-08-18 rather than
+ * corrected: two declarations of one payload is how the next one goes stale, and
+ * this is the one the hooks read.
  *
  * ── AND THE BOOKS LEFT THIS PAYLOAD IN PHASE 1 ─────────────────────────────
  * `entities` used to carry `data: Entity[]` from the mockup fixture, and
@@ -216,3 +227,236 @@ export function findTerm(
  * scanner in its test reads.
  */
 export type { Scope }
+
+// ===========================================================================
+// THE STATUTORY READS — phase 1's seven screens
+// ===========================================================================
+// Every one of these is `booksKey`, never `booksGlobalKey`, and every one takes
+// the whole `Scope`. Two books' balance sheets are two different documents that
+// happen to have the same line names, and the cache slot is the only thing
+// standing between them.
+//
+// ── `enabled` IS PART OF THE CORRECTNESS, NOT AN OPTIMISATION ──────────────
+// A statement read fires only when the workspace AND the book are both known.
+// Without the `entity` guard the first render of every scoped screen would ask
+// `…/bilan` with no `?entity=`, and `resolveScope` answers that with **the first
+// book in the workspace** — real numbers, under whichever name the header had
+// finished rendering. The result would then sit in the cache under
+// `{entity: null}` and be indistinguishable from a deliberate answer.
+//
+// ── THE PARAMETERS ARE ALWAYS SENT EXPLICITLY ─────────────────────────────
+// `?entity=&exercice=` on every request, never relying on the route's defaults,
+// for the same reason: a default is a book somebody else chose.
+
+/**
+ * The scope a statutory read takes.
+ *
+ * ── WHY IT IS NOT JUST `Scope` ────────────────────────────────────────────
+ * Because `exercice: null` is ambiguous — the years are still loading, or the
+ * book has none. Firing on the first is how a screen gets a balance sheet for a
+ * year nobody chose: with no `?exercice=`, `resolveScope` on the server picks
+ * the book's newest, which is a real answer to a question the reader did not
+ * ask. **Watched happen on 2026-08-18 while running the cache test**; the frame
+ * sequence is recorded in `ScopeState.exercicesReady` in `lib/scope.ts`.
+ *
+ * The field is optional so a caller that builds a bare `Scope` — a test, a
+ * future screen with a fixed year — is not forced to say `true`. Undefined means
+ * "nothing to wait for". `useScope()` always supplies it, so every screen in the
+ * app gets the guard by passing the object it already has.
+ */
+export type ReadScope = Scope & { exercicesReady?: boolean }
+
+/** Are this scope's years settled? Undefined means the caller is not waiting. */
+function scopeReady(scope: ReadScope): boolean {
+  return scope.exercicesReady !== false
+}
+
+/** `?entity=…&exercice=…`, built once so no hook can forget half of it. */
+function scopeQuery(scope: Scope, extra?: Record<string, string | undefined>): string {
+  const q = new URLSearchParams()
+  if (scope.entity) q.set('entity', scope.entity)
+  if (scope.exercice != null) q.set('exercice', String(scope.exercice))
+  for (const [k, v] of Object.entries(extra ?? {})) if (v) q.set(k, v)
+  return q.toString()
+}
+
+/** Both statement routes refuse a simplified book by CODE. This is that test. */
+export const SIMPLIFIED_REFUSALS = ['no_bilan_for_simplified', 'no_cr_for_simplified'] as const
+
+/**
+ * Is this error the statutory refusal rather than a failure?
+ *
+ * ── IT MATCHES THE `code`, NEVER THE MESSAGE ──────────────────────────────
+ * The message names the book and is French-inflected prose; the code is the
+ * contract (`lib/client.ts`, `ApiError`). Matching prose would be a screen state
+ * that breaks when somebody rewords an error.
+ *
+ * **This is not a red box.** A sole proprietorship legally has no bilan and no
+ * compte de résultat (art. 957 al. 2 CO); the request succeeded in telling us so.
+ * `<SimplifiedBookNotice>` renders it, with the route's own `suggestion`.
+ */
+export function isSimplifiedRefusal(error: unknown): error is ApiRequestError {
+  return (
+    error instanceof ApiRequestError &&
+    (SIMPLIFIED_REFUSALS as readonly string[]).includes(error.code)
+  )
+}
+
+/**
+ * The balance sheet. `GET …/bilan?entity=&exercice=`.
+ *
+ * Art. 959a, every legal line including the zeroes, plus `balanced` and `ecart`
+ * — which the screen is required to render. A `no_bilan_for_simplified` 400
+ * arrives as an error here and is a SCREEN STATE, not a failure; see
+ * `isSimplifiedRefusal`.
+ */
+export function useBilan(ws: string | undefined, scope: ReadScope) {
+  return useQuery({
+    queryKey: booksKey('bilan', scope, { ws }),
+    queryFn: () => apiGet<BilanResult>(`/api/workspaces/${ws}/bilan?${scopeQuery(scope)}`),
+    enabled: !!ws && !!scope.entity && scopeReady(scope),
+  })
+}
+
+/** The compte de résultat. `GET …/compte-resultat`. Art. 959b, ten lines. */
+export function useCompteResultat(ws: string | undefined, scope: ReadScope) {
+  return useQuery({
+    queryKey: booksKey('compte-resultat', scope, { ws }),
+    queryFn: () =>
+      apiGet<CrResult>(`/api/workspaces/${ws}/compte-resultat?${scopeQuery(scope)}`),
+    enabled: !!ws && !!scope.entity && scopeReady(scope),
+  })
+}
+
+/**
+ * Every book, with whichever statement its legal form has. `GET …/overview`.
+ *
+ * ── WORKSPACE-SCOPED AND NOT BOOK-SCOPED, DELIBERATELY ────────────────────
+ * This is the one statutory read that is about ALL the books at once, so it
+ * carries an empty scope — the same spelling `useEntities` uses. It is still
+ * `booksKey` and not `booksGlobalKey`: two workspaces hold different books and
+ * their ids overlap, so "every book" is not a global fact.
+ */
+export function useOverview(ws: string | undefined) {
+  return useQuery({
+    queryKey: booksKey('overview', { entity: null, exercice: null }, { ws }),
+    queryFn: () =>
+      apiGet<OverviewResult>(`/api/workspaces/${ws}/overview`).then((r) => r.books ?? []),
+    enabled: !!ws,
+  })
+}
+
+/** The chart of accounts for one book. `GET …/accounts`. 26 rows per book. */
+export function useAccounts(ws: string | undefined, scope: ReadScope) {
+  return useQuery({
+    queryKey: booksKey('accounts', scope, { ws }),
+    queryFn: () =>
+      apiList<Account>(`/api/workspaces/${ws}/accounts?${scopeQuery(scope)}`).then((r) => r.data),
+    enabled: !!ws && !!scope.entity && scopeReady(scope),
+  })
+}
+
+/** The filters `GET …/entries` accepts. Each one is part of the cache key. */
+export interface EntryFilters {
+  status?: string
+  recognition?: string
+  /** `?account=1020` — where the income statement's drill-down lands. */
+  account?: string
+}
+
+/**
+ * The grand livre. `GET …/entries`.
+ *
+ * `?account=` returns WHOLE entries that touch the account, not just the
+ * matching line, which is why a filtered row still shows both sides.
+ *
+ * The filters go into the key as well as the URL. A key that carried the scope
+ * but not `account` would serve the unfiltered ledger from cache the moment the
+ * reader drilled in — the same class of bug as the wrong book, one level down.
+ */
+export function useEntries(ws: string | undefined, scope: ReadScope, filters: EntryFilters = {}) {
+  return useQuery({
+    queryKey: booksKey('entries', scope, { ...filters, ws }),
+    queryFn: () =>
+      apiList<Entry>(
+        `/api/workspaces/${ws}/entries?${scopeQuery(scope, {
+          status: filters.status,
+          recognition: filters.recognition,
+          account: filters.account,
+        })}`
+      ).then((r) => r.data),
+    enabled: !!ws && !!scope.entity && scopeReady(scope),
+  })
+}
+
+/**
+ * One écriture. `GET …/entries/{number}` — the workspace #number, never the id.
+ *
+ * ── THE ROUTE IS WORKSPACE-SCOPED, AND THE KEY IS BOOK-SCOPED ANYWAY ───────
+ * `getEntryByNumber` looks the row up by `(workspace_id, seq)` and does not
+ * filter by book, so #10 is #10 whichever book is selected. The key still
+ * carries the scope, because the URL the reader is on does: arriving at
+ * `/ledger/10?entity=aios` and at `?entity=blackcode` are two different claims,
+ * and the screen renders the book name from the scope. One cache slot for both
+ * would put one book's name over another's écriture — which is this app's worst
+ * failure mode arriving through the back door.
+ */
+export function useEntry(ws: string | undefined, scope: ReadScope, number: number | null) {
+  return useQuery({
+    queryKey: booksKey('entry', scope, { number, ws }),
+    queryFn: () => apiGet<Entry>(`/api/workspaces/${ws}/entries/${number}`),
+    // NOT gated on the years. `/entries/{number}` is workspace-scoped and takes
+    // no `?exercice=`, so there is no year for it to default to and nothing to
+    // wait for. The scope is in its KEY, not in its URL — see above.
+    enabled: !!ws && number !== null && Number.isInteger(number),
+  })
+}
+
+/**
+ * The net-worth statements. `GET …/patrimoine`, newest first.
+ *
+ * ── THE ONE PLACE THIS APP CONVERTS A NUMBER INTO AN AMOUNT ────────────────
+ * `books.patrimoine.items` is `jsonb`, so its amounts cross the wire as JSON
+ * numbers (`8200`) rather than as `numeric` strings (`"8200.00"`) — see
+ * `PatrimoineItem` in `lib/types.ts`. Every component below takes a string,
+ * because `<Money>`'s prop type is the guard that keeps floats out of the
+ * display path, and widening it for this one route would remove that guard
+ * everywhere.
+ *
+ * So the conversion happens HERE, once, at the boundary, and is visible:
+ * `toFixed(2)` on a value that was already a float by the time `JSON.parse`
+ * returned. Nothing is recovered by doing it later — the precision was lost on
+ * the wire, not here — and doing it here means exactly one line in the app
+ * knows about it.
+ *
+ * **This is a wire defect, not a design.** Serving these as strings is a
+ * backend request; the report carries it.
+ */
+export interface PatrimoineView extends Omit<PatrimoineSnapshot, 'items'> {
+  items: { label: PatrimoineSnapshot['items'][number]['label']; amount: string }[]
+}
+
+export function usePatrimoine(ws: string | undefined, scope: ReadScope) {
+  return useQuery({
+    queryKey: booksKey('patrimoine', scope, { ws }),
+    queryFn: () =>
+      apiList<PatrimoineSnapshot>(
+        `/api/workspaces/${ws}/patrimoine?${scopeQuery(scope)}`
+      ).then((r) =>
+        r.data.map(
+          (snapshot): PatrimoineView => ({
+            ...snapshot,
+            items: (snapshot.items ?? []).map((i) => ({
+              label: i.label,
+              // The one conversion. See the header above before adding a second.
+              amount: typeof i.amount === 'number' ? i.amount.toFixed(2) : String(i.amount ?? ''),
+            })),
+          })
+        )
+      ),
+    enabled: !!ws && !!scope.entity && scopeReady(scope),
+  })
+}
+
+/** Re-exported so a page reading the overview needs one import, not two. */
+export type { OverviewBook }
