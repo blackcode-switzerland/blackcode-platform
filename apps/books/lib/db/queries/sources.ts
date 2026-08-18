@@ -5,7 +5,7 @@
 // `today` travels in from the route so the derivation stays pure and the tests
 // stay honest; a route passes the real date, a test passes a fixed one.
 
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import { getDb } from '../client'
 import {
   booksSource,
@@ -19,6 +19,7 @@ import {
   type BooksDriveManifest,
 } from '../schema'
 import { sourceStatus, sourceWindows } from '../../derive/sources'
+import { nextSeq } from './imports'
 
 export async function listSources(workspaceId: number, entityId?: number): Promise<BooksSource[]> {
   const conds = [eq(booksSource.workspace_id, workspaceId)]
@@ -132,4 +133,210 @@ export function publicManifestRow(m: BooksDriveManifest, pieceSeq: number | null
     /** The piece this file became, as its workspace #number. */
     piece: pieceSeq,
   }
+}
+
+// ---------------------------------------------------------------------------
+// The register's write half (phase 4A) — what the Companion maintains
+// ---------------------------------------------------------------------------
+// Sources, runbooks and pull records are OPERATIONAL state (0008's grants
+// doctrine): creating and editing them is normal register upkeep, not record
+// mutation. The pulls themselves stay records — recordPull only ever adds.
+
+export class SourceRefused extends Error {
+  constructor(
+    public code: string,
+    message: string,
+    public suggestion: string
+  ) {
+    super(message)
+  }
+}
+
+export interface CreateSourceData {
+  entitySlug: string
+  name: string
+  type: string
+  expected?: string | null
+  ledgerAccounts?: string[]
+  method?: string | null
+  notes?: Record<string, unknown> | null
+}
+
+export async function createSource(workspaceId: number, data: CreateSourceData): Promise<BooksSource> {
+  const db = getDb()
+  return db.transaction(async (tx) => {
+    const [entity] = await tx
+      .select()
+      .from(booksEntity)
+      .where(and(eq(booksEntity.workspace_id, workspaceId), eq(booksEntity.slug, data.entitySlug)))
+      .limit(1)
+    if (!entity) throw new SourceRefused('bad_entity', `no book with slug "${data.entitySlug}"`, 'bk books entity list')
+
+    const seq = await nextSeq(tx, workspaceId, 'source')
+    const [row] = await tx
+      .insert(booksSource)
+      .values({
+        workspace_id: workspaceId,
+        entity_id: entity.id,
+        seq,
+        name: data.name,
+        type: data.type,
+        expected: data.expected ?? null,
+        ledger_accounts: data.ledgerAccounts ?? [],
+        method: data.method ?? null,
+        notes_freeform: data.notes ?? null,
+      })
+      .returning()
+    return row
+  })
+}
+
+export interface UpdateSourceData {
+  name?: string
+  expected?: string | null
+  ledgerAccounts?: string[]
+  method?: string | null
+  notes?: Record<string, unknown> | null
+  retired?: boolean
+}
+
+export async function updateSource(workspaceId: number, seq: number, data: UpdateSourceData): Promise<BooksSource> {
+  const patch: Record<string, unknown> = { updated_at: new Date() }
+  if (data.name !== undefined) patch.name = data.name
+  if (data.expected !== undefined) patch.expected = data.expected
+  if (data.ledgerAccounts !== undefined) patch.ledger_accounts = data.ledgerAccounts
+  if (data.method !== undefined) patch.method = data.method
+  if (data.notes !== undefined) patch.notes_freeform = data.notes
+  if (data.retired !== undefined) patch.retired = data.retired
+
+  const [row] = await getDb()
+    .update(booksSource)
+    .set(patch)
+    .where(and(eq(booksSource.workspace_id, workspaceId), eq(booksSource.seq, seq)))
+    .returning()
+  if (!row) throw new SourceRefused('source_not_found', `no source #${seq}`, 'bk books source list shows the numbers')
+  return row
+}
+
+export interface RecordPullData {
+  file: string
+  period?: string | null
+  format?: string | null
+  hash?: string | null
+  driveRef?: string | null
+  pulled?: string | null
+}
+
+/**
+ * Record a pull the door did not make itself — the Stripe CSV, the PDF the
+ * Companion parked in Drive. Idempotent on (source, file): the first delivery
+ * is the record, a retry converges.
+ */
+export async function recordPull(
+  workspaceId: number,
+  sourceSeq: number,
+  data: RecordPullData
+): Promise<{ pull: BooksSourcePull; created: boolean }> {
+  const db = getDb()
+  return db.transaction(async (tx) => {
+    const [source] = await tx
+      .select()
+      .from(booksSource)
+      .where(and(eq(booksSource.workspace_id, workspaceId), eq(booksSource.seq, sourceSeq)))
+      .limit(1)
+    if (!source) throw new SourceRefused('source_not_found', `no source #${sourceSeq}`, 'bk books source list shows the numbers')
+    if (source.retired) throw new SourceRefused('source_retired', `source #${sourceSeq} is retired`, 'a retired source takes no new pulls')
+
+    const inserted = await tx
+      .insert(booksSourcePull)
+      .values({
+        workspace_id: workspaceId,
+        source_id: source.id,
+        file: data.file,
+        period: data.period ?? null,
+        format: data.format ?? null,
+        hash: data.hash ?? null,
+        drive_ref: data.driveRef ?? null,
+        pulled: data.pulled ?? sql`CURRENT_DATE`,
+      })
+      .onConflictDoNothing()
+      .returning()
+
+    if (inserted.length > 0) {
+      const pulledDate = data.pulled ?? null
+      await tx
+        .update(booksSource)
+        .set({
+          last_import: pulledDate
+            ? sql`GREATEST(COALESCE(${booksSource.last_import}, '1900-01-01'::date), ${pulledDate}::date)`
+            : sql`GREATEST(COALESCE(${booksSource.last_import}, '1900-01-01'::date), CURRENT_DATE)`,
+          updated_at: new Date(),
+        })
+        .where(eq(booksSource.id, source.id))
+      return { pull: inserted[0], created: true }
+    }
+
+    const [existing] = await tx
+      .select()
+      .from(booksSourcePull)
+      .where(and(eq(booksSourcePull.source_id, source.id), eq(booksSourcePull.file, data.file)))
+      .limit(1)
+    return { pull: existing, created: false }
+  })
+}
+
+export interface SetRunbookData {
+  version?: string
+  updated?: string | null
+  loginUrl?: string | null
+  credentialRef?: string | null
+  steps?: unknown[]
+  output?: string | null
+}
+
+/**
+ * Set or update a source's runbook — one per source, versioned in place
+ * (history belongs to git, 0008's header). `credential_ref` is a REFERENCE;
+ * anything that looks like a secret is refused at the door, because this
+ * table must never hold one.
+ */
+export async function setRunbook(workspaceId: number, sourceSeq: number, data: SetRunbookData): Promise<BooksRunbook> {
+  const ref = data.credentialRef ?? null
+  if (ref && !/^[a-z][a-z0-9+.-]*:\/\//i.test(ref)) {
+    throw new SourceRefused(
+      'credential_not_a_ref',
+      'credential_ref must be a REFERENCE (vault://…, op://…), never a credential',
+      'store the secret in the vault and pass its address'
+    )
+  }
+
+  const db = getDb()
+  return db.transaction(async (tx) => {
+    const [source] = await tx
+      .select()
+      .from(booksSource)
+      .where(and(eq(booksSource.workspace_id, workspaceId), eq(booksSource.seq, sourceSeq)))
+      .limit(1)
+    if (!source) throw new SourceRefused('source_not_found', `no source #${sourceSeq}`, 'bk books source list shows the numbers')
+
+    const values = {
+      workspace_id: workspaceId,
+      source_id: source.id,
+      version: data.version ?? '1.0',
+      updated: data.updated ?? sql`CURRENT_DATE`,
+      login_url: data.loginUrl ?? null,
+      credential_ref: ref,
+      steps: data.steps ?? [],
+      output: data.output ?? null,
+    }
+    const [row] = await tx
+      .insert(booksRunbook)
+      .values(values)
+      .onConflictDoUpdate({
+        target: booksRunbook.source_id,
+        set: { ...values, updated_at: new Date() },
+      })
+      .returning()
+    return row
+  })
 }

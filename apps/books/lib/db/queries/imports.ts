@@ -74,8 +74,9 @@ export interface ImportSummary {
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0]
 
 /** Next workspace seq for an entity type, seeded from the table's own maximum. */
-async function nextSeq(tx: Tx, workspaceId: number, entityType: 'entry' | 'ri_entry'): Promise<number> {
-  const table = entityType === 'entry' ? 'entry' : 'ri_entry'
+const SEQ_TABLES = { entry: 'entry', ri_entry: 'ri_entry', source: 'source' } as const
+export async function nextSeq(tx: Tx, workspaceId: number, entityType: keyof typeof SEQ_TABLES): Promise<number> {
+  const table = SEQ_TABLES[entityType]
   const r = await tx.execute(sql`
     INSERT INTO ${booksCounters} (workspace_id, entity_type, last_value)
     VALUES (

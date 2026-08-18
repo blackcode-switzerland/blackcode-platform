@@ -5,7 +5,7 @@
 model in [`docs/platform-db.md`](../../../docs/platform-db.md). Neither is
 repeated here.
 
-**Status: phase 4A, 2026-08-18.** The statutory core, recognition, the sources register, the pièces pipeline, and now the BANK DOOR: `POST /sources/{n}/import` parses camt.053 server-side, stages every booked line in the right journal, runs rules at arrival (`inferred`, never resolved), writes fx when the bank converted, and converges on the bank's own references. Posting (staged → posted, write path #4) is live behind `/entries/{n}/post`. Migrated 0001-0012. What each phase adds
+**Status: phase 4A, 2026-08-18.** The statutory core, recognition, the sources register, the pièces pipeline, and now the BANK DOOR: `POST /sources/{n}/import` parses camt.053 server-side, stages every booked line in the right journal, runs rules at arrival (`inferred`, never resolved), writes fx when the bank converted, and converges on the bank's own references. Posting (staged → posted, write path #4) is live behind `/entries/{n}/post`. The RI journal reads and resolves like the grand livre (`entry list/show`, `resolve --entity`), cash declares through `entry declare`, and the register takes writes (`source create/edit/record-pull/runbook-set` — the Companion's upkeep verbs, with runbooks refusing anything that is not a credential reference). Migrated 0001-0012. What each phase adds
 is in [`docs/books-app-plan/`](../../../docs/books-app-plan/README.md).
 
 Migrations applied: 12 of 12, `__drizzle_migrations_books`.

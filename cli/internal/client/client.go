@@ -1367,3 +1367,18 @@ func looksLikeMarkup(body []byte) bool {
 	return strings.HasPrefix(lower, "<!doctype") || strings.HasPrefix(lower, "<html") ||
 		strings.HasPrefix(lower, "<")
 }
+
+func (c *Client) putJSON(path string, body any, out any) error {
+	var buf bytes.Buffer
+	if body != nil {
+		if err := json.NewEncoder(&buf).Encode(body); err != nil {
+			return err
+		}
+	}
+	req, err := http.NewRequest(http.MethodPut, c.BaseURL+path, &buf)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return c.do(req, out)
+}
