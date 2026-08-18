@@ -317,13 +317,23 @@ export interface RiTotals {
  *
  * There is no bilan here, ever. A sole proprietorship's counterpart is the
  * patrimoine statement.
+ *
+ * ── NEUTRAL ROWS COUNT IN NEITHER TOTAL, AND THE MATCH IS EXPLICIT ──────────
+ * Andrea's rule (2026-08-18): an own-account transfer is logged but neutral.
+ * The earlier else-branch counted anything non-recette as a dépense, which
+ * would have booked her bank-1-to-bank-2 transfer as an EXPENSE — a silent
+ * misstatement of exactly the kind this app exists to refuse. So each known
+ * direction is matched by name and an unknown one lands nowhere: a vocabulary
+ * this function has not heard of must show up as a wrong total in a test, not
+ * as money quietly filed under dépenses.
  */
 export function riTotals(rows: RiRow[]): RiTotals {
   let recettes = 0n
   let depenses = 0n
   for (const r of rows) {
     if (r.direction === 'recette') recettes += toCentimes(r.amount)
-    else depenses += toCentimes(r.amount)
+    else if (r.direction === 'depense') depenses += toCentimes(r.amount)
+    // 'neutral' and anything unknown: logged in the book, absent from both.
   }
   return {
     recettes: fromCentimes(recettes),
