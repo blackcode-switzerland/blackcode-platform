@@ -164,6 +164,11 @@ the entry's document reference, checksum and capture date, and **deliberately
 does not change the entry's `evidence_tier`**: whether a receipt is sufficient
 proof is a judgment, and judgments stay human.
 
+> **Superseded 2026-08-18, same day.** The route now refuses a cross-book match
+> and the web control is switched on. See "The match write holds the entity
+> boundary" above. The warning below is kept because it was true when written,
+> and anyone reading a version of this app from that day needs it.
+
 **Use `bk books piece match` with care until further notice.** The route resolves
 its `--entry` number against the grand livre on workspace and number alone, with
 no book filter, so **a pièce belonging to one legal entity can be attached to
@@ -171,8 +176,10 @@ another entity's entry** — and doing so overwrites any document reference and
 checksum already on that entry, without recording anything in its `history`. A
 simplified book's journal is not affected; it filters correctly.
 
-The web UI's control is therefore built and switched off rather than shipped, and
-will appear here again when the route filters by book.
+The web UI's control was therefore built and switched off rather than shipped.
+**It is on since 2026-08-18**, once the route's refusal was verified in both
+directions — it refuses a pièce from another book, and it still accepts one from
+the same book.
 
 **One client-visible fix.** `entry.piece.hash` and `entry.piece.captured` are
 **nullable** and always have been — `books.entry.piece_hash` is a nullable
