@@ -185,4 +185,76 @@ d('the pièces pipeline', () => {
 
     await expect(matchPiece(ws, pieceSeq, entrySeq)).rejects.toMatchObject({ code: 'already_matched' })
   })
+
+  it('records the match in the entry history: which piece, when, what was there before', async () => {
+    const p = await db.execute(sql`
+      SELECT seq FROM books.piece_inbox
+      WHERE workspace_id = ${ws} AND drive_file_id = ${'test-' + REAL.source.file_id}`)
+    const h = await db.execute(sql`SELECT history FROM books.entry WHERE workspace_id = ${ws} AND seq = ${entrySeq}`)
+    const history = h.rows[0].history
+    expect(Array.isArray(history), 'an append-only trail, like resolve keeps').toBe(true)
+    const ev = history[history.length - 1]
+    expect(ev.event).toBe('piece_matched')
+    expect(ev.piece, 'the piece that documents it, by workspace number').toBe(Number(p.rows[0].seq))
+    expect(ev.was.piece_drive_ref, 'there was nothing there before: the history proves it').toBeNull()
+  })
+
+  it("refuses another book's entry: the number resolves, the boundary does not", async () => {
+    // The review's repro: a second legal entity in the SAME workspace, whose
+    // posted entry already carries full evidence. `seq` is workspace-unique,
+    // so #2 resolves from entity A's piece — and must be refused, not reached.
+    const { matchPiece } = await import('./queries/pieces')
+    const { createEntity, createExercice } = await import('./queries/statutory')
+    const b = await createEntity(ws, { slug: 'pz-b', name: 'Pz-B SA', legal_form: 'SA', bookkeeping_regime: 'double_entry' })
+    const xb = await createExercice(ws, { entityId: b.id, year: 2026 })
+    const eb = await db.execute(sql`
+      INSERT INTO books.entry (workspace_id, entity_id, exercice_id, seq, entry_no, date, status, raw_label,
+                               piece_drive_ref, piece_hash, evidence_tier)
+      VALUES (${ws}, ${b.id}, ${xb.id}, 2, 1, '2026-08-05', 'staged', 'VIREMENT AIOS',
+              'https://drive.google.com/file/d/aios-proof', 'sha256:aios0deadbeef', 'full') RETURNING id`)
+    await db.execute(sql`
+      INSERT INTO books.entry_line (entry_id, account_no, debit, credit)
+      VALUES (${Number(eb.rows[0].id)}, '1020', 12000, 0), (${Number(eb.rows[0].id)}, '3200', 0, 12000)`)
+    await db.execute(sql`UPDATE books.entry SET status = 'posted' WHERE id = ${Number(eb.rows[0].id)}`)
+
+    const p = await db.execute(sql`
+      SELECT seq FROM books.piece_inbox
+      WHERE workspace_id = ${ws} AND drive_file_id = ${'test-rescan-of-test-' + REAL.source.file_id}`)
+    const rescanSeq = Number(p.rows[0].seq)
+
+    await expect(matchPiece(ws, rescanSeq, 2)).rejects.toMatchObject({ code: 'entry_other_book' })
+
+    const e = await db.execute(sql`
+      SELECT piece_drive_ref, piece_hash, evidence_tier, history FROM books.entry WHERE workspace_id = ${ws} AND seq = 2`)
+    expect(e.rows[0].piece_hash, "the other book's proof is exactly as it was").toBe('sha256:aios0deadbeef')
+    expect(e.rows[0].piece_drive_ref).toBe('https://drive.google.com/file/d/aios-proof')
+    expect(e.rows[0].history, 'nothing happened, so nothing is recorded').toBeNull()
+    const st = await db.execute(sql`SELECT status FROM books.piece_inbox WHERE workspace_id = ${ws} AND seq = ${rescanSeq}`)
+    expect(st.rows[0].status, 'the piece never left the inbox').toBe('staged')
+  })
+
+  it('refuses to replace evidence an entry already carries', async () => {
+    // Entry 1 was documented two tests ago; the tampered piece is still staged.
+    const { matchPiece } = await import('./queries/pieces')
+    const p = await db.execute(sql`
+      SELECT seq FROM books.piece_inbox WHERE workspace_id = ${ws} AND drive_file_id = 'test-tampered'`)
+    await expect(matchPiece(ws, Number(p.rows[0].seq), entrySeq)).rejects.toMatchObject({ code: 'entry_documented' })
+    const e = await db.execute(sql`SELECT piece_hash FROM books.entry WHERE workspace_id = ${ws} AND seq = ${entrySeq}`)
+    expect(e.rows[0].piece_hash, 'the first document is still the record').toBe('md5:cafe0123')
+  })
+
+  it('an unattributed piece may match the grand livre, and the match is the attribution', async () => {
+    const { ingestPiece, matchPiece } = await import('./queries/pieces')
+    const { source, x } = payload()
+    const r = await ingestPiece(ws, null, { ...source, file_id: 'test-unattributed', md5_checksum: 'f00d1122' }, x, REAL.received, 'test-worker')
+    expect(r.piece.entity_id, 'nobody has said whose it is').toBeNull()
+
+    await db.execute(sql`
+      INSERT INTO books.entry (workspace_id, entity_id, exercice_id, seq, entry_no, date, status, raw_label)
+      VALUES (${ws}, ${entityId}, ${exerciceId}, 3, 2, '2026-08-05', 'staged', 'CARTE PHILFRUITS ENCORE')`)
+
+    const m = await matchPiece(ws, r.piece.seq, 3)
+    expect(m.piece.status).toBe('matched')
+    expect(m.piece.entity_id, 'saying which entry it documents says whose it is').toBe(entityId)
+  })
 })

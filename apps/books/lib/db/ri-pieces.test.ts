@@ -124,6 +124,23 @@ d('a pièce against the recettes-dépenses journal', () => {
     await expect(matchPiece(ws, pieceSeq, 2)).rejects.toThrow(MatchRefused)
   })
 
+  it('records the match in the RI entry history, and refuses to replace the document', async () => {
+    const h = await db.execute(sql`SELECT history FROM books.ri_entry WHERE id = ${riEntryId}`)
+    const history = h.rows[0].history
+    expect(Array.isArray(history), 'the RI journal keeps the same trail').toBe(true)
+    expect(history[history.length - 1]).toMatchObject({
+      event: 'piece_matched',
+      piece: pieceSeq,
+      was: { piece_drive_ref: null },
+    })
+
+    const { ingestPiece, matchPiece } = await import('./queries/pieces')
+    const r = await ingestPiece(ws, entityId, { file_id: 'ri-cafe-003', md5_checksum: 'cafe9952' }, CAFE, '2026-08-12', 'test-worker')
+    await expect(matchPiece(ws, r.piece.seq, 1)).rejects.toMatchObject({ code: 'entry_documented' })
+    const e = await db.execute(sql`SELECT piece_hash FROM books.ri_entry WHERE id = ${riEntryId}`)
+    expect(e.rows[0].piece_hash, 'the first document is still the record').toBe('md5:cafe9950')
+  })
+
   it('refuses an entry number the RI journal does not hold', async () => {
     const { ingestPiece, matchPiece } = await import('./queries/pieces')
     const r = await ingestPiece(

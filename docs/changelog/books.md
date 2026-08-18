@@ -32,6 +32,42 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-18 — The match write holds the entity boundary
+
+The phase-3 review found that `POST /pieces/{n}/match` could attach a pièce to
+**another legal entity's** grand-livre entry: `entry.seq` is workspace-unique,
+so any book's number resolved, and only the recettes-dépenses branch checked
+whose it was. In doing so it could also silently replace evidence an entry
+already carried — on the reviewer's repro, a posted entry's Drive reference and
+sha256, overwritten with no record. That write was withheld in the UI behind a
+flag. Fixed server-side; the flag can come off.
+
+**Two new refusals**, same shape as every refusal (`code`, message,
+`suggestion`), HTTP 400:
+
+- **`entry_other_book`** — the piece is attributed to one book and the number
+  names an entry in another. The worklist's `suggested_entries` were already
+  scoped to the piece's own book; the write now enforces what the suggestions
+  promised.
+- **`entry_documented`** — the entry (either journal) already carries a pièce.
+  Evidence is never replaced silently; a second document for the same entry is
+  a feature nobody has needed yet, on purpose.
+- (`already_matched`, on the piece side, is unchanged.)
+
+**Two behaviours a client may rely on:**
+
+- **The match is recorded in the entry's `history`** — the same append-only
+  trail `resolve` keeps: `{at, event: "piece_matched", piece, was}`, where
+  `was` holds the (empty, the guard proves) prior `piece_*` fields.
+- **Matching an unattributed piece attributes it.** A piece with no book may
+  still match any grand-livre entry, and saying which entry it documents says
+  whose it is: `piece.entity_id` is set from the entry in the same
+  transaction. It cannot reach a recettes-dépenses book while unattributed,
+  as before.
+
+No route added or renamed, no wire field changed. `bk books piece match`
+surfaces the new refusals as-is.
+
 ## 2026-08-18 — Sources, pièces and the fifth write
 
 Phase 3's screens are live in the web UI. **No route changed**, so no `bk`
