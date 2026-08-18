@@ -131,6 +131,14 @@ type BooksEntryLine struct {
 	Credit  string `json:"credit"`
 }
 
+// BooksFx is the original-currency story (0011): {original, rate, source},
+// e.g. {"USD 5.00", "0.894", "card statement"}. All strings, all display.
+type BooksFx struct {
+	Original string `json:"original"`
+	Rate     string `json:"rate"`
+	Source   string `json:"source"`
+}
+
 // BooksEntry is one écriture.
 //
 // Note BOTH numbers. `Number` is the workspace #number this CLI addresses rows
@@ -157,6 +165,10 @@ type BooksEntry struct {
 		DriveRef string `json:"drive_ref"`
 		Captured string `json:"captured"`
 	} `json:"piece"`
+	// The original-currency story (0011). Display-only: `amount` is CHF — what
+	// the card was actually charged — and this is the evidence of what it was
+	// before the issuer converted.
+	Fx *BooksFx `json:"fx"`
 	// Provenance. Resolutions append here and the old state is kept forever;
 	// without this field `--json` silently drops the one thing that proves a
 	// resolved row was once unrecognized.

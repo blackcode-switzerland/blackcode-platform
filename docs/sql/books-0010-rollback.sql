@@ -1,7 +1,7 @@
 -- Rollback for apps/books migration 0010 — remove the RI half of the match.
 --
--- Rollbacks run in REVERSE: this file FIRST, then 0009, 0008, 0007 … down to
--- 0001. Each file's header names its place.
+-- Runs after books-0011-rollback.sql in the reverse walk, and REFUSES to run
+-- before it. Next after this: books-0009-rollback.sql.
 --
 -- ---------------------------------------------------------------------------
 -- WHAT THIS DESTROYS
@@ -22,6 +22,15 @@ BEGIN;
 DO $do$
 DECLARE n integer;
 BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'books' AND table_name = 'ri_entry' AND column_name = 'fx'
+  ) THEN
+    RAISE EXCEPTION
+      'REFUSING: 0011''s columns still exist. Run docs/sql/books-0011-rollback.sql first — '
+      'the walk is 0011, then this, then 0009 … down to 0001.';
+  END IF;
+
   SELECT count(*) INTO n FROM books.piece_inbox WHERE matched_ri_entry_id IS NOT NULL;
   IF n > 0 THEN
     RAISE EXCEPTION

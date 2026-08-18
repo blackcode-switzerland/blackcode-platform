@@ -614,6 +614,8 @@ export function publicEntry({ entry: e, lines }: EntryWithLines) {
     piece: e.piece_drive_ref
       ? { drive_ref: e.piece_drive_ref, hash: e.piece_hash, captured: e.piece_captured }
       : null,
+    /** The original-currency story (0011): {original, rate, source}. Display-only. */
+    fx: e.fx,
     reverses_entry_id: e.reverses_entry_id,
     history: e.history,
   }
@@ -635,6 +637,8 @@ export function publicRiEntry(r: typeof booksRiEntry.$inferSelect) {
     piece: r.piece_drive_ref
       ? { drive_ref: r.piece_drive_ref, hash: r.piece_hash, captured: r.piece_captured }
       : null,
+    /** The original-currency story (0011): {original, rate, source}. Display-only. */
+    fx: r.fx,
   }
 }
 

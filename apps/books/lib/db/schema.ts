@@ -438,6 +438,8 @@ export const booksEntry = booksSchema.table(
     piece_drive_ref: text('piece_drive_ref'),
     piece_hash: varchar('piece_hash', { length: 80 }),
     piece_captured: date('piece_captured'),
+    /** 0011: the original-currency story, display-only. Nothing computes with it. */
+    fx: jsonb('fx'),
     /** The only correction path. */
     reverses_entry_id: integer('reverses_entry_id'),
     history: jsonb('history'),
@@ -514,6 +516,8 @@ export const booksRiEntry = booksSchema.table(
     piece_drive_ref: text('piece_drive_ref'),
     piece_hash: varchar('piece_hash', { length: 80 }),
     piece_captured: date('piece_captured'),
+    /** 0011: the original-currency story, display-only. Nothing computes with it. */
+    fx: jsonb('fx'),
     history: jsonb('history'),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
