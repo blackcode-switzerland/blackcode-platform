@@ -51,6 +51,12 @@ import { DateText } from './date-text'
 import { Money } from './money'
 import { EmptyState } from './states'
 import { MatchPieceForm } from './match-piece-form'
+
+/**
+ * Off until `matchPiece` filters the grand livre by entity. See the block at the
+ * mount site for what happens while it does not. One line to flip back.
+ */
+const MATCH_WRITE_ENABLED = false
 import type { Entity, InboxPiece, PieceExtractionLine } from '@/lib/types'
 import type { MatchResult } from '@/lib/mutations'
 
@@ -233,10 +239,33 @@ function PieceRow({
             </p>
           )}
 
-          {/* THE ONLY WRITE ON THIS SCREEN, and only where there is a judgment
-              left to make. A matched pièce documents one entry and unmatching is
-              not built, so the affordance is absent rather than disabled. */}
-          {matchedEntry === null && (
+          {/* ── THE WRITE IS WITHHELD, AND THIS IS WHY ────────────────────────
+              `matchPiece`'s grand-livre branch resolves the entry number on
+              `workspace_id + seq` ALONE — no entity filter, where its own
+              recettes-dépenses branch three lines above has one. `books.entry.seq`
+              is workspace-unique, so the number resolves, and a pièce belonging
+              to one legal entity attaches cleanly to ANOTHER entity's entry.
+
+              The phase-3 review did it from this form: on a posted AIOS entry it
+              replaced the Drive reference and the sha256 of the document already
+              proving it, wrote a NULL hash, left `evidence_tier` at `full`, and
+              recorded nothing in `history` — `resolveEntry` writes history,
+              `matchPiece` does not.
+
+              Two legal entities' books must never mix. The plan calls that law,
+              not a preference, and this route can break it.
+
+              A client-side guard would be theatre: the boundary is the server,
+              and `bk books piece match` reaches it either way. Constraining the
+              input to entity-scoped candidates would close OUR path, but the
+              inbox route does not serve them (`candidatesFor` exists; only the
+              worklist uses it), so that needs the backend too.
+
+              So the affordance is withheld until the server filters by entity.
+              `<MatchPieceForm>` and `useMatchPiece` are complete and tested and
+              stay in the tree — re-enabling is deleting this condition. Reported
+              on ticket #53. */}
+          {MATCH_WRITE_ENABLED && matchedEntry === null && (
             <MatchPieceForm
               ws={ws}
               piece={piece}

@@ -4,7 +4,7 @@
 // ===========================================================================
 // WHAT THIS BUYS, AND WHAT IT DOES NOT CLAIM
 // ===========================================================================
-// b/books has thirteen screens and four writes. That ratio is a design decision,
+// b/books has thirteen screens and five writes. That ratio is a design decision,
 // and a design decision nobody can check is a design decision that decays: one
 // `fetch` inside a component, and "read-mostly" is back to being a sentence in a
 // document.
@@ -55,7 +55,7 @@ const RECORD_WRITES = 'lib/mutations.ts'
  * row across every blackcode app). Neither touches `books.*`.
  *
  * The alternatives were both worse. Putting them in `lib/mutations.ts` would
- * have made them "one of the four writes", which they are not, and would gate
+ * have made them "one of the five writes", which they are not, and would gate
  * them on `useCanWrite()` — a hook phase 2 replaces with the WORKSPACE ROLE, at
  * which point it would be deciding whether a stranger may create an account.
  * Letting a component call `apiSend` directly would have deleted the guard.

@@ -5,7 +5,7 @@
 // ===========================================================================
 // WHY THIS IS NOT IN lib/mutations.ts
 // ===========================================================================
-// `lib/mutations.ts` is about RECORD writes — the four buttons that change
+// `lib/mutations.ts` is about RECORD writes — the five buttons that change
 // b/books' own data (resolve an entry, create a rule, post a staged entry,
 // approve a compliance rule). Every one of them is built on `useRecordMutation`,
 // which gates on `useCanWrite()`, and that file's whole argument is "there are
