@@ -53,10 +53,27 @@ import { EmptyState } from './states'
 import { MatchPieceForm } from './match-piece-form'
 
 /**
- * Off until `matchPiece` filters the grand livre by entity. See the block at the
- * mount site for what happens while it does not. One line to flip back.
+ * ── ON SINCE 2026-08-18 ────────────────────────────────────────────────────
+ * This was `false` for one day. `matchPiece`'s grand-livre branch resolved the
+ * entry number on `workspace_id + seq` alone, so a pièce from one legal entity
+ * attached cleanly to another's entry — and overwrote whatever evidence that
+ * entry already carried, recording nothing in `history`.
+ *
+ * The backend fixed it (`fix(books): the match write holds the entity
+ * boundary`). Verified both ways before flipping this, because a boundary
+ * proved only by refusals cannot be told from a subject that refuses
+ * everything — CLAUDE.md finding #16:
+ *
+ *   REFUSES  `bk books piece match 2 --entry 14` (blackcode pièce, AIOS entry)
+ *            → 400 "entry #14 belongs to another book: two legal entities'
+ *              records never mix", with a suggestion. This is the exact call
+ *              that used to succeed and exit 0.
+ *   SUCCEEDS `bk books piece match 2 --entry 1` (both blackcode) → matched.
+ *
+ * The constant stays rather than being deleted, because the next person to ask
+ * "was this ever off, and why" deserves the answer in the file.
  */
-const MATCH_WRITE_ENABLED = false
+const MATCH_WRITE_ENABLED = true
 import type { Entity, InboxPiece, PieceExtractionLine } from '@/lib/types'
 import type { MatchResult } from '@/lib/mutations'
 
