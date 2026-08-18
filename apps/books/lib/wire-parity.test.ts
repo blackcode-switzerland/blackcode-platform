@@ -64,18 +64,31 @@ import {
   publicManifestRow,
 } from './db/queries/sources'
 import { publicPiece } from './db/queries/pieces'
+import { bilanFor, crFor } from './derive'
 import type { WorklistRow as WorklistRowWire } from './db/queries/worklist'
+import type { OverviewBook as OverviewBookWire } from './db/queries/statutory'
+import type { InvitationRow } from './db/queries/invitations'
+import type { ExerciceRow } from './hooks'
 import type {
   Account,
+  BilanGroupResult,
+  BilanLineResult,
+  BilanResult as BilanResultType,
+  CrLineResult,
+  CrResult as CrResultType,
   Entity,
   Entry,
   InboxPiece,
   ManifestFile,
   PatrimoineSnapshot,
   RecognitionRule,
+  OverviewBook,
+  OverviewResult,
   Source,
+  SourceDetail,
   SourcePull,
   SourceRunbook,
+  WorklistResult,
   WorklistRow,
 } from './types'
 
@@ -89,6 +102,75 @@ import type {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const row = (o: Record<string, unknown>): any => o
+
+/**
+ * The TOP-LEVEL keys of the object literal a route hands to `NextResponse.json`.
+ *
+ * ── WHY THIS EXISTS RATHER THAN ANOTHER `indexOf('})')` ───────────────────
+ * The `resolve` case below was the first source-reading check in this file and
+ * it slices to the first `})`. That is correct for a FLAT response and silently
+ * wrong for a nested one: it stops inside the first nested object literal and
+ * reports a SHORT key list, which is a smaller assertion that still passes.
+ * Four of the seven routes this section covers nest, so depth-tracking is not a
+ * tidiness preference — without it "found the whole envelope" and "found the
+ * first two keys" are indistinguishable.
+ *
+ * A spread is reported as `...name`, and that is the point. Whether the bilan
+ * route answers `{...bilan}` or `{bilan}` is exactly what decides whether a
+ * screen reads `data.totalActif` or `data.bilan.totalActif`, it is invisible to
+ * every other check in this repo, and it is a one-character edit.
+ *
+ * ── WHAT IT DOES NOT ASK ──────────────────────────────────────────────────
+ * It reads ONE file as text. It cannot see a live response, it does not know
+ * what the spread expands to, and a route that computes its payload elsewhere
+ * and returns a variable would report a single `...x` and nothing else. Where
+ * the expansion matters, the case beside it CALLS the shaping path instead —
+ * `bilanFor`, `crFor` and the `publicSource` composition below are real calls
+ * against the real functions, which is strictly better than a source read and
+ * is why those three are not written this way.
+ */
+function envelopeKeys(src: string, opts: { after?: string; label: string }): string[] {
+  const from = opts.after ? src.indexOf(opts.after) : 0
+  if (from < 0) throw new Error(`${opts.label}: "${opts.after}" is not in this file any more`)
+  const call = src.indexOf('NextResponse.json(', from)
+  if (call < 0) throw new Error(`${opts.label}: no NextResponse.json( — this case is stale`)
+  const open = src.indexOf('{', call)
+  if (open < 0) throw new Error(`${opts.label}: NextResponse.json was not given an object literal`)
+
+  const keys: string[] = []
+  let depth = 0
+  let expectKey = false
+  let quote: string | null = null
+
+  for (let i = open; i < src.length; i++) {
+    const c = src[i]
+    if (quote) {
+      if (c === '\\') i++
+      else if (c === quote) quote = null
+      continue
+    }
+    if (c === '"' || c === "'" || c === '`') { quote = c; continue }
+    if (c === '/' && src[i + 1] === '/') { const nl = src.indexOf('\n', i); if (nl < 0) break; i = nl; continue }
+    if (c === '/' && src[i + 1] === '*') { const end = src.indexOf('*/', i); if (end < 0) break; i = end + 1; continue }
+    if (c === '{' || c === '[' || c === '(') { depth++; if (depth === 1) expectKey = true; continue }
+    if (c === '}' || c === ']' || c === ')') { depth--; if (depth === 0) break; continue }
+    if (depth !== 1) continue
+    if (c === ',') { expectKey = true; continue }
+    if (!expectKey || /\s/.test(c)) continue
+
+    const rest = src.slice(i)
+    const spread = /^\.\.\.(\w+)/.exec(rest)
+    const named = /^(\w+)\s*:/.exec(rest)
+    const shorthand = /^(\w+)\s*[,}]/.exec(rest)
+    if (spread) keys.push(`...${spread[1]}`)
+    else if (named) keys.push(named[1])
+    else if (shorthand) keys.push(shorthand[1])
+    expectKey = false
+    const eaten = spread ?? named ?? shorthand
+    if (eaten) i += eaten[1].length - 1 + (spread ? 3 : 0)
+  }
+  return keys
+}
 
 const ENTITY_KEYS = [
   'number',
@@ -657,6 +739,286 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     ).toBe(true)
   })
 
+  // ===========================================================================
+  // THE SEVEN ROUTES THAT BUILD THEIR OWN ENVELOPE — cleanup phase, 2026-08-18
+  // ===========================================================================
+  // `bilan`, `compte-resultat`, `overview`, `worklist`, `sources/{number}`,
+  // `invitations` and `invitations/{id}` have no `public*` function to import,
+  // so until now this file could not see them AT ALL. The first three are the
+  // statement payloads — the most consequential JSON in this product.
+  //
+  // ── THIS IS NOT ONE TECHNIQUE, IT IS THREE, AND THE CHOICE IS THE POINT ──
+  //   1. **Call the shaping path.** `bilanFor` and `crFor` are pure exported
+  //      functions and `getBilan`/`getCr` do nothing but feed them database
+  //      rows, so the statement payloads can be produced FOR REAL here. That is
+  //      strictly better than reading source text and it is used wherever it is
+  //      possible.
+  //   2. **`Mutual` at compile time**, against the query layer's own exported
+  //      interface — `derive.BilanResult`, `derive.CrResult`,
+  //      `statutory.OverviewBook`, `invitations.InvitationRow`. This is the half
+  //      that catches a field appearing or disappearing, and it is the half that
+  //      found `worklist` on the overview (see `_OverviewKeys`).
+  //   3. **`envelopeKeys` source read**, for the one fact neither of the above
+  //      can reach: what the route WRAPS the result in. A payload spread flat
+  //      and the same payload nested one level down are the same function, the
+  //      same type and a blank screen.
+  //
+  // Every case below states which of the three it is and what it cannot see.
+
+  // --- bilan ---------------------------------------------------------------
+  //
+  // Mutation watched (2026-08-18): deleted `ecart` from `bilanFor`'s return.
+  // RED here naming it, and red at typecheck on `_BilanKeys`. Restored.
+  // Then `related: !!l.related` → removed. Red on the nested line assertion.
+  it('bilanFor produces exactly the bilan fields, and every statutory line is whole', () => {
+    // This CALLS the real derivation — technique 1. An empty book is the right
+    // input: the statutory structure is fixed by art. 959a, so the line list
+    // does not depend on the data, and using no data means this case cannot
+    // accidentally become a test of the seed.
+    const out = bilanFor([], [], new Map())
+
+    expect(Object.keys(out).sort()).toEqual(
+      ['groups', 'totalActif', 'totalPassif', 'resultat', 'balanced', 'ecart'].sort()
+    )
+
+    // Anti-vacuous, and not only that: a zero-amount statutory line is legally
+    // REQUIRED to be here (`absent !== zero`), so an empty `groups` would be
+    // both a stale test and a wrong bilan.
+    expect(out.groups.length, 'no statutory groups — art. 959a structure is gone').toBeGreaterThan(0)
+    const lines = out.groups.flatMap((g) => g.lines)
+    expect(lines.length, 'no statutory lines — see `lib/statements.ts`').toBeGreaterThan(0)
+
+    for (const g of out.groups) expect(Object.keys(g).sort()).toEqual(['group', 'lines', 'side'])
+    for (const l of lines) expect(Object.keys(l).sort()).toEqual(['amount', 'pos', 'related'])
+  })
+
+  // Technique 3 — the one thing calling `bilanFor` cannot tell you.
+  //
+  // Mutation watched (2026-08-18): `...bilan` → `bilan`. Red, printing the key
+  // list it found. That edit compiles, typechecks, and moves every figure on
+  // the balance-sheet screen one level down; `useBilan` reads `data.groups` and
+  // would render a statement with no lines in it.
+  it('the bilan route SPREADS the derivation, and echoes the book and year', () => {
+    const src = readFileSync(join(APP_ROOT, 'app/api/workspaces/[ws]/bilan/route.ts'), 'utf8')
+    expect(src, 'the bilan route no longer calls getBilan — this case is stale').toContain('getBilan')
+    const keys = envelopeKeys(src, { label: 'bilan' })
+    expect(keys.length, 'found no envelope keys — the response moved').toBeGreaterThan(0)
+    expect(keys.sort()).toEqual(['...bilan', 'entity', 'exercice'].sort())
+  })
+
+  // --- compte de résultat --------------------------------------------------
+  //
+  // Mutation watched (2026-08-18): dropped `accounts` from `crFor`'s `out.push`.
+  // RED here naming it — and that field is the CR's whole drill-down: without
+  // it every line on the income statement stops being clickable into the ledger
+  // and nothing throws.
+  it('crFor produces exactly the CR fields, and every line carries its accounts', () => {
+    const out = crFor([], [])
+    expect(Object.keys(out).sort()).toEqual(['lines', 'resultat'].sort())
+    expect(out.lines.length, 'no CR lines — art. 959b structure is gone').toBeGreaterThan(0)
+    for (const l of out.lines) {
+      expect(Object.keys(l).sort()).toEqual(['accounts', 'amount', 'pos', 'sign'])
+      expect(Array.isArray(l.accounts), '`accounts` stopped being an array').toBe(true)
+    }
+  })
+
+  // Mutation watched (2026-08-18): `...cr` → `cr`. Red.
+  it('the compte-resultat route SPREADS the derivation, and echoes the book and year', () => {
+    const src = readFileSync(join(APP_ROOT, 'app/api/workspaces/[ws]/compte-resultat/route.ts'), 'utf8')
+    expect(src, 'the CR route no longer calls getCr — this case is stale').toContain('getCr')
+    const keys = envelopeKeys(src, { label: 'compte-resultat' })
+    expect(keys.length, 'found no envelope keys — the response moved').toBeGreaterThan(0)
+    expect(keys.sort()).toEqual(['...cr', 'entity', 'exercice'].sort())
+  })
+
+  // --- overview ------------------------------------------------------------
+  //
+  // The row shape is pinned at COMPILE time by `_OverviewKeys` below, against
+  // `getOverview`'s own exported interface — and that assertion is the one that
+  // found this phase's first drift: the route serves `worklist` (unrecognized
+  // AND inferred, the count `bk books overview` prints under TO RESOLVE) and
+  // `lib/types.ts` declared only `unrecognized`, which the rollup panel was
+  // labelling "Need a human". Seeded blackcode: 2 against 3.
+  //
+  // Mutation watched (2026-08-18): deleted `staged` from `OverviewBook` in
+  // `lib/db/queries/statutory.ts`. Red at typecheck on `_OverviewKeys`.
+  it('the overview route serves {books} and nothing beside it', () => {
+    const src = readFileSync(join(APP_ROOT, 'app/api/workspaces/[ws]/overview/route.ts'), 'utf8')
+    expect(src, 'the overview route no longer calls getOverview').toContain('getOverview')
+    const keys = envelopeKeys(src, { label: 'overview' })
+    expect(keys.length, 'found no envelope keys — the response moved').toBeGreaterThan(0)
+    // Mutation watched (2026-08-18): `NextResponse.json({ books })` →
+    // `NextResponse.json({ data: books, next_cursor: null })`, i.e. the route
+    // moved onto the shared list envelope. Red, printing `['data','next_cursor']`
+    // against `['books']`. That is the failure worth catching: `useOverview`
+    // reads `data.books`, would get `undefined`, and `rollup([])` would report a
+    // workspace holding three books as having none — the phase-1 failure exactly,
+    // with nothing thrown.
+    expect(keys).toEqual(['books'])
+  })
+
+  // --- worklist ------------------------------------------------------------
+  //
+  // The envelope already had a case above (`the worklist envelope is not the
+  // list envelope`), which asserts it is NOT `{data, next_cursor}` by matching
+  // the return with a regex. This adds the other half: that the four keys it
+  // serves are the four `WorklistResult` declares, extracted rather than
+  // pattern-matched.
+  //
+  // ── AND IT ASSERTS THE SET, NOT THE ORDER, FOR A MEASURED REASON ────────
+  // Two mutations were watched here on 2026-08-18 and the pair is the argument
+  // for this case existing beside the regex one rather than instead of it:
+  //
+  //   deleted `count: rows.length,`   → BOTH red. The regex loses its `count:`
+  //                                     and this case loses a key.
+  //   REORDERED the four keys, same    → the regex case RED, this one green.
+  //   payload, byte-for-byte identical
+  //   response
+  //
+  // The second is a legitimate edit that breaks nothing, and a check that fails
+  // on it is a check somebody deletes within a month — which is the README's own
+  // warning about snapshots, arriving through a regex instead. So the regex case
+  // keeps the job it is good at (proving the route did not move onto
+  // `jsonList`) and this one carries the key set.
+  it('the worklist envelope is exactly the four keys WorklistResult declares', () => {
+    const src = readFileSync(join(APP_ROOT, 'app/api/workspaces/[ws]/worklist/route.ts'), 'utf8')
+    const keys = envelopeKeys(src, { label: 'worklist' })
+    expect(keys.length, 'found no envelope keys — the response moved').toBeGreaterThan(0)
+    expect(keys.sort()).toEqual(['count', 'entity', 'exercice', 'rows'].sort())
+  })
+
+  // --- sources/{number} ----------------------------------------------------
+  //
+  // Technique 1 again, and it is available here in a way it is not for the
+  // statements: the route's payload is a COMPOSITION of three pure functions
+  // this file already imports, so the whole thing can be built for real.
+  //
+  // ── A MUTATION THAT NOTHING HERE CAUGHT, RECORDED RATHER THAN HIDDEN ────
+  // Watched (2026-08-18): `runbook: runbook ? publicRunbook(runbook) : null` →
+  // `runbook: publicRunbook(runbook!)`. **GREEN, 38/38** — this case, the
+  // envelope case below it, and `npm run typecheck`, all three. A key-set check
+  // sees `runbook` either way and the non-null assertion silences the compiler.
+  //
+  // It is not a hypothetical: seeded sources #4 and #9 have no runbook, so that
+  // edit is a crash on two of nine rows of the sources register. What would
+  // catch it is a check that calls the ROUTE, which this file cannot do, and it
+  // is in the report as a backend finding rather than papered over with a text
+  // match for the ternary — a guard that asserts the shape of the code rather
+  // than the shape of the answer breaks on every legitimate rewrite.
+  //
+  // ── AND THE FIRST MUTATION TRIED FOR THIS CASE LEFT IT GREEN ────────────
+  // Deleting `layer` from `publicSource` failed the `publicSource` case above
+  // and left this one GREEN — correctly, and worth understanding before
+  // trusting it. Both sides of the comparison here are computed from
+  // `publicSource`, so they move together on purpose: this case is not a second
+  // copy of that key list, it is the claim that the DETAIL is the register row
+  // plus exactly `pulls` and `runbook`, whatever that row happens to be.
+  //
+  // Mutation that does make it red, watched (2026-08-18): added
+  // `pulls: s.pulls ?? null` to `publicSource`. Red here AND on the case above
+  // — and the two failures say different things. The one above says the
+  // register row changed; this one says the register row now COLLIDES with what
+  // the detail route spreads over it, so `GET /sources/{n}` would answer with
+  // the file list under a key that also means a column, and the register and
+  // the detail would disagree about the same source with nothing thrown.
+  it('the source detail payload is a Source spread FLAT, plus pulls and runbook', () => {
+    const detail = {
+      ...publicSource(
+        row({ seq: 1, name: 'WIR Bank', type: 'bank', expected: 'weekly', last_import: '2026-08-07', retired: false, ledger_accounts: ['1020'] }),
+        '2026-08-18',
+        'blackcode'
+      ),
+      pulls: [publicPull(row({ file: 'x.csv' }))],
+      runbook: publicRunbook(row({ version: '1' })),
+    }
+    // Anti-vacuous, and the load-bearing assertion of this case: the detail is
+    // the register row plus EXACTLY two keys. `publicSource` is pinned field by
+    // field further up, so counting against it rather than against a literal
+    // means adding a source field does not fail this case — the point is that
+    // the two payloads cannot drift apart, not that either is frozen.
+    const registerKeys = Object.keys(
+      publicSource(row({ seq: 1, ledger_accounts: [] }), '2026-08-18', null)
+    )
+    expect(registerKeys.length, 'publicSource returned nothing — this case is vacuous').toBeGreaterThan(3)
+    expect(Object.keys(detail).sort()).toEqual([...registerKeys, 'pulls', 'runbook'].sort())
+
+    // And neither addition may collide with a field the register row already
+    // has: a `pulls` column on `books.source` would be silently overwritten by
+    // the spread order, and the register and the detail would disagree about
+    // the same source with nothing thrown.
+    expect(registerKeys).not.toContain('pulls')
+    expect(registerKeys).not.toContain('runbook')
+    // The register row is NOT nested under a `source` key. `useSource` reads
+    // `data.name` and `data.status` directly, and one extra level would blank
+    // the header of the screen while `pulls` kept rendering.
+    expect('source' in detail, 'the source row is nested — useSource reads it flat').toBe(false)
+  })
+
+  // Mutation watched (2026-08-18): `...publicSource(...)` → `source: publicSource(...)`.
+  // Red, printing `['source','pulls','runbook']` against the expected set.
+  it('the source detail route spreads publicSource rather than nesting it', () => {
+    const src = readFileSync(join(APP_ROOT, 'app/api/workspaces/[ws]/sources/[number]/route.ts'), 'utf8')
+    expect(src, 'the source detail route no longer calls publicSource').toContain('publicSource')
+    const keys = envelopeKeys(src, { label: 'sources/{number}' })
+    expect(keys.length, 'found no envelope keys — the response moved').toBeGreaterThan(0)
+    expect(keys.sort()).toEqual(['...publicSource', 'pulls', 'runbook'].sort())
+  })
+
+  // --- invitations ---------------------------------------------------------
+  //
+  // ── THESE TWO ROUTES HAVE NO `lib/types.ts` COUNTERPART, BY DECISION ─────
+  // D-C: the word "workspace" never appears in this UI, there is no members
+  // page and no invite flow, so no screen reads either route and there is
+  // nothing in `lib/types.ts` to assert them against. That is the honest state
+  // and it is what this case pins — including the absence, because if a screen
+  // ever does appear the type has to appear with it rather than being typed
+  // inline at the call site.
+  //
+  // What is pinned instead is the contract `bk books invite list/send/revoke`
+  // reads, and the two facts about it that a screen would get wrong first: the
+  // listing IS `{data, next_cursor}` (unlike the worklist), and `accept_url` is
+  // part of the CREATE response because this app sends no email — a link
+  // nobody can copy is not a delivery mechanism.
+  //
+  // Mutations watched (2026-08-18), four: deleted `next_cursor: null` from the
+  // GET (red); deleted `accept_url` from the POST (red, naming it); appended
+  // `export interface Invitation { id: number }` to `lib/types.ts` (red, on the
+  // D-C assertion at the bottom); changed the DELETE to `{ deleted: 1 }`
+  // (GREEN — a real hole, recorded below rather than patched).
+  it('the invitations routes serve the envelopes bk reads, and no screen reads them', () => {
+    const list = readFileSync(join(APP_ROOT, 'app/api/workspaces/[ws]/invitations/route.ts'), 'utf8')
+    const one = readFileSync(join(APP_ROOT, 'app/api/workspaces/[ws]/invitations/[id]/route.ts'), 'utf8')
+    expect(list, 'the invitations route stopped calling listInvitations').toContain('listInvitations')
+    expect(one, 'the revoke route stopped calling revokeInvitation').toContain('revokeInvitation')
+
+    const listed = envelopeKeys(list, { after: 'export const GET', label: 'invitations GET' })
+    const created = envelopeKeys(list, { after: 'export const POST', label: 'invitations POST' })
+    const revoked = envelopeKeys(one, { after: 'export const DELETE', label: 'invitations DELETE' })
+    expect(listed.length + created.length + revoked.length, 'found no envelope keys at all').toBeGreaterThan(0)
+
+    expect(listed.sort()).toEqual(['data', 'next_cursor'].sort())
+    expect(created.sort()).toEqual(['accept_url', 'email_sent', 'invitation'].sort())
+    expect(revoked).toEqual(['deleted'])
+
+    // ── WHAT THIS CASE CANNOT ASK ──────────────────────────────────────────
+    // It reads KEYS, not values, so `{ deleted: 1 }` passes. That is a real
+    // hole and it is left open on purpose rather than patched with a text
+    // match: the shape it would catch is checked where it belongs, by
+    // `lib/cli-parity.test.ts` and by `bk books invite revoke` itself. What is
+    // NOT checked anywhere is `InvitationRow`'s field list, which is why the
+    // compile-time `_InvitationKeys` below exists.
+    //
+    // And it asserts the absence D-C decided: no screen reads these, so
+    // `lib/types.ts` declares nothing for them.
+    const types = readFileSync(join(APP_ROOT, 'lib/types.ts'), 'utf8')
+    expect(
+      /export interface Invitation\b/.test(types),
+      'lib/types.ts now declares an Invitation — a screen is reading these routes, ' +
+        'and D-C (no members page, no invite flow, the word "workspace" never on screen) ' +
+        'says that is a decision to make deliberately, not a type to add quietly'
+    ).toBe(false)
+  })
+
 })
 
 // ===========================================================================
@@ -696,6 +1058,30 @@ type PieceWire = ReturnType<typeof publicPiece>
  */
 type _EntityKeys = Mutual<keyof EntityWire, keyof Entity>
 type _AccountKeys = Mutual<keyof AccountWire, keyof Account>
+/**
+ * The fiscal year.
+ *
+ * ── ITS TYPE DOES NOT LIVE IN `lib/types.ts`, AND THAT IS WHY IT WAS MISSED ──
+ * `ExerciceRow` is declared in `lib/hooks.ts` beside the hook that reads it, so
+ * it was outside every list in this file until 2026-08-18 — it had the runtime
+ * key case above and no type assertion at all.
+ *
+ * ── AND IT IS A KEY ASSERTION ONLY, WHICH IS LESS THAN IT LOOKS ───────────
+ * Mutation watched (2026-08-18), the one that mattered: widened
+ * `ExerciceRow.status` from `'open' | 'closed'` to `string`. **GREEN.** It
+ * cannot fire — `publicExercice` reads a `varchar`, so the wire type is already
+ * `string`, and the union is a claim WE make on top of it. That is the same
+ * reason the file header gives for keeping the enum-ish fields out of
+ * `_Scalars`, and it means a third exercice state added server-side would still
+ * fall silently into this app's `open` branch. Recorded so the next reader does
+ * not mistake this for coverage it has not got.
+ *
+ * Mutation watched that DOES fire: deleted `ends_on` from `ExerciceRow`. Red at
+ * typecheck on `_ExerciceKeys`, which is the drift this closes — the exercice
+ * picker prints those bounds.
+ */
+type ExerciceWire = ReturnType<typeof publicExercice>
+type _ExerciceKeys = Mutual<keyof ExerciceWire, keyof ExerciceRow>
 type _EntryKeys = Mutual<keyof EntryWire, keyof Entry>
 type _PatrimoineKeys = Mutual<keyof PatrimoineWire, keyof PatrimoineSnapshot>
 type _VatKeys = Mutual<keyof EntityWire['vat'], keyof Entity['vat']>
@@ -718,6 +1104,72 @@ type _PieceSourceKeys = Mutual<keyof PieceWire['source'], keyof InboxPiece['sour
  * a book that has no staging step.
  */
 type _WorklistKeys = Mutual<keyof WorklistRowWire, keyof WorklistRow>
+
+// ── THE SEVEN INLINE ROUTES, AT COMPILE TIME — cleanup phase, 2026-08-18 ───
+// None of these has a `public*` function, so the wire type is the QUERY LAYER's
+// own exported interface. That is a weaker reference point than a shaping
+// function — it is a declaration rather than a value — but it is not a
+// hand-written list, and `getOverview`, `bilanFor`, `crFor` and
+// `listInvitations` all return it, so a field that stops being produced fails at
+// its own definition rather than here.
+type BilanWire = ReturnType<typeof bilanFor>
+type CrWire = ReturnType<typeof crFor>
+type OverviewWire = OverviewBookWire
+type InvitationWire = InvitationRow
+
+/**
+ * The bilan and the CR, plus the two keys their ROUTES add.
+ *
+ * The envelope is written into the assertion rather than asserted separately,
+ * because `entity` and `exercice` are not optional decoration: they are what the
+ * server RESOLVED, and a screen that shows a statement without them cannot tell
+ * a defaulted book from the one it asked for. `envelopeKeys` above proves the
+ * route still adds them; this proves `lib/types.ts` still expects them.
+ */
+type _BilanKeys = Mutual<keyof BilanWire | 'entity' | 'exercice', keyof BilanResultType>
+type _BilanGroupKeys = Mutual<keyof BilanWire['groups'][number], keyof BilanGroupResult>
+type _BilanLineKeys = Mutual<keyof BilanWire['groups'][number]['lines'][number], keyof BilanLineResult>
+type _CrKeys = Mutual<keyof CrWire | 'entity' | 'exercice', keyof CrResultType>
+type _CrLineKeys = Mutual<keyof CrWire['lines'][number], keyof CrLineResult>
+
+/**
+ * The overview row.
+ *
+ * ── THIS IS THE ASSERTION THAT FOUND THE CLEANUP PHASE'S FIRST DRIFT ──────
+ * `getOverview` has served `worklist` — unrecognized AND inferred, which is the
+ * count `bk books overview` prints under TO RESOLVE — since phase 2, and
+ * `lib/types.ts` declared only `unrecognized`, which is strictly the first of
+ * the two states. So the rollup panel labelled a number "Need a human" that
+ * excluded every inferred row: 2 where `bk` said 3, on the seeded blackcode
+ * book, from the same database in the same second.
+ *
+ * Neither key set nor typecheck could see it, because the field the wire gained
+ * was simply absent from our type and TypeScript does not mind a payload having
+ * more than you asked for. `Mutual` minds, in both directions, which is the
+ * whole reason it is written that way.
+ */
+type _OverviewKeys = Mutual<keyof OverviewWire, keyof OverviewBook>
+type _OverviewEnvelope = Mutual<'books', keyof OverviewResult>
+type _WorklistEnvelopeKeys = Mutual<'entity' | 'exercice' | 'count' | 'rows', keyof WorklistResult>
+type _SourceDetailKeys = Mutual<keyof SourceWire | 'pulls' | 'runbook', keyof SourceDetail>
+
+/**
+ * `InvitationRow` — pinned with NO `lib/types.ts` counterpart, on purpose.
+ *
+ * D-C bars an invite flow from this UI, so there is nothing to be assignable
+ * to. What this asserts is that the interface still carries the four fields the
+ * route's answer is useless without — and `token` above all, which is why the
+ * listing is owner-only: it is redeemable access, in the clear, by design
+ * (`lib/db/queries/invitations.ts` explains why it is not hashed).
+ *
+ * If a screen ever reads these routes, replace this with a real `Mutual`
+ * against a declared type. Leaving it as a presence check would then be the
+ * vacuous half of a real difference.
+ */
+type _InvitationKeys = Mutual<
+  'id' | 'email' | 'role' | 'token' | 'status' | 'expires_at' | 'created_at' | 'invited_by_name' | 'invited_by_email',
+  keyof InvitationWire
+>
 
 /**
  * The SCALAR TYPES, field by field, for every field where the wire type is not
@@ -885,6 +1337,7 @@ type _Scalars = [
 const _keys: [
   _EntityKeys,
   _AccountKeys,
+  _ExerciceKeys,
   _EntryKeys,
   _PatrimoineKeys,
   _VatKeys,
@@ -897,7 +1350,21 @@ const _keys: [
   _ManifestKeys,
   _PieceKeys,
   _PieceSourceKeys,
-] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true]
+  // ── the seven inline routes, cleanup phase 2026-08-18 ──────────────────
+  _BilanKeys,
+  _BilanGroupKeys,
+  _BilanLineKeys,
+  _CrKeys,
+  _CrLineKeys,
+  _OverviewKeys,
+  _OverviewEnvelope,
+  _WorklistEnvelopeKeys,
+  _SourceDetailKeys,
+  _InvitationKeys,
+] = [
+  true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+  true, true, true, true, true, true, true, true, true, true, true,
+]
 const _scalars: _Scalars = [
   true, true, true, true, true, true, true, true, true, true, true, true, true,
   true, true, true,

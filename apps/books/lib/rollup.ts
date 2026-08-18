@@ -62,7 +62,24 @@ export interface Rollup {
    */
   resultat: Money
   entries: number
+  /**
+   * STRICTLY unrecognized, across every book. Not the work outstanding.
+   *
+   * Kept because it is a real number a screen may want to say the word
+   * "unrecognized" about — but the panel's "Need a human" figure is `worklist`
+   * below, and the two differ the moment anything is `inferred`.
+   */
   unrecognized: number
+  /**
+   * What actually needs a human: `unrecognized` OR `inferred`, summed.
+   *
+   * ── ADDED 2026-08-18, BECAUSE THE PANEL WAS ADDING THE WRONG FIELD ───────
+   * `GET …/overview` has served this per book since phase 2 and `lib/types.ts`
+   * did not declare it, so `RollupPanel` summed `unrecognized` under the label
+   * "Need a human" — 4 where `bk books overview` totalled 5, on the seeded
+   * workspace. Nothing threw; the smaller number simply looked like less work.
+   */
+  worklist: number
   staged: number
   /** Books with no fiscal year yet — they contribute nothing and are counted. */
   withoutExercice: number
@@ -82,6 +99,7 @@ export function rollup(books: OverviewBook[]): Rollup {
   let withoutExercice = 0
   let entries = 0
   let unrecognized = 0
+  let worklist = 0
   let staged = 0
 
   for (const b of books) {
@@ -97,6 +115,7 @@ export function rollup(books: OverviewBook[]): Rollup {
     }
     entries += b.entries
     unrecognized += b.unrecognized
+    worklist += b.worklist
     staged += b.staged
   }
 
@@ -108,6 +127,7 @@ export function rollup(books: OverviewBook[]): Rollup {
     resultat: fromCentimes(resultat),
     entries,
     unrecognized,
+    worklist,
     staged,
     withoutExercice,
   }

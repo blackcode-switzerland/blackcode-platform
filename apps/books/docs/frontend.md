@@ -87,6 +87,30 @@ resolveForm`, offered "Explain this" on every pièce. Pressing it would have
 POSTed `/entries/{piece.number}/resolve`, rewriting the journal entry of the same
 number. The branch is a tested predicate now: `lib/resolvable.ts`.
 
+**Two more wire facts, found by the cleanup sweep on 2026-08-18 and now pinned
+in `lib/wire-parity.test.ts`:**
+
+- **`…/overview` serves `worklist` as well as `unrecognized`, and they are
+  different numbers.** `unrecognized` is strictly `recognition = 'unrecognized'`;
+  `worklist` is `unrecognized` OR `inferred`, which is what the Recognition
+  screen lists and what `bk books overview` prints under `TO RESOLVE`.
+  `lib/types.ts` declared only the first, so nothing could read the second and
+  the rollup panel labelled the strict count "Need a human" — 4 against `bk`'s 5
+  on the seeded workspace. **Anything phrased as work outstanding reads
+  `worklist`.** Neither is the same as `WorklistResult.count`, which also counts
+  pièce rows. Caught by `_OverviewKeys`, and it could only be caught by a
+  BIDIRECTIONAL assertion: a payload carrying more than the type asks for is not
+  a TypeScript error.
+
+- **`…/entries/{number}` is NOT scoped by entity or exercice.** It resolves on
+  `workspace_id + seq`, correctly, because `books.entry.seq` is workspace-wide —
+  so `?entity=` and `?exercice=` on that URL are inert. The transaction screen
+  used to print the book and year from those parameters beside the entry, which
+  meant changing the book selector relabelled an unchanged écriture with another
+  company's name (reproduced in one click). **The payload carries neither field**,
+  so no screen can state them; serving `entity` and `exercice` there is an open
+  backend request. Until then the screen names no book, and says why.
+
 Everything else under `app/api/` is platform scaffold: auth, `/api/me`,
 workspaces, members, invitations.
 
@@ -192,12 +216,32 @@ writing.
 that need them. They are commented rather than stubbed, because a stub that
 returns success is a lie a component builds on.
 
-`useMatchPiece` is worth reading for one property the others do not have: **the
-entry #number is disambiguated by the pièce's own book.** `matchPiece` asks
-`journalOf(piece.entity_id)` first — a simplified book's entries are `ri_entry`
-rows, a double-entry book's are the grand livre's, and an unattributed pièce
-reads as the grand livre. The caller supplies context rather than having to get
-a number right, which is the shape ticket #51's `resolve` should be fixed into.
+> **`useMatchPiece` IS SWITCHED OFF IN THE UI, AND THIS PARAGRAPH USED TO SAY
+> WHY IT WAS SAFE. IT WAS WRONG.** What stood here was: *"the entry #number is
+> disambiguated by the pièce's own book — `matchPiece` asks
+> `journalOf(piece.entity_id)` first … the caller supplies context rather than
+> having to get a number right, which is the shape ticket #51's `resolve` should
+> be fixed into."* `journalOf` chooses **which journal** — grand livre or
+> recettes-dépenses — and nothing more. The recettes-dépenses branch then filters
+> its lookup on `entity_id`; **the grand-livre branch does not.**
+>
+> So for a double-entry book the entry is resolved on `workspace_id + seq`
+> alone, exactly like the `resolve` route this paragraph held it up as the fix
+> for. Verified 2026-08-18 against the seeded workspace:
+> `bk books piece match 1 --entry 16` attached blackcode SA's pièce to AIOS
+> Companion SA's écriture, printed `matched piece #1 -> entry #16`, exited 0,
+> replaced that entry's Drive reference and SHA-256 with a NULL hash, left
+> `evidence_tier` at `full` and wrote nothing to `history`. The data was restored.
+>
+> The web form is withheld for this reason (`components/pieces-inbox.tsx`, and
+> the documents screen now says so to the reader). **`bk books piece match` is
+> not a workaround** — it reaches the same code. Re-enabling both waits on the
+> server filtering the grand-livre lookup by entity; ticket #53.
+>
+> The same claim was in `booksFrontend/DECISIONS.md` D-G and is corrected there
+> too. It is worth noting how it survived: the call to `journalOf(piece.entity_id)`
+> is real and is on the line the claim points at, so reading the code confirmed
+> the sentence. Running it did not.
 
 ### A write answers with a RESULT, not with `null` and a flag
 

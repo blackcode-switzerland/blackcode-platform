@@ -767,8 +767,39 @@ export interface OverviewBook {
     resultat: Money
   } | null
   entries: number
-  /** Entries needing a human. Phase 2's worklist count. */
+  /**
+   * STRICTLY `recognition = 'unrecognized'` — not the worklist count.
+   *
+   * ── THE COMMENT HERE USED TO SAY "Phase 2's worklist count" AND IT WAS ────
+   * ── WRONG, WHICH IS HOW A LABEL ON A SCREEN CAME TO BE WRONG TOO ─────────
+   * The worklist is `unrecognized` OR `inferred`: an inference nobody confirmed
+   * still needs a human. This field counts only the first of the two, so it is
+   * always less than or equal to `worklist` below and it under-reports whenever
+   * a rule has guessed at something. On the seeded blackcode book, 2 against 3.
+   *
+   * The overview page labelled the ROLLUP of this field "Need a human" while
+   * `bk books overview` printed `worklist` under TO RESOLVE from the same
+   * database. Use `worklist` for anything phrased as work outstanding; use this
+   * one only where the word "unrecognized" is what is actually meant.
+   */
   unrecognized: number
+  /**
+   * What the Reconnaissance worklist ACTUALLY lists for this book:
+   * `recognition IN ('unrecognized', 'inferred')`.
+   *
+   * ── SERVED SINCE PHASE 2 AND DECLARED HERE ONLY ON 2026-08-18 ────────────
+   * `getOverview` has always returned it; this type did not have it, so nothing
+   * could read it and the screen used `unrecognized` instead. Found by
+   * `_OverviewKeys` in `lib/wire-parity.test.ts`, which is the assertion this
+   * whole class of drift exists to be caught by — the key set alone could not
+   * see it, because TypeScript does not object to a payload carrying more than
+   * you asked for. `Mutual` objects, in both directions.
+   *
+   * **It is not the same as `WorklistResult.count`.** That counts pièce rows
+   * too; this counts entries only. See `useWorklist` in `lib/hooks.ts`, which
+   * records the one case where the two predicates could disagree.
+   */
+  worklist: number
   staged: number
 }
 
