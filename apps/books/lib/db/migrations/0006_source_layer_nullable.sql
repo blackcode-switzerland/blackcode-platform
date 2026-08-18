@@ -1,0 +1,22 @@
+-- b/books, migration 0006 — `source.layer` is optional, because it is phase 3's.
+--
+-- Found by running the seed, which is the first real client the schema had. 0003
+-- declared `layer` NOT NULL and four of the mockup's nine sources have none:
+--
+--   505 Stripe                          type=processor     layer absent
+--   506 GitHub billing                  type=saas          layer absent
+--   507 AIOSCompanion spend (Ibrahim)   type=card          layer absent
+--   510 Drive - inbox pieces            type=drive_folder  layer absent
+--
+-- `layer` belongs to the three-tier source hierarchy (bank -> card -> processor)
+-- that phase 3 builds. Today only the bank and card sources have a tier assigned,
+-- and the rest are legitimately un-tiered rather than incomplete.
+--
+-- `type` stays NOT NULL, and it is the field that actually classifies a source.
+-- The five values present are bank, card, processor, saas and drive_folder.
+--
+-- ── WHY THIS IS A SEPARATE MIGRATION AND NOT AN EDIT TO 0003 ────────────────
+-- 0003 is applied and committed. Editing an applied migration means the file and
+-- the database disagree for anybody who already ran it, and Drizzle will not
+-- re-run it to reconcile them. A schema mistake is fixed forward.
+ALTER TABLE books.source ALTER COLUMN layer DROP NOT NULL;

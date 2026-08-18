@@ -1,0 +1,3600 @@
+{
+  "TODAY": "2026-08-10",
+  "ENTITIES": [
+    {
+      "id": 1,
+      "slug": "blackcode",
+      "name": "blackcode SA",
+      "legal_form": "SA",
+      "seat": "Chemin de la Roche 6, 1020 Renens VD",
+      "bookkeeping_regime": "double_entry",
+      "fiscal_year": "calendar",
+      "exercice": 2026,
+      "vat_registered": true,
+      "vat_method": "effective",
+      "vat_filing": "quarterly",
+      "audit_status": "opted_out",
+      "fte_count": 4.6,
+      "accent": "#e8b84b"
+    },
+    {
+      "id": 2,
+      "slug": "aios",
+      "name": "AIOS Companion SA",
+      "legal_form": "SA",
+      "seat": "Chemin de la Roche 6, 1020 Renens VD",
+      "bookkeeping_regime": "double_entry",
+      "fiscal_year": "calendar",
+      "exercice": 2026,
+      "vat_registered": false,
+      "vat_method": null,
+      "vat_filing": null,
+      "vat_note": {
+        "fr": "Seuil de CHF 100'000 non atteint — règle vat-001 surveillée par l'agent.",
+        "en": "CHF 100,000 threshold not reached — rule vat-001 watched by the agent."
+      },
+      "audit_status": "opted_out",
+      "fte_count": 1.2,
+      "accent": "#7dd3fc"
+    },
+    {
+      "id": 3,
+      "slug": "ri",
+      "name": "Andrea — Raison Individuelle",
+      "legal_form": "RI",
+      "seat": "Renens VD",
+      "bookkeeping_regime": "simplified",
+      "regime_note": {
+        "fr": "CA < CHF 500'000 → comptabilité recettes/dépenses + patrimoine (art. 957 al. 2 CO). Passage volontaire en partie double possible par exercice.",
+        "en": "Turnover < CHF 500,000 → income/expense + net-worth bookkeeping (art. 957 al. 2 CO). Voluntary double-entry switch possible per fiscal year."
+      },
+      "fiscal_year": "calendar",
+      "exercice": 2026,
+      "vat_registered": false,
+      "vat_method": null,
+      "vat_filing": null,
+      "audit_status": null,
+      "fte_count": null,
+      "accent": "#b18cff"
+    }
+  ],
+  "ACCOUNTS": [
+    {
+      "no": "1020",
+      "class": 1,
+      "label": {
+        "fr": "Banque WIR",
+        "enSuffix": "WIR bank"
+      },
+      "statement": "bilan",
+      "statement_position": "tresorerie"
+    },
+    {
+      "no": "1021",
+      "class": 1,
+      "label": {
+        "fr": "Banque UBS (gelée)",
+        "enSuffix": "UBS bank (frozen)"
+      },
+      "statement": "bilan",
+      "statement_position": "tresorerie"
+    },
+    {
+      "no": "1022",
+      "class": 1,
+      "label": {
+        "fr": "Yapeal",
+        "enSuffix": "Yapeal"
+      },
+      "statement": "bilan",
+      "statement_position": "tresorerie"
+    },
+    {
+      "no": "1100",
+      "class": 1,
+      "label": {
+        "fr": "Créances clients",
+        "enSuffix": "Trade receivables"
+      },
+      "statement": "bilan",
+      "statement_position": "creances_clients"
+    },
+    {
+      "no": "1141",
+      "class": 1,
+      "label": {
+        "fr": "Prêts aux entités liées",
+        "enSuffix": "Loans to related entities"
+      },
+      "statement": "bilan",
+      "statement_position": "autres_creances_ct_liees",
+      "related_party": true
+    },
+    {
+      "no": "1300",
+      "class": 1,
+      "label": {
+        "fr": "Actifs de régularisation",
+        "enSuffix": "Accrued assets"
+      },
+      "statement": "bilan",
+      "statement_position": "regularisation_actif"
+    },
+    {
+      "no": "1510",
+      "class": 1,
+      "label": {
+        "fr": "Mobilier et informatique",
+        "enSuffix": "Furniture & IT"
+      },
+      "statement": "bilan",
+      "statement_position": "immo_corporelles"
+    },
+    {
+      "no": "1850",
+      "class": 1,
+      "label": {
+        "fr": "Capital social non libéré",
+        "enSuffix": "Unpaid share capital"
+      },
+      "statement": "bilan",
+      "statement_position": "capital_non_libere"
+    },
+    {
+      "no": "2000",
+      "class": 2,
+      "label": {
+        "fr": "Dettes fournisseurs",
+        "enSuffix": "Trade payables"
+      },
+      "statement": "bilan",
+      "statement_position": "dettes_fournisseurs"
+    },
+    {
+      "no": "2200",
+      "class": 2,
+      "label": {
+        "fr": "TVA due",
+        "enSuffix": "VAT payable"
+      },
+      "statement": "bilan",
+      "statement_position": "autres_dettes_ct"
+    },
+    {
+      "no": "2261",
+      "class": 2,
+      "label": {
+        "fr": "Dettes envers entités liées",
+        "enSuffix": "Debts to related entities"
+      },
+      "statement": "bilan",
+      "statement_position": "autres_dettes_ct_liees",
+      "related_party": true
+    },
+    {
+      "no": "2300",
+      "class": 2,
+      "label": {
+        "fr": "Passifs de régularisation",
+        "enSuffix": "Accrued liabilities"
+      },
+      "statement": "bilan",
+      "statement_position": "regularisation_passif"
+    },
+    {
+      "no": "2800",
+      "class": 2,
+      "label": {
+        "fr": "Capital-actions",
+        "enSuffix": "Share capital"
+      },
+      "statement": "bilan",
+      "statement_position": "capital_actions"
+    },
+    {
+      "no": "2950",
+      "class": 2,
+      "label": {
+        "fr": "Réserve légale issue du bénéfice",
+        "enSuffix": "Legal reserve from profit"
+      },
+      "statement": "bilan",
+      "statement_position": "reserve_benefice"
+    },
+    {
+      "no": "2970",
+      "class": 2,
+      "label": {
+        "fr": "Bénéfice / perte reporté(e)",
+        "enSuffix": "Retained earnings / loss"
+      },
+      "statement": "bilan",
+      "statement_position": "resultat_reporte"
+    },
+    {
+      "no": "3400",
+      "class": 3,
+      "label": {
+        "fr": "Prestations de services",
+        "enSuffix": "Service revenue"
+      },
+      "statement": "cr",
+      "statement_position": "produits_nets"
+    },
+    {
+      "no": "4400",
+      "class": 4,
+      "label": {
+        "fr": "Prestations de tiers",
+        "enSuffix": "Third-party services"
+      },
+      "statement": "cr",
+      "statement_position": "charges_materiel"
+    },
+    {
+      "no": "5000",
+      "class": 5,
+      "label": {
+        "fr": "Salaires",
+        "enSuffix": "Salaries"
+      },
+      "statement": "cr",
+      "statement_position": "charges_personnel"
+    },
+    {
+      "no": "5700",
+      "class": 5,
+      "label": {
+        "fr": "Charges sociales",
+        "enSuffix": "Social charges"
+      },
+      "statement": "cr",
+      "statement_position": "charges_personnel"
+    },
+    {
+      "no": "6000",
+      "class": 6,
+      "label": {
+        "fr": "Loyer",
+        "enSuffix": "Rent"
+      },
+      "statement": "cr",
+      "statement_position": "autres_charges_exploitation"
+    },
+    {
+      "no": "6500",
+      "class": 6,
+      "label": {
+        "fr": "Administration & fiduciaire",
+        "enSuffix": "Admin & fiduciary"
+      },
+      "statement": "cr",
+      "statement_position": "autres_charges_exploitation"
+    },
+    {
+      "no": "6570",
+      "class": 6,
+      "label": {
+        "fr": "Informatique & abonnements",
+        "enSuffix": "IT & subscriptions"
+      },
+      "statement": "cr",
+      "statement_position": "autres_charges_exploitation"
+    },
+    {
+      "no": "6800",
+      "class": 6,
+      "label": {
+        "fr": "Amortissements",
+        "enSuffix": "Depreciation"
+      },
+      "statement": "cr",
+      "statement_position": "amortissements"
+    },
+    {
+      "no": "6900",
+      "class": 6,
+      "label": {
+        "fr": "Charges financières",
+        "enSuffix": "Financial expense"
+      },
+      "statement": "cr",
+      "statement_position": "financier"
+    },
+    {
+      "no": "8500",
+      "class": 8,
+      "label": {
+        "fr": "Charges hors exploitation",
+        "enSuffix": "Non-operating expense"
+      },
+      "statement": "cr",
+      "statement_position": "hors_exploitation"
+    },
+    {
+      "no": "8900",
+      "class": 8,
+      "label": {
+        "fr": "Impôts directs",
+        "enSuffix": "Direct taxes"
+      },
+      "statement": "cr",
+      "statement_position": "impots"
+    }
+  ],
+  "BILAN_STRUCTURE": [
+    {
+      "group": {
+        "fr": "Actif circulant",
+        "en": "Current assets"
+      },
+      "side": "actif",
+      "lines": [
+        {
+          "pos": "tresorerie",
+          "label": {
+            "fr": "Trésorerie",
+            "en": "Cash & equivalents"
+          }
+        },
+        {
+          "pos": "creances_clients",
+          "label": {
+            "fr": "Créances résultant de ventes et prestations",
+            "en": "Trade receivables"
+          }
+        },
+        {
+          "pos": "autres_creances_ct",
+          "label": {
+            "fr": "Autres créances à court terme",
+            "en": "Other short-term receivables"
+          }
+        },
+        {
+          "pos": "autres_creances_ct_liees",
+          "label": {
+            "fr": "Autres créances c.t. envers entités liées / actionnaire (art. 959a al. 4)",
+            "en": "Other s.-t. receivables from related entities / shareholder (art. 959a al. 4)"
+          },
+          "related": true
+        },
+        {
+          "pos": "stocks",
+          "label": {
+            "fr": "Stocks et prestations non facturées",
+            "en": "Inventory & unbilled services"
+          }
+        },
+        {
+          "pos": "regularisation_actif",
+          "label": {
+            "fr": "Actifs de régularisation",
+            "en": "Accrued income & prepaid expenses"
+          }
+        }
+      ]
+    },
+    {
+      "group": {
+        "fr": "Actif immobilisé",
+        "en": "Fixed assets"
+      },
+      "side": "actif",
+      "lines": [
+        {
+          "pos": "immo_financieres",
+          "label": {
+            "fr": "Immobilisations financières",
+            "en": "Financial assets"
+          }
+        },
+        {
+          "pos": "participations",
+          "label": {
+            "fr": "Participations",
+            "en": "Participations"
+          }
+        },
+        {
+          "pos": "immo_corporelles",
+          "label": {
+            "fr": "Immobilisations corporelles",
+            "en": "Tangible fixed assets"
+          }
+        },
+        {
+          "pos": "immo_incorporelles",
+          "label": {
+            "fr": "Immobilisations incorporelles",
+            "en": "Intangible fixed assets"
+          }
+        },
+        {
+          "pos": "capital_non_libere",
+          "label": {
+            "fr": "Capital social non libéré",
+            "en": "Unpaid share capital"
+          }
+        }
+      ]
+    },
+    {
+      "group": {
+        "fr": "Capitaux étrangers à court terme",
+        "en": "Short-term liabilities"
+      },
+      "side": "passif",
+      "lines": [
+        {
+          "pos": "dettes_fournisseurs",
+          "label": {
+            "fr": "Dettes résultant d'achats et prestations",
+            "en": "Trade payables"
+          }
+        },
+        {
+          "pos": "dettes_ct_interet",
+          "label": {
+            "fr": "Dettes à court terme portant intérêt",
+            "en": "Short-term interest-bearing debt"
+          }
+        },
+        {
+          "pos": "autres_dettes_ct",
+          "label": {
+            "fr": "Autres dettes à court terme",
+            "en": "Other short-term liabilities"
+          }
+        },
+        {
+          "pos": "autres_dettes_ct_liees",
+          "label": {
+            "fr": "Autres dettes c.t. envers entités liées / actionnaire (art. 959a al. 4)",
+            "en": "Other s.-t. liabilities to related entities / shareholder (art. 959a al. 4)"
+          },
+          "related": true
+        },
+        {
+          "pos": "regularisation_passif",
+          "label": {
+            "fr": "Passifs de régularisation",
+            "en": "Accrued expenses & deferred income"
+          }
+        }
+      ]
+    },
+    {
+      "group": {
+        "fr": "Capitaux étrangers à long terme",
+        "en": "Long-term liabilities"
+      },
+      "side": "passif",
+      "lines": [
+        {
+          "pos": "dettes_lt_interet",
+          "label": {
+            "fr": "Dettes à long terme portant intérêt",
+            "en": "Long-term interest-bearing debt"
+          }
+        },
+        {
+          "pos": "autres_dettes_lt",
+          "label": {
+            "fr": "Autres dettes à long terme",
+            "en": "Other long-term liabilities"
+          }
+        },
+        {
+          "pos": "provisions",
+          "label": {
+            "fr": "Provisions",
+            "en": "Provisions"
+          }
+        }
+      ]
+    },
+    {
+      "group": {
+        "fr": "Capitaux propres",
+        "en": "Equity"
+      },
+      "side": "passif",
+      "lines": [
+        {
+          "pos": "capital_actions",
+          "label": {
+            "fr": "Capital-actions",
+            "en": "Share capital"
+          }
+        },
+        {
+          "pos": "reserve_capital",
+          "label": {
+            "fr": "Réserve légale issue du capital",
+            "en": "Legal capital reserve"
+          }
+        },
+        {
+          "pos": "reserve_benefice",
+          "label": {
+            "fr": "Réserve légale issue du bénéfice",
+            "en": "Legal profit reserve"
+          }
+        },
+        {
+          "pos": "reserves_facultatives",
+          "label": {
+            "fr": "Réserves facultatives",
+            "en": "Voluntary reserves"
+          }
+        },
+        {
+          "pos": "resultat_reporte",
+          "label": {
+            "fr": "Bénéfice / perte reporté(e)",
+            "en": "Retained earnings / accumulated loss"
+          }
+        },
+        {
+          "pos": "resultat_exercice",
+          "label": {
+            "fr": "Bénéfice / perte de l'exercice",
+            "en": "Result of the year"
+          },
+          "derived": true
+        }
+      ]
+    }
+  ],
+  "CR_STRUCTURE": [
+    {
+      "pos": "produits_nets",
+      "label": {
+        "fr": "Produits nets des ventes et prestations",
+        "en": "Net revenue from goods & services"
+      },
+      "sign": 1
+    },
+    {
+      "pos": "variation_stocks",
+      "label": {
+        "fr": "Variation des stocks / prestations non facturées",
+        "en": "Change in inventory / unbilled services"
+      },
+      "sign": 1
+    },
+    {
+      "pos": "charges_materiel",
+      "label": {
+        "fr": "Charges de matériel et de prestations de tiers",
+        "en": "Material & third-party service expense"
+      },
+      "sign": -1
+    },
+    {
+      "pos": "charges_personnel",
+      "label": {
+        "fr": "Charges de personnel",
+        "en": "Personnel expense"
+      },
+      "sign": -1
+    },
+    {
+      "pos": "autres_charges_exploitation",
+      "label": {
+        "fr": "Autres charges d'exploitation",
+        "en": "Other operating expense"
+      },
+      "sign": -1
+    },
+    {
+      "pos": "amortissements",
+      "label": {
+        "fr": "Amortissements et corrections de valeur",
+        "en": "Depreciation & value adjustments"
+      },
+      "sign": -1
+    },
+    {
+      "pos": "financier",
+      "label": {
+        "fr": "Charges et produits financiers",
+        "en": "Financial expense & income"
+      },
+      "sign": -1
+    },
+    {
+      "pos": "hors_exploitation",
+      "label": {
+        "fr": "Charges et produits hors exploitation",
+        "en": "Non-operating expense & income"
+      },
+      "sign": -1
+    },
+    {
+      "pos": "exceptionnel",
+      "label": {
+        "fr": "Charges et produits exceptionnels, uniques ou hors période",
+        "en": "Extraordinary, one-off or prior-period items"
+      },
+      "sign": -1
+    },
+    {
+      "pos": "impots",
+      "label": {
+        "fr": "Impôts directs",
+        "en": "Direct taxes"
+      },
+      "sign": -1
+    }
+  ],
+  "OPENING": {
+    "blackcode": {
+      "1020": 42000,
+      "1021": 18500,
+      "1022": 3200,
+      "1100": 22333.03,
+      "1141": 10000,
+      "1300": 1800,
+      "1510": 14500,
+      "2000": 8900,
+      "2200": 4150,
+      "2300": 2283.03,
+      "2800": 100000,
+      "2950": 3000,
+      "2970": -6000
+    },
+    "aios": {
+      "1020": 12400,
+      "1300": 300,
+      "1510": 2100,
+      "1850": 50000,
+      "2000": 1200,
+      "2261": 10000,
+      "2800": 100000,
+      "2970": -46400
+    }
+  },
+  "RECOGNITION": {
+    "known_recurring": {
+      "label": {
+        "fr": "Récurrent connu",
+        "en": "Known recurring"
+      },
+      "color": "#3fb27f"
+    },
+    "known_one_off": {
+      "label": {
+        "fr": "Ponctuel connu",
+        "en": "Known one-off"
+      },
+      "color": "#3fb27f"
+    },
+    "inferred": {
+      "label": {
+        "fr": "Inféré",
+        "en": "Inferred"
+      },
+      "color": "#f0b66b"
+    },
+    "unrecognized": {
+      "label": {
+        "fr": "Non reconnu",
+        "en": "Unrecognized"
+      },
+      "color": "#ef6f6f"
+    }
+  },
+  "EVIDENCE_TIERS": {
+    "full": {
+      "label": {
+        "fr": "Complet",
+        "en": "Full"
+      },
+      "color": "#3fb27f",
+      "note": {
+        "fr": "Pièce conforme art. 26 LTVA — déduction et impôt préalable sûrs.",
+        "en": "Art. 26 LTVA-compliant document — deduction and input VAT safe."
+      }
+    },
+    "partial": {
+      "label": {
+        "fr": "Partiel",
+        "en": "Partial"
+      },
+      "color": "#f0b66b",
+      "note": {
+        "fr": "Relevé bancaire + plausibilité reconstruite — déduction probable (visa fiduciaire requis), impôt préalable PERDU.",
+        "en": "Bank record + reconstructed plausibility — deduction likely (fiduciary sign-off needed), input VAT LOST."
+      }
+    },
+    "bare": {
+      "label": {
+        "fr": "Nu",
+        "en": "Bare"
+      },
+      "color": "#ef6f6f",
+      "note": {
+        "fr": "Relevé bancaire seul — risque de reprise fiscale ; impôt préalable perdu ; risque de distribution dissimulée si contrepartie liée.",
+        "en": "Bank record only — reprise risk; input VAT lost; disguised-distribution risk if counterparty is related."
+      }
+    }
+  },
+  "TX_STATUS": {
+    "posted": {
+      "label": {
+        "fr": "Comptabilisé",
+        "en": "Posted"
+      },
+      "color": "#3fb27f"
+    },
+    "staged": {
+      "label": {
+        "fr": "En attente",
+        "en": "Staged"
+      },
+      "color": "#f0b66b"
+    }
+  },
+  "SOURCE_TYPES": {
+    "bank": {
+      "icon": "landmark",
+      "label": {
+        "fr": "Banque",
+        "en": "Bank"
+      }
+    },
+    "card": {
+      "icon": "credit-card",
+      "label": {
+        "fr": "Carte",
+        "en": "Card"
+      }
+    },
+    "processor": {
+      "icon": "repeat",
+      "label": {
+        "fr": "Processeur paiement",
+        "en": "Payment processor"
+      }
+    },
+    "saas": {
+      "icon": "app-window",
+      "label": {
+        "fr": "Dépense SaaS",
+        "en": "SaaS spend"
+      }
+    },
+    "drive_folder": {
+      "icon": "folder",
+      "label": {
+        "fr": "Dossier Drive",
+        "en": "Drive folder"
+      }
+    }
+  },
+  "SOURCE_LAYERS": {
+    "bank": {
+      "label": {
+        "fr": "Couche 1 · Banque",
+        "en": "Layer 1 · Bank"
+      }
+    },
+    "card": {
+      "label": {
+        "fr": "Couche 2 · Carte",
+        "en": "Layer 2 · Card"
+      }
+    },
+    "routing_app": {
+      "label": {
+        "fr": "Couche 3 · Routage",
+        "en": "Layer 3 · Routing"
+      }
+    }
+  },
+  "SOURCE_STATUS": {
+    "current": {
+      "label": {
+        "fr": "À jour",
+        "en": "Current"
+      },
+      "color": "#3fb27f"
+    },
+    "stale": {
+      "label": {
+        "fr": "En retard",
+        "en": "Stale"
+      },
+      "color": "#f0b66b"
+    },
+    "gap": {
+      "label": {
+        "fr": "Trou détecté",
+        "en": "Gap detected"
+      },
+      "color": "#ef6f6f"
+    },
+    "never_connected": {
+      "label": {
+        "fr": "Jamais connecté",
+        "en": "Never connected"
+      },
+      "color": "#7a8595"
+    },
+    "retired": {
+      "label": {
+        "fr": "Clôturé",
+        "en": "Retired"
+      },
+      "color": "#7a8595"
+    }
+  },
+  "TVA_RATES": [
+    8.1,
+    2.6,
+    3.8,
+    0
+  ],
+  "RECOGNITION_RULES": [
+    {
+      "id": 101,
+      "entity_id": 1,
+      "source_id": 501,
+      "active": true,
+      "source": "contract",
+      "pattern": {
+        "counterparty": "IMMOREGIE",
+        "amount_chf": 1850,
+        "tolerance_chf": 0,
+        "interval": "monthly"
+      },
+      "explanation": {
+        "fr": "Loyer bureau Prilly — bail commercial, CHF 1'850/mois, attendu le 5 du mois, payé depuis WIR.",
+        "en": "Prilly office rent — commercial lease, CHF 1,850/month, expected on the 5th, paid from WIR."
+      },
+      "account": "6000",
+      "created_from": 1001,
+      "created": "2026-01-06",
+      "note": {
+        "fr": "Enseignée par une écriture UBS (1001) avant la migration du loyer vers WIR — la clé actuelle est (WIR, IMMOREGIE).",
+        "en": "Taught by a UBS entry (1001) before rent moved to WIR — the current key is (WIR, IMMOREGIE)."
+      }
+    },
+    {
+      "id": 102,
+      "entity_id": 1,
+      "source_id": 503,
+      "active": true,
+      "source": "subscription",
+      "pattern": {
+        "counterparty": "GITHUB",
+        "amount_chf": 44,
+        "tolerance_chf": 3,
+        "interval": "monthly"
+      },
+      "explanation": {
+        "fr": "Abonnement GitHub Team — facturé sur la carte Yapeal 6474. Si GitHub apparaît un jour sur une AUTRE source (p.ex. la ligne AIOS), c'est un fait nouveau → file d'attente.",
+        "en": "GitHub Team subscription — billed on the Yapeal 6474 card. If GitHub ever shows on ANOTHER source (e.g. the AIOS line), that is a new fact → queue."
+      },
+      "account": "6570",
+      "created_from": null,
+      "created": "2025-11-02"
+    },
+    {
+      "id": 103,
+      "entity_id": 1,
+      "source_id": 501,
+      "active": true,
+      "source": "contract",
+      "pattern": {
+        "counterparty": "SALAIRES",
+        "amount_chf": 13350,
+        "tolerance_chf": 100,
+        "interval": "monthly"
+      },
+      "explanation": {
+        "fr": "Paie mensuelle (salaires + charges sociales) — contrats b/people, depuis WIR.",
+        "en": "Monthly payroll (salaries + social charges) — b/people contracts, from WIR."
+      },
+      "account": "5000",
+      "created_from": null,
+      "created": "2025-10-25"
+    },
+    {
+      "id": 104,
+      "entity_id": 1,
+      "source_id": 505,
+      "active": true,
+      "source": "contract",
+      "pattern": {
+        "counterparty": "STRIPE",
+        "amount_chf": null,
+        "tolerance_chf": null,
+        "interval": "weekly"
+      },
+      "explanation": {
+        "fr": "Versements Stripe — encaissements clients en ligne, montant variable.",
+        "en": "Stripe payouts — online client collections, variable amount."
+      },
+      "account": "3400",
+      "created_from": null,
+      "created": "2025-09-14"
+    },
+    {
+      "id": 105,
+      "entity_id": 1,
+      "source_id": 501,
+      "active": true,
+      "source": "subscription",
+      "pattern": {
+        "counterparty": "SWISSCOM",
+        "amount_chf": 89.9,
+        "tolerance_chf": 5,
+        "interval": "monthly"
+      },
+      "explanation": {
+        "fr": "Swisscom — internet fibre bureau, depuis WIR.",
+        "en": "Swisscom — office fibre internet, from WIR."
+      },
+      "account": "6570",
+      "created_from": null,
+      "created": "2025-08-20"
+    },
+    {
+      "id": 106,
+      "entity_id": 2,
+      "source_id": 507,
+      "active": true,
+      "source": "subscription",
+      "pattern": {
+        "counterparty": "AIOSCOMPANION SPEND",
+        "amount_chf": 30,
+        "tolerance_chf": 5,
+        "interval": "monthly"
+      },
+      "explanation": {
+        "fr": "Dépense outillage Ibrahim — plafonnée à $30/mois.",
+        "en": "Ibrahim tooling spend — capped at $30/month."
+      },
+      "account": "6570",
+      "created_from": null,
+      "created": "2025-12-01"
+    },
+    {
+      "id": 107,
+      "entity_id": 3,
+      "source_id": null,
+      "active": true,
+      "source": "contract",
+      "pattern": {
+        "counterparty": "CAISSE DE COMPENSATION",
+        "amount_chf": 640,
+        "tolerance_chf": 50,
+        "interval": "quarterly"
+      },
+      "explanation": {
+        "fr": "Acomptes AVS indépendant (~10% du bénéfice net) — trimestriels. source_id null : les sources RI ne sont pas encore au registre (slice 2).",
+        "en": "Self-employed AVS instalments (~10% of net profit) — quarterly. source_id null: RI sources are not in the register yet (slice 2)."
+      },
+      "account": null,
+      "created_from": null,
+      "created": "2025-07-10"
+    }
+  ],
+  "ANALYSES": [
+    {
+      "id": 9501,
+      "entity_id": 1,
+      "asked": "2026-08-10T20:35",
+      "asked_by": "Andrea",
+      "agent": "claude-code",
+      "scenario_label": {
+        "fr": "Avec embauche à CHF 4'500/mois",
+        "en": "With a CHF 4,500/month hire"
+      },
+      "runway_after_months": 6.9,
+      "question": {
+        "fr": "Puis-je embaucher un·e assistant·e à CHF 4'500/mois ?",
+        "en": "Can I hire an assistant at CHF 4,500/month?"
+      },
+      "verdict": {
+        "fr": "Pas au rythme actuel : coût chargé ≈ CHF 5'175/mois, le net mensuel passerait de −5'281 à −10'456 et l'autonomie de 13.7 à 6.9 mois. Ça passe si les produits mensuels gagnent ≈ CHF 5'175 (un mandat de taille moyenne).",
+        "en": "Not at the current run-rate: loaded cost ≈ CHF 5,175/month, monthly net would go from −5,281 to −10,456 and runway from 13.7 to 6.9 months. It works if monthly revenue gains ≈ CHF 5,175 (one mid-size mandate)."
+      },
+      "figures": [
+        {
+          "label": {
+            "fr": "Coût mensuel chargé",
+            "en": "Loaded monthly cost"
+          },
+          "value": "CHF 5'175.00"
+        },
+        {
+          "label": {
+            "fr": "Net / mois",
+            "en": "Net / month"
+          },
+          "value": "−5'281.20 → −10'456.20"
+        },
+        {
+          "label": {
+            "fr": "Autonomie",
+            "en": "Runway"
+          },
+          "value": "13.7 → 6.9 mois"
+        }
+      ],
+      "based_on": [
+        {
+          "label": {
+            "fr": "Produits moyens / mois (compte 3400, YTD)",
+            "en": "Average revenue / month (account 3400, YTD)"
+          },
+          "value": "CHF 1'806.67",
+          "href": "app-ledger.html?entity=blackcode&account=3400"
+        },
+        {
+          "label": {
+            "fr": "Charges moyennes / mois (burn, classes 5–6)",
+            "en": "Average charges / month (burn, classes 5–6)"
+          },
+          "value": "CHF 7'087.87",
+          "href": "app-compte-resultat.html?entity=blackcode"
+        },
+        {
+          "label": {
+            "fr": "Trésorerie disponible (1020/1021/1022)",
+            "en": "Available cash (1020/1021/1022)"
+          },
+          "value": "≈ CHF 97'100",
+          "href": "app-bilan.html?entity=blackcode"
+        },
+        {
+          "label": {
+            "fr": "Hypothèse charges patronales (contrat what_if_inputs)",
+            "en": "Employer-charge assumption (what_if_inputs contract)"
+          },
+          "value": "15% → 4'500 × 1.15 = 5'175",
+          "href": null
+        }
+      ]
+    },
+    {
+      "id": 9502,
+      "entity_id": 1,
+      "asked": "2026-08-11T09:10",
+      "asked_by": "Andrea",
+      "agent": "companion",
+      "scenario_label": {
+        "fr": "Sans le bureau de Prilly",
+        "en": "Without the Prilly office"
+      },
+      "runway_after_months": 21,
+      "question": {
+        "fr": "Et si on lâche le bureau de Prilly (CHF 1'850/mois) ?",
+        "en": "What if we drop the Prilly office (CHF 1,850/month)?"
+      },
+      "verdict": {
+        "fr": "L'autonomie passe de 13.7 à ~21 mois (burn 7'088 → 5'238/mois), mais le net mensuel reste négatif (−3'431). Ça achète du temps ; la vraie variable reste les produits.",
+        "en": "Runway goes from 13.7 to ~21 months (burn 7,088 → 5,238/month), but the monthly net stays negative (−3,431). It buys time; the real variable is still revenue."
+      },
+      "figures": [
+        {
+          "label": {
+            "fr": "Burn / mois",
+            "en": "Burn / month"
+          },
+          "value": "7'087.87 → 5'237.87"
+        },
+        {
+          "label": {
+            "fr": "Net / mois",
+            "en": "Net / month"
+          },
+          "value": "−5'281.20 → −3'431.20"
+        },
+        {
+          "label": {
+            "fr": "Autonomie",
+            "en": "Runway"
+          },
+          "value": "13.7 → ~21 mois"
+        }
+      ],
+      "based_on": [
+        {
+          "label": {
+            "fr": "Loyer Prilly / mois (règle 101, IMMOREGIE — compte 6000)",
+            "en": "Prilly rent / month (rule 101, IMMOREGIE — account 6000)"
+          },
+          "value": "CHF 1'850.00",
+          "href": "app-ledger.html?entity=blackcode&account=6000"
+        },
+        {
+          "label": {
+            "fr": "Charges moyennes / mois (burn, classes 5–6)",
+            "en": "Average charges / month (burn, classes 5–6)"
+          },
+          "value": "CHF 7'087.87",
+          "href": "app-compte-resultat.html?entity=blackcode"
+        },
+        {
+          "label": {
+            "fr": "Trésorerie disponible (1020/1021/1022)",
+            "en": "Available cash (1020/1021/1022)"
+          },
+          "value": "≈ CHF 97'100",
+          "href": "app-bilan.html?entity=blackcode"
+        },
+        {
+          "label": {
+            "fr": "Produits moyens / mois (compte 3400, YTD)",
+            "en": "Average revenue / month (account 3400, YTD)"
+          },
+          "value": "CHF 1'806.67",
+          "href": "app-ledger.html?entity=blackcode&account=3400"
+        }
+      ]
+    }
+  ],
+  "SOURCES": [
+    {
+      "id": 501,
+      "name": "WIR Bank",
+      "type": "bank",
+      "layer": "bank",
+      "draws_from": null,
+      "entity_id": 1,
+      "method": "camt.053 via Companion (Playwright)",
+      "expected": "weekly",
+      "last_import": "2026-08-07",
+      "retired": false,
+      "ledger_accounts": [
+        "1020"
+      ],
+      "notes_freeform": {
+        "fr": "Banque principale de blackcode SA depuis le gel UBS. Réactive, e-banking correct. Contact : conseiller PME (coordonnées dans le coffre). Quirk : l'export camt.053 n'est disponible qu'après J+1 — ne jamais tirer le jour même. Les cartes Yapeal tirent sur ce compte.",
+        "en": "blackcode SA's main bank since the UBS freeze. Responsive, decent e-banking. Contact: SME advisor (details in the vault). Quirk: the camt.053 export is only available at D+1 — never pull same-day. The Yapeal cards draw on this account."
+      },
+      "pulls": [
+        {
+          "file": "wir-camt053-2026-08-01_2026-08-07.xml",
+          "period": "01–07.08.2026",
+          "format": "camt.053",
+          "hash": "sha256:4d19…b3e7",
+          "drive_ref": "drive://bbooks/blackcode/sources/wir/2026/wir-camt053-2026-08-01_2026-08-07.xml",
+          "pulled": "2026-08-07"
+        },
+        {
+          "file": "wir-camt053-2026-07-25_2026-07-31.xml",
+          "period": "25–31.07.2026",
+          "format": "camt.053",
+          "hash": "sha256:a0c2…5f18",
+          "drive_ref": "drive://bbooks/blackcode/sources/wir/2026/wir-camt053-2026-07-25_2026-07-31.xml",
+          "pulled": "2026-07-31"
+        },
+        {
+          "file": "wir-camt053-2026-07-18_2026-07-24.xml",
+          "period": "18–24.07.2026",
+          "format": "camt.053",
+          "hash": "sha256:77ee…09ac",
+          "drive_ref": "drive://bbooks/blackcode/sources/wir/2026/wir-camt053-2026-07-18_2026-07-24.xml",
+          "pulled": "2026-07-24"
+        }
+      ],
+      "runbook": {
+        "version": "1.0",
+        "updated": "2026-08-10",
+        "login_url": "https://ebanking.wir.ch",
+        "credential_ref": "vault://blackcode/wir-ebanking",
+        "steps": [
+          "Login (credentials from the vault reference — never stored here)",
+          "Comptes → Documents → Relevés de compte",
+          "Période : depuis le dernier import réussi",
+          "Format d'export : ISO 20022 camt.053 (XML) — pas PDF/CSV",
+          "Télécharger → hash immédiat → Drive (entité/source/période) → file d'attente"
+        ],
+        "output": "camt.053 XML"
+      }
+    },
+    {
+      "id": 502,
+      "name": "UBS (gelé — historique)",
+      "type": "bank",
+      "layer": "bank",
+      "draws_from": null,
+      "entity_id": 1,
+      "method": "camt.053 via Companion — dossier litige uniquement",
+      "expected": "none",
+      "last_import": "2026-06-12",
+      "retired": false,
+      "note": {
+        "fr": "Relation gelée — imports historiques pour le dossier UBS, pas de flux courant.",
+        "en": "Frozen relationship — historical imports for the UBS dossier, no current flow."
+      },
+      "ledger_accounts": [
+        "1021"
+      ],
+      "notes_freeform": {
+        "fr": "LA raison d'être des pages par banque : relation gelée sans préavis, accès e-banking encore ouvert en lecture mais révocable à tout moment. Tout ce qui est récupérable a été tiré et vit dans notre Drive (dossier UBS_Compliance). Ne JAMAIS retraiter ces fichiers — ils sont pièces du dossier litige. Contact : uniquement via l'avocat (réf. dossier au coffre).",
+        "en": "THE reason per-bank pages exist: relationship frozen without notice, e-banking still read-accessible but revocable any time. Everything recoverable has been pulled and lives in our Drive (UBS_Compliance folder). NEVER reprocess these files — they are exhibits in the dispute dossier. Contact: through the lawyer only (dossier ref in the vault)."
+      },
+      "pulls": [
+        {
+          "file": "ubs-camt053-2025-full-year.xml",
+          "period": "01.01–31.12.2025",
+          "format": "camt.053",
+          "hash": "sha256:c8d4…12aa",
+          "drive_ref": "drive://bbooks/blackcode/sources/ubs/UBS_Compliance/ubs-camt053-2025-full-year.xml",
+          "pulled": "2026-05-02"
+        },
+        {
+          "file": "ubs-releves-2026-01_2026-05.pdf",
+          "period": "01.01–31.05.2026",
+          "format": "PDF",
+          "hash": "sha256:39fb…e761",
+          "drive_ref": "drive://bbooks/blackcode/sources/ubs/UBS_Compliance/ubs-releves-2026-01_2026-05.pdf",
+          "pulled": "2026-06-12"
+        }
+      ],
+      "runbook": {
+        "version": "1.0",
+        "updated": "2026-08-10",
+        "login_url": "https://ebanking.ubs.com",
+        "credential_ref": "vault://blackcode/ubs-ebanking (accès litige)",
+        "steps": [
+          "Manuel/ponctuel uniquement — relation gelée, pas de cadence",
+          "Documents → Relevés historiques → période du dossier",
+          "Format : camt.053 si disponible, sinon PDF (pièce du dossier litige)",
+          "Télécharger → hash → Drive (dossier UBS_Compliance) → référencer, ne jamais retraiter"
+        ],
+        "output": "camt.053 XML / PDF (historique)"
+      }
+    },
+    {
+      "id": 503,
+      "name": "Yapeal — carte •••• 6474",
+      "type": "card",
+      "layer": "card",
+      "draws_from": 501,
+      "entity_id": 1,
+      "method": "Export CSV (camt.054 à confirmer)",
+      "expected": "weekly",
+      "last_import": "2026-07-18",
+      "retired": false,
+      "note": {
+        "fr": "Usage partagé entre entités selon la dépense — attribution à l'import.",
+        "en": "Shared use across entities per spend — attributed at import."
+      },
+      "ledger_accounts": [
+        "1022"
+      ],
+      "notes_freeform": {
+        "fr": "Carte partagée entre entités — CHAQUE dépense est attribuée à son entité à l'import, jamais en bloc. Source de vérité des lignes marchands (le relevé WIR ne montre que le débit agrégé). Quirk : l'export CSV tronque les libellés marchands à 32 caractères. Carte 2982 = prédécesseur clôturé, historique seulement.",
+        "en": "Card shared across entities — EACH spend is attributed to its entity at import, never in bulk. Source of truth for merchant lines (the WIR statement only shows the aggregate debit). Quirk: the CSV export truncates merchant labels at 32 characters. Card 2982 = closed predecessor, history only."
+      },
+      "pulls": [
+        {
+          "file": "yapeal-6474-2026-07-01_2026-07-18.csv",
+          "period": "01–18.07.2026",
+          "format": "CSV",
+          "hash": "sha256:5b21…c7d0",
+          "drive_ref": "drive://bbooks/blackcode/sources/yapeal/2026/yapeal-6474-2026-07-01_2026-07-18.csv",
+          "pulled": "2026-07-18"
+        },
+        {
+          "file": "yapeal-6474-2026-06.csv",
+          "period": "06.2026",
+          "format": "CSV",
+          "hash": "sha256:e93a…184f",
+          "drive_ref": "drive://bbooks/blackcode/sources/yapeal/2026/yapeal-6474-2026-06.csv",
+          "pulled": "2026-07-02"
+        }
+      ],
+      "runbook": {
+        "version": "0.9",
+        "updated": "2026-08-10",
+        "login_url": "https://app.yapeal.ch",
+        "credential_ref": "vault://blackcode/yapeal",
+        "steps": [
+          "Login (vault) — app web",
+          "Carte •••• 6474 → Transactions → Exporter",
+          "Format : CSV (vérifier si un export camt.054 existe — à confirmer, v1.0 quand tranché)",
+          "Télécharger → hash → Drive → file d'attente AVEC attribution d'entité par dépense (carte partagée)"
+        ],
+        "output": "CSV (camt.054 à confirmer)"
+      }
+    },
+    {
+      "id": 504,
+      "name": "Yapeal — carte •••• 2982",
+      "type": "card",
+      "layer": "card",
+      "draws_from": 501,
+      "entity_id": 1,
+      "method": "—",
+      "expected": "none",
+      "last_import": "2026-01-31",
+      "retired": true,
+      "note": {
+        "fr": "Remplacée par la carte 6474 — historique uniquement.",
+        "en": "Superseded by card 6474 — historical only."
+      }
+    },
+    {
+      "id": 505,
+      "name": "Stripe",
+      "type": "processor",
+      "layer": null,
+      "draws_from": null,
+      "entity_id": 1,
+      "method": "Export CSV, rapproché des dépôts bancaires",
+      "expected": "monthly",
+      "last_import": "2026-08-01",
+      "retired": false,
+      "runbook": {
+        "version": "1.0",
+        "updated": "2026-08-10",
+        "login_url": "https://dashboard.stripe.com",
+        "credential_ref": "vault://blackcode/stripe (ou clé API restreinte lecture seule)",
+        "steps": [
+          "Login (vault) ou API lecture seule",
+          "Payouts → période depuis le dernier import → Export CSV",
+          "Télécharger → hash → Drive → rapprocher chaque payout du dépôt bancaire correspondant (WIR)"
+        ],
+        "output": "CSV (payouts + transactions)"
+      }
+    },
+    {
+      "id": 506,
+      "name": "GitHub billing",
+      "type": "saas",
+      "layer": null,
+      "draws_from": 503,
+      "entity_id": 1,
+      "method": "Facture PDF → pipeline pièces (§4A)",
+      "expected": "monthly",
+      "last_import": "2026-08-02",
+      "retired": false,
+      "runbook": {
+        "version": "1.0",
+        "updated": "2026-08-10",
+        "login_url": "https://github.com/organizations/blackcode-switzerland/settings/billing",
+        "credential_ref": "vault://blackcode/github-org-admin",
+        "steps": [
+          "Login (vault)",
+          "Billing → Payment history → facture du mois (PDF)",
+          "Télécharger → pipeline pièces §4A (hash, Drive, extraction, rapprochement carte 6474)"
+        ],
+        "output": "Facture PDF"
+      }
+    },
+    {
+      "id": 507,
+      "name": "AIOSCompanion spend (Ibrahim)",
+      "type": "saas",
+      "layer": null,
+      "draws_from": null,
+      "entity_id": 2,
+      "method": "Facture PDF → pipeline pièces (§4A)",
+      "expected": "monthly",
+      "last_import": "2026-05-31",
+      "retired": false,
+      "runbook": {
+        "version": "0.9",
+        "updated": "2026-08-10",
+        "login_url": "(fournisseurs multiples — liste tenue par Ibrahim)",
+        "credential_ref": "vault://aios/spend-ibrahim",
+        "steps": [
+          "Ibrahim exporte les factures du mois (cap $30) depuis chaque fournisseur",
+          "Dépôt dans le dossier Drive convenu → pipeline pièces §4A",
+          "Contrôle du cap mensuel au passage en file d'attente"
+        ],
+        "output": "Factures PDF"
+      }
+    },
+    {
+      "id": 510,
+      "name": "Drive — inbox pièces (blackcode)",
+      "type": "drive_folder",
+      "layer": null,
+      "draws_from": null,
+      "entity_id": 1,
+      "method": "files.list poll → pipeline extraction (PIECES-PIPELINE-DESIGN.md)",
+      "expected": "daily",
+      "last_import": "2026-08-13",
+      "retired": false,
+      "drive": {
+        "folder_id": "1TJz12gqFGCny0jn2lCPJpoQua3LgYJ3O",
+        "folder_link": "https://drive.google.com/drive/folders/1TJz12gqFGCny0jn2lCPJpoQua3LgYJ3O",
+        "access": {
+          "fr": "viewer — lien partagé (spike) ; en prod : service account viewer",
+          "en": "viewer — share link (spike); in prod: service account viewer"
+        },
+        "file_count": 6,
+        "last_synced": "2026-08-13"
+      },
+      "notes_freeform": {
+        "fr": "Dossier de capture des reçus papier (scanner de l'app Drive sur le téléphone). Inbox, PAS l'archive légale (D10) — la copie immuable part en stockage contrôlé. Aujourd'hui en lien partagé (spike) ; à migrer vers un partage service-account avant toute pièce sensible. 6 fichiers au dernier sync, dont le lot de test enrichi du 13.08.",
+        "en": "Paper-receipt capture folder (Drive app scanner on the phone). Inbox, NOT the legal archive (D10) — the immutable copy goes to controlled storage. Share-link today (spike); migrate to a service-account share before anything sensitive. 6 files at last sync, including the enriched 13.08 test batch."
+      },
+      "runbook": {
+        "version": "0.9",
+        "updated": "2026-08-13",
+        "login_url": "https://drive.google.com/drive/folders/1TJz12gqFGCny0jn2lCPJpoQua3LgYJ3O",
+        "credential_ref": "aucun (lien partagé, spike) — prod : vault://blackcode/drive-sa-key",
+        "steps": [
+          "files.list sur le dossier inbox (aujourd'hui : embeddedfolderview, spike ; prod : Drive API + SA)",
+          "Diff contre les file_id déjà traités (md5 pour les doublons exacts)",
+          "Télécharger les nouveaux fichiers → hash sha256 immédiat",
+          "Extraction vision (schéma strict) → validation déterministe hors modèle",
+          "Copie immuable (octets + JSON + hash) vers l'archive légale → ExtractionResult en file d'attente"
+        ],
+        "output": "ExtractionResult JSON par nouveau fichier"
+      }
+    },
+    {
+      "id": 509,
+      "name": "PostFinance",
+      "type": "bank",
+      "layer": "bank",
+      "draws_from": null,
+      "entity_id": null,
+      "method": null,
+      "expected": null,
+      "last_import": null,
+      "retired": false,
+      "note": {
+        "fr": "NON CONFIRMÉ — Andrea doit confirmer si une entité détient un compte.",
+        "en": "UNCONFIRMED — Andrea to confirm whether any entity holds an account."
+      }
+    }
+  ],
+  "TX": [
+    {
+      "id": 1001,
+      "entity_id": 1,
+      "date": "2025-12-05",
+      "status": "posted",
+      "source_id": 502,
+      "raw_label": "UBS - PAYMENT - REF8827364",
+      "counterparty": "IMMOREGIE SA",
+      "explanation": {
+        "fr": "Loyer bureau Prilly, décembre 2025 — récurrent, attendu.",
+        "en": "Prilly office rent, December 2025 — recurring, expected."
+      },
+      "lines": [
+        {
+          "account": "6000",
+          "debit": 1850,
+          "credit": 0
+        },
+        {
+          "account": "1021",
+          "debit": 0,
+          "credit": 1850
+        }
+      ],
+      "recognition": "known_recurring",
+      "matched_rule_id": 101,
+      "evidence_tier": "partial",
+      "evidence_note": {
+        "fr": "Pas de facture retrouvée (relation UBS gelée) — plausibilité reconstruite via le bail. Visa fiduciaire requis.",
+        "en": "No invoice recovered (frozen UBS relationship) — plausibility reconstructed from the lease. Fiduciary sign-off required."
+      },
+      "tva": {
+        "rate": 0,
+        "amount": 0,
+        "input_claimed": false,
+        "note": {
+          "fr": "Loyer exonéré de TVA.",
+          "en": "Rent VAT-exempt."
+        }
+      },
+      "related_party": null,
+      "piece": null,
+      "history": {
+        "fr": "Arrivé NON RECONNU le 03.01.2026 → résolu par Andrea le 06.01 (« c'est le loyer ») → règle 101 créée → les loyers suivants se reconnaissent seuls.",
+        "en": "Arrived UNRECOGNIZED on 03.01.2026 → resolved by Andrea on 06.01 (\"that's the rent\") → rule 101 created → later rents recognize themselves."
+      }
+    },
+    {
+      "id": 1002,
+      "entity_id": 1,
+      "date": "2026-01-05",
+      "status": "posted",
+      "source_id": 501,
+      "raw_label": "WIR-PMT REF-88213 IMMOREGIE SA",
+      "counterparty": "IMMOREGIE SA",
+      "explanation": {
+        "fr": "Loyer bureau Prilly, janvier 2026 — reconnu automatiquement (règle 101).",
+        "en": "Prilly office rent, January 2026 — auto-recognized (rule 101)."
+      },
+      "lines": [
+        {
+          "account": "6000",
+          "debit": 1850,
+          "credit": 0
+        },
+        {
+          "account": "1020",
+          "debit": 0,
+          "credit": 1850
+        }
+      ],
+      "recognition": "known_recurring",
+      "matched_rule_id": 101,
+      "evidence_tier": "full",
+      "tva": {
+        "rate": 0,
+        "amount": 0,
+        "input_claimed": false,
+        "note": {
+          "fr": "Loyer exonéré de TVA.",
+          "en": "Rent VAT-exempt."
+        }
+      },
+      "related_party": null,
+      "piece": {
+        "drive_ref": "drive://bbooks/blackcode/2026/loyer-2026-01.pdf",
+        "hash": "sha256:2f8a…c41e",
+        "captured": "2026-01-05"
+      }
+    },
+    {
+      "id": 1003,
+      "entity_id": 1,
+      "date": "2026-01-25",
+      "status": "posted",
+      "source_id": 501,
+      "raw_label": "WIR-SALAIRES JANVIER LOT-2026-01",
+      "counterparty": "Salaires (équipe)",
+      "explanation": {
+        "fr": "Paie janvier — salaires + charges sociales, selon contrats b/people.",
+        "en": "January payroll — salaries + social charges, per b/people contracts."
+      },
+      "lines": [
+        {
+          "account": "5000",
+          "debit": 11600,
+          "credit": 0
+        },
+        {
+          "account": "5700",
+          "debit": 1750,
+          "credit": 0
+        },
+        {
+          "account": "1020",
+          "debit": 0,
+          "credit": 13350
+        }
+      ],
+      "recognition": "known_recurring",
+      "matched_rule_id": 103,
+      "evidence_tier": "full",
+      "tva": {
+        "rate": 0,
+        "amount": 0,
+        "input_claimed": false,
+        "note": {
+          "fr": "Hors champ TVA.",
+          "en": "Out of VAT scope."
+        }
+      },
+      "related_party": null,
+      "piece": {
+        "drive_ref": "drive://bbooks/blackcode/2026/paie-2026-01.pdf",
+        "hash": "sha256:9b1d…77a2",
+        "captured": "2026-01-25"
+      }
+    },
+    {
+      "id": 1004,
+      "entity_id": 1,
+      "date": "2026-01-31",
+      "status": "posted",
+      "source_id": 503,
+      "raw_label": "YAPEAL*GITHUB.COM HTTPSGITHUB.C",
+      "counterparty": "GitHub, Inc.",
+      "explanation": {
+        "fr": "Abonnement GitHub Team — reconnu (règle 102).",
+        "en": "GitHub Team subscription — recognized (rule 102)."
+      },
+      "lines": [
+        {
+          "account": "6570",
+          "debit": 43.7,
+          "credit": 0
+        },
+        {
+          "account": "1022",
+          "debit": 0,
+          "credit": 43.7
+        }
+      ],
+      "recognition": "known_recurring",
+      "matched_rule_id": 102,
+      "evidence_tier": "full",
+      "tva": {
+        "rate": 0,
+        "amount": 0,
+        "input_claimed": false,
+        "note": {
+          "fr": "Prestation étrangère — autoliquidation (impôt sur les acquisitions) à traiter au décompte.",
+          "en": "Foreign supply — reverse charge (acquisition tax) handled in the return."
+        }
+      },
+      "related_party": null,
+      "piece": {
+        "drive_ref": "drive://bbooks/blackcode/2026/github-2026-01.pdf",
+        "hash": "sha256:c771…08fe",
+        "captured": "2026-02-01"
+      }
+    },
+    {
+      "id": 1005,
+      "entity_id": 1,
+      "date": "2026-02-03",
+      "status": "posted",
+      "source_id": 505,
+      "raw_label": "STRIPE PAYOUT ST-9921",
+      "counterparty": "Stripe Payments Europe",
+      "explanation": {
+        "fr": "Versement Stripe — encaissements clients en ligne (règle 104).",
+        "en": "Stripe payout — online client collections (rule 104)."
+      },
+      "lines": [
+        {
+          "account": "1020",
+          "debit": 5420,
+          "credit": 0
+        },
+        {
+          "account": "3400",
+          "debit": 0,
+          "credit": 5420
+        }
+      ],
+      "recognition": "known_recurring",
+      "matched_rule_id": 104,
+      "evidence_tier": "full",
+      "tva": {
+        "rate": 8.1,
+        "amount": 406.2,
+        "input_claimed": false,
+        "note": {
+          "fr": "TVA due 8.1% incluse — détail par facture dans l'export Stripe.",
+          "en": "Output VAT 8.1% included — per-invoice detail in the Stripe export."
+        }
+      },
+      "related_party": null,
+      "piece": {
+        "drive_ref": "drive://bbooks/blackcode/2026/stripe-2026-02.csv",
+        "hash": "sha256:41aa…d90b",
+        "captured": "2026-02-03"
+      }
+    },
+    {
+      "id": 1006,
+      "entity_id": 1,
+      "date": "2026-02-10",
+      "status": "posted",
+      "source_id": 501,
+      "raw_label": "CREDIT SKS INNOVATION SA QRR-2026-655",
+      "counterparty": "SKS INNOVATION SA",
+      "explanation": {
+        "fr": "Encaissement facture INV-0000655 (Zoho) — CHF 22'333.03.",
+        "en": "Collection of invoice INV-0000655 (Zoho) — CHF 22,333.03."
+      },
+      "lines": [
+        {
+          "account": "1020",
+          "debit": 22333.03,
+          "credit": 0
+        },
+        {
+          "account": "1100",
+          "debit": 0,
+          "credit": 22333.03
+        }
+      ],
+      "recognition": "known_one_off",
+      "matched_rule_id": null,
+      "evidence_tier": "full",
+      "tva": {
+        "rate": 8.1,
+        "amount": 1673.65,
+        "input_claimed": false,
+        "note": {
+          "fr": "TVA due — facturée sur INV-0000655.",
+          "en": "Output VAT — invoiced on INV-0000655."
+        }
+      },
+      "related_party": null,
+      "piece": {
+        "drive_ref": "drive://bbooks/blackcode/2026/INV-0000655.pdf",
+        "hash": "sha256:88e2…1c4a",
+        "captured": "2026-02-10"
+      }
+    },
+    {
+      "id": 1007,
+      "entity_id": 1,
+      "date": "2026-02-14",
+      "status": "posted",
+      "source_id": 501,
+      "raw_label": "WIR-PMT FIDUCIAIRE REYMOND & CIE",
+      "counterparty": "Fiduciaire Reymond & Cie SA",
+      "explanation": {
+        "fr": "Honoraires fiduciaire — travaux de clôture 2025.",
+        "en": "Fiduciary fees — 2025 closing work."
+      },
+      "lines": [
+        {
+          "account": "6500",
+          "debit": 1080,
+          "credit": 0
+        },
+        {
+          "account": "1020",
+          "debit": 0,
+          "credit": 1080
+        }
+      ],
+      "recognition": "known_one_off",
+      "matched_rule_id": null,
+      "evidence_tier": "full",
+      "tva": {
+        "rate": 8.1,
+        "amount": 80.93,
+        "input_claimed": true
+      },
+      "related_party": null,
+      "piece": {
+        "drive_ref": "drive://bbooks/blackcode/2026/reymond-cloture-2025.pdf",
+        "hash": "sha256:5cd0…33b7",
+        "captured": "2026-02-14"
+      }
+    },
+    {
+      "id": 1008,
+      "entity_id": 1,
+      "date": "2026-03-01",
+      "status": "posted",
+      "source_id": 501,
+      "raw_label": "CREDIT AIOS COMPANION SA REMB PRET",
+      "counterparty": "AIOS Companion SA",
+      "explanation": {
+        "fr": "Remboursement partiel du prêt à AIOS Companion SA (2'000 sur 10'000).",
+        "en": "Partial repayment of the loan to AIOS Companion SA (2,000 of 10,000)."
+      },
+      "lines": [
+        {
+          "account": "1020",
+          "debit": 2000,
+          "credit": 0
+        },
+        {
+          "account": "1141",
+          "debit": 0,
+          "credit": 2000
+        }
+      ],
+      "recognition": "known_one_off",
+      "matched_rule_id": null,
+      "evidence_tier": "full",
+      "tva": {
+        "rate": 0,
+        "amount": 0,
+        "input_claimed": false,
+        "note": {
+          "fr": "Hors champ TVA.",
+          "en": "Out of VAT scope."
+        }
+      },
+      "related_party": {
+        "counterpart": "AIOS Companion SA",
+        "kind": "loan",
+        "justification": {
+          "fr": "Prêt de CHF 10'000 du 15.06.2025, taux 1.5% — à confronter aux taux refuges AFC 2026 (lettre-circulaire annuelle, à mettre à jour).",
+          "en": "CHF 10,000 loan of 15.06.2025, 1.5% rate — to check against AFC 2026 safe-harbor rates (annual circular, update yearly)."
+        },
+        "mirror_tx": 2002
+      },
+      "piece": {
+        "drive_ref": "drive://bbooks/related/pret-aios-2025.pdf",
+        "hash": "sha256:e01f…9a52",
+        "captured": "2025-06-15"
+      }
+    },
+    {
+      "id": 1009,
+      "entity_id": 1,
+      "date": "2025-09-12",
+      "status": "posted",
+      "source_id": 502,
+      "raw_label": "UBS DEBIT REF-7719",
+      "counterparty": null,
+      "explanation": null,
+      "lines": [
+        {
+          "account": "6500",
+          "debit": 3000,
+          "credit": 0
+        },
+        {
+          "account": "1021",
+          "debit": 0,
+          "credit": 3000
+        }
+      ],
+      "recognition": "unrecognized",
+      "matched_rule_id": null,
+      "evidence_tier": "bare",
+      "evidence_note": {
+        "fr": "Sortie UBS sans pièce ni contrepartie identifiable — aucune reconstruction possible à ce jour. Risque de reprise ; si la contrepartie se révèle liée : risque de distribution dissimulée (dt-002).",
+        "en": "UBS outflow with no document and no identifiable counterparty — no reconstruction possible so far. Reprise risk; if the counterparty turns out related: disguised-distribution risk (dt-002)."
+      },
+      "tva": {
+        "rate": null,
+        "amount": 0,
+        "input_claimed": false,
+        "note": {
+          "fr": "Impôt préalable NON réclamé — vat-008.",
+          "en": "Input VAT NOT claimed — vat-008."
+        }
+      },
+      "related_party": null,
+      "piece": null,
+      "da_verdict": {
+        "verdict": "accepted-with-warning",
+        "rules_triggered": [
+          "dt-001",
+          "vat-008"
+        ],
+        "worst_case": {
+          "fr": "Reprise de CHF 3'000 au bénéfice imposable ; requalification en distribution dissimulée si la contrepartie se révèle liée (double peine).",
+          "en": "CHF 3,000 added back to taxable profit; requalification as disguised distribution if the counterparty turns out related (double hit)."
+        },
+        "resolves": {
+          "fr": "Identifier la contrepartie (dossier UBS) ; attestation ou confirmation tierce → passe en « partiel ».",
+          "en": "Identify the counterparty (UBS dossier); attestation or third-party confirmation → moves to \"partial\"."
+        }
+      }
+    },
+    {
+      "id": 1010,
+      "entity_id": 1,
+      "date": "2026-01-15",
+      "status": "posted",
+      "source_id": 501,
+      "raw_label": "SWISSCOM FACTURE 555-221",
+      "counterparty": "Swisscom SA",
+      "explanation": {
+        "fr": "Internet fibre bureau — reconnu (règle 105).",
+        "en": "Office fibre internet — recognized (rule 105)."
+      },
+      "lines": [
+        {
+          "account": "6570",
+          "debit": 89.9,
+          "credit": 0
+        },
+        {
+          "account": "1020",
+          "debit": 0,
+          "credit": 89.9
+        }
+      ],
+      "recognition": "known_recurring",
+      "matched_rule_id": 105,
+      "evidence_tier": "full",
+      "tva": {
+        "rate": 8.1,
+        "amount": 6.74,
+        "input_claimed": true
+      },
+      "related_party": null,
+      "piece": {
+        "drive_ref": "drive://bbooks/blackcode/2026/swisscom-2026-01.pdf",
+        "hash": "sha256:7a2e…f610",
+        "captured": "2026-01-16"
+      }
+    },
+    {
+      "id": 1011,
+      "entity_id": 1,
+      "date": "2026-03-08",
+      "status": "staged",
+      "source_id": 503,
+      "raw_label": "YAPEAL*NOTION.SO HTTPSNOTION",
+      "counterparty": "Notion Labs, Inc.",
+      "explanation": {
+        "fr": "INFÉRÉ par l'agent : ressemble à un nouvel abonnement SaaS (Notion) — à confirmer, aucune règle existante.",
+        "en": "INFERRED by the agent: looks like a new SaaS subscription (Notion) — to confirm, no existing rule."
+      },
+      "lines": [
+        {
+          "account": "6570",
+          "debit": 13.5,
+          "credit": 0
+        },
+        {
+          "account": "1022",
+          "debit": 0,
+          "credit": 13.5
+        }
+      ],
+      "recognition": "inferred",
+      "matched_rule_id": null,
+      "evidence_tier": "partial",
+      "tva": {
+        "rate": 0,
+        "amount": 0,
+        "input_claimed": false,
+        "note": {
+          "fr": "Prestation étrangère probable — autoliquidation si confirmé.",
+          "en": "Likely foreign supply — reverse charge if confirmed."
+        }
+      },
+      "related_party": null,
+      "piece": null,
+      "da_verdict": {
+        "verdict": "accepted-with-warning",
+        "rules_triggered": [
+          "vat-007"
+        ],
+        "worst_case": {
+          "fr": "Sans facture, pas de déduction TVA ; charge probablement admise (montant faible, motif plausible).",
+          "en": "Without an invoice, no VAT deduction; expense probably accepted (small amount, plausible purpose)."
+        },
+        "resolves": {
+          "fr": "Confirmer l'abonnement → créer la règle + récupérer la facture Notion.",
+          "en": "Confirm the subscription → create the rule + fetch the Notion invoice."
+        }
+      }
+    },
+    {
+      "id": 1012,
+      "entity_id": 1,
+      "date": "2026-03-10",
+      "status": "staged",
+      "source_id": 501,
+      "raw_label": "WIR-PMT REF-90112 WISE PAYMENT",
+      "counterparty": null,
+      "explanation": null,
+      "lines": [
+        {
+          "account": null,
+          "debit": 620,
+          "credit": 0
+        },
+        {
+          "account": "1020",
+          "debit": 0,
+          "credit": 620
+        }
+      ],
+      "recognition": "unrecognized",
+      "matched_rule_id": null,
+      "evidence_tier": "bare",
+      "tva": {
+        "rate": null,
+        "amount": 0,
+        "input_claimed": false
+      },
+      "related_party": null,
+      "piece": null,
+      "da_verdict": {
+        "verdict": "blocked",
+        "rules_triggered": [
+          "dt-001",
+          "vat-008"
+        ],
+        "worst_case": {
+          "fr": "Non comptabilisable en l'état : destination inconnue. Si versé à une partie liée sans justification : distribution dissimulée.",
+          "en": "Not postable as is: destination unknown. If paid to a related party without justification: disguised distribution."
+        },
+        "resolves": {
+          "fr": "Expliquer la transaction (qui, quoi, pourquoi) + pièce. Ne se comptabilise pas en aveugle.",
+          "en": "Explain the transaction (who, what, why) + document. Does not post blind."
+        }
+      }
+    },
+    {
+      "id": 1013,
+      "entity_id": 1,
+      "date": "2026-03-12",
+      "status": "staged",
+      "source_id": 503,
+      "raw_label": "CARTE 6474 SUMUP*COFFEE8827 LSNE",
+      "counterparty": null,
+      "explanation": null,
+      "lines": [
+        {
+          "account": null,
+          "debit": 45,
+          "credit": 0
+        },
+        {
+          "account": "1022",
+          "debit": 0,
+          "credit": 45
+        }
+      ],
+      "recognition": "unrecognized",
+      "matched_rule_id": null,
+      "evidence_tier": "bare",
+      "tva": {
+        "rate": null,
+        "amount": 0,
+        "input_claimed": false
+      },
+      "related_party": null,
+      "piece": null,
+      "da_verdict": {
+        "verdict": "blocked",
+        "rules_triggered": [
+          "dt-001",
+          "vat-008"
+        ],
+        "worst_case": {
+          "fr": "Petit montant mais même règle : sans motif commercial plausible, non déductible.",
+          "en": "Small amount, same rule: without a plausible business purpose, not deductible."
+        },
+        "resolves": {
+          "fr": "Repas d'affaires ? Ticket ≤ CHF 400 admis en pièce simplifiée (receipt-001) — le photographier suffit.",
+          "en": "Business meal? Receipt ≤ CHF 400 qualifies as simplified document (receipt-001) — a photo is enough."
+        }
+      }
+    },
+    {
+      "id": 2001,
+      "entity_id": 2,
+      "date": "2026-01-31",
+      "status": "posted",
+      "source_id": 507,
+      "raw_label": "AIOSCOMPANION SPEND — IBRAHIM (CAP $30)",
+      "counterparty": "Divers fournisseurs SaaS",
+      "explanation": {
+        "fr": "Dépense outillage Ibrahim, plafonnée à $30/mois (règle 106).",
+        "en": "Ibrahim tooling spend, capped at $30/month (rule 106)."
+      },
+      "lines": [
+        {
+          "account": "6570",
+          "debit": 27.1,
+          "credit": 0
+        },
+        {
+          "account": "1020",
+          "debit": 0,
+          "credit": 27.1
+        }
+      ],
+      "recognition": "known_recurring",
+      "matched_rule_id": 106,
+      "evidence_tier": "full",
+      "tva": {
+        "rate": 0,
+        "amount": 0,
+        "input_claimed": false,
+        "note": {
+          "fr": "Entité non assujettie — pas d'impôt préalable récupérable.",
+          "en": "Entity not VAT-registered — no recoverable input VAT."
+        }
+      },
+      "related_party": null,
+      "piece": {
+        "drive_ref": "drive://bbooks/aios/2026/spend-ibrahim-2026-01.pdf",
+        "hash": "sha256:b3c9…40dd",
+        "captured": "2026-02-01"
+      }
+    },
+    {
+      "id": 2002,
+      "entity_id": 2,
+      "date": "2026-03-01",
+      "status": "posted",
+      "source_id": 501,
+      "raw_label": "WIR-PMT A BLACKCODE SA REMB PRET",
+      "counterparty": "blackcode SA",
+      "explanation": {
+        "fr": "Remboursement partiel du prêt reçu de blackcode SA (2'000 sur 10'000) — miroir de l'écriture 1008.",
+        "en": "Partial repayment of the loan from blackcode SA (2,000 of 10,000) — mirror of entry 1008."
+      },
+      "lines": [
+        {
+          "account": "2261",
+          "debit": 2000,
+          "credit": 0
+        },
+        {
+          "account": "1020",
+          "debit": 0,
+          "credit": 2000
+        }
+      ],
+      "recognition": "known_one_off",
+      "matched_rule_id": null,
+      "evidence_tier": "full",
+      "tva": {
+        "rate": 0,
+        "amount": 0,
+        "input_claimed": false,
+        "note": {
+          "fr": "Hors champ TVA.",
+          "en": "Out of VAT scope."
+        }
+      },
+      "related_party": {
+        "counterpart": "blackcode SA",
+        "kind": "loan",
+        "justification": {
+          "fr": "Même contrat de prêt — enregistré des DEUX côtés (règle §3.2).",
+          "en": "Same loan contract — recorded on BOTH sides (§3.2 rule)."
+        },
+        "mirror_tx": 1008
+      },
+      "piece": {
+        "drive_ref": "drive://bbooks/related/pret-aios-2025.pdf",
+        "hash": "sha256:e01f…9a52",
+        "captured": "2025-06-15"
+      }
+    },
+    {
+      "id": 2003,
+      "entity_id": 2,
+      "date": "2026-02-20",
+      "status": "posted",
+      "source_id": 505,
+      "raw_label": "STRIPE PAYOUT AIOS ST-1102",
+      "counterparty": "Stripe Payments Europe",
+      "explanation": {
+        "fr": "Versement Stripe — premiers abonnements Companion.",
+        "en": "Stripe payout — first Companion subscriptions."
+      },
+      "lines": [
+        {
+          "account": "1020",
+          "debit": 890,
+          "credit": 0
+        },
+        {
+          "account": "3400",
+          "debit": 0,
+          "credit": 890
+        }
+      ],
+      "recognition": "known_one_off",
+      "matched_rule_id": null,
+      "evidence_tier": "full",
+      "tva": {
+        "rate": 0,
+        "amount": 0,
+        "input_claimed": false,
+        "note": {
+          "fr": "Non assujettie (seuil non atteint) — pas de TVA facturée.",
+          "en": "Not VAT-registered (below threshold) — no VAT charged."
+        }
+      },
+      "related_party": null,
+      "piece": {
+        "drive_ref": "drive://bbooks/aios/2026/stripe-2026-02.csv",
+        "hash": "sha256:12f7…8ea3",
+        "captured": "2026-02-20"
+      }
+    },
+    {
+      "id": 2004,
+      "entity_id": 2,
+      "date": "2026-03-05",
+      "status": "staged",
+      "source_id": 503,
+      "raw_label": "YAPEAL*FIGMA INC",
+      "counterparty": "Figma, Inc.",
+      "explanation": null,
+      "lines": [
+        {
+          "account": null,
+          "debit": 22.4,
+          "credit": 0
+        },
+        {
+          "account": "1020",
+          "debit": 0,
+          "credit": 22.4
+        }
+      ],
+      "recognition": "unrecognized",
+      "matched_rule_id": null,
+      "evidence_tier": "bare",
+      "tva": {
+        "rate": null,
+        "amount": 0,
+        "input_claimed": false
+      },
+      "related_party": null,
+      "piece": null,
+      "attribution_note": {
+        "fr": "Payé par la carte 6474 (blackcode SA) mais dépense AIOS ? — l'attribution d'entité fait partie de la résolution.",
+        "en": "Paid on card 6474 (blackcode SA) but an AIOS spend? — entity attribution is part of the resolution."
+      },
+      "da_verdict": {
+        "verdict": "blocked",
+        "rules_triggered": [
+          "dt-001"
+        ],
+        "worst_case": {
+          "fr": "Mauvaise entité = écriture inter-entités non déclarée (partie liée).",
+          "en": "Wrong entity = undeclared inter-entity flow (related party)."
+        },
+        "resolves": {
+          "fr": "Confirmer l'usage (design AIOS ?) → attribuer l'entité, créer la règle, refacturation inter-entités si nécessaire.",
+          "en": "Confirm the use (AIOS design?) → attribute entity, create rule, inter-entity recharge if needed."
+        }
+      }
+    }
+  ],
+  "RI_ENTRIES": [
+    {
+      "id": 3001,
+      "date": "2026-01-20",
+      "direction": "recette",
+      "amount": 2800,
+      "category": {
+        "fr": "Conseil",
+        "en": "Consulting"
+      },
+      "raw_label": "VIREMENT KMU-BERATUNG SARL",
+      "counterparty": "KMU-Beratung Sàrl",
+      "explanation": {
+        "fr": "Mandat de conseil — atelier stratégie janvier.",
+        "en": "Consulting mandate — January strategy workshop."
+      },
+      "recognition": "known_one_off",
+      "matched_rule_id": null,
+      "evidence_tier": "full",
+      "piece": {
+        "drive_ref": "drive://bbooks/ri/2026/note-honoraires-2026-01.pdf",
+        "hash": "sha256:aa17…02cd",
+        "captured": "2026-01-20"
+      }
+    },
+    {
+      "id": 3002,
+      "date": "2026-02-18",
+      "direction": "recette",
+      "amount": 3200,
+      "category": {
+        "fr": "Formation",
+        "en": "Training"
+      },
+      "raw_label": "VIREMENT SKS INNOVATION SA",
+      "counterparty": "SKS INNOVATION SA",
+      "explanation": {
+        "fr": "Atelier IA pour les équipes SKS — activité indépendante, hors blackcode SA.",
+        "en": "AI workshop for SKS teams — independent activity, outside blackcode SA."
+      },
+      "recognition": "known_one_off",
+      "matched_rule_id": null,
+      "evidence_tier": "full",
+      "piece": {
+        "drive_ref": "drive://bbooks/ri/2026/note-honoraires-2026-02.pdf",
+        "hash": "sha256:0de4…77b1",
+        "captured": "2026-02-18"
+      }
+    },
+    {
+      "id": 3003,
+      "date": "2026-01-10",
+      "direction": "depense",
+      "amount": 640,
+      "category": {
+        "fr": "Cotisations AVS",
+        "en": "AVS contributions"
+      },
+      "raw_label": "CAISSE DE COMPENSATION VD ACPTE T4",
+      "counterparty": "Caisse de compensation VD",
+      "explanation": {
+        "fr": "Acompte AVS indépendant T4-2025 (règle 107) — ~10% du bénéfice net, pas de LPP obligatoire.",
+        "en": "Self-employed AVS instalment Q4-2025 (rule 107) — ~10% of net profit, no mandatory LPP."
+      },
+      "recognition": "known_recurring",
+      "matched_rule_id": 107,
+      "evidence_tier": "full",
+      "piece": {
+        "drive_ref": "drive://bbooks/ri/2026/avs-acompte-t4-2025.pdf",
+        "hash": "sha256:61c8…e5f0",
+        "captured": "2026-01-10"
+      }
+    },
+    {
+      "id": 3004,
+      "date": "2026-02-02",
+      "direction": "depense",
+      "amount": 349,
+      "category": {
+        "fr": "Matériel",
+        "en": "Equipment"
+      },
+      "raw_label": "CARTE DIGITEC-GALAXUS AG",
+      "counterparty": "Digitec Galaxus AG",
+      "explanation": {
+        "fr": "Écran externe — usage professionnel indépendant.",
+        "en": "External monitor — independent professional use."
+      },
+      "recognition": "known_one_off",
+      "matched_rule_id": null,
+      "evidence_tier": "full",
+      "piece": {
+        "drive_ref": "drive://bbooks/ri/2026/digitec-349.pdf",
+        "hash": "sha256:f2b0…914a",
+        "captured": "2026-02-02"
+      }
+    },
+    {
+      "id": 3005,
+      "date": "2026-03-15",
+      "direction": "depense",
+      "amount": 120,
+      "category": null,
+      "raw_label": "TWINT *8842",
+      "counterparty": null,
+      "explanation": null,
+      "recognition": "unrecognized",
+      "matched_rule_id": null,
+      "evidence_tier": "bare",
+      "piece": null,
+      "da_verdict": {
+        "verdict": "blocked",
+        "rules_triggered": [
+          "dt-001"
+        ],
+        "worst_case": {
+          "fr": "Sans motif ni pièce : non déductible du revenu indépendant.",
+          "en": "Without purpose or document: not deductible from self-employment income."
+        },
+        "resolves": {
+          "fr": "Identifier le paiement TWINT + photographier le justificatif.",
+          "en": "Identify the TWINT payment + photograph the receipt."
+        }
+      }
+    },
+    {
+      "id": 3006,
+      "date": "2026-03-30",
+      "direction": "recette",
+      "amount": 1500,
+      "category": {
+        "fr": "Formation",
+        "en": "Training"
+      },
+      "raw_label": "VIREMENT HEIG-VD",
+      "counterparty": "HEIG-VD",
+      "explanation": {
+        "fr": "Intervention — cours « agents & données » (mandat ponctuel).",
+        "en": "Guest teaching — \"agents & data\" course (one-off mandate)."
+      },
+      "recognition": "known_one_off",
+      "matched_rule_id": null,
+      "evidence_tier": "full",
+      "piece": {
+        "drive_ref": "drive://bbooks/ri/2026/heig-note-2026-03.pdf",
+        "hash": "sha256:3c55…ab09",
+        "captured": "2026-03-30"
+      }
+    }
+  ],
+  "PATRIMOINE": [
+    {
+      "id": 4001,
+      "as_of": "2025-12-31",
+      "compiled": "2026-01-08",
+      "items": [
+        {
+          "label": {
+            "fr": "Compte bancaire professionnel",
+            "en": "Business bank account"
+          },
+          "amount": 8200
+        },
+        {
+          "label": {
+            "fr": "Créances (factures impayées)",
+            "en": "Receivables (unpaid invoices)"
+          },
+          "amount": 4500
+        },
+        {
+          "label": {
+            "fr": "Matériel professionnel",
+            "en": "Business equipment"
+          },
+          "amount": 1200
+        },
+        {
+          "label": {
+            "fr": "Dettes",
+            "en": "Debts"
+          },
+          "amount": 0
+        }
+      ],
+      "note": {
+        "fr": "Situation du patrimoine au 31.12.2025 — compilée pour l'annexe indépendant de la déclaration personnelle.",
+        "en": "Net-worth statement as of 31.12.2025 — compiled for the personal tax return's self-employment annex."
+      }
+    }
+  ],
+  "PIECE_INBOX": [
+    {
+      "id": 9601,
+      "entity_id": 1,
+      "status": "staged",
+      "received": "2026-08-13",
+      "pipeline": "drive_worker (spike, Tier-1)",
+      "source": {
+        "file_id": "1Q4YcYD_nKrz3wasgPMMfE0ZTLdvhGo8q",
+        "file_name": "Scanned_20260813-1357.jpg",
+        "mime_type": "image/jpeg",
+        "created_time": "2026-08-13T13:57:00+02:00",
+        "web_view_link": "https://drive.google.com/file/d/1Q4YcYD_nKrz3wasgPMMfE0ZTLdvhGo8q/view"
+      },
+      "extraction": {
+        "document_type": "receipt",
+        "merchant": {
+          "name": "Philfruits — Kiosque de Bovernier",
+          "vat_number": "CHE-105.421.786 TVA",
+          "phone": "027 722 99 06",
+          "website": "www.philfruits.ch"
+        },
+        "tx": {
+          "date": "2026-08-05",
+          "time": "16:07",
+          "ticket_number": "A1/20576",
+          "currency": "CHF",
+          "total": 79.05,
+          "payment_method": "card"
+        },
+        "lines": [
+          {
+            "description": "Faises 500",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 5.8,
+            "amount": 5.8,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "BIERE sans alcool",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 4,
+            "amount": 4,
+            "vat_rate": 8.1
+          },
+          {
+            "description": "Cidre",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 5.5,
+            "amount": 5.5,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Abricot A 1kg",
+            "quantity": 0.992,
+            "unit": "kg",
+            "unit_price": 7.5,
+            "amount": 7.45,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Abricot grande",
+            "quantity": 3,
+            "unit": "un",
+            "unit_price": 9.1,
+            "amount": 27.3,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Eav Fiora genepi 50cl",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 29,
+            "amount": 29,
+            "vat_rate": 8.1
+          }
+        ],
+        "vat_summary": [
+          {
+            "rate": 2.6,
+            "gross": 46.05
+          },
+          {
+            "rate": 8.1,
+            "gross": 33
+          }
+        ],
+        "confidence": 0.97,
+        "notes": "\"Faises\" is likely a printer truncation of \"Fraises\" — transcribed as printed. \"Eav\" likewise probably \"Eau\". TP=0.014 kg tare line ignored (not a charge line).",
+        "validation": {
+          "lines_sum_matches_total": true,
+          "vat_rates_valid": true,
+          "date_plausible": true,
+          "passed": true
+        }
+      },
+      "match": {
+        "status": "unmatched",
+        "looking_for": {
+          "amount_chf": 79.05,
+          "date_window": "2026-08-03 → 2026-08-07",
+          "payment_method": "card"
+        },
+        "note": {
+          "fr": "Aucune transaction correspondante dans les imports (CHF 79.05, ~05.08, carte) — en file Reconnaissance jusqu'au rapprochement ou à la création d'une écriture.",
+          "en": "No matching transaction in the imports (CHF 79.05, ~05.08, card) — sits in the Recognition worklist until matched or an entry is created."
+        }
+      }
+    },
+    {
+      "id": 9602,
+      "entity_id": 1,
+      "status": "staged",
+      "received": "2026-08-13",
+      "pipeline": "drive_worker (spike, Tier-1)",
+      "source": {
+        "file_id": "1pJvhqVUwMKXttPOfh4yzboH9Lct-sbhZ",
+        "file_name": "Scanned_20260813-1546-01.jpg",
+        "mime_type": "image/jpeg",
+        "created_time": "2026-08-13T15:46:00+02:00",
+        "web_view_link": "https://drive.google.com/file/d/1pJvhqVUwMKXttPOfh4yzboH9Lct-sbhZ/view"
+      },
+      "extraction": {
+        "document_type": "receipt",
+        "merchant": {
+          "name": "Migros — MM Florissant (Société Coopérative Migros Vaud)",
+          "vat_number": "CHE-105.896.913 TVA",
+          "phone": "058 573 76 40",
+          "website": null
+        },
+        "tx": {
+          "date": "2026-08-05",
+          "time": "18:08",
+          "ticket_number": "0133",
+          "currency": "CHF",
+          "total": 30.05,
+          "payment_method": "card"
+        },
+        "lines": [
+          {
+            "description": "Badoit 6 x 1 l",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 5.7,
+            "amount": 3.82,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Non bianco 75cl",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 7.5,
+            "amount": 5.25,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Non Rosato 75 cl",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 7.5,
+            "amount": 5.25,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Alnatura Mélan. olives",
+            "quantity": 2,
+            "unit": "un",
+            "unit_price": 3.4,
+            "amount": 6.8,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Coca-Cola zero 1.5l",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 2.4,
+            "amount": 2.4,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Cubers glacons",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 3.9,
+            "amount": 3.9,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Bitter 6x10cl",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 2.65,
+            "amount": 2.65,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Arrondi en faveur",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": -0.02,
+            "amount": -0.02,
+            "vat_rate": 0
+          }
+        ],
+        "vat_summary": [
+          {
+            "rate": 2.6,
+            "gross": 30.07
+          }
+        ],
+        "confidence": 0.96,
+        "notes": "Rabais per line (Badoit −1.88, Non ×2 −2.25 each); « Vous économisez au total 6.40 ». Lines sum 30.07, Swiss 5-cent rounding −0.02 → 30.05. Card DEBIT MASTERCARD •••• 9496. EUR total also printed (33.39) — CHF is the settlement.",
+        "validation": {
+          "lines_sum_matches_total": true,
+          "vat_rates_valid": true,
+          "date_plausible": true,
+          "passed": true
+        }
+      },
+      "match": {
+        "status": "unmatched",
+        "looking_for": {
+          "amount_chf": 30.05,
+          "date_window": "2026-08-03 → 2026-08-07",
+          "payment_method": "card"
+        },
+        "note": {
+          "fr": "Aucune transaction correspondante (CHF 30.05, 05.08, carte •••• 9496 — carte inconnue du registre des sources !) — en file Reconnaissance.",
+          "en": "No matching transaction (CHF 30.05, 05.08, card •••• 9496 — a card the sources register does not know!) — in the Recognition worklist."
+        }
+      }
+    },
+    {
+      "id": 9603,
+      "entity_id": 1,
+      "status": "staged",
+      "received": "2026-08-13",
+      "pipeline": "drive_worker (spike, Tier-1)",
+      "source": {
+        "file_id": "1qNInNPAiV3VwoAHJrszZCzMOzzunIBxy",
+        "file_name": "Scanned_20260813-1546-02.jpg",
+        "mime_type": "image/jpeg",
+        "created_time": "2026-08-13T15:46:00+02:00",
+        "web_view_link": "https://drive.google.com/file/d/1qNInNPAiV3VwoAHJrszZCzMOzzunIBxy/view"
+      },
+      "extraction": {
+        "document_type": "receipt",
+        "merchant": {
+          "name": "Migros — MM Florissant (Société Coopérative Migros Vaud)",
+          "vat_number": "CHE-105.896.913 TVA",
+          "phone": "058 573 76 40",
+          "website": null
+        },
+        "tx": {
+          "date": "2026-07-30",
+          "time": "14:09",
+          "ticket_number": null,
+          "currency": "CHF",
+          "total": 28.4,
+          "payment_method": "card"
+        },
+        "lines": [
+          {
+            "description": "Molisana Penne Rigate",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 2.5,
+            "amount": 2.5,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Heinz ketchup 800ml",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 5,
+            "amount": 5,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Albo miettes thon toma",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 2.8,
+            "amount": 2.8,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Non bianco 75cl",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 7.5,
+            "amount": 5.25,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Non Rosato 75 cl",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 7.5,
+            "amount": 5.25,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "LT Excel. Fleur de sel",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 4.8,
+            "amount": 4.8,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Cipolata de porc",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 5.55,
+            "amount": 3.7,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Carottes",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 1.95,
+            "amount": 0.9,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Pomm.de terre précoces",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 2.3,
+            "amount": 1.1,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Pomm.de terre précoces",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 2.3,
+            "amount": 1.1,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Mayonnaise française",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 5.9,
+            "amount": 4.7,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Avocat",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 1.3,
+            "amount": 1.3,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "CUMULUS BON 5.-",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": -5,
+            "amount": -5,
+            "vat_rate": 0
+          },
+          {
+            "description": "CUMULUS BON 5.-",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": -5,
+            "amount": -5,
+            "vat_rate": 0
+          }
+        ],
+        "vat_summary": [
+          {
+            "rate": 2.6,
+            "gross": 28.4
+          }
+        ],
+        "confidence": 0.9,
+        "notes": "Print skew: article names offset one row from their figures — pairing reconstructed via the receipt's own arithmetic (sous-total 38.40 checks). « 9 Répartition proportionnelle taux TVA » on the VAT block. Card •••• 9496.",
+        "validation": {
+          "lines_sum_matches_total": true,
+          "vat_rates_valid": true,
+          "date_plausible": true,
+          "passed": true
+        }
+      },
+      "match": {
+        "status": "unmatched",
+        "looking_for": {
+          "amount_chf": 28.4,
+          "date_window": "2026-07-28 → 2026-08-01",
+          "payment_method": "card"
+        },
+        "note": {
+          "fr": "Aucune transaction correspondante (CHF 28.40, 30.07, carte •••• 9496) — en file Reconnaissance.",
+          "en": "No matching transaction (CHF 28.40, 30.07, card •••• 9496) — in the Recognition worklist."
+        }
+      }
+    },
+    {
+      "id": 9604,
+      "entity_id": 1,
+      "status": "staged",
+      "received": "2026-08-13",
+      "pipeline": "drive_worker (spike, Tier-1)",
+      "source": {
+        "file_id": "1J2kPJmUdmHehODAwwnYuOJ5c3sesfgEi",
+        "file_name": "Scanned_20260813-1546-03.jpg",
+        "mime_type": "image/jpeg",
+        "created_time": "2026-08-13T15:46:00+02:00",
+        "web_view_link": "https://drive.google.com/file/d/1J2kPJmUdmHehODAwwnYuOJ5c3sesfgEi/view"
+      },
+      "extraction": {
+        "document_type": "receipt",
+        "merchant": {
+          "name": "Poste CH Réseau SA — filiale 1095 Lutry",
+          "vat_number": "CHE-116.302.542 TVA",
+          "phone": "0848 888 888",
+          "website": "www.poste.ch"
+        },
+        "tx": {
+          "date": "2026-08-13",
+          "time": "09:40",
+          "ticket_number": "98.00.109500.02607332",
+          "currency": "CHF",
+          "total": 5.6,
+          "payment_method": "cash"
+        },
+        "lines": [
+          {
+            "description": "Recommandé (R) (2) (A) — dest. UBS Switzerland AG, 8152 Glattbrugg, kg 0.041",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 6.8,
+            "amount": 6.8,
+            "vat_rate": 8.1
+          },
+          {
+            "description": "Pré-affranchissement",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": -1.2,
+            "amount": -1.2,
+            "vat_rate": 0
+          }
+        ],
+        "vat_summary": [
+          {
+            "rate": 8.1,
+            "gross": 6.8
+          }
+        ],
+        "confidence": 0.94,
+        "notes": "HANDWRITTEN on the receipt: « Suivi lettre UBS — envoi : 13/08/26 » — Andrea's own annotation linking this to the UBS dossier. Paid cash (espèces 20.00, rendu 14.40). TVA incl. 0.51 printed against the 6.80 item.",
+        "validation": {
+          "lines_sum_matches_total": true,
+          "vat_rates_valid": true,
+          "date_plausible": true,
+          "passed": true
+        }
+      },
+      "match": {
+        "status": "unmatched",
+        "looking_for": {
+          "amount_chf": 5.6,
+          "date_window": "2026-08-13",
+          "payment_method": "cash"
+        },
+        "note": {
+          "fr": "Payé en ESPÈCES — aucun flux bancaire n'arrivera jamais : l'écriture doit être créée depuis la pièce. Annotation manuscrite : à rattacher au dossier UBS.",
+          "en": "Paid in CASH — no bank flow will ever arrive: the entry must be created from the document. Handwritten annotation: attach to the UBS dossier."
+        }
+      }
+    },
+    {
+      "id": 9605,
+      "entity_id": 1,
+      "status": "staged",
+      "received": "2026-08-13",
+      "pipeline": "drive_worker (spike, Tier-1)",
+      "source": {
+        "file_id": "1xuvVHnBWRmAsAWXhz0uyVpHJd-qpOdhN",
+        "file_name": "Scanned_20260813-1546-04.jpg",
+        "mime_type": "image/jpeg",
+        "created_time": "2026-08-13T15:46:00+02:00",
+        "web_view_link": "https://drive.google.com/file/d/1xuvVHnBWRmAsAWXhz0uyVpHJd-qpOdhN/view"
+      },
+      "extraction": {
+        "document_type": "other",
+        "merchant": {
+          "name": "Kiosque de Bovernier",
+          "vat_number": null,
+          "phone": null,
+          "website": null
+        },
+        "tx": {
+          "date": "2026-08-05",
+          "time": "16:07",
+          "ticket_number": null,
+          "currency": "CHF",
+          "total": 79.05,
+          "payment_method": "card"
+        },
+        "lines": [],
+        "vat_summary": [],
+        "confidence": 0.85,
+        "notes": "EFT card slip (justificatif de paiement), not an itemized receipt — no lines, no VAT breakdown. DEBIT MASTERCARD contactless •••• 9496, 16:07:36. Same merchant, date, and total as the Philfruits receipt (ticket A1/20576): companion document of the same purchase. Date partly covered by a finger in the scan; read from the terminal time and the twin receipt.",
+        "validation": {
+          "lines_sum_matches_total": true,
+          "vat_rates_valid": true,
+          "date_plausible": true,
+          "passed": true
+        }
+      },
+      "match": {
+        "status": "duplicate_suspect",
+        "duplicate_of": 9601,
+        "looking_for": {
+          "amount_chf": 79.05,
+          "date_window": "2026-08-05",
+          "payment_method": "card"
+        },
+        "note": {
+          "fr": "Doublon probable de la pièce 9601 (même marchand, même date, même total 79.05) — signalé, jamais écarté automatiquement : remboursements et paiements fractionnés ressemblent à des doublons. À trancher en revue.",
+          "en": "Probable duplicate of pièce 9601 (same merchant, date and total 79.05) — flagged, never auto-dropped: refunds and split payments look like duplicates. Human call in review."
+        }
+      }
+    },
+    {
+      "id": 9606,
+      "entity_id": 1,
+      "status": "staged",
+      "received": "2026-08-13",
+      "pipeline": "drive_worker (spike, Tier-1)",
+      "source": {
+        "file_id": "14FUf6HUMmBwcFMadPrqZDblb7MVvhTu7",
+        "file_name": "Scanned_20260813-1546-05.jpg",
+        "mime_type": "image/jpeg",
+        "created_time": "2026-08-13T15:46:00+02:00",
+        "web_view_link": "https://drive.google.com/file/d/14FUf6HUMmBwcFMadPrqZDblb7MVvhTu7/view"
+      },
+      "extraction": {
+        "document_type": "receipt",
+        "merchant": {
+          "name": "Migros — MM Florissant (Société Coopérative Migros Vaud)",
+          "vat_number": "CHE-105.896.913 TVA",
+          "phone": "058 573 76 40",
+          "website": null
+        },
+        "tx": {
+          "date": "2026-08-05",
+          "time": "08:33",
+          "ticket_number": null,
+          "currency": "CHF",
+          "total": 15.15,
+          "payment_method": "card"
+        },
+        "lines": [
+          {
+            "description": "Aproz Nature 1.5l",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 1.1,
+            "amount": 1.1,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Aproz Légère 1.5l",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 1.1,
+            "amount": 1.1,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Sandwich poulet",
+            "quantity": 2,
+            "unit": "un",
+            "unit_price": 4.5,
+            "amount": 9,
+            "vat_rate": 2.6
+          },
+          {
+            "description": "Farmer Soft brownie",
+            "quantity": 1,
+            "unit": "un",
+            "unit_price": 3.95,
+            "amount": 3.95,
+            "vat_rate": 2.6
+          }
+        ],
+        "vat_summary": [
+          {
+            "rate": 2.6,
+            "gross": 15.15
+          }
+        ],
+        "confidence": 0.85,
+        "notes": "Heavily crumpled thermal paper — several fields reconstructed from partial print, arithmetic checks (1.10+1.10+9.00+3.95 = 15.15). Card •••• 9496, 08:33:52. Same day as the Philfruits and Migros-18:08 purchases.",
+        "validation": {
+          "lines_sum_matches_total": true,
+          "vat_rates_valid": true,
+          "date_plausible": true,
+          "passed": true
+        }
+      },
+      "match": {
+        "status": "unmatched",
+        "looking_for": {
+          "amount_chf": 15.15,
+          "date_window": "2026-08-03 → 2026-08-07",
+          "payment_method": "card"
+        },
+        "note": {
+          "fr": "Aucune transaction correspondante (CHF 15.15, 05.08, carte •••• 9496) — en file Reconnaissance.",
+          "en": "No matching transaction (CHF 15.15, 05.08, card •••• 9496) — in the Recognition worklist."
+        }
+      }
+    }
+  ],
+  "DRIVE_MANIFEST": [
+    {
+      "source_id": 510,
+      "file_id": "1Q4YcYD_nKrz3wasgPMMfE0ZTLdvhGo8q",
+      "name": "Scanned_20260813-1357.jpg",
+      "mime_type": "image/jpeg",
+      "created_time": "2026-08-13T13:57:00+02:00",
+      "fetched": "2026-08-13",
+      "extracted_piece_id": 9601,
+      "state": "validated_staged",
+      "archived": false
+    },
+    {
+      "source_id": 510,
+      "file_id": "1pJvhqVUwMKXttPOfh4yzboH9Lct-sbhZ",
+      "name": "Scanned_20260813-1546-01.jpg",
+      "mime_type": "image/jpeg",
+      "created_time": "2026-08-13T15:46:00+02:00",
+      "fetched": "2026-08-13",
+      "extracted_piece_id": 9602,
+      "state": "validated_staged",
+      "archived": false
+    },
+    {
+      "source_id": 510,
+      "file_id": "1qNInNPAiV3VwoAHJrszZCzMOzzunIBxy",
+      "name": "Scanned_20260813-1546-02.jpg",
+      "mime_type": "image/jpeg",
+      "created_time": "2026-08-13T15:46:00+02:00",
+      "fetched": "2026-08-13",
+      "extracted_piece_id": 9603,
+      "state": "validated_staged",
+      "archived": false
+    },
+    {
+      "source_id": 510,
+      "file_id": "1J2kPJmUdmHehODAwwnYuOJ5c3sesfgEi",
+      "name": "Scanned_20260813-1546-03.jpg",
+      "mime_type": "image/jpeg",
+      "created_time": "2026-08-13T15:46:00+02:00",
+      "fetched": "2026-08-13",
+      "extracted_piece_id": 9604,
+      "state": "validated_staged",
+      "archived": false
+    },
+    {
+      "source_id": 510,
+      "file_id": "1xuvVHnBWRmAsAWXhz0uyVpHJd-qpOdhN",
+      "name": "Scanned_20260813-1546-04.jpg",
+      "mime_type": "image/jpeg",
+      "created_time": "2026-08-13T15:46:00+02:00",
+      "fetched": "2026-08-13",
+      "extracted_piece_id": 9605,
+      "state": "needs_review",
+      "archived": false
+    },
+    {
+      "source_id": 510,
+      "file_id": "14FUf6HUMmBwcFMadPrqZDblb7MVvhTu7",
+      "name": "Scanned_20260813-1546-05.jpg",
+      "mime_type": "image/jpeg",
+      "created_time": "2026-08-13T15:46:00+02:00",
+      "fetched": "2026-08-13",
+      "extracted_piece_id": 9606,
+      "state": "validated_staged",
+      "archived": false
+    }
+  ],
+  "MANIFEST_STATES": {
+    "discovered": {
+      "label": {
+        "fr": "Découvert",
+        "en": "Discovered"
+      },
+      "color": "#7a8595"
+    },
+    "downloaded": {
+      "label": {
+        "fr": "Téléchargé",
+        "en": "Downloaded"
+      },
+      "color": "#7a8595"
+    },
+    "extracted": {
+      "label": {
+        "fr": "Extrait",
+        "en": "Extracted"
+      },
+      "color": "#f0b66b"
+    },
+    "validated_staged": {
+      "label": {
+        "fr": "Validé · en attente",
+        "en": "Validated · staged"
+      },
+      "color": "#f0b66b"
+    },
+    "needs_review": {
+      "label": {
+        "fr": "En revue",
+        "en": "Needs review"
+      },
+      "color": "#ef6f6f"
+    },
+    "ingested": {
+      "label": {
+        "fr": "Comptabilisé",
+        "en": "Ingested"
+      },
+      "color": "#3fb27f"
+    }
+  },
+  "ANALYTIQUE_CATEGORIES": [
+    {
+      "key": "personnel",
+      "accounts": [
+        "5000",
+        "5700"
+      ],
+      "label": {
+        "fr": "Personnel",
+        "en": "People"
+      }
+    },
+    {
+      "key": "bureau",
+      "accounts": [
+        "6000"
+      ],
+      "label": {
+        "fr": "Bureau & loyer",
+        "en": "Office & rent"
+      }
+    },
+    {
+      "key": "it_ai",
+      "accounts": [
+        "6570"
+      ],
+      "label": {
+        "fr": "IT & outils (incl. IA)",
+        "en": "IT & tooling (incl. AI)"
+      }
+    },
+    {
+      "key": "admin",
+      "accounts": [
+        "6500"
+      ],
+      "label": {
+        "fr": "Admin & fiduciaire",
+        "en": "Admin & fiduciary"
+      }
+    },
+    {
+      "key": "autres",
+      "accounts": [
+        "4400",
+        "6800",
+        "6900",
+        "8500",
+        "8900"
+      ],
+      "label": {
+        "fr": "Autres charges",
+        "en": "Other charges"
+      }
+    }
+  ],
+  "COMPLIANCE_META": {
+    "status": "DRAFT — researched against Fedlex, NOT reviewed by a fiduciary or lawyer",
+    "review_states": [
+      "draft",
+      "approved",
+      "edited",
+      "rejected"
+    ]
+  },
+  "COMPLIANCE_RULES": [
+    {
+      "rule_id": "bk-001",
+      "citation": "art. 957 al. 1 ch. 2 CO",
+      "applies_to": "SA",
+      "severity": "blocker",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Une SA/Sàrl n'a JAMAIS d'option simplifiée, quel que soit le chiffre d'affaires.",
+        "en": "An SA/Sàrl NEVER has a simplified option, at any turnover."
+      }
+    },
+    {
+      "rule_id": "bk-002",
+      "citation": "art. 957 al. 2 CO",
+      "applies_to": "RI",
+      "severity": "info",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "RI < CHF 500'000 : régime simplifié permis (plancher permissif, pas une obligation).",
+        "en": "RI < CHF 500,000: simplified regime allowed (permissive floor, not a duty)."
+      }
+    },
+    {
+      "rule_id": "ret-001",
+      "citation": "art. 958f al. 1 CO",
+      "applies_to": "both",
+      "severity": "warning",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Conservation 10 ans des livres et pièces.",
+        "en": "10-year retention of books and documents."
+      }
+    },
+    {
+      "rule_id": "ret-002",
+      "citation": "art. 958f al. 3 CO",
+      "applies_to": "both",
+      "severity": "blocker",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Les enregistrements doivent rester lisibles/restituables pendant toute la durée.",
+        "en": "Records must stay readable/retrievable for the whole period."
+      }
+    },
+    {
+      "rule_id": "ret-003",
+      "citation": "art. 958f al. 2 CO",
+      "applies_to": "both",
+      "severity": "warning",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Comptes annuels approuvés : exemplaire signé et imprimé archivé.",
+        "en": "Approved annual accounts: signed printed copy archived."
+      }
+    },
+    {
+      "rule_id": "ret-004",
+      "citation": "art. 957a al. 2 ch. 1 CO + doctrine",
+      "applies_to": "both",
+      "severity": "blocker",
+      "source_confidence": "doctrine_inferred",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Jamais d'édition/suppression d'une écriture comptabilisée — extourne uniquement.",
+        "en": "Never edit/delete a posted entry — reversing entries only."
+      }
+    },
+    {
+      "rule_id": "vat-001",
+      "citation": "art. 10 al. 2 let. a LTVA",
+      "applies_to": "both",
+      "severity": "blocker",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Assujettissement obligatoire dès CHF 100'000 de chiffre d'affaires.",
+        "en": "Mandatory VAT registration from CHF 100,000 turnover."
+      }
+    },
+    {
+      "rule_id": "vat-002",
+      "citation": "art. 26 al. 2 let. a LTVA",
+      "applies_to": "both",
+      "severity": "blocker",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Facture sans nom/UID fournisseur : impôt préalable en danger.",
+        "en": "Invoice without supplier name/UID: input VAT at risk."
+      }
+    },
+    {
+      "rule_id": "vat-003",
+      "citation": "art. 26 al. 2 let. b LTVA",
+      "applies_to": "both",
+      "severity": "warning",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Destinataire manquant — vérifier l'exception ticket de caisse.",
+        "en": "Missing recipient — check the cash-register exception."
+      }
+    },
+    {
+      "rule_id": "vat-004",
+      "citation": "art. 26 al. 2 let. c LTVA",
+      "applies_to": "both",
+      "severity": "warning",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Date/période de prestation ambiguë.",
+        "en": "Ambiguous supply date/period."
+      }
+    },
+    {
+      "rule_id": "vat-005",
+      "citation": "art. 26 al. 2 let. d LTVA",
+      "applies_to": "both",
+      "severity": "blocker",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Description de la prestation manquante/vague.",
+        "en": "Missing/vague supply description."
+      }
+    },
+    {
+      "rule_id": "vat-006",
+      "citation": "art. 26 al. 2 let. e LTVA",
+      "applies_to": "both",
+      "severity": "blocker",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Montant de la contre-prestation manquant.",
+        "en": "Missing consideration amount."
+      }
+    },
+    {
+      "rule_id": "vat-007",
+      "citation": "art. 26 al. 2 let. f LTVA",
+      "applies_to": "both",
+      "severity": "blocker",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Taux/montant TVA manquant — cause n°1 de refus d'impôt préalable.",
+        "en": "Missing VAT rate/amount — #1 cause of input-tax denial."
+      }
+    },
+    {
+      "rule_id": "vat-008",
+      "citation": "art. 28 al. 3 LTVA",
+      "applies_to": "both",
+      "severity": "blocker",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Une preuve de paiement seule ne remplace JAMAIS la facture art. 26 — crédit TVA perdu.",
+        "en": "Proof of payment alone NEVER replaces the art. 26 invoice — VAT credit lost."
+      }
+    },
+    {
+      "rule_id": "dt-001",
+      "citation": "art. 58 al. 1 let. a LIFD",
+      "applies_to": "SA",
+      "severity": "warning",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Charge sans pièce : la vraisemblance doit être reconstruite, sinon reprise.",
+        "en": "Expense without document: plausibility must be reconstructed, else reprise."
+      }
+    },
+    {
+      "rule_id": "dt-002",
+      "citation": "art. 58 al. 1 let. b LIFD",
+      "applies_to": "SA",
+      "severity": "blocker",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Sortie inexpliquée vers une partie liée : risque de distribution dissimulée (double peine).",
+        "en": "Unexplained outflow to a related party: disguised-distribution risk (double hit)."
+      }
+    },
+    {
+      "rule_id": "audit-001",
+      "citation": "art. 727 / 727a CO",
+      "applies_to": "SA",
+      "severity": "warning",
+      "source_confidence": "needs_fiduciary_check",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Seuils de contrôle ordinaire / conditions d'opting-out à surveiller.",
+        "en": "Ordinary-audit thresholds / opt-out conditions to watch."
+      }
+    },
+    {
+      "rule_id": "receipt-001",
+      "citation": "art. 26 LTVA (seuil CHF 400)",
+      "applies_to": "both",
+      "severity": "blocker",
+      "source_confidence": "verified_fedlex",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Au-delà de CHF 400 TTC, le ticket simplifié ne suffit plus — facture complète requise.",
+        "en": "Above CHF 400 incl. VAT, a simplified receipt is not enough — full invoice required."
+      }
+    },
+    {
+      "rule_id": "receipt-002",
+      "citation": "art. 958f CO — intégrité",
+      "applies_to": "both",
+      "severity": "blocker",
+      "source_confidence": "doctrine_inferred",
+      "review_state": "draft",
+      "summary": {
+        "fr": "Original scanné immuable : hash à la capture, corrections en version liée.",
+        "en": "Scanned original immutable: hash at capture, corrections as linked versions."
+      }
+    }
+  ],
+  "SIDEBAR": [
+    {
+      "id": "overview",
+      "file": "index.html",
+      "icon": "layout-dashboard",
+      "label": {
+        "fr": "Vue d'ensemble",
+        "en": "Overview"
+      },
+      "scoped": false
+    },
+    {
+      "id": "recognition",
+      "file": "app-recognition.html",
+      "icon": "scan-search",
+      "label": {
+        "fr": "Reconnaissance",
+        "en": "Recognition"
+      },
+      "scoped": true
+    },
+    {
+      "id": "pieces",
+      "file": "app-pieces.html",
+      "icon": "paperclip",
+      "label": {
+        "fr": "Pièces justificatives",
+        "en": "Supporting documents"
+      },
+      "scoped": true
+    },
+    {
+      "id": "ledger",
+      "file": "app-ledger.html",
+      "icon": "book-open",
+      "label": {
+        "fr": "Grand Livre",
+        "en": "General ledger"
+      },
+      "scoped": true
+    },
+    {
+      "id": "sources",
+      "file": "app-sources.html",
+      "icon": "landmark",
+      "label": {
+        "fr": "Comptes & sources",
+        "en": "Accounts & sources"
+      },
+      "scoped": false
+    },
+    {
+      "id": "bilan",
+      "file": "app-bilan.html",
+      "icon": "scale",
+      "label": {
+        "fr": "Bilan",
+        "en": "Balance sheet"
+      },
+      "scoped": true
+    },
+    {
+      "id": "cr",
+      "file": "app-compte-resultat.html",
+      "icon": "trending-up",
+      "label": {
+        "fr": "Compte de résultat",
+        "en": "Income statement"
+      },
+      "scoped": true
+    },
+    {
+      "id": "analytique",
+      "file": "app-analytique.html",
+      "icon": "calculator",
+      "label": {
+        "fr": "Compta analytique",
+        "en": "Management view"
+      },
+      "scoped": true
+    },
+    {
+      "id": "analyses",
+      "file": "app-analyses.html",
+      "icon": "messages-square",
+      "label": {
+        "fr": "Analyses",
+        "en": "Analyses"
+      },
+      "scoped": true
+    }
+  ],
+  "TAX_INFO": {
+    "ifd": {
+      "rate_pct": 8.5,
+      "basis": {
+        "fr": "Bénéfice net imposable",
+        "en": "Taxable net profit"
+      },
+      "citation": "art. 68 LIFD",
+      "confirmed": true
+    },
+    "vd_cantonal": {
+      "base_rate_pct": 3.3333333333333335,
+      "coefficient_pct": 155,
+      "coefficient_note": {
+        "fr": "Coefficient cantonal 155% (stable depuis 2021, reconduit 2026)",
+        "en": "Cantonal coefficient 155% (stable since 2021, renewed 2026)"
+      },
+      "citation": "LI VD (RSV 642.11) · vd.ch/impots — impôt sur le bénéfice PM",
+      "confirmed": true
+    },
+    "communal_renens": {
+      "coefficient_pct": 77,
+      "validity": "2024–2027",
+      "citation": {
+        "fr": "Arrêté d'imposition de Renens 2024–2027 (renens.ch) ; tableau officiel des impôts communaux vd.ch",
+        "en": "Renens tax decree 2024–2027 (renens.ch); official vd.ch communal tax table"
+      },
+      "confirmed": true
+    },
+    "capital_tax": {
+      "base_rate_permille": 0.6,
+      "imputation": true,
+      "citation": "art. 118 LI VD · vd.ch/impots — impôt sur le capital",
+      "confirmed": true,
+      "open_question": {
+        "fr": "Reste à confirmer avec la fiduciaire : application exacte des coefficients (cantonal/communal) au taux de 0.6‰, et définition précise du capital propre imposable pour une petite SA.",
+        "en": "Still to confirm with the fiduciary: exact application of the (cantonal/communal) coefficients to the 0.6‰ rate, and the precise taxable-equity definition for a small SA."
+      }
+    }
+  }
+}

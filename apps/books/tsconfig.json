@@ -1,0 +1,39 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // ES2020 for BigInt LITERALS (`0n`), which lib/derive needs.
+    //
+    // The shared base targets ES2017. That is fine for every other app and is
+    // deliberately not changed here: a shared config edited to suit one app is how
+    // a two-app base becomes nobody's. `lib` already includes esnext, so the
+    // BigInt TYPES were always available; only the literal syntax is gated by
+    // `target`.
+    //
+    // Why BigInt at all: money is `numeric(14,2)` and arrives from the driver as a
+    // string. Summing those as JavaScript numbers reintroduces the exact error the
+    // column type exists to prevent, and this data contains 22333.03 and 2283.03.
+    // lib/derive accumulates in integer centimes so a bilan balances to the
+    // rappen rather than to within a rounding error.
+    "target": "ES2020",
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

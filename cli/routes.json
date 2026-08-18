@@ -3,6 +3,114 @@
   "routes": [
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}/invitations/{id}",
+      "command": "bk books invite revoke",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "command": "bk books workspace list, bk books workspace use",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk books workspace show",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/accounts",
+      "command": "bk books account list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/bilan",
+      "command": "bk books bilan",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/compte-resultat",
+      "command": "bk books cr",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/entities",
+      "command": "bk books entity list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/entries",
+      "command": "bk books entry list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/entries/{number}",
+      "command": "bk books entry show",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/exercices",
+      "command": "bk books exercice list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk books invite list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/members",
+      "command": "bk books member list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/overview",
+      "command": "bk books overview",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/patrimoine",
+      "command": "bk books patrimoine",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/active-workspace",
+      "command": "bk books workspace use",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/entities",
+      "command": "bk books entity create",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/exercices",
+      "command": "bk books exercice create",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk books invite send",
+      "app": "books"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}",
       "command": "bk issues workspace delete",
       "app": "issues"
