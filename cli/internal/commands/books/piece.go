@@ -61,7 +61,7 @@ func newPieceListCmd() *cobra.Command {
 						flags += fmt.Sprintf("dup-of #%d ", *p.DuplicateOf)
 					}
 					if p.MatchedEntry != nil {
-						flags += fmt.Sprintf("-> entry #%d", *p.MatchedEntry)
+						flags += fmt.Sprintf("-> %s#%d", riPrefix(p.MatchedJournal), *p.MatchedEntry)
 					}
 					if flags == "" {
 						flags = "—"
@@ -187,7 +187,7 @@ func newPieceMatchCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, p, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "matched piece #%d -> entry #%d\n", p.Number, *p.MatchedEntry)
+				_, err := fmt.Fprintf(w, "matched piece #%d -> %s#%d\n", p.Number, riPrefix(p.MatchedJournal), *p.MatchedEntry)
 				return err
 			})
 		},
@@ -195,4 +195,13 @@ func newPieceMatchCmd() *cobra.Command {
 	cmd.Flags().IntVar(&entry, "entry", 0, "The entry #number this document proves (required)")
 	_ = cmd.MarkFlagRequired("entry")
 	return cmd
+}
+
+// riPrefix labels a matched entry number with its journal: an RI book's
+// numbers live in the recettes-dépenses journal, not the grand livre.
+func riPrefix(journal *string) string {
+	if journal != nil && *journal == "recettes_depenses" {
+		return "RI entry "
+	}
+	return "entry "
 }

@@ -598,7 +598,10 @@ type BooksPiece struct {
 	NeedsReview  bool    `json:"needs_review"`
 	DuplicateOf  *int    `json:"duplicate_of"`
 	MatchedEntry *int    `json:"matched_entry"`
-	Validation   struct {
+	// Which journal MatchedEntry's number lives in: "grand_livre" or, for a
+	// simplified book, "recettes_depenses". Nil until matched.
+	MatchedJournal *string `json:"matched_journal"`
+	Validation     struct {
 		Passed   bool     `json:"passed"`
 		Problems []string `json:"problems"`
 	} `json:"validation"`

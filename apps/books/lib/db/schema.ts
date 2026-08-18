@@ -646,6 +646,10 @@ export const booksPieceInbox = booksSchema.table(
     matched_entry_id: integer('matched_entry_id').references(() => booksEntry.id, {
       onDelete: 'set null',
     }),
+    /** The RI journal's half of the match. 0010's CHECK: never both. */
+    matched_ri_entry_id: integer('matched_ri_entry_id').references(() => booksRiEntry.id, {
+      onDelete: 'set null',
+    }),
     matched_at: timestamp('matched_at', { withTimezone: true }),
     note: jsonb('note'),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

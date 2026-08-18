@@ -21,6 +21,8 @@ import {
   booksDriveManifest,
   booksEntry,
   booksEntryLine,
+  booksRiEntry,
+  booksEntity,
   booksSource,
   booksCounters,
   type BooksPieceInbox,
@@ -223,6 +225,23 @@ export interface MatchCandidate {
 }
 
 /**
+ * Which journal a piece's book keeps. A simplified book's entries are
+ * `ri_entry` rows; a double-entry book's are the grand livre's. An
+ * UNATTRIBUTED piece (entity NULL) reads as the grand livre — same doctrine
+ * as the worklist: until somebody says whose it is, it cannot reach a
+ * personal recettes-dépenses book.
+ */
+type Journal = 'grand_livre' | 'recettes_depenses'
+async function journalOf(
+  tx: Pick<ReturnType<typeof getDb>, 'select'>,
+  entityId: number | null
+): Promise<Journal> {
+  if (entityId === null) return 'grand_livre'
+  const [e] = await tx.select().from(booksEntity).where(eq(booksEntity.id, entityId)).limit(1)
+  return e?.bookkeeping_regime === 'simplified' ? 'recettes_depenses' : 'grand_livre'
+}
+
+/**
  * Entries this piece could document: same amount to the rappen, dated within
  * three days either side. Computed live — document matching happens inside
  * phase 2's worklist, and a stored candidate list would rot the moment an
@@ -233,6 +252,27 @@ export async function candidatesFor(workspaceId: number, piece: BooksPieceInbox)
   const total = toCentimes(x.transaction?.total ?? (x as unknown as { tx?: { total?: number } }).tx?.total ?? 0)
   const date = x.transaction?.date ?? (x as unknown as { tx?: { date?: string } }).tx?.date ?? null
   if (total === 0n || !date) return []
+
+  // A simplified book's candidates come from ITS journal: amount is a column,
+  // not a sum over lines, and `status` shows the recognition state instead —
+  // an RI entry has no draft/staged/posted lifecycle.
+  if ((await journalOf(getDb(), piece.entity_id)) === 'recettes_depenses') {
+    const rows = await getDb()
+      .select()
+      .from(booksRiEntry)
+      .where(
+        and(
+          eq(booksRiEntry.workspace_id, workspaceId),
+          eq(booksRiEntry.entity_id, piece.entity_id as number),
+          isNull(booksRiEntry.deleted_at),
+          sql`${booksRiEntry.date} BETWEEN ${date}::date - 3 AND ${date}::date + 3`
+        )
+      )
+      .orderBy(asc(booksRiEntry.date))
+    return rows
+      .filter((r) => toCentimes(r.amount) === total)
+      .map((r) => ({ number: r.seq, date: r.date, raw_label: r.raw_label, amount: fromCentimes(total), status: r.recognition }))
+  }
 
   const conds = [eq(booksEntry.workspace_id, workspaceId), isNull(booksEntry.deleted_at)]
   if (piece.entity_id !== null) conds.push(eq(booksEntry.entity_id, piece.entity_id))
@@ -282,7 +322,7 @@ export async function matchPiece(
   workspaceId: number,
   pieceSeq: number,
   entrySeq: number
-): Promise<{ piece: BooksPieceInbox; entryNumber: number }> {
+): Promise<{ piece: BooksPieceInbox; entryNumber: number; journal: Journal }> {
   const db = getDb()
   return db.transaction(async (tx) => {
     const [piece] = await tx
@@ -291,12 +331,59 @@ export async function matchPiece(
       .where(and(eq(booksPieceInbox.workspace_id, workspaceId), eq(booksPieceInbox.seq, pieceSeq)))
       .limit(1)
     if (!piece) throw new MatchRefused('piece_not_found', `no piece #${pieceSeq}`, 'bk books piece list shows the numbers')
-    if (piece.status === 'matched' && piece.matched_entry_id !== null) {
+    if (piece.status === 'matched' && (piece.matched_entry_id !== null || piece.matched_ri_entry_id !== null)) {
       throw new MatchRefused(
         'already_matched',
         `piece #${pieceSeq} is already matched`,
         'a piece documents one entry; unmatching is not built until somebody needs it, on purpose'
       )
+    }
+
+    // The piece's book decides which journal `entrySeq` names. 0010's CHECK
+    // makes the two match columns mutually exclusive; this decision is why
+    // they can never race.
+    const journal = await journalOf(tx, piece.entity_id)
+
+    if (journal === 'recettes_depenses') {
+      const [ri] = await tx
+        .select()
+        .from(booksRiEntry)
+        .where(
+          and(
+            eq(booksRiEntry.workspace_id, workspaceId),
+            eq(booksRiEntry.entity_id, piece.entity_id as number),
+            eq(booksRiEntry.seq, entrySeq)
+          )
+        )
+        .limit(1)
+      if (!ri) {
+        throw new MatchRefused('entry_not_found', `no entry #${entrySeq} in this book's recettes-dépenses journal`, 'the worklist shows the numbers')
+      }
+      if (ri.deleted_at) throw new MatchRefused('entry_deleted', `entry #${entrySeq} is deleted`, 'match against a live entry')
+
+      const [updatedPiece] = await tx
+        .update(booksPieceInbox)
+        .set({ status: 'matched', matched_ri_entry_id: ri.id, matched_at: new Date() })
+        .where(eq(booksPieceInbox.id, piece.id))
+        .returning()
+
+      await tx
+        .update(booksRiEntry)
+        .set({
+          piece_drive_ref: piece.web_view_link ?? `drive://${piece.drive_file_id}`,
+          piece_hash: piece.md5_checksum ? `md5:${piece.md5_checksum}` : null,
+          piece_captured: piece.received,
+        })
+        .where(eq(booksRiEntry.id, ri.id))
+
+      await tx
+        .update(booksDriveManifest)
+        .set({ state: 'ingested', updated_at: new Date() })
+        .where(
+          and(eq(booksDriveManifest.workspace_id, workspaceId), eq(booksDriveManifest.file_id, piece.drive_file_id))
+        )
+
+      return { piece: updatedPiece, entryNumber: ri.seq, journal }
     }
 
     const [entry] = await tx
@@ -331,7 +418,7 @@ export async function matchPiece(
         and(eq(booksDriveManifest.workspace_id, workspaceId), eq(booksDriveManifest.file_id, piece.drive_file_id))
       )
 
-    return { piece: updatedPiece, entryNumber: entry.seq }
+    return { piece: updatedPiece, entryNumber: entry.seq, journal }
   })
 }
 
@@ -339,7 +426,11 @@ export async function matchPiece(
 // The wire shape
 // ---------------------------------------------------------------------------
 
-export function publicPiece(p: BooksPieceInbox, entitySlug: string | null, matchedEntrySeq: number | null) {
+export function publicPiece(
+  p: BooksPieceInbox,
+  entitySlug: string | null,
+  matched: { seq: number; journal: Journal } | null
+) {
   const x = p.extraction as unknown as Extraction & { tx?: Extraction['transaction'] }
   const tx = x.transaction ?? x.tx
   return {
@@ -364,7 +455,9 @@ export function publicPiece(p: BooksPieceInbox, entitySlug: string | null, match
     validation: p.validation,
     needs_review: p.needs_review,
     duplicate_of: null as number | null, // filled by the route when set
-    matched_entry: matchedEntrySeq,
+    matched_entry: matched?.seq ?? null,
+    /** Which journal that number lives in — `null` until matched. */
+    matched_journal: matched?.journal ?? null,
     extraction: p.extraction,
     note: p.note,
   }

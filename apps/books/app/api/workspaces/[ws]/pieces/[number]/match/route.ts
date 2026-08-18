@@ -25,7 +25,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
 
   try {
     const r = await matchPiece(ctx.workspace.id, n, entry)
-    return NextResponse.json({ number: r.piece.seq, status: r.piece.status, matched_entry: r.entryNumber })
+    return NextResponse.json({ number: r.piece.seq, status: r.piece.status, matched_entry: r.entryNumber, matched_journal: r.journal })
   } catch (e) {
     if (e instanceof MatchRefused) {
       if (e.code.endsWith('not_found')) throw Errors.notFound(e.code.replace('_not_found', ''), String(e.code === 'piece_not_found' ? n : entry))
