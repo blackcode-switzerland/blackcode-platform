@@ -23,10 +23,14 @@ app. `bk changelog --app books` filters to this file.
 > **2026-08-18 — this file was created.** b/books had no changelog file through
 > phases 0–3, so nothing it shipped was reported on the agent surface. Files are
 > discovered by reading this directory, so the app appears in `bk changelog` from
-> here on. The entries below start at phase 3; phases 0–2 are recorded in
-> `docs/books-app-plan/` and are not backfilled, because a dated log is a record
-> of what was announced and inventing announcements after the fact is worse than
-> the gap.
+> here on.
+>
+> **Phases 0 to 2 shipped before this file existed.** They are not written up
+> below as if they had been announced at the time — a dated log records what was
+> said on a date, and back-dating announcements nobody made is worse than the
+> gap. What they added is stated once, plainly, in the closing entry, so an agent
+> reading `bk changelog --app books` is not left believing this app began at
+> phase 3.
 
 ## 2026-08-18 — Sources, pièces and the fifth write
 
@@ -63,13 +67,22 @@ commands that shipped with phase 3's backend.
   lands, staged and flagged; duplicates are flagged and never dropped. Neither is
   drawn as an error.
 
-**The write count went from four to five.** Attaching a pièce to the entry it
-proves — `POST /api/workspaces/{ws}/pieces/{n}/match`, `bk books piece match` —
-is now available in the web UI as well as from `bk`. It writes the entry's
-document reference, checksum and capture date, and **deliberately does not
-change the entry's `evidence_tier`**: whether a receipt is sufficient proof is a
-judgment, and judgments stay human. `apps/books/docs/frontend.md` §5 and
-`lib/mutations.ts` both moved from four to five in the same change.
+**The write count went from four to five — and the fifth is WITHHELD in the web
+UI for now.** Attaching a pièce to the entry it proves is
+`POST /api/workspaces/{ws}/pieces/{n}/match`, `bk books piece match`. It writes
+the entry's document reference, checksum and capture date, and **deliberately
+does not change the entry's `evidence_tier`**: whether a receipt is sufficient
+proof is a judgment, and judgments stay human.
+
+**Use `bk books piece match` with care until further notice.** The route resolves
+its `--entry` number against the grand livre on workspace and number alone, with
+no book filter, so **a pièce belonging to one legal entity can be attached to
+another entity's entry** — and doing so overwrites any document reference and
+checksum already on that entry, without recording anything in its `history`. A
+simplified book's journal is not affected; it filters correctly.
+
+The web UI's control is therefore built and switched off rather than shipped, and
+will appear here again when the route filters by book.
 
 **One client-visible fix.** `entry.piece.hash` and `entry.piece.captured` are
 **nullable** and always have been — `books.entry.piece_hash` is a nullable
@@ -78,3 +91,56 @@ entry whose pièce was attached by `match` from a document with no checksum,
 which is every document the current capture pipeline produces. Nothing on the
 wire changed; the shape is being stated because it was previously mis-declared
 on our side.
+
+---
+
+## 2026-08-17 — Everything before this log existed (recorded late, 2026-08-18)
+
+**Not an announcement.** This entry was written on 2026-08-18, after the fact,
+because phases 0 to 2 shipped before anyone created this file and an agent
+reading only the entry above would conclude b/books began with sources and
+pièces. It says what exists and where to read the contract; it does not pretend
+to have been published on the date in its heading.
+
+**The app.** `apps/books`, its own `books.*` Postgres schema and role, sharing
+one blackcode account with every other app. One workspace holds any number of
+**books** (legal entities); each book keeps its own chart of accounts, its own
+fiscal years and its own statements, and two books never mix.
+
+**The routes, all workspace-scoped under `/api/workspaces/{ws}/`:**
+
+| Route | `bk` |
+|---|---|
+| `entities` (GET, POST) | `bk books entity list` / `create` |
+| `exercices` (GET, POST) | `bk books exercice list` / `create` |
+| `accounts` | `bk books account list` |
+| `entries`, `entries/{n}` | `bk books entry list` / `show` |
+| `bilan` | `bk books bilan` |
+| `compte-resultat` | `bk books cr` |
+| `overview` | `bk books overview` |
+| `patrimoine` | `bk books patrimoine` |
+| `worklist` | `bk books worklist` |
+| `rules` (GET, POST) | `bk books rule list` / `create` |
+| `entries/{n}/resolve` (POST) | `bk books resolve` |
+
+`GET /api/meta` is the dynamic contract — vocabularies, VAT rates, the statutory
+line structures — and never the data. **It does not carry the books or the
+fiscal years**: those are workspace-scoped rows and are read from `entities` and
+`exercices`.
+
+**Four things a client must get right**, each of which has already broken one:
+
+- **Money is a string on the wire** and stays one. `numeric(14,2)` does not fit a
+  float, and a bilan balances to the rappen.
+- **Dates are plain dates**, not instants. Parsing `"2026-01-05"` into a
+  timestamp moves a booking across a year boundary for anyone west of Greenwich.
+- **A simplified book has no bilan.** `GET …/bilan` refuses it with
+  `no_bilan_for_simplified` and points at `patrimoine`. That is correct, not an
+  error, and permanent — confirmed 2026-08-18.
+- **The worklist merges three tables** (`entry`, `ri_entry`, `piece_inbox`) whose
+  `seq` counters are separate. **`POST /entries/{n}/resolve` addresses
+  `books.entry` only**, so resolving a row of any other kind by its number
+  rewrites an unrelated journal entry. Read `kind` before acting on `number`.
+
+The full design record is `docs/books-app-plan/`, and the frontend contract is
+`apps/books/docs/frontend.md`.
