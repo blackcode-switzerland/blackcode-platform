@@ -32,8 +32,10 @@ import { crGroups } from '@/lib/statement-view'
 import { StatementTable } from '@/components/statement-table'
 import { ScreenFrame } from '@/components/screen-frame'
 import { SimplifiedBookNotice } from '@/components/simplified-notice'
+import { NoExerciceNotice, isNoExerciceRefusal } from '@/components/no-exercice-notice'
 import { ErrorState, Loading } from '@/components/states'
 import { StatementHeading } from '@/components/statement-heading'
+import { PostedOnlyNote } from '@/components/posted-only-note'
 
 export default function Page() {
   const params = useParams<{ ws: string }>()
@@ -46,10 +48,26 @@ export default function Page() {
       <StatementHeading
         fr="Compte de résultat"
         en="Income statement"
-        article="art. 959b CO, par nature"
+        // Not cited when the book has no such statement — see the balance
+        // sheet, same reason. F4.
+        // Cited only when the document actually exists. Heading a page
+        // "art. 959b CO, par nature" above an explanation that this book has no such
+        // statement contradicts itself in two lines — true for a simplified
+        // book (F4) and equally for one whose exercice is not open yet.
+        article={cr.data ? 'art. 959b CO, par nature' : undefined}
         bookName={scope.record?.name}
         exercice={scope.exercice}
       />
+
+      {/* F1: the statements exclude staged entries and said so nowhere, while
+          their own drill-down shows them. Disclosed here rather than implied.
+
+          Gated on the statement EXISTING. Rendered unconditionally it announced
+          "every posting below is counted" above the RI refusal, which has no
+          postings and no statement — a confident wrong sentence, of exactly the
+          kind this note was added to remove. Caught in the browser, not by a
+          test: nothing here can fail. */}
+      {cr.data && <PostedOnlyNote ws={params.ws} scope={scope} />}
 
       {cr.isLoading && <Loading rows={8} label="Loading the income statement" />}
 
@@ -64,7 +82,17 @@ export default function Page() {
         />
       )}
 
-      {cr.error && !isSimplifiedRefusal(cr.error) && (
+      {/* Also not a failure: a book whose exercice has not been opened yet.
+          Same rule as the refusal above — nothing broke, so nothing is red. */}
+      {isNoExerciceRefusal(cr.error) && (
+        <NoExerciceNotice
+          error={cr.error}
+          statement="income statement"
+          bookName={scope.record?.name}
+        />
+      )}
+
+      {cr.error && !isSimplifiedRefusal(cr.error) && !isNoExerciceRefusal(cr.error) && (
         <ErrorState error={cr.error} title="The income statement could not be derived" />
       )}
 

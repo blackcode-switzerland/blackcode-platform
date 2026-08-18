@@ -264,8 +264,12 @@ function RollupPanel({ totals }: { totals: ReturnType<typeof rollup> }) {
         )}
         {totals.withoutExercice > 0 && (
           <li>
+            {/* Both verbs agree with the count, not just the first one. "1 book
+                has … and contribute nothing" read as a typo on a page whose
+                whole job is looking precise about numbers. */}
             {totals.withoutExercice} {totals.withoutExercice === 1 ? 'book has' : 'books have'} no
-            fiscal year open and contribute nothing to any total above.
+            fiscal year open and {totals.withoutExercice === 1 ? 'contributes' : 'contribute'}{' '}
+            nothing to any total above.
           </li>
         )}
         {totals.staged > 0 && (

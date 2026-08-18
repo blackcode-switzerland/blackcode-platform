@@ -38,9 +38,11 @@ import { bilanGroups } from '@/lib/statement-view'
 import { StatementTable } from '@/components/statement-table'
 import { ScreenFrame } from '@/components/screen-frame'
 import { SimplifiedBookNotice } from '@/components/simplified-notice'
+import { NoExerciceNotice, isNoExerciceRefusal } from '@/components/no-exercice-notice'
 import { ErrorState, Loading } from '@/components/states'
 import { Money } from '@/components/money'
 import { StatementHeading } from '@/components/statement-heading'
+import { PostedOnlyNote } from '@/components/posted-only-note'
 import { BalanceCheck } from '@/components/balance-check'
 
 export default function Page() {
@@ -54,10 +56,27 @@ export default function Page() {
       <StatementHeading
         fr="Bilan"
         en="Balance sheet"
-        article="art. 959a CO"
+        // Not cited when the book has no such statement: heading a page
+        // "art. 959a CO" and then explaining this book has no art. 959a
+        // balance sheet contradicts itself in two lines. F4.
+        // Cited only when the document actually exists. Heading a page
+        // "art. 959a CO" above an explanation that this book has no such
+        // statement contradicts itself in two lines — true for a simplified
+        // book (F4) and equally for one whose exercice is not open yet.
+        article={bilan.data ? 'art. 959a CO' : undefined}
         bookName={scope.record?.name}
         exercice={scope.exercice}
       />
+
+      {/* F1: the statements exclude staged entries and said so nowhere, while
+          their own drill-down shows them. Disclosed here rather than implied.
+
+          Gated on the statement EXISTING. Rendered unconditionally it announced
+          "every posting below is counted" above the RI refusal, which has no
+          postings and no statement — a confident wrong sentence, of exactly the
+          kind this note was added to remove. Caught in the browser, not by a
+          test: nothing here can fail. */}
+      {bilan.data && <PostedOnlyNote ws={params.ws} scope={scope} />}
 
       {bilan.isLoading && <Loading rows={8} label="Loading the balance sheet" />}
 
@@ -75,7 +94,17 @@ export default function Page() {
         />
       )}
 
-      {bilan.error && !isSimplifiedRefusal(bilan.error) && (
+      {/* Also not a failure: a book whose exercice has not been opened yet.
+          Same rule as the refusal above — nothing broke, so nothing is red. */}
+      {isNoExerciceRefusal(bilan.error) && (
+        <NoExerciceNotice
+          error={bilan.error}
+          statement="balance sheet"
+          bookName={scope.record?.name}
+        />
+      )}
+
+      {bilan.error && !isSimplifiedRefusal(bilan.error) && !isNoExerciceRefusal(bilan.error) && (
         <ErrorState error={bilan.error} title="The balance sheet could not be derived" />
       )}
 
