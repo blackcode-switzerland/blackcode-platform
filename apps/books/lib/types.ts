@@ -365,41 +365,217 @@ export interface Entry {
   /**
    * Resolution provenance, and it is PERMANENT. Confirming an inferred entry
    * resolves the question; it does not erase where the answer came from.
+   *
+   * **Three shapes, not one — see `EntryHistory`.** This was `Label | null`
+   * until 2026-08-18 and the entry detail screen rendered it with `en()`, which
+   * returns `""` for the array `resolveEntry` actually writes. Every resolved
+   * entry would have shown a blank audit trail from a truthy value.
    */
-  history: Label | null
+  history: EntryHistory
 }
 
 // ---------------------------------------------------------------------------
 // recognition rule — the legibility engine
 // ---------------------------------------------------------------------------
 
+/**
+ * The match pattern. **`amount_chf` and `tolerance_chf` are JSON NUMBERS.**
+ *
+ * ── AND THAT IS AN EXCEPTION TO THE MONEY RULE, NOT A TYPO ─────────────────
+ * `books.rule.pattern` is `jsonb`, and `publicRule` passes the column through
+ * untouched, so `1850` and `89.9` arrive as floats — not as `"1850.00"`. This
+ * file used to declare both as `Money` (a string), which would have handed
+ * `<Money>` a number, failed its prop type, and — where a screen coerced instead
+ * — printed a rule's expected amount through a float.
+ *
+ * They are numbers HERE and they stop being numbers immediately: nothing renders
+ * one through `<Money>`. A rule's pattern is a MATCHING THRESHOLD, not an amount
+ * in anybody's books, and it is displayed as `~CHF 1'850.00 ±5.00` by
+ * `ruleAmount()` in `lib/format.ts`, which is the one place the conversion is
+ * written down.
+ *
+ * **Serving these as strings is a backend request**, the same one
+ * `usePatrimoine` carries. Until then the boundary is visible instead of hidden.
+ */
 export interface RulePattern {
   counterparty: string
-  /** Null matches any amount. */
-  amount_chf: Money | null
-  tolerance_chf: Money | null
-  interval: 'weekly' | 'monthly' | 'quarterly' | null
+  /** Null matches any amount. A JSON number — see above. */
+  amount_chf: number | null
+  tolerance_chf: number | null
+  /**
+   * Documented cadence. **Never matched on** — `matchesRule` ignores it
+   * entirely, so it is a note to a human and not part of the key. Typed as a
+   * plain string because `POST /rules` accepts any string in this field and
+   * validates nothing, so narrowing it here would be a claim the route does not
+   * keep.
+   */
+  interval: string | null
 }
 
+/**
+ * A remembered judgment, exactly as `publicRule` serves it.
+ *
+ * ── FOUR OF THESE NINE FIELDS WERE WRONG UNTIL 2026-08-18 ──────────────────
+ * This interface was written from the mockup's `RECOGNITION_RULES` and never
+ * against `publicRule` (`lib/db/queries/rules.ts`). Every one of the four would
+ * have rendered `undefined` — which is the failure this whole file exists to
+ * turn into a compile error:
+ *
+ *   `source`      → the wire says **`source_id`**. Half the match key, blank.
+ *   `source_kind` → the wire says **`learned_from`**. The rules table's
+ *                   "Origin" column, blank on every row.
+ *   `created`     → the wire says **`created_on`**. A rule's birthday, blank.
+ *   `entity`      → **not on the wire at all.** A phantom field: the request
+ *                   carries `?entity=`, the payload does not.
+ *
+ * And `pattern.amount_chf` was declared a string. See `RulePattern`.
+ */
 export interface RecognitionRule {
   number: number
-  entity: string
+  active: boolean
   /**
    * Half of the match key. The key is the PAIR (source, counterparty), never the
    * merchant name alone: the same merchant on a source nobody tracks is a new
    * fact and must stay queued rather than be silently matched.
+   *
+   * **It is a serial id and this app does not resolve it** — phase 3 brings the
+   * source register. Shown as a fact, never as a link. A null means the rule
+   * matches only sourceless entries, which is what the RI's rules are.
    */
-  source: number | null
-  active: boolean
-  /** Where the rule came from. */
-  source_kind: 'contract' | 'subscription' | 'manual'
+  source_id: number | null
+  /** Where the rule came from: `contract`, `subscription` or `manual`. */
+  learned_from: string | null
   pattern: RulePattern
-  explanation: Label
+  /** `jsonb`, and genuinely nullable — `POST /rules` does not require one. */
+  explanation: Label | null
   account: string | null
-  /** Which entry TAUGHT this rule. The learning loop, made visible. */
+  /**
+   * Which entry TAUGHT this rule, as its workspace #number. The learning loop,
+   * made visible — and it is always null on the 201 from `POST /rules`, because
+   * a rule that predates its first entry was taught by nothing.
+   */
   created_from: number | null
-  created: IsoDate
+  created_on: IsoDate | null
   note: Label | null
+}
+
+// ---------------------------------------------------------------------------
+// the worklist — phase 2's payload, and the one screen with judgment in it
+// ---------------------------------------------------------------------------
+
+/**
+ * One thing needing a human, exactly as `getWorklist` builds it.
+ *
+ * ── THE TWO KINDS SHARE A NUMBER SERIES AND DO NOT SHARE A ROUTE ───────────
+ * `kind` is not decoration. `books.entry` and `books.ri_entry` have SEPARATE
+ * `seq` counters, so `{kind:'entry', number:5}` and `{kind:'ri_entry', number:5}`
+ * are two different rows that both exist — and `POST /entries/{n}/resolve` only
+ * ever addresses `books.entry`. Asking it to resolve an `ri_entry` by the number
+ * printed on the row rewrites an unrelated journal entry and answers 200.
+ *
+ * Reproduced 2026-08-18 against the seeded workspace: resolving RI #5 (the TWINT
+ * row) overwrote entry #5, the January payroll. Raised on ticket #51.
+ *
+ * **So the type is the guard.** `<ResolveForm>` takes a row narrowed to
+ * `kind: 'entry'`, and handing it an RI row does not compile.
+ */
+export interface WorklistRow {
+  kind: 'entry' | 'ri_entry'
+  /** The workspace #number **within this kind**. See the note above. */
+  number: number
+  date: IsoDate
+  /**
+   * `posted` or `staged` for a journal entry, and **null for every `ri_entry`** —
+   * a simplified book has no staging step, so the column is hardcoded null in
+   * `getWorklist`. Null here means "this regime has no such state", not "unknown",
+   * and it must not render as a chip saying `staged`.
+   */
+  status: EntryStatus | null
+  /** The bank's own words. Never overwritten — it is the original record. */
+  raw_label: string
+  counterparty: string | null
+  recognition: Recognition
+  evidence_tier: EvidenceTier
+  /** A `numeric(14,2)` string. For an entry, the sum of its debit lines. */
+  amount: Money
+  /**
+   * Rule #numbers that WOULD explain this row, computed live at read time.
+   *
+   * **An opinion, never an action.** Nothing on the server applies one and
+   * nothing on this screen may either: a suggestion prefills the form and a
+   * human presses the button. Often `[]` — every seeded row has none, because
+   * the match key is the PAIR and no seeded rule shares a source with a seeded
+   * worklist row.
+   */
+  suggested_rules: number[]
+}
+
+/**
+ * `GET …/worklist`'s envelope. **Not `{data, next_cursor}`** — it is a bespoke
+ * object, and `entity`/`exercice` echo back WHICH BOOK AND YEAR THE SERVER
+ * CHOSE, which is the only way a screen can tell that its `?entity=` was
+ * defaulted rather than honoured.
+ */
+export interface WorklistResult {
+  entity: string
+  exercice: number
+  count: number
+  rows: WorklistRow[]
+}
+
+// ---------------------------------------------------------------------------
+// resolve — the first write
+// ---------------------------------------------------------------------------
+
+/**
+ * One entry in an entry's `history`, as `resolveEntry` appends it.
+ *
+ * ── `history` HAS THREE SHAPES ON THE WIRE AND ALL THREE ARE REAL ──────────
+ * The column is `jsonb` and nullable, and three different things have written it:
+ *
+ *   `null`            never resolved. Most rows.
+ *   `{fr, en}`        the SEED's narrative sentence, an object, not a list.
+ *   `HistoryEvent[]`  what `resolveEntry` writes — append-only, and if it finds
+ *                     a non-array already there it keeps it as element 0.
+ *
+ * So `EntryHistory` is a union and `<HistoryTrail>` handles all three. Declaring
+ * it `Label | null` — which this file did until 2026-08-18 — makes the array
+ * case render through `en()`, which finds no `.en` and no `.fr` and returns the
+ * empty string. **A blank audit trail, from a truthy value, with nothing thrown.**
+ * That is the product's central claim rendering as nothing at all.
+ */
+export interface HistoryEvent {
+  /** An ISO instant — a timestamp, unlike every other date in this app. */
+  at: string
+  event: string
+  was: {
+    recognition: Recognition
+    counterparty: string | null
+    explanation: Label | null
+    /**
+     * The internal serial id of the rule that matched, and **the one place this
+     * app leaks one onto the wire.** Not resolvable to a #number; not shown.
+     */
+    matched_rule_id: number | null
+  }
+}
+
+/** `null`, the seed's narrative object, or the append-only event list. */
+export type EntryHistory = Label | HistoryEvent[] | null
+
+/**
+ * What `POST /entries/{n}/resolve` answers with.
+ *
+ * It carries neither the updated `counterparty` nor the line's new account — a
+ * caller that set either has to re-read the entry. `taught_rule` is the new
+ * rule's #number when the resolution taught one.
+ */
+export interface ResolveResult {
+  number: number
+  recognition: Recognition
+  explanation: Label | null
+  history: EntryHistory
+  taught_rule: number | null
 }
 
 // ---------------------------------------------------------------------------

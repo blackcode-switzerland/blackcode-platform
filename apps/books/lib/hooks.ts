@@ -26,7 +26,10 @@ import type {
   OverviewBook,
   OverviewResult,
   PatrimoineSnapshot,
+  RecognitionRule,
   Term,
+  WorklistResult,
+  WorklistRow,
 } from './types'
 import type { BilanGroup, CrLine } from './statements'
 
@@ -456,6 +459,85 @@ export function usePatrimoine(ws: string | undefined, scope: ReadScope) {
       ),
     enabled: !!ws && !!scope.entity && scopeReady(scope),
   })
+}
+
+// ===========================================================================
+// RECOGNITION — phase 2's two reads
+// ===========================================================================
+// The only screen in the product with judgment in it reads exactly two things,
+// and both are entity-scoped for the reason at the top of `lib/query-keys.ts`:
+// one book's unexplained money under another book's name is this app's worst
+// failure, and the worklist is the list a human ACTS on.
+
+/**
+ * Everything needing a human. `GET …/worklist?entity=&exercice=`.
+ *
+ * ── IT DOES NOT SERVE `{data, next_cursor}`, SO `apiList` IS WRONG HERE ────
+ * The envelope is `{entity, exercice, count, rows}`. `apiList` would find no
+ * `data` key, substitute `[]`, and the screen would render "everything is
+ * explained" over a book with unexplained money in it — the phase-1 failure
+ * shape exactly, and `lib/wire-parity.test.ts` cannot see it because it reads
+ * shaping functions and not envelopes. So the whole envelope is kept.
+ *
+ * **`entity` and `exercice` come back for a reason.** They are what the server
+ * actually chose, and the screen shows them: a request whose `?entity=` was
+ * dropped is answered with the FIRST book, and the only way to notice is to
+ * compare what came back with what was asked.
+ *
+ * ── `count` IS THE ONE THE OVERVIEW SHOWS, AND THEY MUST AGREE ────────────
+ * `GET …/overview` computes its `worklist` figure with a different predicate —
+ * it counts ONE table, chosen by the book's regime, where this route counts
+ * both unconditionally. They agree on every seeded book because each one has
+ * rows in one table only. A `double_entry` book that ever acquired `ri_entry`
+ * rows would make them disagree, and it would be the overview that is wrong.
+ * Recorded here rather than papered over; it is a backend request.
+ */
+export function useWorklist(ws: string | undefined, scope: ReadScope) {
+  return useQuery({
+    queryKey: booksKey('worklist', scope, { ws }),
+    queryFn: () => apiGet<WorklistResult>(`/api/workspaces/${ws}/worklist?${scopeQuery(scope)}`),
+    enabled: !!ws && !!scope.entity && scopeReady(scope),
+  })
+}
+
+/**
+ * The recognition rules of one book. `GET …/rules?entity=`.
+ *
+ * `{data, next_cursor}` — this one IS a list route, so `apiList`.
+ *
+ * Rules are entity-scoped and **not** exercice-scoped: a lease signed in 2025
+ * explains a payment made in 2026, and the route ignores `?exercice=` beyond
+ * validating the scope. The year still goes in the KEY, because `scopeQuery`
+ * puts it in the URL and a key that omitted it would serve one year's request
+ * from another year's slot — same bytes today, and a silent lie the moment the
+ * route starts reading it.
+ */
+export function useRules(ws: string | undefined, scope: ReadScope) {
+  return useQuery({
+    queryKey: booksKey('rules', scope, { ws }),
+    queryFn: () =>
+      apiList<RecognitionRule>(`/api/workspaces/${ws}/rules?${scopeQuery(scope)}`).then((r) => r.data),
+    enabled: !!ws && !!scope.entity && scopeReady(scope),
+  })
+}
+
+/**
+ * The rules a row's `suggested_rules` points at, in the order the server gave.
+ *
+ * Not a hook and not a fetch — the screen already has both lists. A #number with
+ * no rule in hand is DROPPED rather than rendered as a bare "#4": a suggestion
+ * whose rule cannot be shown is not something a human can judge, and printing
+ * the number alone invites acting on it. The count the row shows is the length
+ * of what this returns, so nothing claims a suggestion it cannot display.
+ */
+export function suggestionsFor(
+  row: WorklistRow,
+  rules: RecognitionRule[] | undefined
+): RecognitionRule[] {
+  if (!rules) return []
+  return row.suggested_rules
+    .map((n) => rules.find((r) => r.number === n))
+    .filter((r): r is RecognitionRule => r !== undefined)
 }
 
 /** Re-exported so a page reading the overview needs one import, not two. */

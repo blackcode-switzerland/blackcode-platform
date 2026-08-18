@@ -48,6 +48,7 @@ import { VocabChip } from '@/components/chips'
 import { EntryLines } from '@/components/entry-lines'
 import { DriveLink } from '@/components/drive-link'
 import { Money } from '@/components/money'
+import { HistoryTrail, hasHistory } from '@/components/history-trail'
 
 export default function Page() {
   const params = useParams<{ ws: string; number: string }>()
@@ -233,10 +234,22 @@ export default function Page() {
                 }
               />
             </dl>
-            {entry.data.history && (
-              <p className="mt-1.5 text-[12px] text-muted-foreground">
-                {en(entry.data.history)}
-              </p>
+            {/* ── THIS RENDERED NOTHING UNTIL 2026-08-18 ──────────────────
+                It was `{en(entry.data.history)}`, because `lib/types.ts`
+                declared `history: Label | null`. The value `resolveEntry`
+                actually writes is an ARRAY: `en()` looks for `.en`, then `.fr`,
+                finds neither, and returns `''`. So the block was truthy,
+                rendered, and drew a blank — every entry resolved through the
+                phase-2 write path would have shown an EMPTY audit trail, with
+                nothing thrown and nothing logged. The type is a union now and
+                `<HistoryTrail>` handles all three shapes the column can hold. */}
+            {hasHistory(entry.data.history) && (
+              <div className="mt-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  History
+                </p>
+                <HistoryTrail history={entry.data.history} />
+              </div>
             )}
             <p className="mt-1.5 text-[11.5px] text-muted-foreground">
               Source, rule, mirror and reversal are internal ids and are not addressable from this

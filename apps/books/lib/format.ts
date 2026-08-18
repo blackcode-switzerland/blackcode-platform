@@ -179,6 +179,42 @@ export function amount(value: string | number | null | undefined): number | null
 }
 
 /**
+ * A recognition rule's match window: `~CHF 1'850.00 ±5.00`, or `any amount`.
+ *
+ * ── IT TAKES NUMBERS, AND THAT IS THE WIRE'S FAULT, NOT A LOOSENING ───────
+ * `books.rule.pattern` is `jsonb` and `publicRule` passes the column through, so
+ * `amount_chf` and `tolerance_chf` arrive as JSON floats (`1850`, `89.9`) rather
+ * than as `numeric` strings. Every other amount in this app is a string and must
+ * stay one; these two never were.
+ *
+ * **This is not money and must never be rendered by `<Money>`.** It is a MATCH
+ * THRESHOLD — the window inside which a future payment looks like this rule —
+ * and no figure in anybody's books is computed from it. Keeping it out of the
+ * money component is what stops the exception spreading: `<Money>`'s prop is
+ * `string | null` with no numeric overload precisely so a float cannot reach the
+ * display path, and widening that for this one field would remove the guard
+ * everywhere.
+ *
+ * `money()` already accepts a `number` and routes it through the same grouping,
+ * so nothing new parses anything here. **No `Number()` is constructed on a wire
+ * string** — this file's rule is intact.
+ *
+ * A null amount is `any amount`, in words: a rule with no expected amount
+ * matches every one, and rendering that as an em dash would read as missing data
+ * rather than as the deliberate wildcard it is.
+ */
+export function ruleAmount(
+  amountChf: number | null | undefined,
+  toleranceChf: number | null | undefined
+): string {
+  if (amountChf === null || amountChf === undefined) return 'any amount'
+  const base = `~${money(amountChf)}`
+  if (!toleranceChf) return base
+  // `money(x, '')` returns a leading space where the currency would have been.
+  return `${base} ±${money(toleranceChf, '').trim()}`
+}
+
+/**
  * A date as Swiss bookkeeping writes it: `05.01.2026`.
  *
  * Takes the wire form `"2026-01-05"` and slices it. Deliberately no `Date`
