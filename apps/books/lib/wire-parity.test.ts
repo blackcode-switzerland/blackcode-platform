@@ -132,8 +132,29 @@ const row = (o: Record<string, unknown>): any => o
 function envelopeKeys(src: string, opts: { after?: string; label: string }): string[] {
   const from = opts.after ? src.indexOf(opts.after) : 0
   if (from < 0) throw new Error(`${opts.label}: "${opts.after}" is not in this file any more`)
-  const call = src.indexOf('NextResponse.json(', from)
-  if (call < 0) throw new Error(`${opts.label}: no NextResponse.json( — this case is stale`)
+
+  // ── THE **LAST** RESPONSE AFTER THE ANCHOR, NOT THE FIRST ────────────────
+  // This took the first `NextResponse.json(` it found. A route that returns
+  // early — a refusal, an empty case, a 304 — puts a DIFFERENT object literal
+  // between the anchor and the one being pinned, and the reader then walked the
+  // wrong one: the case went red naming keys nobody had touched, which is worse
+  // than not firing, because it sends the reader to the wrong file.
+  //
+  // The success response is the last one in a handler, so that is what is read,
+  // and how many were skipped is reported when it matters. Found in the cleanup
+  // audit, 2026-08-18.
+  // Bounded by the NEXT handler, so an anchored read never crosses into one it
+  // was not asked about — `invitations/route.ts` holds a GET and a POST, and an
+  // unbounded "last" walked the POST's object while claiming to pin the GET's.
+  const nextHandler = opts.after ? src.indexOf('export const ', from + 1) : -1
+  const until = nextHandler < 0 ? src.length : nextHandler
+
+  const calls: number[] = []
+  for (let at = src.indexOf('NextResponse.json(', from); at >= 0 && at < until; at = src.indexOf('NextResponse.json(', at + 1)) {
+    calls.push(at)
+  }
+  if (calls.length === 0) throw new Error(`${opts.label}: no NextResponse.json( — this case is stale`)
+  const call = calls[calls.length - 1]
   const open = src.indexOf('{', call)
   if (open < 0) throw new Error(`${opts.label}: NextResponse.json was not given an object literal`)
 
@@ -1333,38 +1354,75 @@ type _Scalars = [
 ]
 
 // Referencing them is what turns a `never` above into an error at THIS line,
-// with the failing member named, rather than an unused type alias nobody sees.
-const _keys: [
-  _EntityKeys,
-  _AccountKeys,
-  _ExerciceKeys,
-  _EntryKeys,
-  _PatrimoineKeys,
-  _VatKeys,
-  _RuleKeys,
-  _WorklistKeys,
-  _SourceKeys,
-  _WindowKeys,
-  _PullKeys,
-  _RunbookKeys,
-  _ManifestKeys,
-  _PieceKeys,
-  _PieceSourceKeys,
-  // ── the seven inline routes, cleanup phase 2026-08-18 ──────────────────
-  _BilanKeys,
-  _BilanGroupKeys,
-  _BilanLineKeys,
-  _CrKeys,
-  _CrLineKeys,
-  _OverviewKeys,
-  _OverviewEnvelope,
-  _WorklistEnvelopeKeys,
-  _SourceDetailKeys,
-  _InvitationKeys,
-] = [
-  true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-  true, true, true, true, true, true, true, true, true, true, true,
-]
+// rather than leaving an unused type alias nobody sees.
+//
+// ── AN OBJECT, NOT AN ARRAY, AND THAT IS THE WHOLE POINT ───────────────────
+// This was a positional tuple of twenty-five bare `true`s. When one alias
+// resolved to `never`, TypeScript said:
+//
+//     wire-parity.test.ts(1366,N): Type 'true' is not assignable to type 'never'
+//
+// — and N is a COLUMN OFFSET into a row of identical literals. The comment above
+// claimed the failing member was named; it was not, and the only way to find it
+// was to count. Four mutations in the cleanup audit hit this, four times.
+//
+// Keyed by name, the compiler names the property instead, so the error says
+// which contract drifted. Found 2026-08-18 by the reviewer whose job was to
+// break each of these and read what came back.
+const _keys: {
+  _EntityKeys: _EntityKeys
+  _AccountKeys: _AccountKeys
+  _ExerciceKeys: _ExerciceKeys
+  _EntryKeys: _EntryKeys
+  _PatrimoineKeys: _PatrimoineKeys
+  _VatKeys: _VatKeys
+  _RuleKeys: _RuleKeys
+  _WorklistKeys: _WorklistKeys
+  _SourceKeys: _SourceKeys
+  _WindowKeys: _WindowKeys
+  _PullKeys: _PullKeys
+  _RunbookKeys: _RunbookKeys
+  _ManifestKeys: _ManifestKeys
+  _PieceKeys: _PieceKeys
+  _PieceSourceKeys: _PieceSourceKeys
+  _BilanKeys: _BilanKeys
+  _BilanGroupKeys: _BilanGroupKeys
+  _BilanLineKeys: _BilanLineKeys
+  _CrKeys: _CrKeys
+  _CrLineKeys: _CrLineKeys
+  _OverviewKeys: _OverviewKeys
+  _OverviewEnvelope: _OverviewEnvelope
+  _WorklistEnvelopeKeys: _WorklistEnvelopeKeys
+  _SourceDetailKeys: _SourceDetailKeys
+  _InvitationKeys: _InvitationKeys
+} = {
+  _EntityKeys: true,
+  _AccountKeys: true,
+  _ExerciceKeys: true,
+  _EntryKeys: true,
+  _PatrimoineKeys: true,
+  _VatKeys: true,
+  _RuleKeys: true,
+  _WorklistKeys: true,
+  _SourceKeys: true,
+  _WindowKeys: true,
+  _PullKeys: true,
+  _RunbookKeys: true,
+  _ManifestKeys: true,
+  _PieceKeys: true,
+  _PieceSourceKeys: true,
+  _BilanKeys: true,
+  _BilanGroupKeys: true,
+  _BilanLineKeys: true,
+  _CrKeys: true,
+  _CrLineKeys: true,
+  _OverviewKeys: true,
+  _OverviewEnvelope: true,
+  _WorklistEnvelopeKeys: true,
+  _SourceDetailKeys: true,
+  _InvitationKeys: true,
+}
+
 const _scalars: _Scalars = [
   true, true, true, true, true, true, true, true, true, true, true, true, true,
   true, true, true,
