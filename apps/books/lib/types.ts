@@ -277,8 +277,29 @@ export interface Vat {
  */
 export interface Piece {
   drive_ref: string
-  hash: string
-  captured: IsoDate
+  /**
+   * The sha256 taken at capture — **and it is nullable, which this file denied
+   * until 2026-08-18.**
+   *
+   * `books.entry.piece_hash` is a nullable column and `publicEntry` serves it
+   * verbatim, so `hash: string` here was a claim the wire never made. It stayed
+   * invisible while every entry carrying a pièce came from the seed, which
+   * always sets one.
+   *
+   * Phase 3's `match` write is what made it reachable: `matchPiece` fills
+   * `piece_hash` from the pièce's `md5_checksum`, and **every seeded pièce has
+   * a NULL checksum**, so attaching one leaves the entry with a document and no
+   * hash. `<DriveLink>` then called `.slice()` on null and the entry detail page
+   * went to a white screen — reproduced in the browser on `/ledger/12` after
+   * matching pièce #1. The wire was right and this type was wrong, which is the
+   * direction the phase rule assumes.
+   *
+   * The nested fields of `piece` were not in `lib/wire-parity.test.ts`'s scalar
+   * list, so nothing caught it. They are now.
+   */
+  hash: string | null
+  /** Also nullable on the column, for the same reason. */
+  captured: IsoDate | null
 }
 
 /**
@@ -480,7 +501,27 @@ export interface RecognitionRule {
  * `kind: 'entry'`, and handing it an RI row does not compile.
  */
 export interface WorklistRow {
-  kind: 'entry' | 'ri_entry'
+  /**
+   * ── THERE ARE THREE KINDS SINCE PHASE 3, AND THE THIRD ARRIVED SILENTLY ──
+   * `getWorklist` gained `kind: 'piece'` rows when the backend's phase-3 branch
+   * merged. This file still said two, so `npm run typecheck` went red on
+   * `_WorklistKeys` in `lib/wire-parity.test.ts` — **and it was red on the
+   * branch before this phase's frontend work started**, which means the guard
+   * fired and nobody read it.
+   *
+   * The consequence was not cosmetic. `<WorklistRows>` branched on
+   * `row.kind === 'ri_entry' ? readOnly : resolveForm`, a NEGATIVE test that was
+   * exhaustive when there were two kinds. A third kind fell into the else,
+   * rendered "Explain this", and `<ResolveForm>` would have POSTed
+   * `/entries/{piece.number}/resolve` — pièce #1 rewriting journal entry #1.
+   * That is ticket #51's bug, reachable from the default screen, for six seeded
+   * rows. **Nothing in this repo was written wrong; a correct backend change
+   * retargeted a correct branch.** CLAUDE.md finding #10's mechanism.
+   *
+   * The branch is positive now (`kind === 'entry'`), and this union is what
+   * makes the next kind a compile error rather than a write.
+   */
+  kind: 'entry' | 'ri_entry' | 'piece'
   /** The workspace #number **within this kind**. See the note above. */
   number: number
   date: IsoDate
@@ -489,13 +530,33 @@ export interface WorklistRow {
    * a simplified book has no staging step, so the column is hardcoded null in
    * `getWorklist`. Null here means "this regime has no such state", not "unknown",
    * and it must not render as a chip saying `staged`.
+   *
+   * A pièce carries its own lifecycle here (`staged`, `matched`), which happens
+   * to share a spelling with the entry vocabulary and does not mean the same
+   * thing — a staged pièce is a document waiting for a judgment, not an écriture
+   * waiting to post.
    */
-  status: EntryStatus | null
+  status: EntryStatus | 'matched' | null
   /** The bank's own words. Never overwritten — it is the original record. */
   raw_label: string
   counterparty: string | null
-  recognition: Recognition
-  evidence_tier: EvidenceTier
+  /**
+   * Why this row needs a human — **and a pièce answers in a different
+   * vocabulary on purpose.** An entry is `unrecognized` or `inferred`; a
+   * document is `unmatched` or `needs_review`, because a document is not a
+   * transaction. Neither pièce value is in the served `recognition` vocabulary,
+   * so `<VocabChip>` draws it raw and uncoloured — legible and obviously
+   * un-styled, which is the right failure for a value the server knows and this
+   * bundle does not.
+   */
+  recognition: Recognition | 'unmatched' | 'needs_review'
+  /**
+   * Empty string for a pièce: a document has no evidence tier of its own — it
+   * IS the evidence. `<VocabChip>` renders nothing for a falsy value, so the
+   * absence shows as an absence rather than as a `bare` chip, which would be a
+   * legal claim about an entry that does not exist.
+   */
+  evidence_tier: EvidenceTier | ''
   /** A `numeric(14,2)` string. For an entry, the sum of its debit lines. */
   amount: Money
   /**
@@ -508,6 +569,22 @@ export interface WorklistRow {
    * worklist row.
    */
   suggested_rules: number[]
+  /**
+   * Pièces only: entry #numbers this document could prove — same amount to the
+   * rappen, dated within three days either side, computed live by
+   * `candidatesFor`.
+   *
+   * **The same kind of opinion as `suggested_rules`, and it auto-applies
+   * nothing.** `[]` on every seeded pièce, because no seeded entry shares an
+   * amount and a date window with a seeded receipt.
+   *
+   * ── AND THE #NUMBER IS DISAMBIGUATED BY THE PIÈCE'S OWN BOOK ────────────
+   * `journalOf(entity)` decides whether these name grand-livre entries or
+   * recettes-dépenses rows; an unattributed pièce reads as the grand livre.
+   * That is the shape ticket #51 should be fixed into — the caller supplies the
+   * context, rather than having to get the number right.
+   */
+  suggested_entries: number[]
 }
 
 /**
@@ -771,3 +848,276 @@ export interface Term {
  *
  * Import `MetaPayload` from `lib/hooks.ts`.
  */
+
+// ===========================================================================
+// PHASE 3 — SOURCES AND PIÈCES
+// ===========================================================================
+// Every shape below was read off the ROUTE, not off the mockup. Four of them
+// disagree with what the mockup renders and the disagreements are named where
+// they sit: `draws_from`, `drive`, `sourceBalance` and the pièces `match`
+// object are all mockup facts that no b/books route serves.
+//
+// `lib/wire-parity.test.ts` pins each key set against its `public*` function.
+
+/**
+ * The completeness verdict. **Computed at read time, never a column.**
+ *
+ * `lib/derive/sources.ts` holds the reasoning: the register answers "do I have
+ * everything", and that answer is only trustworthy while nobody can set it. The
+ * one hand-set lifecycle fact is `retired`, which is a boolean on the row and
+ * takes precedence over every other verdict.
+ *
+ * Declared as a union rather than a `string` because it is the value the screen
+ * decides layout from, and a state the server added since this bundle shipped
+ * must fail the build rather than fall into an `else`. The CHIP is a different
+ * matter and takes the raw value — see `<VocabChip vocabulary="source_status">`,
+ * which renders an unknown term uncoloured instead of hiding it.
+ */
+export type SourceStatus = 'current' | 'stale' | 'gap' | 'never_connected' | 'retired'
+
+/**
+ * The failure semantics of one cadence, in days. `gap` is twice `stale`.
+ *
+ * Served alongside the status so a screen can say *why* — "stale after 10 days,
+ * gap after 20" — without re-deriving the thresholds. Re-deriving them here
+ * would be a second copy of `sourceWindows`, and the two would drift silently.
+ */
+export interface SourceWindows {
+  stale_after_days: number
+  gap_after_days: number
+}
+
+/**
+ * One row of the register, as `publicSource` serves it.
+ *
+ * ── WHAT THE MOCKUP DRAWS AND THIS PAYLOAD DOES NOT CARRY ─────────────────
+ * `draws_from` (the card→bank edge), the `drive` block (folder id, access,
+ * file count, last sync) and a book balance per source. `books.source` HAS a
+ * `draws_from` column; `publicSource` does not serve it, so the mockup's
+ * three-layer CHAIN cannot be drawn — only each source's own `layer`. The
+ * balance was never a column at all: the mockup computed it from the fixture.
+ * All three are backend requests, and none is faked here.
+ */
+export interface Source {
+  /** The workspace #number. Never the serial id. */
+  number: number
+  name: string
+  /** `bank | card | processor | saas | drive_folder` — the `source_types` vocabulary. */
+  type: string
+  /** `bank | card | routing_app`, or null: four sources have no tier. */
+  layer: string | null
+  /** The book's slug, or null — an unattributed source is legitimate. */
+  entity: string | null
+  method: string | null
+  /** `daily | weekly | monthly | quarterly | none`, or null. Drives the windows. */
+  expected: string | null
+  last_import: IsoDate | null
+  /** The ONLY hand-set lifecycle fact on this row. */
+  retired: boolean
+  ledger_accounts: string[]
+  /** Computed from `expected` against `last_import`. Never settable. */
+  status: SourceStatus
+  windows: SourceWindows
+  /** `{fr, en}`. English chrome (D-A), so `en()`. */
+  notes_freeform: Label | null
+}
+
+/** One raw file pulled from a source and kept on our side. Archival insurance. */
+export interface SourcePull {
+  file: string
+  period: string | null
+  format: string | null
+  hash: string | null
+  drive_ref: string | null
+  pulled: IsoDate | null
+}
+
+/**
+ * How to pull this source, versioned in place.
+ *
+ * ── `credential_ref` IS A VAULT REFERENCE AND IS RENDERED AS ONE ───────────
+ * `vault://blackcode/yapeal`. If a real secret ever appears in this field the
+ * bug is upstream, in whoever wrote the runbook, and **the fix is rotation, not
+ * CSS.** There is deliberately no masking component in this app: masking a
+ * leaked secret in one renderer leaves it in the payload, in `bk books source
+ * show --json`, and in every log that touched the response, while making the
+ * screen look like the problem was handled.
+ */
+export interface SourceRunbook {
+  version: string
+  updated: IsoDate | null
+  login_url: string | null
+  credential_ref: string | null
+  steps: string[]
+  output: string | null
+}
+
+/** `GET …/sources/{number}` — the register row, plus its files and its runbook. */
+export interface SourceDetail extends Source {
+  pulls: SourcePull[]
+  runbook: SourceRunbook | null
+}
+
+/**
+ * One file in the worker's ledger of a Drive folder.
+ *
+ * ── `created_time` IS A TIMESTAMP, NOT A `date` ───────────────────────────
+ * `books.drive_manifest.drive_created_time` is `timestamp with time zone`, so
+ * the shaping function's TypeScript type is `Date` and the WIRE carries
+ * `"2026-08-13T13:46:00.000Z"`. Every other date in this app is a Postgres
+ * `date` and arrives as `"2026-08-13"`. `<DateText>` and `format.date()` slice
+ * the first ten characters and are therefore correct for both — but only
+ * because they never parse. Do not "improve" either into a `new Date()`.
+ */
+export interface ManifestFile {
+  file_id: string
+  name: string | null
+  mime_type: string | null
+  /** ISO **timestamp**, not a date. See above. */
+  created_time: string | null
+  fetched: IsoDate | null
+  /** `discovered | downloaded | extracted | validated_staged | needs_review | ingested`. */
+  state: string
+  /** The immutable legal-archive copy. False everywhere today, honestly. */
+  archived: boolean
+  archive_ref: string | null
+  /** The pièce this file became, as a #number. Null while nothing extracted it. */
+  piece: number | null
+}
+
+/**
+ * `GET …/sources/{number}/manifest`. **Not `{data, next_cursor}`** — it is a
+ * bespoke envelope, so `apiList` would find no `data` key, substitute `[]`, and
+ * render "no files on record" over a folder holding six. Same failure shape as
+ * the worklist; `useManifest` keeps the envelope for the same reason.
+ */
+export interface ManifestResult {
+  /** The source's own #number, echoed. What the server answered for. */
+  source: number
+  files: ManifestFile[]
+}
+
+/** The server's verdict on one extraction. **The worker's own claim is not this.** */
+export interface PieceValidation {
+  lines_sum_matches_total: boolean
+  vat_rates_valid: boolean
+  date_plausible: boolean
+  passed: boolean
+  /** Every failed check, in words. Empty when passed. */
+  problems: string[]
+}
+
+/** One line of an extracted document, as the worker read it. */
+export interface PieceExtractionLine {
+  description?: string
+  quantity?: number
+  unit?: string
+  unit_price?: number
+  amount: number
+  vat_rate?: number | null
+}
+
+/**
+ * The worker's payload, stored VERBATIM.
+ *
+ * ── IT IS SPELLED `tx` ON THE SEED AND `transaction` IN THE SCHEMA ────────
+ * `lib/validate/extraction.ts` says the schema's name is `transaction` and the
+ * mockup's seeded pieces spell it `tx`; `ingestPiece` accepts either. The seeded
+ * rows really do carry both spellings inconsistently — piece #1 has only `tx`,
+ * piece #5 has both — so **anything reading this must try both**, which is what
+ * `transactionOf()` in `lib/hooks.ts` is for. Reading `transaction` alone renders
+ * an empty detail panel over a document that has every field.
+ *
+ * `validation` inside here is the WORKER'S claim and is read by nothing. The
+ * server recomputes its own and serves it as the payload's top-level
+ * `validation`. On seeded piece #5 the two disagree — the worker says passed,
+ * the server says the lines support nothing — and the screen shows the server's.
+ */
+export interface PieceExtraction {
+  document_type?: string
+  merchant?: { name?: string; vat_number?: string | null }
+  transaction?: PieceTransaction
+  /** The seed's spelling of the same object. */
+  tx?: PieceTransaction
+  lines?: PieceExtractionLine[]
+  vat_summary?: { rate: number; gross: number }[]
+  confidence?: number
+  notes?: string | null
+  /** The worker's own verdict. Evidence of what it claimed; never input. */
+  validation?: Partial<PieceValidation>
+}
+
+export interface PieceTransaction {
+  date?: string | null
+  time?: string | null
+  ticket_number?: string | null
+  currency?: string
+  total?: number
+  payment_method?: string | null
+}
+
+/**
+ * One document in the receipts inbox, as `publicPiece` (plus the route's
+ * `duplicate_of`) serves it.
+ *
+ * ── `Piece` IS ALREADY TAKEN, AND MEANS SOMETHING ELSE ────────────────────
+ * `Piece` above is the reference an ENTRY carries — `{drive_ref, hash,
+ * captured}`. This is the inbox row the entry's reference may one day come
+ * from. Two different things; two names.
+ *
+ * ── A FLAGGED PIÈCE IS NORMAL TRAFFIC ─────────────────────────────────────
+ * `needs_review` is true for a document a human must look at, and a payload
+ * that fails validation still lands: refusing it at the door would hide it in
+ * the worker's retry queue. So the screen draws it as a judgment to make, not
+ * as an error.
+ */
+export interface InboxPiece {
+  /** The workspace #number. */
+  number: number
+  /** The book's slug, or null — a scanned receipt does not always say whose it is. */
+  entity: string | null
+  /** `staged | matched`. Everything lands staged; nothing auto-posts. */
+  status: string
+  received: IsoDate
+  pipeline: string | null
+  source: {
+    file_id: string
+    file_name: string | null
+    mime_type: string | null
+    md5_checksum: string | null
+    /** ISO **timestamp**. See `ManifestFile.created_time`. */
+    created_time: string | null
+    web_view_link: string | null
+  }
+  /**
+   * ── TWO FIELDS WHOSE WIRE TYPE IS STRONGER THAN THE DATA ────────────────
+   * `publicPiece` casts the `jsonb` column to `Extraction`, which declares
+   * `document_type: string` and `merchant.name: string` as REQUIRED. So the
+   * shaping function's type is `string`, its `?? null` on the merchant is
+   * unreachable *by the type*, and typing these as nullable here would fail the
+   * parity assertion for a difference that is a claim rather than a shape.
+   *
+   * The claim is backed at the door: `structuralRefusal` in
+   * `lib/validate/extraction.ts` refuses a payload without either field, so
+   * nothing can reach this table through `pieces/ingest` without them. **The
+   * seed writes rows directly and is not held by that guard** — so the screen
+   * still handles absence rather than trusting the type, which is the standing
+   * rule about a falsy fallback pointed at a field the TYPE says cannot be
+   * missing.
+   */
+  document_type: string
+  merchant: string
+  /** A STRING, like every other amount. Null when the extraction had no total. */
+  total: Money | null
+  date: IsoDate | null
+  /** THE SERVER'S verdict, recomputed. Not the worker's. */
+  validation: PieceValidation
+  needs_review: boolean
+  /** An earlier pièce with the same checksum, as a #number. Flagged, never dropped. */
+  duplicate_of: number | null
+  matched_entry: number | null
+  /** Which journal that #number lives in. Null until matched. */
+  matched_journal: 'grand_livre' | 'recettes_depenses' | null
+  extraction: PieceExtraction
+  note: Label | null
+}

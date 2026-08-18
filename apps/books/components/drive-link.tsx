@@ -64,13 +64,32 @@ export function DriveLink({
         <ExternalLink size={12} className="shrink-0" />
         Document
       </a>
-      <span
-        className="font-mono text-[11px] text-muted-foreground"
-        title={piece.hash}
-        data-hash={piece.hash}
-      >
-        {piece.hash.slice(0, 12)}
-      </span>
+      {/* ── A NULL HASH IS A FINDING, AND IT USED TO BE A WHITE SCREEN ────
+          `books.entry.piece_hash` is nullable and `lib/types.ts` declared it a
+          string, so this line was `piece.hash.slice(0, 12)` and threw on null.
+          Unreachable while every pièce came from the seed; phase 3's `match`
+          write made it reachable, because every seeded pièce has a NULL
+          `md5_checksum` and `matchPiece` copies it across. Attaching one and
+          opening `/ledger/12` produced "Application error: a client-side
+          exception has occurred".
+
+          It renders as a FACT rather than as an em dash: the hash is what makes
+          the digital copy admissible under art. 958f CO, so a document on file
+          with nothing proving what was captured is exactly the thing an audit
+          asks about. Same rule as the absent document above. */}
+      {piece.hash ? (
+        <span
+          className="font-mono text-[11px] text-muted-foreground"
+          title={piece.hash}
+          data-hash={piece.hash}
+        >
+          {piece.hash.slice(0, 12)}
+        </span>
+      ) : (
+        <span className="text-[11px] text-destructive" data-hash="none">
+          no checksum
+        </span>
+      )}
       {withCaptured && (
         <DateText value={piece.captured} className="text-[11px] text-muted-foreground" />
       )}

@@ -4,24 +4,35 @@
 // where a person changes a record.
 //
 // ===========================================================================
-// TWO KINDS OF ROW, AND ONLY ONE OF THEM HAS A BUTTON
+// THREE KINDS OF ROW, AND ONLY ONE OF THEM HAS A BUTTON
 // ===========================================================================
-// `GET …/worklist` merges `books.entry` and `books.ri_entry` into one list.
-// `POST /entries/{n}/resolve` addresses `books.entry` ONLY, and the two tables
-// keep SEPARATE `seq` counters — so an RI row's #number is also, usually, some
-// journal entry's #number, and resolving by it rewrites that entry and answers
-// 200. Reproduced 2026-08-18: RI #5 (TWINT *8842, 120.00) → `books.entry` #5,
-// the January payroll, in a different book. Raised on ticket #51.
+// `GET …/worklist` merges `books.entry`, `books.ri_entry` and — since phase 3 —
+// `books.piece_inbox` into one list. `POST /entries/{n}/resolve` addresses
+// `books.entry` ONLY, and all three tables keep SEPARATE `seq` counters, so a
+// row's #number from any other kind is also, usually, some journal entry's
+// #number. Resolving by it rewrites that entry and answers 200. Reproduced
+// 2026-08-18: RI #5 (TWINT *8842, 120.00) → `books.entry` #5, the January
+// payroll, in a different book. Raised on ticket #51.
 //
-// Until that is answered, an `ri_entry` row is READ-ONLY and says so ON THE ROW,
-// with the reason. Not in a footnote and not in a tooltip: the reader is looking
-// at a row that behaves differently from the one above it, and the difference is
-// not their fault.
+// Until that is answered, only an `entry` row has a button. Every other kind is
+// READ-ONLY and says so ON THE ROW, with the reason. Not in a footnote and not
+// in a tooltip: the reader is looking at a row that behaves differently from the
+// one above it, and the difference is not their fault.
 //
-// **The branch is on `kind`, before `<ResolveForm>` exists.** That component's
-// prop is narrowed to `kind: 'entry'`, so there is no disabled control to
-// re-enable, no handler bound to an RI number, and no way to reach the mutation
-// hook from an RI row at all.
+// ── THE BRANCH IS POSITIVE, AND IT WAS NEGATIVE UNTIL IT BIT ──────────────
+// It used to read `row.kind === 'ri_entry' ? readOnly : resolveForm`. That was
+// exhaustive while there were two kinds and correct on the day it was written.
+// **Phase 3's backend added a third**, six pièce rows landed in the else, each
+// rendered "Explain this", and pressing it would have POSTed
+// `/entries/{piece.number}/resolve` — pièce #1 rewriting journal entry #1.
+//
+// Nothing was written wrong: a correct backend change retargeted a correct
+// branch, which is CLAUDE.md finding #10's exact mechanism. `npm run typecheck`
+// WAS red on `_WorklistKeys` in `lib/wire-parity.test.ts` and had been for the
+// whole merge — the guard fired and nobody read it. The `row as ResolvableRow`
+// cast below is what kept the compiler quiet at THIS line, and it is why the
+// list is now enumerated positively: a fourth kind is a rendering nobody wrote,
+// never a write nobody meant.
 //
 // ===========================================================================
 // A SUGGESTION IS AN OPINION. NOTHING HERE APPLIES ONE.
@@ -44,7 +55,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Lock } from 'lucide-react'
+import { FileText, Lock } from 'lucide-react'
 import { scopedHref } from '@/lib/nav'
 import { en } from '@/lib/label'
 import { ruleAmount } from '@/lib/format'
@@ -54,14 +65,15 @@ import { DateText } from './date-text'
 import { Money } from './money'
 import { VocabChip } from './chips'
 import { HistoryTrail } from './history-trail'
-import { ResolveForm, type ResolvableRow } from './resolve-form'
+import { ResolveForm } from './resolve-form'
+import { isResolvable, type ResolvableRow } from '@/lib/resolvable'
 import { EmptyState } from './states'
 import type { RecognitionRule, ResolveResult, WorklistRow } from '@/lib/types'
 
 /** What the screen remembers about a row it just resolved, per #number. */
 export type ResolvedMap = Record<string, ResolveResult>
 
-/** A key that cannot collide across the two kinds. See the header. */
+/** A key that cannot collide across the three kinds. See the header. */
 function rowId(row: WorklistRow): string {
   return `${row.kind}:${row.number}`
 }
@@ -182,8 +194,19 @@ function Row({
             <VocabChip vocabulary="evidence_tiers" value={row.evidence_tier} withNote />
             {/* `status` is null for EVERY ri_entry — a simplified book has no
                 staging step. `<VocabChip>` renders nothing for a null value, so
-                the absence shows as an absence rather than as `staged`. */}
-            <VocabChip vocabulary="entry_status" value={row.status} />
+                the absence shows as an absence rather than as `staged`.
+                A PIÈCE is excluded on purpose: its lifecycle happens to spell
+                `staged` the same way and does not mean the same thing, and
+                there is no `piece_status` vocabulary to draw it from — so the
+                chip would borrow the entry vocabulary's colour and label for a
+                document. Plain text instead. See `<PiecesInbox>`. */}
+            {row.kind === 'piece' ? (
+              <span className="font-mono uppercase tracking-wider" data-status={row.status}>
+                {row.status}
+              </span>
+            ) : (
+              <VocabChip vocabulary="entry_status" value={row.status} />
+            )}
             {row.counterparty && <span>{row.counterparty}</span>}
             <span className="font-mono">
               {row.kind} #{row.number}
@@ -236,10 +259,12 @@ function Row({
             </div>
           )}
 
-          {/* ─── the branch ─────────────────────────────────────────────── */}
+          {/* POSITIVE, and enumerated. `kind === 'entry'` is the only path to a
+              write; everything else explains itself. See the header for what a
+              negative test cost when a third kind arrived. */}
           {!result &&
-            (row.kind === 'ri_entry' ? (
-              <ReadOnlyReason />
+            (!isResolvable(row) ? (
+              <ReadOnlyReason kind={row.kind} base={base} scope={scope} row={row} />
             ) : !canWrite ? (
               <p className="mt-2 text-[12px] text-muted-foreground">
                 This session cannot change records.
@@ -283,11 +308,64 @@ function Row({
  * Why this row has no button, said on the row.
  *
  * ── IT NAMES THE MECHANISM, NOT "NOT SUPPORTED" ───────────────────────────
- * A reader looking at two rows that behave differently deserves to know it is a
+ * A reader looking at rows that behave differently deserves to know it is a
  * defect being worked around and not their mistake. And an agent reading the DOM
  * gets `data-readonly` plus the ticket, which is the recovery.
+ *
+ * ── THE TWO REASONS ARE DIFFERENT, SO THEY ARE TWO SENTENCES ─────────────
+ * An `ri_entry` has no button because resolve would hit the WRONG TABLE
+ * (ticket #51). A `piece` has no button because resolve is not what a document
+ * needs at all — a pièce is matched to an entry, which is a different act with
+ * a different route. Collapsing them into "read-only" would tell a reader the
+ * inbox is broken when it is somewhere else on purpose.
  */
-function ReadOnlyReason() {
+function ReadOnlyReason({
+  kind,
+  base,
+  scope,
+  row,
+}: {
+  kind: WorklistRow['kind']
+  base: string
+  scope: ReadScope
+  row: WorklistRow
+}) {
+  if (kind === 'piece') {
+    return (
+      <p
+        data-readonly="piece"
+        className="mt-2 inline-flex items-start gap-1.5 rounded-md border border-dashed border-border px-2.5 py-1.5 text-[12px] text-muted-foreground"
+      >
+        <FileText size={12} className="mt-0.5 shrink-0" />
+        <span>
+          This is a document, not a transaction. Explaining is not what it needs — a pièce is
+          attached to the entry it proves, and{' '}
+          {row.suggested_entries.length > 0 ? (
+            <>
+              this one could document{' '}
+              {/* The candidates, as facts. Nothing here applies one, and the
+                  #numbers name whichever journal the pièce's own book keeps —
+                  `journalOf`, on the server. */}
+              <span className="font-mono text-foreground">
+                {row.suggested_entries.map((n) => `#${n}`).join(', ')}
+              </span>
+              .{' '}
+            </>
+          ) : (
+            <>nothing in the books matches its amount and date yet. </>
+          )}
+          <Link
+            href={scopedHref(base, '/documents', scope)}
+            className="text-primary-strong hover:underline"
+          >
+            Open it in supporting documents
+          </Link>
+          .
+        </span>
+      </p>
+    )
+  }
+
   return (
     <p
       data-readonly="ri_entry"

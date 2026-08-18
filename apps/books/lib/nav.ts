@@ -56,7 +56,14 @@ export interface NavItem {
 export const NAV: readonly NavItem[] = [
   { seg: '', label: 'Overview', icon: 'layout-dashboard', scoped: false },
   { seg: '/recognition', label: 'Recognition', icon: 'scan-search', scoped: true },
-  { seg: '/documents', label: 'Supporting documents', icon: 'paperclip', scoped: true },
+  // `scoped: false` since 2026-08-18, when the pièces inbox was built here.
+  // `books.piece_inbox.entity_id` is NULLABLE — a scanned receipt does not
+  // always say whose it is — so the screen serves the WHOLE inbox and carries
+  // the book as a column. A switcher over a list it does not filter is the
+  // control this file's header warns about: the reader assumes they used it
+  // wrong. The register on `/sources` has the same shape and keeps `true` only
+  // because the chart of accounts above it really is per book.
+  { seg: '/documents', label: 'Supporting documents', icon: 'paperclip', scoped: false },
   { seg: '/ledger', label: 'General ledger', icon: 'book-open', scoped: true },
   // `scoped: true` since 2026-08-18, when the CHART half of this screen was
   // built. It was `false` on the reasoning that a source is a channel money
