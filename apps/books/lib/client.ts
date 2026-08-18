@@ -4,7 +4,7 @@
 // WHY THIS FILE IS A CHOKE POINT AND NOT A CONVENIENCE
 // ===========================================================================
 // b/books' web surface is READ-MOSTLY: visibility, history, and a small number of
-// intervention points. Across all thirteen screens there are four writes —
+// intervention points. Across all thirteen screens there are five writes —
 // resolve an entry, create a rule, post a staged entry, approve a compliance
 // rule. Everything else reads.
 //

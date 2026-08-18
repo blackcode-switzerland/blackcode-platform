@@ -14,7 +14,7 @@
 // ===========================================================================
 // IT DOES NOT OFFER A BUTTON, AND THE REASON IS NOT "WE RAN OUT OF TIME"
 // ===========================================================================
-// b/books' web surface is read-mostly by design: thirteen screens, four writes,
+// b/books' web surface is read-mostly by design: thirteen screens, five writes,
 // none of which is "create a book". Creating one is a setup act with legal
 // consequences — a legal form, a seat that decides which cantonal tax parameters
 // apply, an audit status, a VAT registration — and it is not a thing to do in a
