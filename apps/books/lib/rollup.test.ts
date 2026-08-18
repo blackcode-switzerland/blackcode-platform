@@ -18,6 +18,7 @@ const sa = (slug: string, actif: string, resultat: string, extra: Partial<Overvi
   ri: null,
   entries: 0,
   unrecognized: 0,
+  worklist: 0,
   staged: 0,
   ...extra,
 })
@@ -31,6 +32,7 @@ const ri = (slug: string, resultat: string, extra: Partial<OverviewBook> = {}): 
   ri: { recettes: '0.00', depenses: '0.00', resultat },
   entries: 0,
   unrecognized: 0,
+  worklist: 0,
   staged: 0,
   ...extra,
 })
@@ -139,6 +141,7 @@ describe('the rollup', () => {
       ri: null,
       entries: 0,
       unrecognized: 0,
+      worklist: 0,
       staged: 0,
     }
     const r = rollup([sa('a', '100.00', '0.00'), none])
@@ -150,10 +153,35 @@ describe('the rollup', () => {
 
   it('sums the entry counts', () => {
     const r = rollup([
-      sa('a', '0.00', '0.00', { entries: 11, unrecognized: 2, staged: 3 }),
-      ri('r', '0.00', { entries: 6, unrecognized: 1, staged: 0 }),
+      sa('a', '0.00', '0.00', { entries: 11, unrecognized: 2, worklist: 3, staged: 3 }),
+      ri('r', '0.00', { entries: 6, unrecognized: 1, worklist: 1, staged: 0 }),
     ])
     expect([r.entries, r.unrecognized, r.staged]).toEqual([17, 3, 3])
+  })
+
+  /**
+   * `worklist` and `unrecognized` are DIFFERENT NUMBERS and the panel must add
+   * the right one.
+   *
+   * The figures below are the seeded workspace's, read off `bk books overview`
+   * and off SQL on 2026-08-18: blackcode 2/3, aios 1/1, ri 1/1. The panel
+   * labelled the sum of the first column "Need a human" — 4 — while the
+   * recognition screens and the CLI between them accounted for 5.
+   *
+   * Mutation watched (2026-08-18): `worklist += b.worklist` → `b.unrecognized`
+   * in `lib/rollup.ts`. RED, `5` against `4`. Restored.
+   */
+  it('needs-a-human is the worklist count, which is not the unrecognized count', () => {
+    const r = rollup([
+      sa('blackcode', '0.00', '0.00', { entries: 11, unrecognized: 2, worklist: 3, staged: 3 }),
+      sa('aios', '0.00', '0.00', { entries: 4, unrecognized: 1, worklist: 1, staged: 1 }),
+      ri('ri', '0.00', { entries: 6, unrecognized: 1, worklist: 1, staged: 0 }),
+    ])
+    expect(r.worklist, 'the panel is adding `unrecognized` again').toBe(5)
+    expect(r.unrecognized, 'the strict count is still available and still 4').toBe(4)
+    // Anti-vacuous: if the two ever coincide this case proves nothing, so it
+    // asserts that this fixture actually distinguishes them.
+    expect(r.worklist).not.toBe(r.unrecognized)
   })
 
   it('an empty workspace rolls up to zeroes, not to NaN or an em dash', () => {

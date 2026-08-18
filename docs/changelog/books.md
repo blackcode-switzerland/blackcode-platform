@@ -67,6 +67,60 @@ flag. Fixed server-side; the flag can come off.
 
 No route added or renamed, no wire field changed. `bk books piece match`
 surfaces the new refusals as-is.
+## 2026-08-18 — Web screens corrected: the overview under-counted, and a transaction named the wrong book
+
+Hardening pass over the twelve built screens. **No route changed and no `bk`
+command changed** — every fix below is in the web UI, and in two places the web
+UI is now saying what `bk` was already saying.
+
+**Breaking for nobody. Read this if you compare the web figures against `bk`.**
+
+- **The overview's "Need a human" was the wrong number, and `bk` was right.**
+  `GET …/overview` serves both `unrecognized` (strictly
+  `recognition = 'unrecognized'`) and `worklist` (`unrecognized` OR `inferred`,
+  which is what the Recognition queue actually lists and what
+  `bk books overview` prints under `TO RESOLVE`). The web read the first and
+  labelled it "Need a human". On the seeded workspace it showed **4 where `bk`
+  totalled 5**, and per book "2 unrecognized" where `bk` said 3. The web now
+  reads `worklist` and the two agree. `unrecognized` is still served and is
+  still the right field if you specifically mean that state.
+
+- **The transaction screen stated a book and a fiscal year it does not know.**
+  `GET …/entries/{number}` resolves on `workspace_id + seq` and is **not scoped
+  by entity or exercice** — correctly, because `books.entry.seq` is
+  workspace-wide. The screen was printing the book and year from the URL's
+  `?entity=` / `?exercice=` filter beside the entry, so opening one book's
+  écriture and changing the book selector relabelled that unchanged entry with
+  another company's name. It no longer names either. **If you consumed that
+  heading as the entry's book, it was never that.** The payload carries neither
+  field; serving them is an open backend request.
+
+- **The Recognition screen treated "this book has no fiscal year" as a failure.**
+  Every book starts with no exercice (`bk books entity create` opens none), so
+  this was the first screen a new book showed, and it showed two red alert boxes
+  printing the raw `bad_scope` code. It now renders the same calm explanation
+  the balance sheet and income statement already used, carrying the server's own
+  `suggestion` (`bk books exercice create --year …`).
+
+- **An entry's original-currency block is rendered.** `fx` (`{original, rate,
+  source}`, migration 0011) is described as display-only and was displayed
+  nowhere. The transaction screen now shows it when present, field by field —
+  absent fields are omitted rather than dashed, because the writer may omit any
+  of them. Nothing computes with it; amounts stay CHF.
+
+- **The pièces inbox now says why it cannot attach a document.**
+  `POST …/pieces/{n}/match` and `bk books piece match` both work, and the web
+  form for them is deliberately switched off. The screen said nothing about it,
+  so six documents sat there unactionable with no explanation. It now states the
+  reason. **Note for anyone reaching for the CLI as a workaround: there is not
+  one.** `matchPiece`'s grand-livre branch resolves the entry on
+  `workspace_id + seq` with no entity filter, so
+  `bk books piece match <p> --entry <n>` will attach a pièce across two legal
+  entities and exits 0 — verified against seeded data, where a blackcode SA
+  receipt attached to an AIOS Companion SA écriture and overwrote that entry's
+  existing Drive reference and SHA-256 with a NULL hash, leaving `evidence_tier`
+  untouched and writing no history. Do not use it across books until the route
+  filters by entity.
 
 ## 2026-08-18 — Sources, pièces and the fifth write
 
