@@ -10,6 +10,8 @@ package books
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -23,7 +25,7 @@ func newSourceCmd() *cobra.Command {
 		Use:   "source",
 		Short: "The sources register — every place money data comes from",
 	}
-	cmd.AddCommand(newSourceListCmd(), newSourceShowCmd())
+	cmd.AddCommand(newSourceListCmd(), newSourceShowCmd(), newSourceImportCmd())
 	return cmd
 }
 
@@ -129,4 +131,68 @@ func strOr(s *string, fallback string) string {
 		return fallback
 	}
 	return *s
+}
+
+func newSourceImportCmd() *cobra.Command {
+	var file string
+	cmd := &cobra.Command{
+		Use:         "import <source-number> --file <statement.xml>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/sources/{number}/import"},
+		Short:       "Import one camt.053 bank statement through the door",
+		Long: "Deliver one camt.053 statement to this source's book. Every booked line\n" +
+			"lands STAGED — whole file or nothing: the statement must reconcile against\n" +
+			"itself (opening + lines = closing, to the rappen) or it is refused with the\n" +
+			"arithmetic shown.\n\n" +
+			"Rules run at arrival: a clean hit lands `inferred` and waits on the worklist\n" +
+			"for a human to confirm — the machine suggests, it never applies. Re-importing\n" +
+			"an overlapping statement converges on the bank's own references and duplicates\n" +
+			"nothing. `--file -` reads stdin, which is how the Companion pipes.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			n, err := strconv.Atoi(args[0])
+			if err != nil || n < 1 {
+				return fmt.Errorf("%q is not a source number", args[0])
+			}
+			var raw []byte
+			name := filepath.Base(file)
+			if file == "-" {
+				raw, err = io.ReadAll(os.Stdin)
+				name = "stdin.camt053.xml"
+			} else {
+				raw, err = os.ReadFile(file)
+			}
+			if err != nil {
+				return fmt.Errorf("reading the statement: %w", err)
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			r, err := c.ImportBooksSource(ws, n, name, string(raw))
+			if err != nil {
+				return err
+			}
+			return output.Render(format, r, func(w io.Writer) error {
+				fmt.Fprintf(w, "imported %s into source #%d (%s)\n", r.File, r.Source, r.Journal)
+				fmt.Fprintf(w, "  period      %s -> %s\n", strOr(r.Period.From, "?"), strOr(r.Period.To, "?"))
+				fmt.Fprintf(w, "  statement   %s -> %s (reconciles)\n", r.Opening, r.Closing)
+				fmt.Fprintf(w, "  lines       %d booked: %d new (%d inferred by rules, %d for the worklist), %d already known\n",
+					r.LinesTotal, r.Imported, r.Inferred, r.Unrecognized, r.AlreadyKnown)
+				if r.WithFx > 0 {
+					fmt.Fprintf(w, "  fx          %d line(s) carry an original-currency story\n", r.WithFx)
+				}
+				if r.Unrecognized > 0 {
+					fmt.Fprintln(w, "next: bk books worklist")
+				}
+				return nil
+			})
+		},
+	}
+	cmd.Flags().StringVar(&file, "file", "", "Path to the camt.053 XML, or - for stdin (required)")
+	_ = cmd.MarkFlagRequired("file")
+	return cmd
 }

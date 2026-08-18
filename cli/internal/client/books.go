@@ -673,3 +673,52 @@ func (c *Client) MatchBooksPiece(ws string, piece, entry int) (*BooksPiece, erro
 	}
 	return &out, nil
 }
+
+// ===========================================================================
+// THE BANK DOOR AND POSTING (phase 4A)
+// ===========================================================================
+
+// BooksImportSummary is what one statement import did — and did not — do.
+type BooksImportSummary struct {
+	Source  int    `json:"source"`
+	File    string `json:"file"`
+	Journal string `json:"journal"`
+	Period  struct {
+		From *string `json:"from"`
+		To   *string `json:"to"`
+	} `json:"period"`
+	Opening      string `json:"opening"`
+	Closing      string `json:"closing"`
+	LinesTotal   int    `json:"lines_total"`
+	Imported     int    `json:"imported"`
+	Inferred     int    `json:"inferred"`
+	Unrecognized int    `json:"unrecognized"`
+	AlreadyKnown int    `json:"already_known"`
+	WithFx       int    `json:"with_fx"`
+	Staged       []int  `json:"staged"`
+}
+
+func (c *Client) ImportBooksSource(ws string, source int, file, xml string) (*BooksImportSummary, error) {
+	var out BooksImportSummary
+	body := map[string]string{"file": file, "xml": xml}
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/sources/%d/import", ws, source), body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// BooksPostResult reports one posting. `Already` marks the idempotent no-op.
+type BooksPostResult struct {
+	Number  int    `json:"number"`
+	EntryNo int    `json:"entry_no"`
+	Status  string `json:"status"`
+	Already bool   `json:"already"`
+}
+
+func (c *Client) PostBooksEntry(ws string, entry int) (*BooksPostResult, error) {
+	var out BooksPostResult
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/entries/%d/post", ws, entry), nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

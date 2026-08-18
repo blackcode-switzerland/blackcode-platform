@@ -480,7 +480,14 @@ export interface RecognitionRule {
  * `kind: 'entry'`, and handing it an RI row does not compile.
  */
 export interface WorklistRow {
-  kind: 'entry' | 'ri_entry'
+  /**
+   * `piece` arrived with phase 3: unmatched documents sit on the SAME list as
+   * unrecognized money, because document matching happens here rather than in
+   * a second review queue. A piece row's `recognition` speaks a different
+   * vocabulary (`unmatched` | `needs_review`) and its `suggested_entries` are
+   * entry #numbers it could prove — the mirror image of `suggested_rules`.
+   */
+  kind: 'entry' | 'ri_entry' | 'piece'
   /** The workspace #number **within this kind**. See the note above. */
   number: number
   date: IsoDate
@@ -494,7 +501,12 @@ export interface WorklistRow {
   /** The bank's own words. Never overwritten — it is the original record. */
   raw_label: string
   counterparty: string | null
-  recognition: Recognition
+  /**
+   * For entry and ri_entry rows: the recognition state. For piece rows:
+   * `unmatched` or `needs_review` — a different vocabulary on purpose,
+   * because a document is not a transaction.
+   */
+  recognition: Recognition | 'unmatched' | 'needs_review'
   evidence_tier: EvidenceTier
   /** A `numeric(14,2)` string. For an entry, the sum of its debit lines. */
   amount: Money
@@ -508,6 +520,12 @@ export interface WorklistRow {
    * worklist row.
    */
   suggested_rules: number[]
+  /**
+   * Pieces only: entry #numbers this document could prove (same amount to the
+   * rappen, three days either side). `[]` for entry and ri_entry rows. Same
+   * doctrine as `suggested_rules`: an opinion, never an action.
+   */
+  suggested_entries: number[]
 }
 
 /**

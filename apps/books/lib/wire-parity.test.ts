@@ -503,6 +503,8 @@ type _Scalars = [
   // either way, and it must stay one — `<Money>` has no numeric overload.
   Mutual<WorklistRowWire['amount'], WorklistRow['amount']>,
   Mutual<WorklistRowWire['suggested_rules'], WorklistRow['suggested_rules']>,
+  // Phase 3: pieces only — entry #numbers this document could prove.
+  Mutual<WorklistRowWire['suggested_entries'], WorklistRow['suggested_entries']>,
 ]
 
 // Referencing them is what turns a `never` above into an error at THIS line,
@@ -524,5 +526,7 @@ const _scalars: _Scalars = [
   // phase 2: five rule fields, six worklist fields
   true, true, true, true, true,
   true, true, true, true, true, true,
+  // phase 3: the worklist's piece column
+  true,
 ]
 void [_keys, _scalars]

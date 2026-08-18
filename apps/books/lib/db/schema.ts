@@ -440,6 +440,8 @@ export const booksEntry = booksSchema.table(
     piece_captured: date('piece_captured'),
     /** 0011: the original-currency story, display-only. Nothing computes with it. */
     fx: jsonb('fx'),
+    /** 0012: the bank's own reference — the import door's idempotency key. */
+    bank_ref: varchar('bank_ref', { length: 64 }),
     /** The only correction path. */
     reverses_entry_id: integer('reverses_entry_id'),
     history: jsonb('history'),
@@ -518,6 +520,12 @@ export const booksRiEntry = booksSchema.table(
     piece_captured: date('piece_captured'),
     /** 0011: the original-currency story, display-only. Nothing computes with it. */
     fx: jsonb('fx'),
+    /** 0012: the bank's own reference — the import door's idempotency key. */
+    bank_ref: varchar('bank_ref', { length: 64 }),
+    /** 0012: which register source delivered this line. NULL for pre-import rows. */
+    source_id: integer('source_id').references(() => booksSource.id, {
+      onDelete: 'set null',
+    }),
     history: jsonb('history'),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

@@ -287,7 +287,7 @@ func newEntryCmd() *cobra.Command {
 		Use:   "entry",
 		Short: "The grand livre — écritures",
 	}
-	cmd.AddCommand(newEntryListCmd(), newEntryShowCmd())
+	cmd.AddCommand(newEntryListCmd(), newEntryShowCmd(), newEntryPostCmd())
 	return cmd
 }
 
@@ -616,4 +616,45 @@ func fxLine(fx *client.BooksFx) string {
 		s += " (" + fx.Source + ")"
 	}
 	return s
+}
+
+func newEntryPostCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:         "post <number>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/entries/{number}/post"},
+		Short:       "Post a staged écriture — after review, it becomes immutable",
+		Long: "Staged -> posted, after review. The database has the last word: a posted\n" +
+			"entry must balance, carry at least two lines, and have every line mapped to\n" +
+			"an account — resolve it first if it does not. Posted is immutable; from here\n" +
+			"on, a correction is a reversing entry. Posting a posted entry is a no-op that\n" +
+			"says so, because a retry is not an error.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			n, err := strconv.Atoi(args[0])
+			if err != nil || n < 1 {
+				return fmt.Errorf("%q is not an entry number", args[0])
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			r, err := c.PostBooksEntry(ws, n)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, r, func(w io.Writer) error {
+				if r.Already {
+					_, err := fmt.Fprintf(w, "entry #%d was already posted (journal no. %d)\n", r.Number, r.EntryNo)
+					return err
+				}
+				_, err := fmt.Fprintf(w, "posted entry #%d (journal no. %d) — now immutable; corrections are reversing entries\n", r.Number, r.EntryNo)
+				return err
+			})
+		},
+	}
+	return cmd
 }

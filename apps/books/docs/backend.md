@@ -5,10 +5,10 @@
 model in [`docs/platform-db.md`](../../../docs/platform-db.md). Neither is
 repeated here.
 
-**Status: phase 3, 2026-08-18.** The statutory core, recognition, the sources register and the pièces pipeline exist and are migrated (0001-0011; 0010 lets a pièce match into the RI journal, found by the first real RI use; 0011 adds `fx`, the display-only original-currency story — the book stays CHF, phase 4's bank ingest is the intended writer). What each phase adds
+**Status: phase 4A, 2026-08-18.** The statutory core, recognition, the sources register, the pièces pipeline, and now the BANK DOOR: `POST /sources/{n}/import` parses camt.053 server-side, stages every booked line in the right journal, runs rules at arrival (`inferred`, never resolved), writes fx when the bank converted, and converges on the bank's own references. Posting (staged → posted, write path #4) is live behind `/entries/{n}/post`. Migrated 0001-0012. What each phase adds
 is in [`docs/books-app-plan/`](../../../docs/books-app-plan/README.md).
 
-Migrations applied: 11 of 11, `__drizzle_migrations_books`.
+Migrations applied: 12 of 12, `__drizzle_migrations_books`.
 
 ---
 
