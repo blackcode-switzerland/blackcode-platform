@@ -57,6 +57,7 @@ import {
   publicRiEntry,
 } from './db/queries/statutory'
 import { publicRule } from './db/queries/rules'
+import type { MetaPayload } from './hooks'
 import { publicAnalysis, publicCategory } from './db/queries/management'
 import { publicComplianceRule } from './db/queries/compliance'
 import {
@@ -172,7 +173,30 @@ function envelopeKeys(src: string, opts: { after?: string; label: string }): str
   const call = calls[calls.length - 1]
   const open = src.indexOf('{', call)
   if (open < 0) throw new Error(`${opts.label}: NextResponse.json was not given an object literal`)
+  return keysOfObjectAt(src, open)
+}
 
+/**
+ * The keys of ONE nested object literal, by its own anchor.
+ *
+ * `envelopeKeys` finds a response and walks it; this walks a block inside one —
+ * `vocabularies: {` — which the response reader cannot reach, because it is
+ * built to look for a `NextResponse.json(` call and there is not one here.
+ *
+ * Added for `/api/meta`, whose vocabularies are the field that has actually
+ * drifted: a chip's colour comes from one of those keys and a rename to any of
+ * them is silent.
+ */
+function objectKeys(src: string, anchor: string, label: string): string[] {
+  const at = src.indexOf(anchor)
+  if (at < 0) throw new Error(`${label}: "${anchor}" is not in this file any more`)
+  const open = src.indexOf('{', at)
+  if (open < 0) throw new Error(`${label}: "${anchor}" is not followed by an object literal`)
+  return keysOfObjectAt(src, open)
+}
+
+/** The shared walker: brace-matched, quote-aware, comment-stripping. */
+function keysOfObjectAt(src: string, open: number): string[] {
   const keys: string[] = []
   let depth = 0
   let expectKey = false
@@ -207,6 +231,34 @@ function envelopeKeys(src: string, opts: { after?: string; label: string }): str
   }
   return keys
 }
+
+/**
+ * `/api/meta`'s shape, in one place.
+ *
+ * ── DECLARED `as const` SO THE COMPILER CAN CHECK IT AGAINST MetaPayload ────
+ * A hardcoded list compared to a route is a snapshot: it fails on any change,
+ * including a legitimate one, and the third time somebody has to edit it in a
+ * hurry they delete it. These are asserted against `MetaPayload` at the bottom
+ * of this file, so the pairing is:
+ *
+ *   forget the TYPE   → compile error, naming the key
+ *   forget the ROUTE  → the runtime case below, naming the key
+ *   change all three  → green, which is what an agreed addition looks like
+ */
+const META_KEYS = ['app', 'entities', 'vocabularies', 'tva_rates', 'statements'] as const
+
+const META_VOCABULARIES = [
+  'recognition',
+  'evidence_tiers',
+  'entry_status',
+  'source_types',
+  'source_layers',
+  'source_status',
+  'manifest_states',
+  'verdict_states',
+  'rule_review_states',
+  'rule_confidence',
+] as const
 
 const ENTITY_KEYS = [
   'number',
@@ -288,6 +340,42 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
   // is said plainly here rather than implied: it sees that file and nothing else,
   // and it would not notice a change made anywhere but there. It is still the
   // difference between a rename being caught and a false statement shipping.
+  // ── /api/meta, THE PAYLOAD NOTHING PINNED UNTIL 2026-08-19 ───────────────
+  // It is the DYNAMIC CONTRACT — every chip's colour, every dropdown's values,
+  // the statutory line structures — and it was the one route no case here could
+  // see, because it is built inline and has no shaping function.
+  //
+  // It has now drifted twice. The cleanup review renamed `entry_status` to
+  // `entry_statuses` and watched typecheck, 307 tests and lint all stay green
+  // while the POSTED chip silently lost its colour. Then phase 5 added three
+  // vocabularies — `verdict_states`, `rule_review_states`, `rule_confidence` —
+  // and `MetaPayload` followed none of them for a day; a chip asking for one was
+  // a compile error only because `VocabularyName` is derived from those keys,
+  // which is luck rather than a check.
+  //
+  // Reproduced before writing this: renaming `tva_rates` on the wire left
+  // `npm run typecheck` at zero errors and all 444 tests green.
+  //
+  // A source read is the weaker instrument and it is said so here: it sees that
+  // one file. What it can do is refuse a rename, which is the whole failure this
+  // payload has actually suffered.
+  it('/api/meta serves exactly the top-level keys MetaPayload declares', () => {
+    const src = readFileSync(join(APP_ROOT, 'app/api/meta/route.ts'), 'utf8')
+    const served = envelopeKeys(src, { label: '/api/meta' })
+    expect(served.length, 'found no keys — the response moved and this case is stale').toBeGreaterThan(3)
+    expect(served.sort()).toEqual([...META_KEYS].sort())
+  })
+
+  it('/api/meta serves exactly the vocabularies MetaPayload declares', () => {
+    const src = readFileSync(join(APP_ROOT, 'app/api/meta/route.ts'), 'utf8')
+    // The `vocabularies:` block only. Brace-matched from its own anchor, so a
+    // key added to a SIBLING block cannot satisfy this and a key added here
+    // cannot hide in one.
+    const served = objectKeys(src, 'vocabularies: {', '/api/meta vocabularies')
+    expect(served.length, 'found no vocabularies — this case is stale').toBeGreaterThan(3)
+    expect(served.sort()).toEqual([...META_VOCABULARIES].sort())
+  })
+
   it('the resolve route serves exactly the fields ResolveResult declares', () => {
     const src = readFileSync(
       join(APP_ROOT, 'app/api/workspaces/[ws]/entries/[number]/resolve/route.ts'),
@@ -1653,6 +1741,11 @@ type PieceWire = ReturnType<typeof publicPiece>
  * This is the half that catches a field appearing or disappearing without
  * anybody running the suite — `npm run typecheck` alone is enough.
  */
+type _MetaKeys = Mutual<(typeof META_KEYS)[number], keyof MetaPayload>
+type _MetaVocabularies = Mutual<
+  (typeof META_VOCABULARIES)[number],
+  keyof MetaPayload['vocabularies']
+>
 type _EntityKeys = Mutual<keyof EntityWire, keyof Entity>
 type _AccountKeys = Mutual<keyof AccountWire, keyof Account>
 /**
@@ -2172,6 +2265,8 @@ type _Scalars = [
 // which contract drifted. Found 2026-08-18 by the reviewer whose job was to
 // break each of these and read what came back.
 const _keys: {
+  _MetaKeys: _MetaKeys
+  _MetaVocabularies: _MetaVocabularies
   _EntityKeys: _EntityKeys
   _AccountKeys: _AccountKeys
   _ExerciceKeys: _ExerciceKeys
@@ -2212,6 +2307,8 @@ const _keys: {
   _CapitalTaxKeys: _CapitalTaxKeys
   _ComplianceKeys: _ComplianceKeys
 } = {
+  _MetaKeys: true,
+  _MetaVocabularies: true,
   _EntityKeys: true,
   _AccountKeys: true,
   _ExerciceKeys: true,
