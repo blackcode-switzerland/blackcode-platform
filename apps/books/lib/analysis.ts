@@ -47,17 +47,31 @@ function isLabel(v: unknown): v is Label {
  * inserts these rows directly, and `bk books analyse record` is not the only
  * way a row has ever arrived. A row that fails this is DROPPED and counted, not
  * rendered blank; see `analysisRows`.
+ *
+ * ── A LABEL MAY BE A BARE STRING ─────────────────────────────────────────
+ * The door's `speaks()` accepts `"runway now (months)"` as readily as
+ * `{fr, en}`, and the FIRST real agent filing (analysis #3, 2026-08-19) used
+ * bare strings — this screen dropped all thirteen rows of a valid record.
+ * A bare string renders as itself on both language sides; that is display
+ * shaping, not an edit — the record stays as filed. (A bare NUMBER as `value`
+ * is a separate seam: the door accepts one, this screen still drops and counts
+ * it — flagged on #56 for one decision rather than changed unilaterally here.)
  */
 function figureOf(v: unknown): AnalysisFigure | null {
   if (!v || typeof v !== 'object') return null
   const o = v as { label?: unknown; value?: unknown; href?: unknown }
-  if (!isLabel(o.label)) return null
+  const label: Label | null = isLabel(o.label)
+    ? o.label
+    : typeof o.label === 'string' && o.label.trim() !== ''
+      ? { fr: o.label, en: o.label }
+      : null
+  if (!label) return null
   // A value is text and stays text. `0` and `false` are not values an agent
   // filed — every seeded one is a formatted string — so anything that is not a
   // non-empty string is a row this screen cannot show honestly.
   if (typeof o.value !== 'string' || o.value.trim() === '') return null
   return {
-    label: o.label,
+    label,
     value: o.value,
     href: typeof o.href === 'string' && o.href.trim() !== '' ? o.href : null,
   }

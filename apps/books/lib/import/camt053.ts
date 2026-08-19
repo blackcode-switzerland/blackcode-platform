@@ -39,7 +39,7 @@ export class CamtRefused extends Error {
 
 export interface CamtFx {
   original: string
-  rate?: string
+  rate: string
   source: 'camt.053'
 }
 
@@ -160,15 +160,17 @@ function readLine(ntry: string, index: number): CamtLine | null {
   }
 
   // fx: when the bank converted, AmtDtls carries the instructed amount in the
-  // original currency and the applied rate. Display evidence only (0011).
+  // original currency and the applied rate. Display evidence only (0011). The
+  // wire contract is ALL THREE FIELDS OR NULL, so a conversion whose rate the
+  // bank did not state is not stored as fx — the narrative still tells it.
   let fx: CamtFx | null = null
   const dtls = firstBlock(ntry, 'AmtDtls')
   if (dtls) {
     const instd = firstBlock(dtls, 'InstdAmt')
     const orig = instd ? amountWithCcy(instd, 'Amt') : null
-    if (orig && orig.ccy !== amt.ccy) {
-      const rate = text(dtls, 'XchgRate')
-      fx = { original: `${orig.ccy} ${orig.amount}`, ...(rate ? { rate } : {}), source: 'camt.053' }
+    const rate = text(dtls, 'XchgRate')
+    if (orig && orig.ccy !== amt.ccy && rate) {
+      fx = { original: `${orig.ccy} ${orig.amount}`, rate, source: 'camt.053' }
     }
   }
 

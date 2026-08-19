@@ -240,9 +240,14 @@ d('the seeded database', () => {
       expect((params?.params as { ifd: { confirmed: boolean } }).ifd.confirmed).toBe(true)
     }
 
+    // The journal is append-only AND live: using the product files more rows
+    // (analysis #3 arrived through `bk books analyse record` the very day an
+    // exact count first broke here). The seed's two are pinned by NUMBER and
+    // content — a parity test must not turn "somebody used the product" into
+    // a failure, and it must never demand a row's deletion to go green.
     const analyses = await m.listAnalyses(ws)
-    expect(analyses.length).toBe(2)
-    const first = m.publicAnalysis(analyses[analyses.length - 1])
+    expect(analyses.length).toBeGreaterThanOrEqual(2)
+    const first = m.publicAnalysis(analyses.find((a) => a.analysis.seq === 1)!)
     expect(first.entity).toBe('blackcode')
     expect(first.runway_after_months).toBe(6.9)
     expect((first.based_on as { value: string }[]).map((b) => b.value)[0], 'the snapshot exactly as the fixture filed it').toBe("CHF 1'806.67")
@@ -292,7 +297,16 @@ d('the seeded database', () => {
     const e26 = await q.listEntries(bc.id, x2026.id)
     expect(e25.map((r: { entry: { entry_no: number } }) => r.entry.entry_no)).toEqual([1, 2])
     expect(e26[0].entry.entry_no).toBe(1)
-    expect(e26.length).toBe(FX.TX.filter((t) => t.entity_id === 1 && t.date >= '2026-01-01').length)
+    // The journal is LIVE — a declare adds a row (an extourne did, 2026-08-19).
+    // The fixture's rows are pinned as the gapless head of the journal, not as
+    // its entire contents: the same rule as the analyses pin above — a parity
+    // test must not turn "somebody used the product" into a failure.
+    const seeded = FX.TX.filter((t) => t.entity_id === 1 && t.date >= '2026-01-01').length
+    expect(e26.length).toBeGreaterThanOrEqual(seeded)
+    expect(
+      e26.map((r: { entry: { entry_no: number } }) => r.entry.entry_no),
+      'entry_no is gapless from 1 within the exercice — the invariant itself'
+    ).toEqual(Array.from({ length: e26.length }, (_, i) => i + 1))
     // Every 2025-dated entry sits in the 2025 exercice. The point of the split.
     for (const r of e25) expect(r.entry.date < '2026-01-01').toBe(true)
     for (const r of e26) expect(r.entry.date >= '2026-01-01').toBe(true)

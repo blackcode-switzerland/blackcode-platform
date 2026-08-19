@@ -155,7 +155,7 @@ d('the management layer', () => {
         agent: 'b',
         question: 'q?',
         verdict: 'v',
-        basedOn: [{ label: { fr: 'Trésorerie' } }],
+        basedOn: [{ label: { fr: 'Trésorerie' }, value: undefined }],
       })
     ).rejects.toMatchObject({ code: 'based_on_incomplete' })
     await expect(
@@ -169,6 +169,8 @@ d('the management layer', () => {
     expect(bureau.seq).toBe(1)
     const it = await createCategory(ws, { entitySlug: 'mg', key: 'it_ai', label: 'IT & tooling', accounts: ['6570'] })
     expect(it.label, 'a plain-string label is normalized: the wire always carries {fr, en}').toEqual({ fr: 'IT & tooling', en: 'IT & tooling' })
+    const demi = await createCategory(ws, { entitySlug: 'mg', key: 'divers', label: { fr: 'Divers' }, accounts: ['6900'] })
+    expect(demi.label, 'a half-spoken {fr}-only label is filled, not stored half-empty').toEqual({ fr: 'Divers', en: 'Divers' })
 
     await expect(
       createCategory(ws, { entitySlug: 'mg', key: 'fantome', label: 'x', accounts: ['9999'] })
@@ -176,6 +178,10 @@ d('the management layer', () => {
     await expect(
       createCategory(ws, { entitySlug: 'mg', key: 'caisse', label: 'x', accounts: ['1020'] })
     ).rejects.toMatchObject({ code: 'not_a_flow_account' })
+    await expect(
+      createCategory(ws, { entitySlug: 'mg', key: 'ventes', label: 'x', accounts: ['3400'] }),
+      'class 3 passes the statement check but is revenue: in a cost bucket the breakdown would count produits as charges'
+    ).rejects.toMatchObject({ code: 'revenue_not_a_cost' })
     await expect(
       createCategory(ws, { entitySlug: 'mg', key: 'double', label: 'x', accounts: ['6570'] })
     ).rejects.toMatchObject({ code: 'accounts_claimed' })

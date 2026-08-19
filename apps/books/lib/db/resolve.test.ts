@@ -144,13 +144,13 @@ d('the resolve loop', () => {
     const e = await mkEntry({ label: 'MYSTERY DEBIT REF-9', source: sourceId, amount: '250.00' })
 
     const r1 = await resolveEntry(ws, e.seq, { explanation: { en: 'Team lunch' }, account: '6000' })
-    const h1 = r1.entry.history as { event: string; was: { recognition: string } }[]
+    const h1 = r1.entry.history as unknown as { event: string; was: { recognition: string } }[]
     expect(Array.isArray(h1)).toBe(true)
     expect(h1[0].was.recognition, 'the acceptance criterion verbatim').toBe('unrecognized')
 
     // Resolving again stacks history rather than replacing it.
     const r2 = await resolveEntry(ws, e.seq, { explanation: { en: 'Actually a client lunch' } })
-    const h2 = r2.entry.history as { was: { recognition: string } }[]
+    const h2 = r2.entry.history as unknown as { was: { recognition: string } }[]
     expect(h2.length).toBe(2)
     expect(h2[0].was.recognition).toBe('unrecognized')
     expect(h2[1].was.recognition).toBe('known_one_off')

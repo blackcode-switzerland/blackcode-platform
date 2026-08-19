@@ -59,6 +59,65 @@ cantonal and communal tax parameters every later figure is computed with, and
 
 **What to do:** nothing.
 
+## 2026-08-19 — The analyse detail reads bare-string labels, as the door always accepted
+
+**Screen-only; no route, no wire shape, no `bk` command changed.** The analyse
+detail's row reader (`figures` / `based_on`) accepted only `{fr, en}` labels,
+while `POST …/analyses` has always accepted a bare string (`speaks()`), and the
+first real agent filing — analysis #3, filed today through `bk books analyse
+record` — used bare strings: a valid record rendered with all thirteen rows
+"could not be read". A bare-string label now renders as itself on both language
+sides; the record is untouched. One seam stays open on purpose: a bare NUMBER
+as `value` files fine at the door but still drops (counted, stated) on screen —
+one decision is needed on which side moves, tracked on ticket #56.
+
+## 2026-08-19 — A cost bucket refuses revenue, and every jsonb column now states its shape
+
+**One new refusal; nothing else on the wire moved.**
+
+**`POST …/analytique/categories` now refuses a class-3 account** with
+`revenue_not_a_cost` (400). The old check held only `statement === 'cr'`, and
+3400 Produits is a CR account — so `bk books category create --accounts 3400`
+exited 0 and the management breakdown counted revenue as an ordinary charge
+line, indistinguishable from a real cost (found by the frontend review,
+2026-08-19). A category buckets costs; produits already carry their own line
+on the compte de résultat. Nothing existing changes: no seeded or creatable
+category ever held a class-3 account.
+
+**Half-spoken category labels are filled at write.** `{fr: "Divers"}` used to
+be stored as given even though the wire contract promises `{fr, en}` on
+configuration; the missing half is now copied from the spoken one, exactly as
+a bare string always was.
+
+**camt.053: a conversion without its rate no longer stores a partial `fx`.**
+The wire contract (2026-08-19 hardening pass) is all three of
+`{original, rate, source}` or `fx: null`. The parser used to emit
+`{original, source}` when the bank stated no `XchgRate`; that could never
+reach the published shape. Such a line now lands with `fx: null` — the bank's
+narrative still tells the conversion story.
+
+**Every jsonb column in `lib/db/schema.ts` now declares its storage shape**
+via `.$type<…>()` — compile-time only, nothing stored changes. Until now those
+columns crossed into TypeScript as `unknown`, which made the wire types the
+only guard between the database and a screen (the frontend proved a two-line
+edit could break the RI management view with every test green). The shapes are
+exported (`StoredSpeech`, `StoredVerdict`, `StoredHistory`, …) so parity tests
+on both sides can hold them. Two of them document behavior that was previously
+folklore: records keep speech **verbatim** (`string` or `{fr?, en?}` — one
+language suffices), and `history` may still be the mockup's original narrative
+object until the first append folds it into element 0.
+
+**The write doors, enumerated once** — three documents counted "the writes"
+three different ways (five, six, seven), so the ordinals are gone and this
+list is the canon. Doors that write RECORDS: `sources/{n}/import` (bank
+lines), `pieces/ingest` (extractions), `entries` POST (declare),
+`entries/{n}/resolve`, `entries/{n}/post`, `pieces/{n}/match`,
+`entries/{n}/verdict`, `analyses` POST (the analyse record). Doors that write
+CONFIGURATION or the register: workspaces, entities, exercices, sources
+(create/edit/pulls/runbook), rules, analytique categories, invitations, and
+`compliance-rules/{rule}` PATCH (review). Sixteen in all. When a count matters,
+cite this list, not a number.
+
 ## 2026-08-19 — The last four screens: analyses, the analyse record, the tax snapshot, and the compliance register
 
 **Not breaking. No route changed, no `bk` command changed, nothing on the wire
