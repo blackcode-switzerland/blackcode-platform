@@ -109,6 +109,50 @@ export function HistoryTrail({ history }: { history: EntryHistory }) {
           ) : null
         }
         const was = event.was
+
+        // ── A VERDICT EVENT CARRIES A DIFFERENT `was`, AND THIS KNEW ONE ──────
+        // `appendHistory` writes `{was: {verdict}}` for a compliance verdict and
+        // `{was: {recognition, explanation, counterparty}}` for a resolution.
+        // This block read `was.recognition` unconditionally, so replacing a
+        // verdict — filing `blocked` and then `accepted_with_warning` on the same
+        // entry — printed `was · verdict 13:52 UTC` **with the value missing**.
+        //
+        // The screen showed only the second verdict and the trail showed neither,
+        // so a replaced verdict was invisible on both. `bk books verdict --help`
+        // promises the old one stays in history; it does stay in the column, and
+        // this is the surface that was not reading it. Found by the phase-5
+        // review, 2026-08-19.
+        //
+        // Branching on what the event HAS rather than on `event.event`, because a
+        // sixth event kind should render its own shape or nothing — never another
+        // kind's field read off an object that does not have it.
+        if (was && typeof was === 'object' && 'verdict' in was) {
+          const previous = (was as { verdict: unknown }).verdict as
+            | { verdict?: string }
+            | null
+            | undefined
+          return (
+            <li key={i} className="text-[12px]">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-muted-foreground">was</span>
+                {previous?.verdict ? (
+                  <TermChip
+                    term={findTerm(meta, 'verdict_states', previous.verdict)}
+                    value={previous.verdict}
+                  />
+                ) : (
+                  // Never checked is not "clean", and it is the commonest prior
+                  // state — every entry starts here.
+                  <span className="text-muted-foreground italic">never checked</span>
+                )}
+                <span className="text-muted-foreground">
+                  · {event.event} {instant(event.at)}
+                </span>
+              </div>
+            </li>
+          )
+        }
+
         return (
           <li key={i} className="text-[12px]">
             <div className="flex flex-wrap items-center gap-1.5">

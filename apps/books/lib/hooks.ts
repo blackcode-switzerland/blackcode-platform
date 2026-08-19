@@ -90,6 +90,16 @@ export interface MetaPayload {
     source_layers: Term[]
     source_status: Term[]
     manifest_states: Term[]
+    /**
+     * Phase 5's three, added 2026-08-19 — and they had been on the wire since
+     * that morning without this type knowing, because `/api/meta` is the one
+     * payload `wire-parity` does not pin (the cleanup review's F-4, still open).
+     * A chip asking for `verdict_states` was a compile error rather than a
+     * missing colour only because `VocabularyName` is derived from these keys.
+     */
+    verdict_states: Term[]
+    rule_review_states: Term[]
+    rule_confidence: Term[]
   }
   tva_rates: number[]
   statements: {

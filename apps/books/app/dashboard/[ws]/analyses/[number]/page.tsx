@@ -211,16 +211,32 @@ export default function Page() {
             <BookTodayNotice
               asked={record.asked}
               today={today}
+              book={scope.record?.name ?? scope.entity}
               exercice={scope.exercice}
               journal={scope.journal}
               loading={entries.isLoading || riEntries.isLoading}
             />
           </section>
 
+          {/* ── SAY WHAT THIS SCREEN CAN KNOW, NOT WHAT THE DEPLOYMENT SHOULD BE
+              This claimed "the app's database role holds no UPDATE or DELETE on
+              the table". Migration 0013 does revoke them from `books_app` and
+              warns loudly when that role is absent — but **there is no
+              `books_app` role in this database and the app connects as
+              `blackcode`, which holds both.** The screen stated the end state
+              regardless, so on every environment that has not been provisioned
+              the way the docs describe, it was telling a reader something false
+              about the guarantee behind the record in front of them.
+
+              What is true everywhere, and is the part that matters, is that
+              there is no update route: nothing this product exposes can change a
+              filed answer. The grant is a deployment fact, and a screen that
+              cannot check it should not assert it. Found by the phase-5 review,
+              which asked the database instead of reading the migration. */}
           <p className="mt-5 border-t border-border pt-3 text-[11.5px] text-muted-foreground">
-            This record cannot be edited or deleted, here or anywhere: there is no update route and
-            the app&apos;s database role holds no UPDATE or DELETE on the table. A better answer is a
-            new one, and both stand.{' '}
+            This record cannot be edited or deleted through this product: there is no update route
+            and no delete route, here or in <span className="font-mono">bk</span>. A better answer
+            is a new one, and both stand.{' '}
             <span className="font-mono">bk books analyse show {record.number}</span> prints it as
             stored.
           </p>

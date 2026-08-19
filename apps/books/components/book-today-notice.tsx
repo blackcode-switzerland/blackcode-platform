@@ -55,6 +55,8 @@ export function BookTodayNotice({
   asked,
   today,
   exercice,
+  /** The book these counts describe — NOT necessarily the record's. */
+  book,
   journal,
   /** Are the entries still in flight? A silent nothing would read as "clean". */
   loading,
@@ -62,6 +64,7 @@ export function BookTodayNotice({
   asked: string
   today: BookToday | null
   exercice: number | null
+  book: string | null
   journal: Journal | null
   loading: boolean
 }) {
@@ -101,8 +104,16 @@ export function BookTodayNotice({
       {!loading && today !== null && today.examined > 0 && (
         <>
           <p className="mt-2.5 text-[12px] text-muted-foreground">
-            What it can check is the book. Of the{' '}
-            <span className="text-foreground">{today.examined}</span>{' '}
+            {/* ── IT NAMES ITS BOOK, SINCE 2026-08-19 ────────────────────────
+                "the book" was whichever book the URL selected, while the record
+                above belongs to `record.entity` — and `getAnalysis` resolves on
+                `(workspace_id, seq)` without filtering by book. So
+                `/analyses/1?entity=aios` reported AIOS's entry counts directly
+                beneath a blackcode record, with nothing saying they were about
+                different books. The page knows they differ; this paragraph did
+                not say so. Found by the phase-5 review. */}
+            What it can check is <span className="text-foreground">{book ?? 'the selected book'}</span>.
+            Of the <span className="text-foreground">{today.examined}</span>{' '}
             {today.examined === 1 ? 'entry' : 'entries'} it serves for{' '}
             <span className="text-foreground">{exercice ?? 'this year'}</span>:
           </p>
