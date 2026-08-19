@@ -240,9 +240,14 @@ d('the seeded database', () => {
       expect((params?.params as { ifd: { confirmed: boolean } }).ifd.confirmed).toBe(true)
     }
 
+    // The journal is append-only AND live: using the product files more rows
+    // (analysis #3 arrived through `bk books analyse record` the very day an
+    // exact count first broke here). The seed's two are pinned by NUMBER and
+    // content — a parity test must not turn "somebody used the product" into
+    // a failure, and it must never demand a row's deletion to go green.
     const analyses = await m.listAnalyses(ws)
-    expect(analyses.length).toBe(2)
-    const first = m.publicAnalysis(analyses[analyses.length - 1])
+    expect(analyses.length).toBeGreaterThanOrEqual(2)
+    const first = m.publicAnalysis(analyses.find((a) => a.analysis.seq === 1)!)
     expect(first.entity).toBe('blackcode')
     expect(first.runway_after_months).toBe(6.9)
     expect((first.based_on as { value: string }[]).map((b) => b.value)[0], 'the snapshot exactly as the fixture filed it').toBe("CHF 1'806.67")
