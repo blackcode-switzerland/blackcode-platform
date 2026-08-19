@@ -25,12 +25,32 @@
 
 import { useEntries } from '@/lib/hooks'
 import type { ReadScope } from '@/lib/hooks'
+import type { Journal } from '@/lib/journal'
 
-export function PostedOnlyNote({ ws, scope }: { ws: string | undefined; scope: ReadScope }) {
+/**
+ * ── IT TAKES THE JOURNAL, AND `?status=` IS THE REASON ───────────────────
+ * The count below asks `GET …/entries?status=staged`, and since phase 4A a
+ * SIMPLIFIED book refuses that filter outright (400 `ri_no_such_filter`) rather
+ * than ignoring it. Both call sites gate this component on the statement having
+ * come back, and a simplified book has neither statement — so `grand_livre` is
+ * what actually reaches here today. It is passed rather than assumed anyway:
+ * this note's whole existence is because a sentence that is true for one book
+ * was being printed over another, and "the caller happens to gate it" is not a
+ * thing the compiler holds.
+ */
+export function PostedOnlyNote({
+  ws,
+  scope,
+  journal,
+}: {
+  ws: string | undefined
+  scope: ReadScope
+  journal: Journal | null
+}) {
   // Counted rather than asserted. "Posted entries only" is always true and is
   // said unconditionally; the COUNT is what turns a policy note into something
   // the reader can act on, and a number nobody has fetched would be a guess.
-  const { data: staged } = useEntries(ws, scope, { status: 'staged' })
+  const { data: staged } = useEntries(ws, scope, journal, { status: 'staged' })
   const n = staged?.length ?? 0
 
   return (

@@ -17,6 +17,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiGet, apiList, ApiRequestError } from './client'
 import { booksGlobalKey, booksKey, type Scope } from './query-keys'
+import type { Journal } from './journal'
 import type {
   Account,
   BilanResult,
@@ -31,6 +32,7 @@ import type {
   PieceExtraction,
   PieceTransaction,
   RecognitionRule,
+  RiEntry,
   Source,
   SourceDetail,
   Term,
@@ -374,7 +376,35 @@ export interface EntryFilters {
 }
 
 /**
- * The grand livre. `GET …/entries`.
+ * The grand livre. `GET …/entries`, for a DOUBLE-ENTRY book only.
+ *
+ * ===========================================================================
+ * ONE ROUTE, TWO SHAPES, TWO HOOKS — AND TWO CACHE SLOTS
+ * ===========================================================================
+ * Since phase 4A `GET …/entries` serves the grand livre for a double-entry book
+ * and the recettes-dépenses journal for a simplified one, with **no marker field
+ * on the wire**: the caller named the book, so the caller knows which shape it
+ * gets. `lib/journal.ts` is where that is decided, and this hook takes the
+ * decision rather than making it.
+ *
+ * It is TWO hooks and not one returning a union, for two reasons that are not
+ * the same reason:
+ *
+ *   1. **A union would be typed loosely at every call site.** A screen would
+ *      narrow it with a check the compiler cannot tie back to the request, and
+ *      the phase-1 lesson is that a wire shape which changes does not fail to
+ *      compile.
+ *   2. **The CACHE SLOT would be shared.** `booksKey('entries', …)` carries the
+ *      entity, so two books never collide today — but one resource name holding
+ *      two incompatible shapes is one refactor away from the failure at the top
+ *      of `lib/query-keys.ts`. `ri-entries` is its own resource because it is
+ *      its own document.
+ *
+ * `journal` is REQUIRED, and passing anything but `grand_livre` disables the
+ * query rather than sending it. `null` means the book is not in hand yet, and a
+ * request sent then is a request with no `?entity=` — which `resolveScope`
+ * answers with **the first book in the workspace**, real numbers under a name
+ * nobody chose. Same rule, and the same reason, as `enabled`'s note above.
  *
  * `?account=` returns WHOLE entries that touch the account, not just the
  * matching line, which is why a filtered row still shows both sides.
@@ -383,7 +413,12 @@ export interface EntryFilters {
  * but not `account` would serve the unfiltered ledger from cache the moment the
  * reader drilled in — the same class of bug as the wrong book, one level down.
  */
-export function useEntries(ws: string | undefined, scope: ReadScope, filters: EntryFilters = {}) {
+export function useEntries(
+  ws: string | undefined,
+  scope: ReadScope,
+  journal: Journal | null,
+  filters: EntryFilters = {}
+) {
   return useQuery({
     queryKey: booksKey('entries', scope, { ...filters, ws }),
     queryFn: () =>
@@ -394,7 +429,45 @@ export function useEntries(ws: string | undefined, scope: ReadScope, filters: En
           account: filters.account,
         })}`
       ).then((r) => r.data),
-    enabled: !!ws && !!scope.entity && scopeReady(scope),
+    // POSITIVE. `journal === 'grand_livre'`, never `!== 'recettes_depenses'` —
+    // a third journal added server-side then fires nothing rather than firing
+    // this. See `lib/journal.ts`.
+    enabled: !!ws && !!scope.entity && scopeReady(scope) && journal === 'grand_livre',
+  })
+}
+
+/** The filters an RI journal accepts. `status` and `account` are REFUSED there. */
+export interface RiEntryFilters {
+  recognition?: string
+}
+
+/**
+ * The recettes-dépenses journal. `GET …/entries`, for a SIMPLIFIED book only.
+ *
+ * Same route, same query parameters minus two, different shape — see
+ * `useEntries` above for why it is a second hook and `lib/types.ts`'s `RiEntry`
+ * for what changes.
+ *
+ * ── `?status=` AND `?account=` ARE REFUSED HERE, NOT IGNORED ──────────────
+ * `ri_no_such_filter`, 400: *"an RI journal has no posting status and no
+ * accounts to filter by"*. They used to be silently dropped. This hook does not
+ * take them — the type is the guard, so a caller cannot pass one and a screen
+ * that wants to must decide out loud what to do with a filter that does not
+ * apply. `filtersFor()` in `lib/journal.ts` is what a screen asks.
+ */
+export function useRiEntries(
+  ws: string | undefined,
+  scope: ReadScope,
+  journal: Journal | null,
+  filters: RiEntryFilters = {}
+) {
+  return useQuery({
+    queryKey: booksKey('ri-entries', scope, { ...filters, ws }),
+    queryFn: () =>
+      apiList<RiEntry>(
+        `/api/workspaces/${ws}/entries?${scopeQuery(scope, { recognition: filters.recognition })}`
+      ).then((r) => r.data),
+    enabled: !!ws && !!scope.entity && scopeReady(scope) && journal === 'recettes_depenses',
   })
 }
 

@@ -33,6 +33,7 @@
 // Not a crash and not a redirect to the list. `<ErrorState>` renders the
 // server's message and its `suggestion`, which is the recovery.
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
@@ -49,6 +50,8 @@ import { EntryLines } from '@/components/entry-lines'
 import { DriveLink } from '@/components/drive-link'
 import { Money } from '@/components/money'
 import { HistoryTrail, hasHistory } from '@/components/history-trail'
+import { PostEntryForm, PostedNotice } from '@/components/post-entry-form'
+import type { PostResult } from '@/lib/mutations'
 
 export default function Page() {
   const params = useParams<{ ws: string; number: string }>()
@@ -61,6 +64,17 @@ export default function Page() {
   const parsed = Number(params.number)
   const number = Number.isInteger(parsed) && parsed > 0 ? parsed : null
   const entry = useEntry(params.ws, scope, number)
+
+  /**
+   * What the server answered the last time this session posted this entry.
+   *
+   * Held here rather than derived from the refetched entry, for the reason the
+   * worklist holds its resolve results: the REFETCHED row says `posted` and
+   * nothing more, and `already` — did this call change anything, or had a robot
+   * already done it — exists only in the response. Dropping it would lose the
+   * one distinction the idempotent route was built to make.
+   */
+  const [posted, setPosted] = useState<PostResult | null>(null)
 
   return (
     <ScreenFrame title="Transaction">
@@ -137,6 +151,39 @@ export default function Page() {
               record does not carry one.
             </p>
           </header>
+
+          {/* ── THE POSTING TRANSITION ────────────────────────────────────
+              Rendered only for a STAGED entry, and gone the moment it is
+              posted — there is nothing to offer on a posted one, and a disabled
+              button would invite somebody to wonder what is wrong with it. The
+              status chip in the header already says which it is.
+
+              `status === 'staged'` is POSITIVE. `!== 'posted'` would render this
+              on any third status added server-side, which is a write affordance
+              nobody wrote, on the one write that cannot be undone. */}
+          {entry.data.status === 'staged' && (
+            <section className="mt-4">
+              <H2>Posting</H2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                This entry is staged. It is recorded and it counts in nothing: the balance sheet
+                and the income statement both derive from posted entries only.
+              </p>
+              {posted ? (
+                <PostedNotice result={posted} />
+              ) : (
+                <PostEntryForm ws={params.ws} entry={entry.data} onPosted={setPosted} />
+              )}
+            </section>
+          )}
+
+          {/* A post made in this session, still shown after the entry refetched
+              as `posted` — because `already` lives only in the response. */}
+          {entry.data.status === 'posted' && posted && (
+            <section className="mt-4">
+              <H2>Posting</H2>
+              <PostedNotice result={posted} />
+            </section>
+          )}
 
           {entry.data.explanation ? (
             <section className="mt-4">

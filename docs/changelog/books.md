@@ -198,6 +198,84 @@ configured", never someone else's rates. Two flags worth reading:
 
 Nothing existing changed shape: no column moved, no route renamed, migrations
 0001-0012 untouched.
+## 2026-08-19 — The web ledger reads both journals, and posting is on the web
+
+**Not breaking for `bk`.** No route changed and no payload changed; this is the
+web UI catching up to what phase 4A's backend already serves. Two of the three
+items below are corrections to screens that were quietly wrong.
+
+### The general ledger now renders a simplified book
+
+`GET …/entries` has served two shapes since phase 4A — the grand livre for a
+double-entry book, the recettes-dépenses journal for a simplified one — with, by
+design, **no marker field on the payload**: the caller named the book, so the
+caller knows which shape it gets.
+
+The web ledger did not branch on it. On a simplified book it was drawing
+recettes-dépenses movements through grand-livre columns: no amount and no
+direction shown at all, a blank journal number, a blank posting status, "This
+entry has no lines." on every row — and each row linked to `/ledger/{n}`, which
+reads the double-entry journal, so following one **opened a different book's
+écriture** under the simplified book's name. The two journals keep separate
+number series, which is why the numbers resolved.
+
+It branches on the book's `bookkeeping_regime` before it reads a row now, and
+renders the simplified journal with its own columns (date, movement, category,
+direction, amount). Those rows are deliberately **not** links: nothing serves one
+recettes-dépenses movement on its own.
+
+*Nothing to adapt for an agent.* `bk books entry list --entity <simplified-book>`
+was always correct and is unchanged.
+
+### `?status=` and `?account=` are no longer sent to a simplified book
+
+Those two filters are **refused** by an RI journal (400 `ri_no_such_filter`),
+not ignored. The web UI was sending both: the ledger's status filter, and the
+income statement's account drill-down, which appends `?status=posted` so a figure
+reconciles to its own drill-down.
+
+The chart of accounts renders for a simplified book too, so every account number
+on that screen was a link to a 400. Those numbers are now shown as facts rather
+than as drill-downs — a simplified book has no chart mapping to drill into — and
+a URL that still carries either filter says on the page that it was not applied
+rather than dropping it silently.
+
+### Posting a staged entry is on the web
+
+`POST …/entries/{n}/post` and `bk books entry post` have both existed since
+phase 1; the web UI had no way to do it. It is on the entry detail page now, for
+a staged entry only.
+
+It is not an ordinary button, because posting is the one write in this product
+with no undo: it moves a line into the immutable record, where nobody — human or
+agent — can modify or delete it, and a correction becomes a new reversing entry.
+So it **requires the entry's #number to be typed back** before it will submit,
+the way `bk workspace delete <slug> --confirm <slug>` requires the slug, and it
+states what freezes (date, amounts, accounts) and what stays open (the
+explanation, counterparty, recognition state and supporting document).
+
+**`already: true` is rendered as "already posted", not as an error**, matching
+the route's deliberate idempotency: an agent that retries has not failed.
+
+### Known defect, not fixed here: the 0004 guard's refusal never reaches a client
+
+Migration 0004 checks at COMMIT that a posted entry balances, carries at least
+two lines and has every line mapped. The route means to translate that refusal
+into `guard_refused` (400) with the database's own sentence. **It cannot, and
+never has.** Under drizzle-orm 0.45 a failure raised at COMMIT arrives wrapped,
+with the database's message on the error's `cause`, so the route's check never
+matches and the refusal surfaces as **500 `internal_error`** — on `bk books entry
+post` exactly as on the web form.
+
+Reproduced with an entry whose two lines are mapped and unbalanced (77.00 against
+99.00): 500 on both surfaces, while the same statements in `psql` answer *"entry
+1272 does not balance: debit 77.00 <> credit 99.00"*.
+
+*How to adapt:* a 500 from `bk books entry post` means the entry was **not**
+posted and is unchanged — the transaction rolls back whole — and almost always
+means it failed one of those three conditions. `bk books entry show <n>` and its
+lines are what the guard reads. This is a route fix and is tracked; the message
+will start arriving as a 400 with a real sentence.
 
 ## 2026-08-18 — The match write holds the entity boundary
 

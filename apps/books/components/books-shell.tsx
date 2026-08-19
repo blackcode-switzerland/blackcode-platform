@@ -46,6 +46,7 @@
 // roominess costs rows on the screen. Tokens cannot express density — the header
 // height below and the row padding in `<DataTable>` are the carriers.
 
+import * as React from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -74,6 +75,35 @@ import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 import { ALL_NAV, NAV, isActive, scopedHref, type NavIconName, type NavItem } from '@/lib/nav'
 import { useScope, WorkspaceSlugProvider } from '@/lib/scope'
 import { useMe } from '@/lib/hooks'
+
+/**
+ * A heading a CLIENT page sets for itself.
+ *
+ * ── THE COMMENT ON `title` BELOW SAID "THIS ONE DOES NOT, YET" ─────────────
+ * It does now. The shell titles itself from `lib/nav.ts`, which is right for
+ * nine screens and wrong for one: since phase 4A the ledger shows a grand livre
+ * or a recettes-dépenses journal depending on the book, and "General ledger"
+ * over the RI book names a document that book does not keep.
+ *
+ * The ledger tried to fix this by passing a title to `<ScreenFrame>`, which uses
+ * it only to label loading and error states — so the ternary was written, was
+ * correct, and rendered nowhere. Found by the phase-4A review, which read the
+ * H1 rather than the code that meant to set it.
+ *
+ * A context rather than a prop because the layout that mounts the shell is a
+ * server component and the fact it needs is resolved in the client. `apps/sales`
+ * reached the same place by the same road.
+ */
+const PageTitle = React.createContext<((t: string | null) => void) | null>(null)
+
+/** Set this screen's heading. Pass null to fall back to the nav label. */
+export function usePageTitle(title: string | null) {
+  const set = React.useContext(PageTitle)
+  React.useEffect(() => {
+    set?.(title)
+    return () => set?.(null)
+  }, [set, title])
+}
 
 /**
  * The icon per nav entry.
@@ -114,11 +144,14 @@ export function BooksShell({
   title?: string
   children: React.ReactNode
 }) {
+  const [pageTitle, setPageTitle] = React.useState<string | null>(null)
   return (
     <WorkspaceSlugProvider value={ws}>
-      <ShellBody ws={ws} title={title}>
-        {children}
-      </ShellBody>
+      <PageTitle.Provider value={setPageTitle}>
+        <ShellBody ws={ws} title={title ?? pageTitle ?? undefined}>
+          {children}
+        </ShellBody>
+      </PageTitle.Provider>
     </WorkspaceSlugProvider>
   )
 }
@@ -131,9 +164,12 @@ function ShellBody({
    * `/dashboard/settings/*` is the case: it is a SIBLING of `[ws]`, so no nav
    * entry matches its pathname and the header would otherwise read "b/books" on
    * every settings page. A prop rather than a context, because the page above is
-   * a server component and cannot call a hook — `apps/sales` needed a whole
-   * `<PageTitle>` component for the same reason, and only because its shell also
-   * has to be titled from inside CLIENT pages. This one does not, yet.
+   * a server component and cannot call a hook.
+   *
+   * **"This one does not, yet" — it does since 2026-08-19.** A client page can
+   * now set its own heading with `usePageTitle`, and this prop still wins when
+   * both are present, because a server layout naming its subtree is the more
+   * specific claim. See the context above.
    */
   title,
   children,

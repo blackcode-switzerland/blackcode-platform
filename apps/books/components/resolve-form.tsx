@@ -3,31 +3,42 @@
 // `<ResolveForm>` — the first button in b/books that changes a company's books.
 //
 // ===========================================================================
-// IT CANNOT BE HANDED AN RI ROW, AND THAT IS ENFORCED BY THE TYPE
+// IT TAKES A TARGET, NOT A ROW — AND THE TARGET NAMES THE JOURNAL
 // ===========================================================================
-// `GET …/worklist` serves two kinds of row and **their #number series overlap**:
-// `books.entry` and `books.ri_entry` have separate `seq` counters, so
-// `{kind:'entry', number:5}` and `{kind:'ri_entry', number:5}` are two different
-// rows that both exist. `POST /entries/{n}/resolve` addresses `books.entry` and
-// nothing else — `lib/db/queries/resolve.ts` has no RI path at all — so asking it
-// to resolve an RI row by the number printed on that row rewrites an unrelated
-// journal entry and answers **200**.
+// `GET …/worklist` serves three kinds of row and **their #number series
+// overlap**: `books.entry`, `books.ri_entry` and `books.piece_inbox` keep
+// separate `seq` counters, so `{kind:'entry', number:5}` and
+// `{kind:'ri_entry', number:5}` are two different rows that both exist.
 //
-// Reproduced against the seeded workspace on 2026-08-18:
+// Until 2026-08-19 `POST /entries/{n}/resolve` addressed `books.entry` and
+// nothing else, so asking it to resolve an RI row by the number printed on that
+// row rewrote an unrelated journal entry and answered **200**. Reproduced
+// against the seeded workspace on 2026-08-18: RI #5 (TWINT *8842) resolved and
+// what changed was `books.entry` #5 — the January payroll, in a different book.
+// Ticket #51. This component's prop was `WorklistRow & { kind: 'entry' }` for
+// exactly that reason.
 //
-//     bk books worklist --entity ri   →  #5  ri_entry  TWINT *8842  120.00
-//     bk books resolve 5 --explanation "probe"
-//       resolved #5 -> known_one_off        ← exit 0, no error
+// **Phase 4A's backend fixed it, WITH A CONDITION**, and the condition is what
+// this component now carries: the route reads `body.entity`, and when that names
+// a simplified book it resolves against that book's recettes-dépenses journal
+// instead of the grand livre. Verified both ways before this form was widened —
+// with the book named, the RI row changed and the grand-livre entry did not;
+// **without it, the January payroll was rewritten exactly as before**. The two
+// commands and their outcomes are in `lib/resolvable.ts`'s header.
 //
-// and what changed was `books.entry` #5 — the January payroll, in a different
-// book — whose explanation was overwritten. The RI row was untouched. Raised on
-// ticket #51.
+// So the prop is a `ResolveTarget` — a discriminated union of
+// `{journal:'grand_livre', row}` and `{journal:'recettes_depenses', row}` — and
+// the RI arm is the ONLY thing that puts `entity` in the body. Handing this a
+// pièce, or an RI row under an unknown journal, is a COMPILE ERROR rather than a
+// runtime check somebody can forget to write, and `resolveTargetFor` is what
+// produces the value. There is no disabled button to re-enable in devtools and
+// no handler to call, because for a row with no target neither is rendered.
 //
-// So this component's prop is `WorklistRow & { kind: 'entry' }`. Passing an RI
-// row is a COMPILE ERROR, not a runtime check somebody can forget to write, and
-// `<WorklistRows>` branches on `kind` before it can reach here. There is no
-// disabled button to re-enable in devtools and no handler to call, because for
-// an RI row neither is rendered.
+// ── AND THE RI ARM HAS NO ACCOUNT CONTROL, BECAUSE THERE ARE NO LINES ─────
+// `resolveRiEntry` refuses `account` outright (`ri_no_lines`: *"a simplified
+// book keeps recettes and dépenses, not a chart mapping"*). The control is not
+// rendered and the field is not sent — two guards, for the same reason the
+// posted case has two.
 //
 // ===========================================================================
 // THE FAILURE IS READ OFF THE RESULT, NEVER OFF HOOK STATE
@@ -58,7 +69,7 @@
 
 import { useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import type { ResolvableRow } from '@/lib/resolvable'
+import type { ResolvableRow, ResolveTarget } from '@/lib/resolvable'
 import { useAccounts } from '@/lib/hooks'
 import { useCanWrite, useResolveEntry, type ResolveBody } from '@/lib/mutations'
 import { booksCacheFilter } from '@/lib/query-keys'
@@ -66,15 +77,15 @@ import type { ReadScope } from '@/lib/hooks'
 import type { ResolveResult, WorklistRow } from '@/lib/types'
 import { en } from '@/lib/label'
 
-/** A worklist row this form is allowed to act on. See the header. */
 /**
- * Re-exported from `lib/resolvable.ts`, which now owns both the type and the
- * PREDICATE that produces it. The predicate is the half that can be tested —
- * `lib/resolvable.test.ts` calls it over every kind the worklist serves — and
- * splitting them would put the type and the rule that enforces it in two
- * places. See that file's header for the bug this arrangement exists after.
+ * Re-exported from `lib/resolvable.ts`, which owns both the types and the
+ * FUNCTION that produces them. The function is the half that can be tested —
+ * `lib/resolvable.test.ts` calls it over the whole (kind × journal) cross
+ * product — and splitting them would put the type and the rule that enforces it
+ * in two places. See that file's header for the bug this arrangement exists
+ * after, and for the widening it survived.
  */
-export type { ResolvableRow }
+export type { ResolvableRow, ResolveTarget }
 
 const FIELD =
   'w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-[13px] text-foreground ' +
@@ -88,20 +99,25 @@ const LABEL = 'block text-[11px] font-semibold uppercase tracking-wider text-mut
  * a decision: the field is the one the rule keys on, so it has to be visible and
  * changeable before anybody presses the button.
  */
-function counterpartyGuess(row: ResolvableRow): string {
+function counterpartyGuess(row: ResolveTarget['row']): string {
   return row.counterparty ?? row.raw_label.split(/\s+/)[0] ?? ''
 }
 
 export function ResolveForm({
   ws,
   scope,
-  row,
+  target,
   initialExplanation = '',
   onResolved,
 }: {
   ws: string | undefined
   scope: ReadScope
-  row: ResolvableRow
+  /**
+   * The row AND the journal its #number is read in. See the header — the
+   * journal is not decoration, it is what decides whether `entity` goes in the
+   * body, and `entity` is the whole of #51's fix.
+   */
+  target: ResolveTarget
   /**
    * Text to start the box with, when a suggestion was taken.
    *
@@ -117,8 +133,15 @@ export function ResolveForm({
 }) {
   const canWrite = useCanWrite()
   const queryClient = useQueryClient()
+  const row = target.row
+  // The recettes-dépenses journal, positively. Never `!== 'grand_livre'`.
+  const ri = target.journal === 'recettes_depenses'
   const resolve = useResolveEntry(ws, row.number)
-  const accounts = useAccounts(ws, scope)
+  // Not fetched for an RI book: it has no lines to map, the account control is
+  // not rendered, and a chart of accounts nothing reads is a request nobody
+  // needed. (The route serves one for a simplified book — 26 rows, seeded — so
+  // this is a decision rather than an absence.)
+  const accounts = useAccounts(ws, ri ? { entity: null, exercice: null } : scope)
 
   const [explanation, setExplanation] = useState(initialExplanation)
   const [recognition, setRecognition] = useState<'known_one_off' | 'known_recurring'>('known_one_off')
@@ -159,6 +182,9 @@ export function ResolveForm({
   // stays open on a posted entry — explanation, counterparty and recognition all
   // still apply — and only the ACCOUNT is frozen, because posted lines are
   // accounting facts.
+  // `status` is null for EVERY ri_entry — a simplified book has no staging step
+  // — so this is false there, and the account control it gates is not rendered
+  // for an RI row anyway. Left as a positive comparison rather than widened.
   const posted = row.status === 'posted'
 
   if (!canWrite) {
@@ -199,10 +225,19 @@ export function ResolveForm({
       explanation: { en: explanation.trim() },
       recognition,
     }
+    // ── THE FIELD THAT MAKES #51 STAY FIXED ────────────────────────────
+    // Without it the server reads this #number in the GRAND LIVRE, and an RI
+    // row's number is also, usually, some écriture's. Verified on 2026-08-19:
+    // the same command without it rewrote blackcode SA's January payroll and
+    // exited 0. `scope.entity` is the book the worklist is scoped to, which is
+    // the book this row came from.
+    if (ri) body.entity = scope.entity ?? undefined
     if (counterparty.trim()) body.counterparty = counterparty.trim()
-    // Never sent on a posted entry. The control is not rendered there either;
-    // this is the second of the two, because one of them will be edited someday.
-    if (!posted && account) body.account = account
+    // Never sent on a posted entry, and never on an RI row — `resolveRiEntry`
+    // refuses it (`ri_no_lines`). The controls are not rendered in either case
+    // either; these are the second of the two guards, because one of them will
+    // be edited someday.
+    if (!posted && !ri && account) body.account = account
     if (evidenceNote.trim()) body.evidence_note = { en: evidenceNote.trim() }
     if (teachRule) {
       body.rule = {
@@ -241,6 +276,25 @@ export function ResolveForm({
 
   return (
     <form onSubmit={submit} className="mt-3 space-y-3 rounded-md border border-border bg-secondary/40 p-3">
+      {/* ── WHICH JOURNAL THIS #NUMBER IS READ IN, SAID BEFORE THE BUTTON ──
+          The two journals number themselves separately, so "#5" names two rows.
+          The request carries the book, the server resolves the number inside it,
+          and if the pair were ever wrong the answer is a refusal rather than a
+          wrong write. The reader cannot see that from the number alone, so it is
+          said — the same treatment `<MatchPieceForm>` gives the same fact. */}
+      {ri && (
+        <p
+          className="text-[11.5px] text-muted-foreground"
+          data-journal="recettes_depenses"
+        >
+          This movement is resolved in{' '}
+          <span className="text-foreground">
+            {scope.entity ?? 'this book'}&apos;s recettes-dépenses journal
+          </span>
+          , named in the request — the grand livre numbers itself separately and is not reachable
+          from here.
+        </p>
+      )}
       <div>
         <label className={LABEL} htmlFor={`expl-${row.number}`}>
           What was this money?
@@ -300,7 +354,21 @@ export function ResolveForm({
           <label className={LABEL} htmlFor={`acct-${row.number}`}>
             Account <span className="font-normal normal-case tracking-normal">(optional)</span>
           </label>
-          {posted ? (
+          {ri ? (
+            // NOT a disabled select and NOT a hidden field. A simplified book
+            // has no chart mapping at all — `resolveRiEntry` refuses `account`
+            // with "a simplified book keeps recettes and dépenses, not a chart
+            // mapping" — so there is nothing to choose, rather than something
+            // this reader may not choose.
+            <p
+              className="mt-1 rounded-md border border-dashed border-border px-2.5 py-1.5 text-[12px] text-muted-foreground"
+              data-frozen="ri_no_lines"
+            >
+              This book keeps recettes and dépenses under art. 957 al. 2 CO. Its movements have no
+              lines and no accounts, so there is nothing to map. Everything else on this form
+              applies.
+            </p>
+          ) : posted ? (
             // NOT a disabled input. A greyed field invites somebody to wonder
             // what is wrong with it; the fact is that this entry is posted and
             // its lines are accounting facts, which is a sentence, not a state.

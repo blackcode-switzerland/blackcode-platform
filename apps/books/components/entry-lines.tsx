@@ -22,7 +22,7 @@
 // "unmapped" rather than as an em dash. It is the thing Recognition exists to
 // resolve, and an em dash would hide it.
 
-import { AccountRef } from './account-ref'
+import { AccountRef, type AccountRefScope } from './account-ref'
 import { Money } from './money'
 import type { EntryLine } from '@/lib/types'
 
@@ -35,7 +35,7 @@ export function EntryLines({
 }: {
   lines: EntryLine[]
   base: string
-  scope: { entity: string | null; exercice: number | null }
+  scope: AccountRefScope
   detailed?: boolean
 }) {
   if (!lines || lines.length === 0) {

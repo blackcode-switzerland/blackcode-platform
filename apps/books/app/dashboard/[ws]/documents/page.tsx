@@ -103,52 +103,24 @@ export default function Page() {
           table. This list is the whole inbox and is not filtered by book — a scanned receipt does
           not always say whose it is, and saying so is one of the judgments this screen is for.
         </p>
-        {/* ── THE WITHHELD WRITE, NAMED ON THE SCREEN ──────────────────────────
-            Attaching a pièce to the entry it proves is a capability this product
-            has: `POST /pieces/{n}/match` and `bk books piece match` both ship,
-            and `<MatchPieceForm>` is built and tested. It is switched off here
-            because `matchPiece`'s grand-livre branch resolves the entry on
-            `workspace_id + seq` with no entity filter — see the block at its
-            mount site in `components/pieces-inbox.tsx`.
+        {/* ── THE WRITE THAT WAS WITHHELD, AND IS NOT ANY MORE ────────────────
+            This screen carried a paragraph telling the reader that attaching a
+            document was switched off, and that `bk books piece match` "has the
+            same gap, so it is not a way round". Both sentences were true when
+            written on 2026-08-18 and **both were false by the end of that day**:
+            the backend landed the entity filter, `MATCH_WRITE_ENABLED` went
+            true, and the copy did not follow.
 
-            Withholding it is right. Withholding it SILENTLY was not: until
-            2026-08-18 this screen listed six documents a person could read and
-            not act on, said nothing about why, and the recognition screen sent
-            readers here with "Open it in supporting documents" — a dead end that
-            did not name its own exit. That is the rule this repo applies to
-            every `bk` failure and it holds for a screen.
+            So for a day this page told a reader a working control did not work,
+            standing directly above the working control. Found by the phase-4A
+            review, which checked the sentence against the route rather than
+            against the flag — the route refuses a cross-book attach and accepts
+            a same-book one, both verified.
 
-            ── AND THE FIRST DRAFT OF THIS PARAGRAPH POINTED AT THE CLI ──────
-            It read "the way to do it is `bk books piece match`, which resolves
-            the entry through the pièce's own book", on the strength of
-            `matchPiece` calling `journalOf(piece.entity_id)` first and of
-            DECISIONS.md D-G saying the same. **Both are wrong about what that
-            call does.** `journalOf` chooses WHICH JOURNAL — grand livre or
-            recettes-dépenses — and the recettes-dépenses branch then filters on
-            `entity_id` while the grand-livre branch does not.
-
-            Reproduced against the seeded workspace before this copy shipped:
-            `bk books piece match 1 --entry 16` printed `matched piece #1 ->
-            entry #16` and exited 0, attaching blackcode SA's receipt to AIOS
-            Companion SA's écriture — overwriting the Drive reference and the
-            sha256 of the document already proving it with a NULL hash, leaving
-            `evidence_tier` at `full`, and writing nothing to `history`. The
-            data was restored.
-
-            So there is no workaround to point at, and this paragraph says that
-            instead of sending a reader to the same defect through a different
-            door. It goes when the server filters by entity — ticket #53. */}
-        <p className="mt-1.5 max-w-2xl text-[12.5px] text-muted-foreground">
-          <span className="font-medium text-foreground">
-            Attaching a document to the entry it proves is switched off.
-          </span>{' '}
-          The form is built and withheld: it resolves the entry by number without checking which
-          book that entry belongs to, so it can attach one company&apos;s receipt to another
-          company&apos;s écriture — and overwrite the reference and checksum of the document
-          already proving it. The command-line route has the same gap, so it is not a way round.
-          Nothing is lost meanwhile: a document that is here is kept and hashed, and matching is
-          an interpretation added later.
-        </p>
+            The lesson is narrow and worth keeping: **prose that describes a
+            defect is code that goes stale when the defect is fixed**, and
+            nothing compiles it. When a flag flips, grep for what the flag was
+            explained by. */}
       </div>
 
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">

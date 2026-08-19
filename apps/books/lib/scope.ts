@@ -31,6 +31,7 @@
 import { createContext, useCallback, useContext, useMemo } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEntities, useExercices, useMeta, type MetaPayload } from './hooks'
+import { journalFor, type Journal } from './journal'
 import type { Entity } from './types'
 import type { Scope } from './query-keys'
 
@@ -65,6 +66,23 @@ export const EXERCICE_PARAM = 'exercice'
 export interface ScopeState extends Scope {
   /** The book the slug resolves to, or null when the slug matches nothing. */
   record: Entity | null
+  /**
+   * Which journal the scoped book keeps — `grand_livre`, `recettes_depenses`,
+   * or `null` when it cannot be told.
+   *
+   * ── IT IS DERIVED ONCE, HERE, AND EVERY SCREEN TAKES IT ──────────────────
+   * Since phase 4A `GET …/entries` serves two shapes and puts **no marker field
+   * on the wire**; the discriminator is `record.bookkeeping_regime`, which is a
+   * fact this module already resolves. Deriving it in each screen would be four
+   * copies of one rule, and the one that went stale would be the one that read a
+   * grand livre out of a recettes-dépenses payload. `lib/journal.ts` holds the
+   * mapping and the reason it is positive rather than negative.
+   *
+   * **`null` is not a default journal.** It means the books have not arrived, or
+   * `?entity=` names nothing, or the regime is a value this bundle does not
+   * know. A screen renders that as an unknown; it never falls back.
+   */
+  journal: Journal | null
   /** Every book this account has. Any number, including zero. */
   entities: Entity[]
   /** Every fiscal year this book has. One today; the control is built for more. */
@@ -189,6 +207,7 @@ export function useScope(): ScopeState {
     entity,
     exercice,
     record,
+    journal: journalFor(record?.bookkeeping_regime),
     entities,
     exercices,
     // `isFetched` and not `!isPending`: a query that is DISABLED is "pending"

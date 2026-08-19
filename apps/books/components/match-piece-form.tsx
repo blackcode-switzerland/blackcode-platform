@@ -55,6 +55,12 @@ import type { Entity, InboxPiece } from '@/lib/types'
  * Mirrors `journalOf` by reading the same field the server reads. Returns null
  * when the book is not in hand yet — the label then says so rather than
  * guessing, because naming the wrong journal is worse than naming none.
+ *
+ * ── AN UNATTRIBUTED PIÈCE READS AS THE GRAND LIVRE, AND THAT IS THE SERVER'S
+ * RULE, NOT OURS ─────────────────────────────────────────────────────────
+ * `journalOf(null)` returns `grand_livre`: *"until somebody says whose it is, it
+ * cannot reach a personal recettes-dépenses book."* That is also why matching
+ * one is an ATTRIBUTION — see `<AttributionWarning>` below.
  */
 function journalLabel(piece: InboxPiece, entities: Entity[]): string | null {
   if (piece.entity === null) return 'the grand livre'
@@ -130,6 +136,12 @@ export function MatchPieceForm({
   const inFlight = useRef(false)
 
   const journal = journalLabel(piece, entities)
+  // ── AN UNATTRIBUTED PIÈCE IS THE CASE WITH A SIDE EFFECT ────────────────
+  // `books.piece_inbox.entity_id` is nullable — a scanned receipt does not
+  // always say whose it is — and this is the only thing on the screen that can
+  // change that. POSITIVE: `=== null`, matching the server's own
+  // `piece.entity_id ?? entry.entity_id`.
+  const unattributed = piece.entity === null
 
   // ── THE AFFORDANCE ITSELF IS GATED, NOT ONLY WHAT IT OPENS ─────────────
   // A button that renders and then explains it cannot do anything teaches the
@@ -256,6 +268,29 @@ export function MatchPieceForm({
         make it. A document proves one entry; there is no undo.
       </p>
 
+      {/* ── THE ENTRY MAY REFUSE, AND THE READER IS TOLD BEFORE THE CLICK ───
+          `entry_documented` (400), landed with PR #12 and live in BOTH journals:
+          *"entry #n already carries a pièce — an entry cites one document;
+          replacing evidence is not built until somebody needs it, on purpose."*
+
+          The refusal renders correctly without this — it comes through
+          `Errors.badRequest` with its own suggestion, so `result.message`
+          carries the whole sentence. What this adds is that the rule is
+          knowable BEFORE a person picks an entry. A one-to-one constraint that
+          only announces itself on rejection reads as a bug; stated first, it
+          reads as the design it is, and it also tells the reader what to do
+          instead — which is nothing, because replacing evidence is deliberately
+          not built. */}
+      <p className="mt-1 text-[11.5px] text-muted-foreground" data-refusal-hint="entry_documented">
+        And the entry must not already have one. An entry cites{' '}
+        <span className="text-foreground">one</span> document; if the one you name already carries a
+        pièce the attach is refused rather than replacing it, in either journal. Swapping a
+        document out is not built, deliberately — evidence that can be quietly replaced is evidence
+        that proves nothing.
+      </p>
+
+      {unattributed && <AttributionWarning journal={journal} />}
+
       {refusal && (
         <p
           role="alert"
@@ -266,5 +301,52 @@ export function MatchPieceForm({
         </p>
       )}
     </form>
+  )
+}
+
+/**
+ * A change the reader did not ask for, said BEFORE the click.
+ *
+ * ===========================================================================
+ * MATCHING AN UNATTRIBUTED PIÈCE IS ALSO AN ATTRIBUTION
+ * ===========================================================================
+ * `matchPiece` sets `entity_id: piece.entity_id ?? entry.entity_id` on the
+ * pièce, in the SAME TRANSACTION as the match. The backend's own comment says
+ * why: *"Matching an unattributed piece IS the attribution"* — saying which
+ * entry a document proves is saying whose it is. That is right, and it is a
+ * second write the form was not asking about.
+ *
+ * A pièce with no book is not an edge case here. `books.piece_inbox.entity_id`
+ * is nullable because a scanned receipt does not always say whose it is, and an
+ * unattributed one is **the only kind that cannot be reached any other way**:
+ * the worklist is entity- and exercice-scoped, so it never lists one, and the
+ * inbox is the whole of its surface (DECISIONS.md D-G).
+ *
+ * ── AND IT IS ONE-WAY, WHICH IS WHY IT IS SAID FIRST ─────────────────────
+ * There is no unmatch, so there is no un-attribute. Filing a receipt under the
+ * wrong legal entity is exactly the mistake this product's boundary rules exist
+ * to prevent, and the recovery is a conversation with the backend rather than a
+ * button. A reader who learns this from the result has learned it too late.
+ *
+ * The journal is repeated because the two facts are the same fact seen twice: an
+ * unattributed pièce reads as the GRAND LIVRE (`journalOf(null)`), so the entry
+ * it can reach is a double-entry book's, so the book it will be filed under is
+ * that entry's. Someone who wants it filed under a simplified book cannot do it
+ * from here at all, and saying so is better than a refusal they have to decode.
+ */
+function AttributionWarning({ journal }: { journal: string | null }) {
+  return (
+    <p
+      className="mt-1.5 rounded-md border border-dashed border-border px-2.5 py-1.5 text-[11.5px] text-muted-foreground"
+      data-attribution="unattributed"
+    >
+      <span className="font-medium text-foreground">
+        This document does not say which book it belongs to, and attaching it decides that.
+      </span>{' '}
+      In the same write, it is filed under the book of whichever entry you name — so this is two
+      changes, not one, and neither can be undone. Until then it belongs to no book, which is why
+      its number is read in {journal ?? 'the grand livre'}: a document nobody has attributed cannot
+      reach a personal recettes-dépenses journal.
+    </p>
   )
 }

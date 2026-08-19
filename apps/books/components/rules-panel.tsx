@@ -37,6 +37,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
 import { scopedHref } from '@/lib/nav'
+import type { Journal } from '@/lib/journal'
 import { en } from '@/lib/label'
 import { ruleAmount } from '@/lib/format'
 import { useCanWrite, useCreateRule } from '@/lib/mutations'
@@ -55,6 +56,7 @@ const LABEL = 'block text-[11px] font-semibold uppercase tracking-wider text-mut
 export function RulesPanel({
   ws,
   scope,
+  journal,
   base,
   rules,
   isLoading,
@@ -62,6 +64,8 @@ export function RulesPanel({
 }: {
   ws: string | undefined
   scope: ReadScope
+  /** Which journal this book keeps. Decides whether `created_from` is addressable. */
+  journal: Journal | null
   base: string
   rules: RecognitionRule[] | undefined
   isLoading: boolean
@@ -131,16 +135,42 @@ export function RulesPanel({
     {
       key: 'created_from',
       header: 'Taught by',
+      // ── NOT A LINK, AND NOT EVEN A NUMBER, ON A SIMPLIFIED BOOK ───────────
+      // `created_from_entry_id` is ONE column holding ids from TWO tables:
+      // `resolve.ts` writes a `books.entry` id at :130 and a `books.ri_entry` id
+      // at :236. `teachingSeqs()` resolves every one of them against
+      // `books.entry` alone, so a rule taught from an RI movement comes back
+      // carrying some other book's écriture number — all six seeded RI rows
+      // collide with real entry ids.
+      //
+      // Reproduced in three clicks: resolve RI #5 with "Teach a rule", and the
+      // rules panel offers "Taught by #4", which opens blackcode SA's Swisscom
+      // invoice. **This phase opened that door**: until `resolveTargetFor` was
+      // widened to close #51, no RI-taught rule could be created from the
+      // browser at all.
+      //
+      // The number is wrong, so it is not shown — a plausible wrong écriture
+      // number on an audit trail is worse than an absent one, and linking it
+      // sends the reader into another company's books. The rule itself is real
+      // and its provenance IS recorded; only the address is unresolvable until
+      // the payload says which table it came from. Backend ask, ticket #55.
       cell: (r) =>
-        r.created_from !== null ? (
+        r.created_from === null ? (
+          <span className="text-[12px] text-muted-foreground">no entry — known first</span>
+        ) : journal === 'recettes_depenses' ? (
+          <span
+            className="text-[12px] text-muted-foreground"
+            title="Taught by an entry in this book. The number the API returns for a simplified book resolves against the double-entry journal, so it is not shown rather than shown wrong."
+          >
+            taught here — not addressable yet
+          </span>
+        ) : (
           <Link
             href={scopedHref(base, `/ledger/${r.created_from}`, scope)}
             className="font-mono text-[12px] text-primary-strong hover:underline"
           >
             #{r.created_from}
           </Link>
-        ) : (
-          <span className="text-[12px] text-muted-foreground">no entry — known first</span>
         ),
       sortValue: (r) => r.created_from,
     },

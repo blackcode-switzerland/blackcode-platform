@@ -39,7 +39,7 @@
 
 import { useState } from 'react'
 import { Money } from './money'
-import { AccountRef } from './account-ref'
+import { AccountRef, type AccountRefScope } from './account-ref'
 import { en, legal } from '@/lib/label'
 import type { StatementLabel } from '@/lib/statements'
 import type { Money as MoneyString } from '@/lib/types'
@@ -75,7 +75,7 @@ export function StatementTable({
   groups: readonly StatementGroupView[]
   /** `/dashboard/{ws}` — needed for the account drill-down links. */
   base: string
-  scope: { entity: string | null; exercice: number | null }
+  scope: AccountRefScope
   footer?: { label: string; amount: MoneyString | null }
 }) {
   // Off by default. The reader's first question about a statement is "what does
