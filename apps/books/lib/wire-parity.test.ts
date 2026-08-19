@@ -57,6 +57,7 @@ import {
   publicRiEntry,
 } from './db/queries/statutory'
 import { publicRule } from './db/queries/rules'
+import { publicCategory } from './db/queries/management'
 import {
   publicSource,
   publicPull,
@@ -66,6 +67,7 @@ import {
 import { publicPiece } from './db/queries/pieces'
 import type { postEntry } from './db/queries/imports'
 import { bilanFor, crFor } from './derive'
+import { costBreakdown, costBreakdownRi, monthlyFlows } from './derive/management'
 import type { WorklistRow as WorklistRowWire } from './db/queries/worklist'
 import type { OverviewBook as OverviewBookWire } from './db/queries/statutory'
 import type { InvitationRow } from './db/queries/invitations'
@@ -73,6 +75,10 @@ import type { ExerciceRow } from './hooks'
 import type { PostResult } from './mutations'
 import type {
   Account,
+  AnalytiqueCategory,
+  AnalytiqueCategoryConfig,
+  AnalytiqueLine,
+  AnalytiqueResult,
   BilanGroupResult,
   BilanLineResult,
   BilanResult as BilanResultType,
@@ -87,6 +93,7 @@ import type {
   RiEntry,
   OverviewBook,
   OverviewResult,
+  MonthlyFlow,
   Source,
   SourceDetail,
   SourcePull,
@@ -258,6 +265,7 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
       publicRunbook,
       publicManifestRow,
       publicPiece,
+      publicCategory,
     })) {
       expect(typeof fn, `${name} is not a function — this file is stale`).toBe('function')
     }
@@ -1098,6 +1106,171 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     expect(keys.sort()).toEqual(['...publicSource', 'pulls', 'runbook'].sort())
   })
 
+  // --- phase 4B: analytique -------------------------------------------------
+  //
+  // ── TWO SHAPES THAT LOOK LIKE ONE, AND THE SCREEN NEEDS BOTH ────────────
+  // `GET …/analytique` serves a DERIVATION over postings; `GET …/analytique/
+  // categories` serves the CONFIGURATION. They share a `key`, a `label` and an
+  // `accounts`, they differ in everything else, and the second one carries
+  // `retired` — which the first silently drops, because `getAnalytique`
+  // filters retired buckets out. A screen that read one for the other would
+  // show a breakdown with no way to explain what it does not count.
+
+  // Mutation watched (2026-08-19): deleted `retired` from `publicCategory`.
+  // Red, naming it. That field is the whole reason the management screen reads
+  // this route at all.
+  it('publicCategory serves exactly these fields, retired among them', () => {
+    const out = publicCategory(
+      row({ seq: 3, key: 'it_ai', label: { fr: 'IT', en: 'IT' }, accounts: ['6570'], retired: false }),
+      'blackcode'
+    )
+    expect(Object.keys(out).sort()).toEqual(
+      ['number', 'entity', 'key', 'label', 'accounts', 'retired'].sort()
+    )
+  })
+
+  // Mutation watched (2026-08-19): renamed `monthly_flows` to `flows` in the
+  // route. Red, naming both. This is the case that would have caught the
+  // phase-1 failure shape — a renamed envelope key renders `undefined`, and an
+  // accounting screen then makes something up.
+  it('the analytique route serves four keys and is NOT the list envelope', () => {
+    const src = readFileSync(join(APP_ROOT, 'app/api/workspaces/[ws]/analytique/route.ts'), 'utf8')
+    const keys = envelopeKeys(src, { after: 'export const GET', label: 'analytique GET' })
+    expect(keys.length, 'found no envelope keys — the response moved').toBeGreaterThan(0)
+    expect(keys.sort()).toEqual(['entity', 'exercice', 'categories', 'monthly_flows'].sort())
+    // `useAnalytique` calls `apiGet`, not `apiList`. If this route ever grew a
+    // `{data, next_cursor}` envelope the hook would read `undefined.categories`
+    // — the exact failure `…/worklist` and `…/manifest` are pinned for.
+    expect(src, 'the analytique route now uses jsonList — the hook reads apiGet').not.toContain('jsonList')
+  })
+
+  // Mutation watched (2026-08-19): swapped `jsonList` for `NextResponse.json`
+  // in the categories GET. Red. The two sibling routes under one directory use
+  // DIFFERENT envelopes, which is precisely the pairing this repo has already
+  // got wrong twice.
+  it('the categories route IS the list envelope, unlike its sibling', () => {
+    const src = readFileSync(
+      join(APP_ROOT, 'app/api/workspaces/[ws]/analytique/categories/route.ts'),
+      'utf8'
+    )
+    expect(src, 'the categories list stopped using jsonList — useAnalytiqueCategories reads apiList').toContain(
+      'jsonList('
+    )
+    expect(src, 'the categories list stopped calling publicCategory').toContain('publicCategory')
+  })
+
+  // ── THE ZERO BUCKET IS A WIRE FACT, NOT A RENDERING CHOICE ──────────────
+  // The screen renders a category with no postings, and it can only do that if
+  // the server sends one. `costBreakdown` maps over the CONFIGURED categories
+  // rather than over the lines, so an empty bucket survives — and this is the
+  // assertion that says so, because a future optimisation that filtered empty
+  // buckets server-side would empty the screen with nothing going red.
+  //
+  // Mutation watched (2026-08-19): appended `.filter(c => c.amount !== '0.00')`
+  // to `costBreakdown`'s return. Red.
+  it('costBreakdown keeps a category that has nothing in it', () => {
+    const out = costBreakdown(
+      [
+        { key: 'bureau', label: { fr: 'Bureau', en: 'Office' }, accounts: ['6000'] },
+        { key: 'autres', label: { fr: 'Autres', en: 'Other' }, accounts: ['8500'] },
+      ],
+      [
+        {
+          account_no: '6000',
+          debit: '1850.00',
+          credit: '0.00',
+          status: 'posted',
+          date: '2026-01-05',
+          counterparty: 'IMMOREGIE SA',
+          entry_number: 3,
+        },
+      ]
+    )
+    expect(out.map((c) => c.key)).toEqual(['bureau', 'autres'])
+    expect(out[1].amount, 'the empty bucket must be served at zero, not dropped').toBe('0.00')
+    expect(out[1].lines).toEqual([])
+    // And its keys are exactly what `AnalytiqueCategory` declares.
+    expect(Object.keys(out[0]).sort()).toEqual(['key', 'label', 'accounts', 'amount', 'lines'].sort())
+    expect(Object.keys(out[0].lines[0]).sort()).toEqual(
+      ['number', 'date', 'counterparty', 'amount', 'account'].sort()
+    )
+  })
+
+  // ── THE SPARSE SERIES IS A WIRE FACT TOO ────────────────────────────────
+  // `<FlowsChart>` refuses to interpolate because months are MISSING, not
+  // zero. If the server ever filled the year in, the chart would be drawing a
+  // shape nobody asked for and nothing would say so.
+  //
+  // ── TWO DIFFERENT WAYS A MONTH GOES MISSING, AND THE FIRST DRAFT OF THIS
+  //    CASE ONLY TESTED ONE ─────────────────────────────────────────────────
+  // `monthlyFlows` drops a month twice over: `status !== 'posted'` skips a line
+  // BEFORE it is bucketed, and a trailing `.filter` drops a month whose posted
+  // lines net to zero. The first version of this case used a staged February
+  // and claimed to cover both — and **removing the filter left it GREEN**,
+  // because a staged line never reached the map for the filter to remove.
+  // Watched, 2026-08-19. Both months are here now, and both mutations are red:
+  //   • deleted the `.filter(...)` → red, March (the reversal) appears at zero
+  //   • `status !== 'posted'` → `status === 'deleted'` → red, February appears
+  it('omits a month with nothing in it, whichever way it came to have nothing', () => {
+    const chart = [
+      { no: '3400', class: 3, statement: 'cr', statement_position: 'produits_nets' },
+      { no: '6000', class: 6, statement: 'cr', statement_position: 'autres_charges_exploitation' },
+    ]
+    const out = monthlyFlows(
+      [
+        { account_no: '6000', debit: '100.00', credit: '0.00', status: 'posted', date: '2026-01-05' },
+        // February: a staged line only. Never bucketed at all.
+        { account_no: '6000', debit: '50.00', credit: '0.00', status: 'staged', date: '2026-02-11' },
+        // March: an entry and its reversal, both POSTED. Bucketed, nets to
+        // zero, dropped by the filter. This is a real shape — a correction in
+        // this product IS a reversing entry beside the original.
+        { account_no: '6000', debit: '80.00', credit: '0.00', status: 'posted', date: '2026-03-04' },
+        { account_no: '6000', debit: '0.00', credit: '80.00', status: 'posted', date: '2026-03-09' },
+        { account_no: '3400', debit: '0.00', credit: '900.00', status: 'posted', date: '2026-04-02' },
+      ],
+      chart
+    )
+    expect(
+      out.map((f) => f.month),
+      'February and March must be ABSENT, not present at zero'
+    ).toEqual(['2026-01', '2026-04'])
+    expect(Object.keys(out[0]).sort()).toEqual(['month', 'produits', 'charges'].sort())
+    expect(out[0].charges).toBe('100.00')
+    expect(out[1].produits).toBe('900.00')
+  })
+
+  // ── THE ONE LABEL THE SERVER INVENTS, AND IT MUST HAVE AN ENGLISH HALF ──
+  // Every other label on this screen is somebody's data. `costBreakdownRi`
+  // MAKES one, for a dépense that carries no category — and `en()` renders the
+  // English with a French fallback, so an fr-only label would print French on
+  // an English screen with nothing to say so. That is not hypothetical: it is
+  // exactly what account labels did until 2026-08-19 (`lib/label.ts`'s closing
+  // note). The compile-time half cannot see this at all — the column is
+  // `unknown` — so it is asserted here.
+  //
+  // Mutation watched (2026-08-19): dropped the `en` half of the fallback in
+  // `costBreakdownRi`. Red.
+  it('the uncategorized bucket the server invents carries both halves of its label', () => {
+    const out = costBreakdownRi([
+      {
+        seq: 5,
+        date: '2026-03-15',
+        direction: 'depense',
+        amount: '120.00',
+        counterparty: 'TWINT *8842',
+        raw_label: 'TWINT',
+        category: null,
+      },
+    ])
+    expect(out).toHaveLength(1)
+    expect(out[0].key, 'the residual bucket key the screen must NOT special-case by name').toBe('__none')
+    expect(out[0].label).toEqual({ fr: 'Sans catégorie', en: 'Uncategorized' })
+    // And it carries no accounts, which is what marks a simplified book's
+    // breakdown apart from a configured one.
+    expect(out[0].accounts).toBeNull()
+    expect(out[0].lines[0].account, 'an RI line has no chart account — empty string, not null').toBe('')
+  })
+
   // --- invitations ---------------------------------------------------------
   //
   // ── THESE TWO ROUTES HAVE NO `lib/types.ts` COUNTERPART, BY DECISION ─────
@@ -1260,6 +1433,67 @@ type _RiEntryKeys = Mutual<keyof RiEntryWire, keyof RiEntry>
  */
 type PostWire = Awaited<ReturnType<typeof postEntry>>
 type _PostKeys = Mutual<keyof PostWire, keyof PostResult>
+
+// ── PHASE 4B ───────────────────────────────────────────────────────────────
+// The analytique payload is FOUR types deep and only the outermost one is
+// visible to a key-set check: `AnalytiqueResult` → `AnalytiqueCategory` →
+// `AnalytiqueLine`, plus `MonthlyFlow`. A nested field whose type changed —
+// `accounts` losing its null, `account` gaining one — keeps every key and
+// renders wrongly. These four are what see that.
+//
+// Mutations watched (2026-08-19), at `npm run typecheck`:
+//   • `AnalytiqueLine.account: string | null` (the widening a reader would
+//     reach for on seeing `""`) — RED on both category assertions.
+//   • `AnalytiqueCategory.accounts: string[]`, dropping the null a simplified
+//     book actually sends — **GREEN, and that is a real hole.** `accounts` is
+//     one of the two fields omitted below, so nothing at compile time holds
+//     its nullability. What holds it is the `costBreakdownRi` case above,
+//     which asserts the value is null on a simplified book — a weaker check in
+//     a different file's blast radius. Recorded rather than left implied: a
+//     component reading `c.accounts.length` unguarded would throw on the RI
+//     book and the typecheck would be green.
+//     (`<CostBreakdown>` guards with `c.accounts && …` for this reason.)
+//
+// ── AND TWO FIELDS THIS HALF CANNOT HOLD AT ALL: `label` AND `accounts` ───
+// **Every `jsonb` column in `lib/db/schema.ts` is declared without
+// `.$type<>()`, so drizzle infers `unknown`** — all thirty of them. Everywhere
+// else that does not show, because the shaping function CASTS on the way out
+// (`publicEntry`, `publicRule`, `publicPiece` all do). `publicCategory` and
+// `costBreakdown` do not: they pass the column through, so `label` and
+// `accounts` are `unknown` on the wire type, and `unknown` is assignable to
+// nothing.
+//
+// A `Mutual<>` over the whole object is therefore impossible, and a
+// one-directional assertion would be VACUOUS — everything is assignable TO
+// `unknown`, so it would pass against `label: number` and against a type that
+// deleted the field. So the two fields are OMITTED here and named, rather than
+// papered over with a check that cannot fail. What holds them instead is the
+// runtime key-set case above and the `__none` label case below.
+//
+// **This is a backend ask and it is in the phase-4B report — and it is NOT a
+// one-line fix, which was checked rather than assumed.** Rehearsed on
+// 2026-08-19 by adding `.$type<{fr,en}>()` and `.$type<string[]>()` to the two
+// `analytique_category` columns and widening the two `Mutual`s below: the
+// typecheck then goes red in FOUR more places — `createCategory`'s insert,
+// `getAnalytique`'s RI branch (`ri_entry.category` is `unknown` too),
+// `costBreakdown`'s own parameter type and `lib/db/seed.ts`. The cast has to
+// land with the write-side normalisation, not beside it. Restored; nothing of
+// that rehearsal is in the tree.
+type CategoryBreakdownWire = ReturnType<typeof costBreakdown>[number]
+type MonthlyFlowWire = ReturnType<typeof monthlyFlows>[number]
+type CategoryConfigWire = ReturnType<typeof publicCategory>
+/** The typed part of a breakdown bucket. `label` and `accounts` are `unknown` — see above. */
+type _AnalytiqueCategoryKeys = Mutual<
+  Omit<CategoryBreakdownWire, 'label' | 'accounts'>,
+  Omit<AnalytiqueCategory, 'label' | 'accounts'>
+>
+type _AnalytiqueLineKeys = Mutual<CategoryBreakdownWire['lines'][number], AnalytiqueLine>
+type _MonthlyFlowKeys = Mutual<MonthlyFlowWire, MonthlyFlow>
+/** Same omission, same reason. `retired`, `number`, `entity` and `key` ARE held. */
+type _CategoryConfigKeys = Mutual<
+  Omit<CategoryConfigWire, 'label' | 'accounts'>,
+  Omit<AnalytiqueCategoryConfig, 'label' | 'accounts'>
+>
 type _PatrimoineKeys = Mutual<keyof PatrimoineWire, keyof PatrimoineSnapshot>
 type _VatKeys = Mutual<keyof EntityWire['vat'], keyof Entity['vat']>
 type _RuleKeys = Mutual<keyof RuleWire, keyof RecognitionRule>
@@ -1585,6 +1819,10 @@ const _keys: {
   _WorklistEnvelopeKeys: _WorklistEnvelopeKeys
   _SourceDetailKeys: _SourceDetailKeys
   _InvitationKeys: _InvitationKeys
+  _AnalytiqueCategoryKeys: _AnalytiqueCategoryKeys
+  _AnalytiqueLineKeys: _AnalytiqueLineKeys
+  _MonthlyFlowKeys: _MonthlyFlowKeys
+  _CategoryConfigKeys: _CategoryConfigKeys
 } = {
   _EntityKeys: true,
   _AccountKeys: true,
@@ -1613,6 +1851,10 @@ const _keys: {
   _WorklistEnvelopeKeys: true,
   _SourceDetailKeys: true,
   _InvitationKeys: true,
+  _AnalytiqueCategoryKeys: true,
+  _AnalytiqueLineKeys: true,
+  _MonthlyFlowKeys: true,
+  _CategoryConfigKeys: true,
 }
 
 const _scalars: _Scalars = [

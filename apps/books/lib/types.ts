@@ -1295,3 +1295,99 @@ export interface InboxPiece {
   extraction: PieceExtraction
   note: Label | null
 }
+
+// ---------------------------------------------------------------------------
+// analytique — the management view (phase 4B)
+// ---------------------------------------------------------------------------
+
+/**
+ * One ledger line under a cost category.
+ *
+ * ── `account` IS `""` ON A SIMPLIFIED BOOK, NOT `null` ─────────────────────
+ * `costBreakdownRi` in `lib/derive/management.ts` fills it with the empty
+ * string, because an RI movement has no chart account to name. Typed as the
+ * string it is rather than widened to `string | null`, so a screen that renders
+ * it has to decide what an empty account looks like instead of leaning on a
+ * `??` that never fires. Verified against the wire on 2026-08-19.
+ *
+ * ── `number` NAMES A ROW IN WHICHEVER JOURNAL THE BOOK KEEPS ───────────────
+ * A grand-livre `entry.seq` on a double-entry book, an `ri_entry.seq` on a
+ * simplified one — and **the two counters collide.** On the seeded workspace
+ * `#3` is blackcode's rent écriture AND the RI's AVS instalment. `/ledger/{n}`
+ * asks the grand livre first, so linking an RI line by this number opens
+ * another book's record. See `components/cost-breakdown.tsx`.
+ */
+export interface AnalytiqueLine {
+  number: number
+  date: IsoDate
+  /** The entry's counterparty, falling back to its raw label. Never null. */
+  counterparty: string
+  amount: Money
+  /** The chart account. `""` on a simplified book — see above. */
+  account: string
+}
+
+/**
+ * One bucket of the cost breakdown, as `GET …/analytique` serves it.
+ *
+ * ── A ZERO BUCKET IS A ROW, NOT AN ABSENCE ────────────────────────────────
+ * `amount: "0.00"` with `lines: []` is what a configured category with no
+ * postings looks like, and it is on the screen. Four of AIOS's five read that
+ * way. Same rule as the statutory zero lines.
+ *
+ * ── `accounts` IS `null` ON A SIMPLIFIED BOOK ─────────────────────────────
+ * There is no account→category mapping there: an RI movement carries its own
+ * category, so `key` is that label's French text (or `"__none"` for the
+ * uncategorized bucket) rather than a configured slug.
+ */
+export interface AnalytiqueCategory {
+  key: string
+  label: Label
+  /** The accounts this bucket counts, or null on a simplified book. */
+  accounts: string[] | null
+  amount: Money
+  lines: AnalytiqueLine[]
+}
+
+/**
+ * One month of produits and charges.
+ *
+ * **The series is SPARSE.** A month with no posted écriture is absent, not
+ * zero — `monthlyFlows` filters those out — so twelve months of a year may be
+ * two rows. Nothing may interpolate between them; see
+ * `components/flows-chart.tsx`.
+ */
+export interface MonthlyFlow {
+  /** `YYYY-MM`. */
+  month: string
+  produits: Money
+  charges: Money
+}
+
+/** `GET /api/workspaces/{ws}/analytique?entity=&exercice=`. */
+export interface AnalytiqueResult {
+  /** Echoed back: the book this breakdown is about, resolved server-side. */
+  entity: string
+  exercice: number
+  categories: AnalytiqueCategory[]
+  monthly_flows: MonthlyFlow[]
+}
+
+/**
+ * One configured bucket, as `GET …/analytique/categories` serves it.
+ *
+ * Not the same shape as `AnalytiqueCategory` above and deliberately a separate
+ * type: this is the CONFIGURATION — it carries `number` and `retired` and
+ * carries no amounts — while the other is a DERIVATION over postings. The
+ * breakdown drops retired buckets (`getAnalytique` filters them); this list
+ * serves them flagged, which is the only place a reader can see that an
+ * account has stopped being counted.
+ */
+export interface AnalytiqueCategoryConfig {
+  number: number
+  entity: string
+  key: string
+  label: Label
+  accounts: string[]
+  retired: boolean
+}

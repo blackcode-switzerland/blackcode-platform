@@ -32,6 +32,50 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-19 — The management view is on the web, and it is the first screen with charts
+
+**Not breaking. No route changed, no `bk` command changed, nothing on the wire
+moved.** This is the web surface catching up with two routes that shipped with
+phase 4B's backend: `GET /api/workspaces/{ws}/analytique` and
+`GET /api/workspaces/{ws}/analytique/categories`. Everything below is already
+readable with `bk books analytique` and `bk books category list`, and the CLI
+remains the complete surface.
+
+**What it shows** — `/dashboard/{ws}/management`, per book and per exercice:
+
+- The exercice totals for revenue, charges and the net, over the months that
+  carry a movement, with the coverage stated.
+- Revenue against charges per month, as grouped columns, with the same figures
+  in a table beside them.
+- Charges by category, each bucket with its accounts, its share and its
+  underlying ledger lines.
+
+**Three things it deliberately does NOT show**, so an agent comparing the two
+surfaces is not left looking for them:
+
+- **No per-month averages, no runway, and no cash.** The mockup's five "run
+  metrics" divide money by a month count; a franc figure produced by dividing a
+  parsed float is not a figure this product will print. Cash and runway are not
+  on this route at all. The route serving exercice totals, a treasury figure and
+  the recorded runway scenarios would let all five come back honestly.
+- **No tax panel.** `GET …/tax-snapshot` has its own screen, still to come.
+- **No raw/agent payload panel.** Dropped permanently: agents use `bk`.
+
+**And it reads categories, it does not write them.** `POST …/analytique/
+categories` exists and `bk books category create` is how a bucket is made
+today. Whether the web surface should offer it is an open decision — the
+breakdown's buckets are configuration, and this product's web writes have so
+far all been interpretation. It is recorded rather than answered.
+
+**One thing for anyone building against the analytique payload.** Two of its
+fields cross the wire as untyped JSON: a category's `label` and its `accounts`.
+Every `jsonb` column in this app is declared without a TypeScript type and the
+other shaping functions cast on the way out; `publicCategory` and
+`costBreakdown` pass the column through. A client typing that payload gets
+`unknown` for both and has to assert. `label` is `{fr, en}` and `accounts` is a
+string array — **or `null`, on a simplified book**, where a bucket is the
+category a movement carries rather than a mapping from accounts.
+
 ## 2026-08-19 — The hardening pass: every open finding from the frontend reviews, closed
 
 Nine fixes, all of them answers to tickets #50/#51/#53/#55. Four change the

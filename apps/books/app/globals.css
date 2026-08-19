@@ -148,7 +148,28 @@
   --chart-series-ideal: #b1a48c;
 
   /* Charts — gold → sky → sage → violet → clay. The mockup's own gold/sky
-     pairing (`--pt-amber` / `--pt-coral`) extended to five. */
+     pairing (`--pt-amber` / `--pt-coral`) extended to five.
+
+     ── SLOTS 1 AND 2 ARE VALIDATED. SLOTS 3–5 ARE NOT. ────────────────
+     The management view is the first screen in this app with charts, and it
+     uses two series (revenue, charges) plus one bar hue. Those two slots were
+     run through the `dataviz` skill's `validate_palette.js` against THIS app's
+     own chart surface — `--card`, #fffefa light and #1a1713 dark — rather
+     than eyeballed, on 2026-08-19:
+
+       light  #b8892a / #3a94c4   all five checks PASS
+       dark   #b88a00 / #3b9ec9   all five checks PASS
+
+     **The dark values were re-stepped to get there.** They were #e8b84b and
+     #7dd3fc, lifted for contrast when this file was written and never measured:
+     both sit at OKLCH L 0.81–0.83, outside the 0.48–0.67 band a dark chart
+     surface needs, so two marks that pass on paper wash out against the ink.
+     The new steps hold the same two hues at L 0.66. Nothing rendered them
+     before today, so this changes no existing screen.
+
+     Slots 3, 4 and 5 have never been measured and nothing uses them. Run them
+     through the validator before the first chart that does — a palette that
+     exists and has not been checked reads as protection while giving none. */
   --chart-1: #b8892a;
   --chart-2: #3a94c4;
   --chart-3: #3fb27f;
@@ -203,9 +224,11 @@
   --input: oklch(1 0 0 / 14%);
   --ring: #e8b84b;
 
-  /* Lifted for contrast against the dark surface; same hue order. */
-  --chart-1: #e8b84b;
-  --chart-2: #7dd3fc;
+  /* Same hue order, stepped for the dark surface. Slots 1 and 2 are the
+     validated pair — see the note beside the light values; 3–5 are the old
+     lifted steps and are still unmeasured. */
+  --chart-1: #b88a00;
+  --chart-2: #3b9ec9;
   --chart-3: #3fb27f;
   --chart-4: #a78bfa;
   --chart-5: #f0876b;

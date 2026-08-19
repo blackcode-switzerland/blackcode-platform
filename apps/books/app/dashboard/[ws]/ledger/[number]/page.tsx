@@ -83,7 +83,10 @@ export default function Page() {
         className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft size={13} />
-        Grand livre
+        {/* Names the journal it goes back to, not the one this app has more of.
+            "Grand livre" over a simplified book is the same mislabel the ledger's
+            own header carried until 2026-08-19. */}
+        {scope.journal === 'recettes_depenses' ? 'Recettes et dépenses' : 'Grand livre'}
       </Link>
 
       {number === null && (
@@ -101,7 +104,41 @@ export default function Page() {
       {entry.isLoading && <Loading rows={6} label="Loading the entry" />}
       {entry.error && <ErrorState error={entry.error} title="This entry could not be loaded" />}
 
-      {entry.data && (
+      {/* ── A SIMPLIFIED BOOK'S MOVEMENT IS NOT AN ÉCRITURE ──────────────────
+          This screen reads eight fields no RI row has — `entry_no`, `lines`,
+          `status`, `tva`, `related_party`, `reverses_entry_id`, `source_id`,
+          `matched_rule_id` — so it cannot render one, and `<EntryLines>` threw
+          on `entry.data.lines` when it tried.
+
+          It got here because `seq` is workspace-wide across BOTH journals:
+          `entry show 3` is blackcode's rent payment and `entry show 3
+          --entity ri` is the RI's AVS instalment. `useEntry` now sends the book,
+          so the RIGHT record arrives — which is the fix — and this branch is
+          what stands in until a simplified book has a detail screen of its own.
+
+          A refusal that names the book beats both alternatives: a crash, and the
+          older behaviour of fetching another company's écriture and drawing it
+          under this book's heading. Ticket-shaped, same family as #51 and #53. */}
+      {entry.data && scope.journal === 'recettes_depenses' && (
+        <section className="rounded-lg border border-border bg-secondary px-4 py-4" aria-live="polite">
+          <h2 className="text-sm font-medium text-foreground">
+            {scope.record?.name ?? 'This book'} keeps no écritures.
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Movement #{number} is a recette or a dépense under art. 957 al. 2 CO — one amount and a
+            direction, with no debit, no credit and no posting step. There is no detail screen for
+            one yet; the journal shows every field it has.
+          </p>
+          <Link
+            href={scopedHref(base, '/ledger', scope)}
+            className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary-strong hover:underline"
+          >
+            Back to receipts and expenses
+          </Link>
+        </section>
+      )}
+
+      {entry.data && scope.journal !== 'recettes_depenses' && (
         <article data-entry={entry.data.number}>
           <header className="border-b border-border pb-3">
             <div className="flex flex-wrap items-center gap-2">
