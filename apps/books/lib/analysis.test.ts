@@ -12,6 +12,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { analysisRows, bookHasSomethingToSay, bookToday, hasSnapshot } from './analysis'
+import { en } from './label'
 
 const label = { fr: 'Trésorerie', en: 'Cash' }
 
@@ -52,6 +53,24 @@ describe('analysisRows — the jsonb guard', () => {
     ]
     const { rows } = analysisRows(filed.map((value) => ({ label, value })))
     expect(rows.map((r) => r.value)).toEqual(filed)
+  })
+
+  // The FIRST real agent filing (analysis #3, 2026-08-19) used bare-string
+  // labels — legal at the door, `speaks()` accepts them — and this screen
+  // dropped all thirteen rows of a valid record. A bare string is a label.
+  it('reads a bare-string label: the shape the door accepts and real agents file', () => {
+    const out = analysisRows([
+      { label: 'runway now (months)', value: '49.2' },
+      { label: 'cash (tresorerie) 2026-08', value: '72189.43' },
+    ])
+    expect(out.dropped).toBe(0)
+    expect(out.rows.map((r) => en(r.label))).toEqual(['runway now (months)', 'cash (tresorerie) 2026-08'])
+    expect(out.rows.map((r) => r.value)).toEqual(['49.2', '72189.43'])
+  })
+
+  it('a blank string is still not a label', () => {
+    const out = analysisRows([{ label: '   ', value: 'x' }])
+    expect(out).toEqual({ rows: [], dropped: 1 })
   })
 
   // Mutation watched: relaxed the label test to `!!o.label`. Red — `{}` and

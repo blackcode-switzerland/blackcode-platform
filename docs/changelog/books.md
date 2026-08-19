@@ -32,6 +32,18 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-19 — The analyse detail reads bare-string labels, as the door always accepted
+
+**Screen-only; no route, no wire shape, no `bk` command changed.** The analyse
+detail's row reader (`figures` / `based_on`) accepted only `{fr, en}` labels,
+while `POST …/analyses` has always accepted a bare string (`speaks()`), and the
+first real agent filing — analysis #3, filed today through `bk books analyse
+record` — used bare strings: a valid record rendered with all thirteen rows
+"could not be read". A bare-string label now renders as itself on both language
+sides; the record is untouched. One seam stays open on purpose: a bare NUMBER
+as `value` files fine at the door but still drops (counted, stated) on screen —
+one decision is needed on which side moves, tracked on ticket #56.
+
 ## 2026-08-19 — A cost bucket refuses revenue, and every jsonb column now states its shape
 
 **One new refusal; nothing else on the wire moved.**
