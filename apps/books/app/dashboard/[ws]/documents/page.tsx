@@ -108,8 +108,10 @@ export default function Page() {
             document was switched off, and that `bk books piece match` "has the
             same gap, so it is not a way round". Both sentences were true when
             written on 2026-08-18 and **both were false by the end of that day**:
-            the backend landed the entity filter, `MATCH_WRITE_ENABLED` went
-            true, and the copy did not follow.
+            the backend landed the entity filter, the control went on, and the copy
+            did not follow. (The flag itself is gone since 2026-08-19 — it had
+            been permanently true, and a constant guarding nothing is not a
+            record of anything.)
 
             So for a day this page told a reader a working control did not work,
             standing directly above the working control. Found by the phase-4A

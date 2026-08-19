@@ -1391,3 +1391,269 @@ export interface AnalytiqueCategoryConfig {
   accounts: string[]
   retired: boolean
 }
+
+// ===========================================================================
+// PHASE 5 — THE ANALYSES JOURNAL, THE TAX SNAPSHOT, THE COMPLIANCE RULES
+// ===========================================================================
+// ── EVERY JSONB FIELD BELOW IS DECLARED, AND NONE OF THEM IS PROTECTED ────
+// `lib/db/schema.ts` declares every `jsonb()` column without `.$type<>()`, so
+// `question`, `verdict`, `figures`, `based_on`, `scenario_label`, `summary` and
+// the whole tax `params` block cross the wire as `unknown`. `wire-parity`'s
+// compile-time half compares a shaping function's return type against these,
+// and against an `unknown` there is nothing to compare — a `Mutual<>` on a
+// payload of `unknown` fields is satisfied by any shape at all.
+//
+// **So these types are a CLAIM this app makes about the payload, not a fact the
+// suite can hold it to.** That is filed with the backend on #55 and is repeated
+// here because the consequence is local: the guard for a jsonb field has to be a
+// PURE FUNCTION with a test — `lib/analysis.ts`, `lib/compliance.ts` — never a
+// check written inline in JSX, which is the phase-4B `accountsLabel` lesson.
+
+/**
+ * One row of a filed analysis's `figures` or `based_on` array.
+ *
+ * ── `value` IS TEXT THE AGENT WROTE, AND IS NOT A `Money` ─────────────────
+ * The seeded records carry `"CHF 5'175.00"`, `"−5'281.20 → −10'456.20"`,
+ * `"13.7 → 6.9 mois"` and `"15% → 4'500 × 1.15 = 5'175"`. It is prose with
+ * numbers in it, already formatted by whoever filed it. **It never goes through
+ * `<Money>` and it is never parsed** — reformatting a filed figure is editing
+ * the record, and parsing one is the recompute the route forbids.
+ */
+export interface AnalysisFigure {
+  label: Label
+  value: string
+  /**
+   * Where the agent said it read the value. **Recorded, not navigable.**
+   *
+   * The seeded hrefs are the MOCKUP's addresses (`app-ledger.html?entity=…`),
+   * which are not routes in this app. An agent filing one tomorrow may write
+   * anything at all. Rendering it as a link would offer a reader a destination
+   * this app cannot promise — see `<BasedOnTable>`.
+   */
+  href?: string | null
+}
+
+/**
+ * One filed analysis. `GET …/analyses` and `GET …/analyses/{number}`.
+ *
+ * ===========================================================================
+ * THE ROW IS PERMANENT AND NOTHING ON IT IS EVER RECOMPUTED
+ * ===========================================================================
+ * The route's own header: *"the `based_on` snapshot exactly as it was filed.
+ * NEVER recomputed — a stored answer that silently reflows is a different
+ * answer."* There is no update route and none is coming (migration 0013 revokes
+ * UPDATE and DELETE from the app role); a drifted answer is re-asked and both
+ * rows stand.
+ *
+ * `POST /analyses` is the AGENT's door — ring 0, an append from the world. This
+ * app reads the journal and does not author in it (decision D-H's rule).
+ *
+ * ── THE MOCKUP'S `metrics`, `polarity` AND `verdict_short` DO NOT EXIST ───
+ * `app-analyse.html` draws two SVG charts and three gauges off
+ * `a.metrics.{revenue_monthly, burn_monthly, net_monthly, runway_months,
+ * cash_chf, driver}`, and colours every row by `a.polarity`. **None of those is
+ * a column and none is on the wire.** What survives of them is
+ * `runway_after_months` — one number, the "after" side with no "before" — and
+ * `figures`, which is text. Building against the mockup here would have been
+ * building against a shape nobody serves.
+ */
+export interface Analysis {
+  /** The workspace #number. Its own URL; agents deep-link it. */
+  number: number
+  /** The book's slug. */
+  entity: string
+  /** A full ISO timestamp, not a `date` — the server's clock at filing. */
+  asked: string
+  asked_by: string
+  /** Which agent answered: `claude-code`, `companion`, … Free text. */
+  agent: string
+  scenario_label: Label | null
+  /**
+   * The scenario's runway, in months, as the agent computed it. Null when the
+   * question had no runway answer.
+   *
+   * **There is no "before" on the wire**, so nothing here may draw a delta:
+   * the mockup's gauges each need both sides and this payload has one.
+   */
+  runway_after_months: number | null
+  question: Label
+  verdict: Label
+  figures: AnalysisFigure[]
+  /** What the agent READ. The snapshot. Permanent, and never recomputed. */
+  based_on: AnalysisFigure[]
+}
+
+/**
+ * The VAT position, exact and in centimes on the server.
+ *
+ * `net_due` is `opening_due + output_ytd − input_claimed_ytd` — the arithmetic
+ * is rendered rather than only its answer, because a reader who cannot see the
+ * three inputs cannot tell a net due from a net claim.
+ */
+export interface VatPosition {
+  opening_due: Money
+  output_ytd: Money
+  input_claimed_ytd: Money
+  net_due: Money
+}
+
+/**
+ * The profit-tax ESTIMATE. Floats on the server, deliberately — see
+ * `lib/derive/management.ts`'s header: a coefficient stack of
+ * 8.5% + 3⅓% × 232% has no exact centime representation, and this is a position
+ * estimate rather than a posting. It still crosses the wire as strings.
+ *
+ * `statutory_pct` and `effective_pct` are NUMBERS, not `Money`: they are rates,
+ * and `effective` is `s/(1+s)` because Swiss taxes are themselves deductible.
+ * Both are served so a reader can see which one a figure was computed at.
+ */
+export interface ProfitTax {
+  cantonal: Money
+  communal: Money
+  ifd: Money
+  total: Money
+  statutory_pct: number
+  effective_pct: number
+}
+
+/**
+ * The capital-tax estimate, with the art. 118 LI-VD imputation SHOWN.
+ *
+ * `gross` is the per-mille of book equity, `credited` is the cantonal+communal
+ * profit tax counted against it, `net_due` is what remains. All three are
+ * served because whether the imputation applies exactly this way is the
+ * parameters' own open question — serving only `net_due` would pick an answer
+ * the fiduciary has not given.
+ */
+export interface CapitalTax {
+  gross: Money
+  credited: Money
+  net_due: Money
+}
+
+/**
+ * The tax parameter record for one book, verbatim from `books.tax_params`.
+ *
+ * ===========================================================================
+ * EVERY FIGURE ON THE TAXES SCREEN IS CITED FROM HERE, AND `unknown` IS WHY
+ * ===========================================================================
+ * This is a `jsonb` column served without normalisation, so the shape below is
+ * this app's reading of it rather than a contract. A `citation` is a `string` on
+ * three of the four blocks and a `{fr, en}` pair on the fourth (`communal`),
+ * which is not a mistake to tidy: it is what the seed holds and what an agent
+ * may file. `lib/tax.ts`'s `citationText` is the one place that difference is
+ * resolved, and it is tested.
+ *
+ * `confirmed` is a fact about the PARAMETER, not about the arithmetic. The
+ * seeded `capital_tax` block is `confirmed: false` with an `open_question` for
+ * the fiduciary; a screen that renders its figure without that flag has turned
+ * an open question into a number somebody might file.
+ */
+export interface TaxParamBlock {
+  citation?: unknown
+  confirmed?: unknown
+  open_question?: unknown
+  [key: string]: unknown
+}
+
+export interface TaxParams {
+  ifd?: TaxParamBlock
+  cantonal?: TaxParamBlock
+  communal?: TaxParamBlock
+  capital_tax?: TaxParamBlock
+  [key: string]: unknown
+}
+
+/**
+ * `GET /api/workspaces/{ws}/tax-snapshot?entity=&exercice=`.
+ *
+ * ===========================================================================
+ * RING 3. DERIVED AT REQUEST TIME AND STORED NOWHERE.
+ * ===========================================================================
+ * Not a tax return, not a position tracked over time — that is a different
+ * product (b/tax). This is the statutory picture of one (book, exercice) at the
+ * moment the page was opened.
+ *
+ * ── `configured: false` IS A REAL ANSWER AND MUST NOT BE FILLED IN ────────
+ * A book with no `books.tax_params` row answers `tax: null, configured: false`.
+ * **The canton and the commune come from that row and from nowhere else**
+ * (decision D-D: nothing may assume a Swiss canton, let alone VD/Renens). A
+ * screen that supplied a default rate would be inventing somebody's tax bill.
+ *
+ * ── A SIMPLIFIED BOOK IS REFUSED, BY CODE ────────────────────────────────
+ * `no_tax_snapshot_for_simplified`, 400: a sole proprietorship's result is taxed
+ * as its owner's personal income. That is a SCREEN STATE, like the bilan's
+ * refusal — see `isNoTaxSnapshotRefusal` in `lib/hooks.ts`.
+ */
+export interface TaxSnapshotResult {
+  /** Echoed back: the book the server resolved, not the one the URL asked for. */
+  entity: string
+  exercice: number
+  /** The exercice result, from the compte de résultat. Negative in a loss year. */
+  profit: Money
+  /** Capitaux propres from the bilan, including the injected result. */
+  equity: Money
+  /** Null when the book is not VAT-registered — not zero. */
+  vat: VatPosition | null
+  tax: {
+    canton: string
+    commune: string
+    profit_tax: ProfitTax
+    capital_tax: CapitalTax
+    params: TaxParams
+  } | null
+  configured: boolean
+}
+
+/**
+ * One statutory compliance rule. `GET /api/compliance-rules`.
+ *
+ * ===========================================================================
+ * THIS ROUTE IS NOT WORKSPACE-SCOPED, AND THAT IS DELIBERATE
+ * ===========================================================================
+ * The same law binds every book, so the rules live at `/api/compliance-rules`
+ * rather than under `/api/workspaces/{ws}/`, and the GET is unauthenticated for
+ * the same reason `/api/meta` is: the payload is law text with citations,
+ * holding no amounts and no names. It is the one read in this app that is
+ * genuinely global, which is why it is the third `booksGlobalKey`.
+ *
+ * ── `draft` IS THE RESTING STATE, NOT A WARNING ──────────────────────────
+ * All nineteen are born `draft`. Research against Fedlex is not a fiduciary's
+ * sign-off, and the seed says so in capitals. Nineteen researched rules awaiting
+ * a human is what this screen looks like when nothing is wrong; drawing it in
+ * red says the opposite. `lib/compliance.ts` holds that as a tested function
+ * rather than as a class name in JSX.
+ *
+ * ── `source_confidence` IS A FACT ABOUT THE SOURCE, NOT ABOUT THE RULE ────
+ * `verified_fedlex` means the agent read the article in Fedlex.
+ * `doctrine_inferred` means it is a reading rather than a quotation.
+ * `needs_fiduciary_check` means the source itself is not settled. It is
+ * PROVENANCE and it is rendered as provenance — a reader has to be able to see
+ * which rules rest on statute and which rest on something softer.
+ */
+export interface ComplianceRule {
+  /** `bk-001`, `vat-008`, … The id a verdict cites. */
+  rule_id: string
+  /** The article. `art. 957 al. 1 ch. 2 CO`. Never absent. */
+  citation: string
+  /** `SA`, `RI`, or `both` — which legal form the rule binds. */
+  applies_to: string
+  trigger_condition: string
+  /** The rule as executable prose. Superseded by `edited_logic` after an edit. */
+  check_logic: string
+  /** `blocker` | `warning` | `info`. Served, never derived here. */
+  severity: string
+  consequence: string
+  /** The human-sized one-liner. Null on a rule that has none. */
+  summary: Label | null
+  /** `verified_fedlex` | `doctrine_inferred` | `needs_fiduciary_check`. */
+  source_confidence: string
+  /** `draft` | `approved` | `edited` | `rejected`. Never reviewed BACK to draft. */
+  review_state: string
+  /** The fiduciary's corrected wording. Set only by an `edited` review. */
+  edited_logic: string | null
+  review_note: string | null
+  reviewed_by: string | null
+  /** A full ISO timestamp, or null while the rule is still draft. */
+  reviewed_at: string | null
+}

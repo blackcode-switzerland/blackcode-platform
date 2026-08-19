@@ -32,6 +32,95 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-19 — The last four screens: analyses, the analyse record, the tax snapshot, and the compliance register
+
+**Not breaking. No route changed, no `bk` command changed, nothing on the wire
+moved.** This is the web surface catching up with four routes that shipped with
+phases 4B and 5, all of which are already readable and writable from the CLI:
+`GET …/analyses`, `GET …/analyses/{number}`, `GET …/tax-snapshot`,
+`GET /api/compliance-rules` and `PATCH /api/compliance-rules/{rule}`. The CLI
+remains the complete surface; `bk books analyse list|show`, `bk books tax` and
+`bk books compliance list|show|review` do everything these screens do.
+
+**Thirteen screens now exist.** Nothing in this app still renders
+`<NotBuiltYet>`.
+
+### What the four screens show
+
+- **Analyses** (`/dashboard/{ws}/analyses`) — the journal of what agents were
+  asked about one book, newest first. Read-only, and deliberately: an analysis
+  is filed by the agent that answered it, through `bk books analyse record`.
+  There is no "new analysis" button and there will not be one.
+- **The analyse record** (`/dashboard/{ws}/analyses/{number}`) — one filed
+  answer, whole, with its `based_on` snapshot **rendered exactly as filed**.
+  Nothing on that page is recomputed and nothing is reformatted: a filed value
+  is text the agent wrote, and re-rounding one would be editing the record. Each
+  record has its own URL and agents can deep-link it.
+- **Impôts** (`/dashboard/{ws}/taxes`) — the statutory position of one (book,
+  exercice), derived at request time and stored nowhere. **Every figure names
+  the article it rests on**, read from the book's own tax parameters, and a
+  figure whose parameter no fiduciary has confirmed says so beside itself. The
+  canton and the commune come from the book; nothing is defaulted. Reached from
+  the overview's cross-link, not from the nav — tax tracking over time is a
+  different product.
+- **Compliance rules** (`/dashboard/{ws}/compliance`) — the nineteen statutory
+  checks with their citations, their severity, and their source confidence.
+  Reached from the overview and from a verdict. It is not book-scoped, because
+  the same law binds every book.
+
+### The fifth write is live on the web: reviewing a compliance rule
+
+`PATCH /api/compliance-rules/{rule}` — `bk books compliance review` — now has a
+web form. Approve, edit with corrected wording, or reject.
+
+**A review cannot be undone, and the confirmation says so before it appears.**
+There is no un-review, no delete, and no way back to `draft`: draft is where a
+rule is born, and reviewing backwards would erase the fact that somebody looked.
+The row records who and when, from the session.
+
+An edit that carries no corrected wording is refused by the route
+(`edited_needs_logic`) and the form shows that refusal **verbatim** rather than
+disabling its own button — the route is the rule, and its sentence explains what
+an edit legally is in a way a greyed-out button cannot.
+
+**`draft` is not drawn as a warning.** All nineteen rules are draft and that is
+the resting state of the screen: research against Fedlex is not a fiduciary's
+sign-off, and nineteen researched rules waiting for a human is what this page
+looks like when nothing is wrong.
+
+**`source_confidence` is rendered as provenance, not as doubt.**
+`needs_fiduciary_check` is a fact about the source — the article behind the rule
+is not settled — and it is shown in the same calm treatment as the other two, so
+a reader can see which rules rest on statute the agent read in Fedlex and which
+rest on something softer.
+
+### The Devil's Advocate's verdict is now visible on every entry
+
+`POST /entries/{n}/verdict` stays what it is: the agent's door, reached with
+`bk books verdict`. There is no button anywhere in the web UI that files one,
+and this app still computes no compliance judgment of its own.
+
+What is new is that the entry detail screen renders the stored verdict — on
+**every** entry, including the ones nothing has ever looked at.
+
+> **`verdict: null` means NEVER CHECKED. It does not mean clean.** A screen that
+> drew the absence as an accepted verdict would invent an assurance nobody gave,
+> so the absence is rendered as its own state and says what it does not mean.
+
+A `blocked` verdict refuses to post, server-side, and the post form now renders
+that refusal as the answer it is — carrying the pass's own resolution text as
+the way out. There is no override and no force flag.
+
+### One correctness fix that is not about these screens
+
+A scoped read fired **once without `?exercice=`** on a page opened directly at
+`?entity=<slug>`, before the book list had arrived. `resolveScope` answers a
+missing year with the book's newest exercice, so that first answer was a real
+statement for a year nobody chose, cached as though it had been asked for.
+Nothing rendered wrongly — the page holds on a skeleton until the books arrive —
+but a book whose newest exercice is CLOSED would have been served from that
+cache entry. Fixed; every scoped read now waits for the book list.
+
 ## 2026-08-19 — The management view is on the web, and it is the first screen with charts
 
 **Not breaking. No route changed, no `bk` command changed, nothing on the wire

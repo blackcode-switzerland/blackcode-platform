@@ -41,7 +41,7 @@
 // distinction, and it is checked by opening the page, not by this file.
 
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -57,7 +57,8 @@ import {
   publicRiEntry,
 } from './db/queries/statutory'
 import { publicRule } from './db/queries/rules'
-import { publicCategory } from './db/queries/management'
+import { publicAnalysis, publicCategory } from './db/queries/management'
+import { publicComplianceRule } from './db/queries/compliance'
 import {
   publicSource,
   publicPull,
@@ -66,6 +67,7 @@ import {
 } from './db/queries/sources'
 import { publicPiece } from './db/queries/pieces'
 import type { postEntry } from './db/queries/imports'
+import type { getTaxSnapshot } from './db/queries/management'
 import { bilanFor, crFor } from './derive'
 import { costBreakdown, costBreakdownRi, monthlyFlows } from './derive/management'
 import type { WorklistRow as WorklistRowWire } from './db/queries/worklist'
@@ -75,6 +77,7 @@ import type { ExerciceRow } from './hooks'
 import type { PostResult } from './mutations'
 import type {
   Account,
+  Analysis,
   AnalytiqueCategory,
   AnalytiqueCategoryConfig,
   AnalytiqueLine,
@@ -82,6 +85,7 @@ import type {
   BilanGroupResult,
   BilanLineResult,
   BilanResult as BilanResultType,
+  ComplianceRule,
   CrLineResult,
   CrResult as CrResultType,
   Entity,
@@ -98,6 +102,7 @@ import type {
   SourceDetail,
   SourcePull,
   SourceRunbook,
+  TaxSnapshotResult,
   WorklistResult,
   WorklistRow,
 } from './types'
@@ -1326,6 +1331,291 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     ).toBe(false)
   })
 
+  // =========================================================================
+  // PHASE 5 — ANALYSES, THE TAX SNAPSHOT, THE COMPLIANCE RULES
+  // =========================================================================
+  // ── AND WHAT THIS FILE CANNOT ASK ABOUT ANY OF THEM ────────────────────
+  // Six of the fields below are `jsonb` columns declared WITHOUT `.$type<>()`
+  // in `lib/db/schema.ts`, so they cross the wire as `unknown`: `question`,
+  // `verdict`, `figures`, `based_on`, `scenario_label`, and the whole tax
+  // `params` block. **A `Mutual<>` over an `unknown` field is satisfied by any
+  // shape at all** — so the compile-time half at the bottom of this file holds
+  // the KEY SET of these payloads and nothing about what is inside them.
+  //
+  // That gap is filed with the backend on #55 and it is why phase 5's guards
+  // are pure functions with their own tests — `lib/analysis.ts`,
+  // `lib/tax.ts`, `lib/verdict.ts`, `lib/compliance.ts`. The key-set cases
+  // here are still worth having: the phase-1 failure was a RENAMED ENVELOPE
+  // KEY, which is exactly what they catch.
+
+  // Mutation watched (2026-08-19): renamed `based_on` to `basis` in
+  // `publicAnalysis`. Red, naming both — and the detail screen would otherwise
+  // have rendered "This answer was filed without a snapshot" over a complete
+  // one, which is the confident wrong answer this file exists for.
+  it('publicAnalysis serves exactly these fields, based_on among them', () => {
+    const out = publicAnalysis({
+      analysis: row({
+        seq: 1,
+        asked: new Date('2026-08-10T18:35:00.000Z'),
+        asked_by: 'Andrea',
+        agent: 'claude-code',
+        scenario_label: { fr: 'x', en: 'x' },
+        runway_after_months: '6.90',
+        question: { fr: 'q', en: 'q' },
+        verdict: { fr: 'v', en: 'v' },
+        figures: [],
+        based_on: [],
+      }),
+      entitySlug: 'blackcode',
+    })
+    expect(Object.keys(out).sort()).toEqual(
+      [
+        'number',
+        'entity',
+        'asked',
+        'asked_by',
+        'agent',
+        'scenario_label',
+        'runway_after_months',
+        'question',
+        'verdict',
+        'figures',
+        'based_on',
+      ].sort()
+    )
+  })
+
+  // ── THE RECORD NAMES ITS OWN BOOK, WHICH IS THE ENTRY SCREEN'S FIX ─────
+  // `getAnalysis` resolves on `(workspace_id, seq)` and does not filter by
+  // book, exactly like `getEntryByNumber`. The entry detail screen could only
+  // DISCLOSE that, because `publicEntry` carries no `entity`; this payload
+  // does, so the analyse screen names the record's book and refuses out loud
+  // when the URL asks about a different one.
+  //
+  // Mutation watched (2026-08-19): dropped `entity` from `publicAnalysis`.
+  // Red here, and red at typecheck on `_AnalysisKeys`.
+  it('an analysis payload names its book, and its runway is a NUMBER', () => {
+    const out = publicAnalysis({
+      analysis: row({
+        seq: 2,
+        asked: new Date('2026-08-11T07:10:00.000Z'),
+        asked_by: 'Andrea',
+        agent: 'companion',
+        scenario_label: null,
+        // `numeric(8,2)` — a STRING off the column, and the shaping function
+        // is what turns it into a number. A screen reading the column value
+        // would render "21.00 months".
+        runway_after_months: '21.00',
+        question: {},
+        verdict: {},
+        figures: [],
+        based_on: [],
+      }),
+      entitySlug: 'aios',
+    })
+    expect(out.entity).toBe('aios')
+    expect(out.runway_after_months).toBe(21)
+    expect(typeof out.asked).toBe('string')
+  })
+
+  // Mutation watched (2026-08-19): returned `runway_after_months: a.runway_after_months`
+  // unconverted. Red — `null` survived, and so did the string `"21.00"`.
+  it('a runway that was never recorded is null, and not a zero', () => {
+    const out = publicAnalysis({
+      analysis: row({
+        seq: 3,
+        asked: new Date('2026-08-11T07:10:00.000Z'),
+        asked_by: 'a',
+        agent: 'b',
+        scenario_label: null,
+        runway_after_months: null,
+        question: {},
+        verdict: {},
+        figures: [],
+        based_on: [],
+      }),
+      entitySlug: 'blackcode',
+    })
+    expect(out.runway_after_months).toBeNull()
+  })
+
+  // Mutation watched (2026-08-19): swapped `jsonList` for `NextResponse.json`
+  // in the analyses GET. Red. `useAnalyses` calls `apiList`, so the list would
+  // have read `undefined.data`, substituted `[]`, and rendered "No analysis has
+  // been filed for this book" over a journal holding two — the phase-1 failure
+  // shape exactly.
+  it('the analyses list IS the list envelope, and its sibling is NOT', () => {
+    const list = readFileSync(join(APP_ROOT, 'app/api/workspaces/[ws]/analyses/route.ts'), 'utf8')
+    expect(list, 'the analyses list stopped using jsonList — useAnalyses reads apiList').toContain(
+      'jsonList('
+    )
+    expect(list, 'the analyses list stopped calling publicAnalysis').toContain('publicAnalysis')
+
+    const one = readFileSync(
+      join(APP_ROOT, 'app/api/workspaces/[ws]/analyses/[number]/route.ts'),
+      'utf8'
+    )
+    expect(
+      one,
+      'the analyse detail route now uses jsonList — useAnalysis reads apiGet and would see undefined'
+    ).not.toContain('jsonList')
+    expect(one, 'the detail route stopped calling publicAnalysis').toContain('publicAnalysis')
+  })
+
+  // ── THE TAX SNAPSHOT IS BUILT INLINE IN ITS ROUTE ─────────────────────
+  // `getTaxSnapshot` returns an object and the route SPREADS it beside `entity`
+  // and `exercice`, so there is no `publicTaxSnapshot` to call. This reads the
+  // route source for the two echoed keys and the query layer's declared return
+  // type for the rest — a declaration rather than a value, which is weaker, and
+  // is said plainly here for the same reason the post route's case says it.
+  //
+  // Mutation watched (2026-08-19): renamed `configured` to `has_params` in
+  // `TaxSnapshot`. Red at typecheck on `_TaxSnapshotKeys` below, naming it —
+  // and the screen would have read `undefined`, which is falsy, and told every
+  // book its tax parameters were missing.
+  it('the tax-snapshot route spreads the derivation and echoes the book and year', () => {
+    const src = readFileSync(
+      join(APP_ROOT, 'app/api/workspaces/[ws]/tax-snapshot/route.ts'),
+      'utf8'
+    )
+    expect(src, 'the tax route stopped calling getTaxSnapshot').toContain('getTaxSnapshot')
+    // `useTaxSnapshot` calls `apiGet`, not `apiList`.
+    expect(src, 'the tax route now uses jsonList — the hook reads apiGet').not.toContain('jsonList')
+    // The echo is what lets the screen state which book the SERVER resolved,
+    // rather than which one the URL asked for.
+    expect(src).toContain('entity: scope.entity.slug')
+    expect(src).toContain('exercice: scope.exercice.year')
+    // And the refusal the screen renders as a state rather than a failure.
+    expect(src, 'the simplified refusal no longer reaches this route').toContain(
+      'ManagementRefused'
+    )
+  })
+
+  // Mutation watched (2026-08-19): deleted `source_confidence` from
+  // `publicComplianceRule`. Red, naming it. That field is provenance — which
+  // rules rest on statute the agent read in Fedlex and which rest on something
+  // softer — and it is half of what the compliance screen is for.
+  it('publicComplianceRule serves exactly these fields, provenance among them', () => {
+    const out = publicComplianceRule(
+      row({
+        rule_id: 'bk-001',
+        citation: 'art. 957 al. 1 ch. 2 CO',
+        applies_to: 'SA',
+        trigger_condition: 'x',
+        check_logic: 'y',
+        severity: 'blocker',
+        consequence: 'z',
+        summary: { fr: 'a', en: 'b' },
+        source_confidence: 'verified_fedlex',
+        review_state: 'draft',
+        edited_logic: null,
+        review_note: null,
+        reviewed_by: null,
+        reviewed_at: null,
+      })
+    )
+    expect(Object.keys(out).sort()).toEqual(
+      [
+        'rule_id',
+        'citation',
+        'applies_to',
+        'trigger_condition',
+        'check_logic',
+        'severity',
+        'consequence',
+        'summary',
+        'source_confidence',
+        'review_state',
+        'edited_logic',
+        'review_note',
+        'reviewed_by',
+        'reviewed_at',
+      ].sort()
+    )
+  })
+
+  // ── THE ORIGINAL WORDING SURVIVES AN EDIT, ON THE WIRE ────────────────
+  // `edited_logic` is a separate column so `check_logic` is not lost, and the
+  // screen shows both when they differ. If the shaping function ever
+  // substituted one for the other, the record OF the correction would be gone
+  // and nothing would go red anywhere else.
+  //
+  // Mutation watched (2026-08-19): made `check_logic: r.edited_logic ?? r.check_logic`.
+  // Red here.
+  it('a reviewed rule serves BOTH its original wording and the correction', () => {
+    const out = publicComplianceRule(
+      row({
+        rule_id: 'vat-008',
+        citation: 'art. 28 al. 3 LTVA',
+        applies_to: 'both',
+        trigger_condition: 't',
+        check_logic: 'IF a THEN flag',
+        severity: 'blocker',
+        consequence: 'c',
+        summary: null,
+        source_confidence: 'verified_fedlex',
+        review_state: 'edited',
+        edited_logic: 'IF a AND b THEN flag',
+        review_note: 'narrowed',
+        reviewed_by: 'someone@example.com',
+        reviewed_at: new Date('2026-08-19T09:00:00.000Z'),
+      })
+    )
+    expect(out.check_logic).toBe('IF a THEN flag')
+    expect(out.edited_logic).toBe('IF a AND b THEN flag')
+    // A timestamp, not a `date` — so `<DateText>` slices it and never parses it.
+    expect(out.reviewed_at).toBe('2026-08-19T09:00:00.000Z')
+  })
+
+  // Mutation watched (2026-08-19): swapped `jsonList` for `NextResponse.json`
+  // in the rules GET. Red. And the sibling — the one that TAKES the review — is
+  // asserted to be a PATCH, because `useReviewComplianceRule` sends one and the
+  // stub it replaced had said POST at a workspace-scoped path that does not
+  // exist.
+  it('the compliance rules list IS the list envelope, and the review is a PATCH', () => {
+    const list = readFileSync(join(APP_ROOT, 'app/api/compliance-rules/route.ts'), 'utf8')
+    expect(list, 'the rules list stopped using jsonList — useComplianceRules reads apiList').toContain(
+      'jsonList('
+    )
+    expect(list, 'the rules list stopped calling publicComplianceRule').toContain(
+      'publicComplianceRule'
+    )
+
+    const one = readFileSync(join(APP_ROOT, 'app/api/compliance-rules/[rule]/route.ts'), 'utf8')
+    expect(one, 'the review is no longer a PATCH — lib/mutations.ts sends one').toContain(
+      'export const PATCH'
+    )
+    // The refusal the review form is built to render verbatim.
+    expect(one, 'the review route stopped calling reviewComplianceRule').toContain(
+      'reviewComplianceRule'
+    )
+  })
+
+  // ── AND THE ROUTE IS NOT UNDER `/api/workspaces/{ws}/` ────────────────
+  // The whole reason `useReviewComplianceRule` takes no workspace. The stub
+  // that stood in `lib/mutations.ts` for two phases had a workspace-scoped path
+  // in it, which would have 404'd — a commented stub is still a claim about the
+  // wire, and nothing contradicted that one.
+  //
+  // Mutation watched (2026-08-19): moved the directory to
+  // `app/api/workspaces/[ws]/compliance-rules/`. Red, on both halves.
+  it('the compliance rules are GLOBAL: not under /api/workspaces, and the hook agrees', () => {
+    expect(
+      existsSync(join(APP_ROOT, 'app/api/compliance-rules/route.ts')),
+      'the compliance rules route moved — it is global by design, see its own header'
+    ).toBe(true)
+    expect(
+      existsSync(join(APP_ROOT, 'app/api/workspaces/[ws]/compliance-rules/route.ts')),
+      'a workspace-scoped compliance-rules route now exists — the same law binds every book'
+    ).toBe(false)
+
+    const mutations = readFileSync(join(APP_ROOT, 'lib/mutations.ts'), 'utf8')
+    expect(
+      mutations,
+      'useReviewComplianceRule no longer targets the global path'
+    ).toContain('`/api/compliance-rules/${ruleId}`')
+  })
+
 })
 
 // ===========================================================================
@@ -1494,6 +1784,96 @@ type _CategoryConfigKeys = Mutual<
   Omit<CategoryConfigWire, 'label' | 'accounts'>,
   Omit<AnalytiqueCategoryConfig, 'label' | 'accounts'>
 >
+
+// ── PHASE 5 ────────────────────────────────────────────────────────────────
+/**
+ * The analysis payload's KEY SET, and nothing about what is inside it.
+ *
+ * Four of its eleven fields — `scenario_label`, `question`, `verdict`,
+ * `figures`, `based_on` — are `jsonb` columns declared without `.$type<>()`, so
+ * the wire type is `unknown` and a `Mutual<>` over them is satisfied by any
+ * shape at all. They are held here only as KEYS; what holds their CONTENT is
+ * `lib/analysis.ts` and its test, which is the arrangement `lib/types.ts`'s
+ * phase-5 header records and #55 is filed against.
+ *
+ * `keyof … , keyof …` rather than the whole object, for exactly that reason: an
+ * object-level `Mutual` cannot be written while five fields are `unknown` on one
+ * side and typed on the other, and a one-directional assertion would be VACUOUS
+ * — everything is assignable to `unknown`. Same shape and same reason as
+ * `_AnalytiqueCategoryKeys`.
+ *
+ * Mutation watched (2026-08-19): deleted `asked_by` from `Analysis`. Red at
+ * typecheck, naming it — the detail screen prints it, and it is half of the
+ * record's provenance.
+ */
+type AnalysisWire = ReturnType<typeof publicAnalysis>
+type _AnalysisKeys = Mutual<keyof AnalysisWire, keyof Analysis>
+
+/**
+ * `runway_after_months` is a NUMBER on the wire and a `numeric(8,2)` STRING on
+ * the column — `publicAnalysis` is what converts it.
+ *
+ * Pinned separately because the key set cannot see it, and because it is the one
+ * scalar on this payload that a screen does arithmetic-shaped rendering with. A
+ * string would render `21.00 months` where the record says 21, and `!== null`
+ * would still behave, so nothing else would go red.
+ *
+ * Mutation watched (2026-08-19): declared it `Money` in `lib/types.ts`. Red.
+ */
+type _AnalysisRunway = Mutual<AnalysisWire['runway_after_months'], number | null>
+
+/**
+ * The tax snapshot, pinned against the QUERY LAYER's declared return type.
+ *
+ * The route spreads `getTaxSnapshot`'s object beside `entity` and `exercice`, so
+ * there is no shaping function to call — the same situation as the post
+ * response, and the same weakness: this is a DECLARATION rather than a value, so
+ * a query that returned something else while still type-checking would not be
+ * caught here. It is said plainly for the reason the post case says it.
+ *
+ * `params` is omitted on both sides: it is the `jsonb` parameter block, `unknown`
+ * on the wire, and `lib/tax.ts` is its guard.
+ *
+ * Mutation watched (2026-08-19): deleted `configured` from `TaxSnapshot` in
+ * `lib/db/queries/management.ts`. Red, naming it — and the screen would have
+ * read `undefined`, which is falsy, and told every book its tax parameters were
+ * missing while rendering its rates.
+ */
+type TaxWire = Awaited<ReturnType<typeof getTaxSnapshot>>
+type _TaxSnapshotKeys = Mutual<
+  keyof TaxWire | 'entity' | 'exercice',
+  keyof TaxSnapshotResult
+>
+type _TaxVatKeys = Mutual<keyof NonNullable<TaxWire['vat']>, keyof NonNullable<TaxSnapshotResult['vat']>>
+type _TaxBlockKeys = Mutual<
+  Exclude<keyof NonNullable<TaxWire['tax']>, 'params'>,
+  Exclude<keyof NonNullable<TaxSnapshotResult['tax']>, 'params'>
+>
+type _ProfitTaxKeys = Mutual<
+  keyof NonNullable<TaxWire['tax']>['profit_tax'],
+  keyof NonNullable<TaxSnapshotResult['tax']>['profit_tax']
+>
+type _CapitalTaxKeys = Mutual<
+  keyof NonNullable<TaxWire['tax']>['capital_tax'],
+  keyof NonNullable<TaxSnapshotResult['tax']>['capital_tax']
+>
+
+/**
+ * The compliance rule. **The only phase-5 payload with a real shaping function
+ * and almost no jsonb**, so this one is a whole-object assertion in both
+ * directions — `summary` alone is `unknown` and is omitted.
+ *
+ * Mutation watched (2026-08-19): changed `reviewed_at` in `lib/types.ts` from
+ * `string | null` to `Date | null`. Red — `publicComplianceRule` calls
+ * `.toISOString()`, and `<DateText>` slices a string and would have rendered an
+ * em dash for every reviewed rule.
+ */
+type ComplianceWire = ReturnType<typeof publicComplianceRule>
+type _ComplianceKeys = Mutual<
+  Omit<ComplianceWire, 'summary'>,
+  Omit<ComplianceRule, 'summary'>
+>
+
 type _PatrimoineKeys = Mutual<keyof PatrimoineWire, keyof PatrimoineSnapshot>
 type _VatKeys = Mutual<keyof EntityWire['vat'], keyof Entity['vat']>
 type _RuleKeys = Mutual<keyof RuleWire, keyof RecognitionRule>
@@ -1823,6 +2203,14 @@ const _keys: {
   _AnalytiqueLineKeys: _AnalytiqueLineKeys
   _MonthlyFlowKeys: _MonthlyFlowKeys
   _CategoryConfigKeys: _CategoryConfigKeys
+  _AnalysisKeys: _AnalysisKeys
+  _AnalysisRunway: _AnalysisRunway
+  _TaxSnapshotKeys: _TaxSnapshotKeys
+  _TaxVatKeys: _TaxVatKeys
+  _TaxBlockKeys: _TaxBlockKeys
+  _ProfitTaxKeys: _ProfitTaxKeys
+  _CapitalTaxKeys: _CapitalTaxKeys
+  _ComplianceKeys: _ComplianceKeys
 } = {
   _EntityKeys: true,
   _AccountKeys: true,
@@ -1855,6 +2243,14 @@ const _keys: {
   _AnalytiqueLineKeys: true,
   _MonthlyFlowKeys: true,
   _CategoryConfigKeys: true,
+  _AnalysisKeys: true,
+  _AnalysisRunway: true,
+  _TaxSnapshotKeys: true,
+  _TaxVatKeys: true,
+  _TaxBlockKeys: true,
+  _ProfitTaxKeys: true,
+  _CapitalTaxKeys: true,
+  _ComplianceKeys: true,
 }
 
 const _scalars: _Scalars = [

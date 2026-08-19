@@ -293,6 +293,21 @@ export function PostEntryForm({
               paraphrasing the rule that encodes art. 957a CO. */}
           <p className="text-[12.5px] text-foreground">{refusal.message}</p>
           <p className="mt-1 font-mono text-[11px] text-muted-foreground">{refusal.code}</p>
+          {/* ── A COMPLIANCE PASS REFUSED, AND ITS SENTENCE IS ABOVE ────
+              `postEntry`'s one enforced consequence: a `blocked` verdict refuses
+              to post, server side, *"a fresh verdict (or a correction of what it
+              flagged) is the way through — never a force flag."* The message
+              already carries the agent's own `resolves` text as its suggestion,
+              printed verbatim above; this only says whose refusal it is, because
+              the reader would otherwise read a compliance judgment as a
+              bookkeeping error. */}
+          {refusal.code === 'verdict_blocked' && (
+            <p className="mt-1 text-[11.5px] text-muted-foreground">
+              That is a compliance pass refusing, not the books. The entry is unchanged and still
+              staged. There is no override: what clears it is a fresh verdict from a pass that no
+              longer finds the problem.
+            </p>
+          )}
           {refusal.code === 'guard_refused' && (
             <p className="mt-1 text-[11.5px] text-muted-foreground">
               That is the database refusing at the last moment, in its own words. The entry was not
