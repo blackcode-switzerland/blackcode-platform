@@ -72,6 +72,7 @@ The books' own routes, all workspace-scoped under `/api/workspaces/{ws}/`:
 | 1 | `entities`, `exercices`, `accounts`, `entries`, `entries/{n}`, `bilan`, `compte-resultat`, `overview`, `patrimoine` |
 | 2 | `worklist`, `rules` (GET, POST), `entries/{n}/resolve` (POST) |
 | 3 | `sources`, `sources/{n}`, `sources/{n}/manifest`, `pieces`, `pieces/{n}/match` (POST), `pieces/ingest` (POST — the robot door, no UI) |
+| 4B | `analytique`, `analytique/categories` (GET, POST) |
 
 Three of these do **not** use the shared `{data, next_cursor}` envelope, and a
 hook that reached for `apiList` would render an empty screen over a full one:
@@ -202,6 +203,71 @@ factories require it. Never explain it to the reader.
 
 `apps/sales` settled the same point: its team page says "your team" and the word
 workspace appears nowhere on it.
+
+## 4bis. Charts — the house pattern, set by one screen
+
+**The management view (`/dashboard/{ws}/management`) is the only screen in this
+product with charts, and everything it chose is now the pattern.** Written
+2026-08-19, with the `dataviz` skill loaded first because there was nothing to
+copy.
+
+### The line the whole screen is built on
+
+> **A FIGURE is exact. A GEOMETRY is a float.**
+
+- A figure comes off the wire as a string, or it is added here in CENTIMES with
+  `toCentimes`/`fromCentimes` from `lib/derive` — `lib/rollup.ts`'s pattern,
+  reused rather than re-implemented. It reaches the screen through `<Money>`.
+- A geometry — a bar's length, a column's height, a percentage share, an axis
+  ceiling — comes from `amount()` and is **never rendered as an amount**.
+
+`lib/analytique.ts` is split into those two halves under headed comments, and
+its three `amount()` call sites are the only ones this screen has. The split is
+what makes the claim checkable: everything below the second header returns a
+`number`, and `<Money>`'s prop type refuses one.
+
+**The server serves no totals for this screen**, so the exercice figures are
+added in the browser. `lib/analytique.test.ts` pins that with an input at a
+magnitude where a float accumulator and this one disagree — and **read
+`lib/rollup.test.ts` before touching it**: the first version of the equivalent
+assertion there passed against a rollup rewritten to use floats.
+
+### What the two charts refuse, and why
+
+- **No line chart, ever, on the monthly series.** It is SPARSE — a month with
+  no movement is absent, not zero — so a stroke between two points states a
+  figure for the months between them. Grouped columns cannot interpolate.
+  `hasGaps` makes the chart say so in words when a month really is missing
+  between two that are served.
+- **No colour keyed to a category.** One measure over nominal categories is one
+  hue for every bar. The mockup gives each bucket its own colour with a sixth
+  reserved for `autres`; that is a value-ramp on nominal categories (the
+  `dataviz` skill's own anti-pattern) *and* a colour keyed to a slug we know
+  today, which the phase brief forbids because categories are served and a new
+  one must render with no frontend release.
+- **No tooltip as the only way to read a value.** Every chart has a table twin.
+  The hover read-out is a convenience; the table is the record.
+
+### The colours are validated, not chosen
+
+`--chart-1` and `--chart-2` in `app/globals.css`, run through the `dataviz`
+skill's `validate_palette.js` **against this app's own chart surface** in both
+themes. The dark steps were re-stepped to pass: the originals sat outside the
+lightness band a dark surface needs. Slots 3–5 have never been measured and
+nothing uses them — run them before the first chart that does.
+
+**`--primary` is never a series colour.** Amber means "you are in books" (D-B),
+and a mark wearing it collides with the chrome the reader uses to know which app
+they are in. An entity accent is user data and belongs on the entity chip.
+
+### Why not `@blackcode/platform-ui/charts`
+
+The shared kit is mounted by nobody here, and the reason is in
+`components/flows-chart.tsx`'s header: it is built for COUNTS. `HorizontalBars`
+renders its value with `formatNumber` (`13350` → `13.4K`) and takes
+`value: number`, `AreaLineChart` draws a line, and `ColumnChart` renders "No
+data." when its total is zero — which is a real month here, not an absent one.
+Books' charts are money, and money is a string.
 
 ## 5. The surface is read-mostly, and that is checked
 
@@ -460,7 +526,8 @@ not going to edit `lib/types.ts`.
 | Patrimoine, Accounts | phase 1 | yes |
 | Reconnaissance | phase 2 | **yes, 2026-08-18** |
 | Comptes & sources, Source detail, Pièces justificatives | phase 3 | **yes, 2026-08-18** |
-| Compta analytique, Analyses, Analyse detail, Impôts | phase 4 | no |
+| Compta analytique | phase 4B | **yes, 2026-08-19** |
+| Analyses, Analyse detail, Impôts | phase 4B / 5 | no |
 
 **Two of phase 3's screens are NOT book-scoped, and `lib/nav.ts` says so.** A
 source can feed more than one book and `books.source.entity_id` is nullable; a

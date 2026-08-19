@@ -151,6 +151,20 @@ defines them emerald-teal, and neither app branches on the other. **An undefined
 token resolves to nothing and the stroke silently disappears** — so these four
 are an obligation for any app that mounts the kit, not a nicety.
 
+> **The kit is for COUNTS, and `apps/books` deliberately does not mount it.**
+> Added 2026-08-19, when the first money chart on this platform was built.
+> `HorizontalBars` takes `value: number` and renders it with `formatNumber`
+> (`13350` → `13.4K`); `ColumnChart` shows "No data." when its total is zero;
+> `AreaLineChart` draws a line between points. Each is right for issues' and
+> sales' counts and wrong for a bookkeeping amount, which crosses the wire as a
+> `numeric` STRING and must never be parsed on its way to the screen, whose
+> zero months are real, and whose monthly series is sparse and must not be
+> interpolated. Books writes its own two chart components and records why in
+> `apps/books/docs/frontend.md` §4bis. **If a third app needs money charts, that
+> is the moment to lift a money-shaped variant into this kit** — not before, and
+> not by widening `BarItem.value` to `string | number`, which would put the
+> parse back at every call site.
+
 Two guards, and they cover different halves:
 
 - `apps/issues/lib/charts-parity.test.ts` renders every component to static

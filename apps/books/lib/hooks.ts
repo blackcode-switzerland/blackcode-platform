@@ -20,6 +20,8 @@ import { booksGlobalKey, booksKey, type Scope } from './query-keys'
 import type { Journal } from './journal'
 import type {
   Account,
+  AnalytiqueCategoryConfig,
+  AnalytiqueResult,
   BilanResult,
   CrResult,
   Entity,
@@ -486,10 +488,31 @@ export function useRiEntries(
 export function useEntry(ws: string | undefined, scope: ReadScope, number: number | null) {
   return useQuery({
     queryKey: booksKey('entry', scope, { number, ws }),
-    queryFn: () => apiGet<Entry>(`/api/workspaces/${ws}/entries/${number}`),
-    // NOT gated on the years. `/entries/{number}` is workspace-scoped and takes
-    // no `?exercice=`, so there is no year for it to default to and nothing to
-    // wait for. The scope is in its KEY, not in its URL — see above.
+    // ── THE BOOK GOES IN THE URL, NOT ONLY IN THE KEY ─────────────────────
+    // It used to be in the key alone, on the reasoning above: the route looks a
+    // row up by `(workspace_id, seq)` and does not filter by book, so #10 is #10
+    // whichever book is selected, and the scope was carried only to stop two
+    // books sharing a cache slot.
+    //
+    // **That reasoning was right about the cache and wrong about the record.**
+    // `seq` is workspace-wide across BOTH journals, so one number names two
+    // rows: verified 2026-08-19, `entry show 3` is blackcode's rent payment and
+    // `entry show 3 --entity ri` is the RI's AVS instalment. Following a link
+    // from the simplified book's own screens fetched the first and drew it under
+    // the second's heading — this app's worst failure mode, arriving through the
+    // door the comment above says it was guarding.
+    //
+    // The route accepts `?entity=` and answers within that book. So the screen
+    // asks for the record it means, and a number that does not exist in this
+    // book is a refusal rather than another company's écriture.
+    queryFn: () =>
+      apiGet<Entry>(
+        `/api/workspaces/${ws}/entries/${number}${
+          scope.entity ? `?entity=${encodeURIComponent(scope.entity)}` : ''
+        }`
+      ),
+    // NOT gated on the years: the route takes no `?exercice=`, so there is no
+    // year for it to default to and nothing to wait for.
     enabled: !!ws && number !== null && Number.isInteger(number),
   })
 }
@@ -742,4 +765,73 @@ export function usePieces(
 export function transactionOf(x: PieceExtraction | null | undefined): PieceTransaction | null {
   if (!x) return null
   return x.transaction ?? x.tx ?? null
+}
+
+// ===========================================================================
+// THE MANAGEMENT READS — phase 4B
+// ===========================================================================
+// `analytique` is RING 3: derived at request time from posted lines, stored
+// nowhere, and it accepts no writes ever. Nothing here may cache a FIGURE — the
+// query cache holds a RESPONSE for as long as any other read does, which is a
+// cache of a request rather than a stored derivation. The distinction is worth
+// stating because the route recomputes on every call: a screen must never
+// present a number it kept while the books moved underneath it, so a write
+// anywhere in this app invalidates the whole root (`booksCacheFilter`) and this
+// comes back with it.
+
+/**
+ * The cost breakdown and the monthly flows for one (book, exercice).
+ * `GET …/analytique?entity=&exercice=`.
+ *
+ * Both regimes answer this route: a double-entry book’s breakdown groups POSTED
+ * lines by the configured account->category mapping, and a simplified book’s
+ * groups its dépenses by the category each movement carries. Same route, the
+ * book’s own shape — so this is ONE hook and not two, unlike
+ * `useEntries` / `useRiEntries`, where the row shapes differ and a screen has to
+ * branch before it reads a field. Here they do not: `AnalytiqueCategory`
+ * describes both, and `accounts: null` marks the simplified case.
+ *
+ * `enabled` waits for the years like every scoped read — a request with no
+ * `?exercice=` gets `resolveScope`’s newest, which is a real answer to a
+ * question the reader did not ask.
+ */
+export function useAnalytique(ws: string | undefined, scope: ReadScope) {
+  return useQuery({
+    queryKey: booksKey('analytique', scope, { ws }),
+    queryFn: () =>
+      apiGet<AnalytiqueResult>(`/api/workspaces/${ws}/analytique?${scopeQuery(scope)}`),
+    enabled: !!ws && !!scope.entity && scopeReady(scope),
+  })
+}
+
+/**
+ * The configured buckets for one book. `GET …/analytique/categories?entity=`.
+ *
+ * ── IT IS NOT THE BREAKDOWN, AND THE SCREEN NEEDS BOTH ────
+ * `useAnalytique` above serves the buckets that were COUNTED — `getAnalytique`
+ * filters `retired` out. This serves the CONFIGURATION, retired rows included
+ * and flagged. A reader asking “why does this breakdown not add up to the
+ * income statement’s charges?” cannot answer it from the breakdown alone: a
+ * retired bucket’s accounts are counted nowhere, and no other surface in this
+ * app says so.
+ *
+ * ── IT TAKES NO EXERCICE, BECAUSE THE CONFIGURATION HAS NONE ────
+ * `books.analytique_category` is per BOOK. The key still carries a null
+ * exercice rather than using `booksGlobalKey`: two books configure different
+ * buckets, so this is emphatically not a global fact — `lib/query-keys.ts`
+ * spells out why the two builders are different words.
+ *
+ * **A simplified book answers `[]`** — its categories live on its movements,
+ * not in this table — and that is not an empty configuration to be fixed. The
+ * screen renders the panel only where the mapping exists.
+ */
+export function useAnalytiqueCategories(ws: string | undefined, entity: string | null) {
+  return useQuery({
+    queryKey: booksKey('analytique-categories', { entity, exercice: null }, { ws }),
+    queryFn: () =>
+      apiList<AnalytiqueCategoryConfig>(
+        `/api/workspaces/${ws}/analytique/categories?entity=${encodeURIComponent(entity ?? '')}`
+      ).then((r) => r.data),
+    enabled: !!ws && !!entity,
+  })
 }
