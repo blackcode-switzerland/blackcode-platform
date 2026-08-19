@@ -704,6 +704,95 @@ export const booksDriveManifest = booksSchema.table(
   ]
 )
 
+/**
+ * 0013: a recorded analysis — question, verdict, and the `based_on` snapshot of
+ * what the agent read at answer time. APPEND-ONLY: UPDATE and DELETE are revoked
+ * from the app role, and no query function offers either. A stored answer that
+ * silently changes is worse than a stale one.
+ */
+export const booksAnalysis = booksSchema.table(
+  'analysis',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    entity_id: integer('entity_id')
+      .notNull()
+      .references(() => booksEntity.id, { onDelete: 'cascade' }),
+    seq: integer('seq').notNull(),
+    /** When the answer was FILED — the server's clock, not the caller's claim. */
+    asked: timestamp('asked', { withTimezone: true }).defaultNow().notNull(),
+    asked_by: varchar('asked_by', { length: 120 }).notNull(),
+    agent: varchar('agent', { length: 120 }).notNull(),
+    scenario_label: jsonb('scenario_label'),
+    /** Numeric restatement of the verdict's runway, so charts need no prose parsing. */
+    runway_after_months: numeric('runway_after_months', { precision: 8, scale: 2 }),
+    question: jsonb('question').notNull(),
+    verdict: jsonb('verdict').notNull(),
+    figures: jsonb('figures').notNull(),
+    /** What the agent read: [{label, value, href}]. Permanent. NEVER recomputed. */
+    based_on: jsonb('based_on').notNull(),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    unique('analysis_workspace_id_seq_unique').on(t.workspace_id, t.seq),
+    index('idx_books_analysis_entity').on(t.entity_id, t.asked),
+  ]
+)
+
+/**
+ * 0013: management cost categories — ledger accounts mapped to a named bucket,
+ * per ENTITY because the mapping names accounts and the chart is the entity's.
+ * Never deleted (a past analysis may cite a breakdown that used one): `retired`
+ * is the exit, like a source's.
+ */
+export const booksAnalytiqueCategory = booksSchema.table(
+  'analytique_category',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+    entity_id: integer('entity_id')
+      .notNull()
+      .references(() => booksEntity.id, { onDelete: 'cascade' }),
+    seq: integer('seq').notNull(),
+    key: varchar('key', { length: 40 }).notNull(),
+    label: jsonb('label').notNull(),
+    /** Account numbers as a jsonb string array, validated against the chart at write time. */
+    accounts: jsonb('accounts').notNull(),
+    retired: boolean('retired').notNull().default(false),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    unique('analytique_category_workspace_id_seq_unique').on(t.workspace_id, t.seq),
+    unique('analytique_category_entity_id_key_unique').on(t.entity_id, t.key),
+  ]
+)
+
+/**
+ * 0013: the entity's tax parameters — canton, commune, and the TAX_INFO shape
+ * with citations and `confirmed` flags. One row per entity; a book without one
+ * shows "not configured" rather than someone else's rates.
+ */
+export const booksTaxParams = booksSchema.table('tax_params', {
+  id: serial('id').primaryKey(),
+  workspace_id: integer('workspace_id')
+    .notNull()
+    .references(() => booksWorkspaces.id, { onDelete: 'cascade' }),
+  entity_id: integer('entity_id')
+    .notNull()
+    .unique()
+    .references(() => booksEntity.id, { onDelete: 'cascade' }),
+  canton: varchar('canton', { length: 2 }).notNull(),
+  commune: varchar('commune', { length: 80 }).notNull(),
+  params: jsonb('params').notNull(),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 export type BooksSource = typeof booksSource.$inferSelect
 export type BooksSourcePull = typeof booksSourcePull.$inferSelect
 export type BooksRunbook = typeof booksRunbook.$inferSelect
@@ -714,3 +803,6 @@ export type BooksEntry = typeof booksEntry.$inferSelect
 export type BooksEntryLine = typeof booksEntryLine.$inferSelect
 export type BooksRiEntry = typeof booksRiEntry.$inferSelect
 export type BooksPatrimoine = typeof booksPatrimoine.$inferSelect
+export type BooksAnalysis = typeof booksAnalysis.$inferSelect
+export type BooksAnalytiqueCategory = typeof booksAnalytiqueCategory.$inferSelect
+export type BooksTaxParams = typeof booksTaxParams.$inferSelect

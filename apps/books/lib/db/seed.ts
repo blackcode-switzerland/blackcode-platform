@@ -103,7 +103,7 @@ import {
   type ChartAccount,
   type PostingLine,
 } from '../derive'
-import { booksSourcePull, booksRunbook } from './schema'
+import { booksSourcePull, booksRunbook, booksAnalysis, booksAnalytiqueCategory, booksTaxParams } from './schema'
 import { ingestPiece } from './queries/pieces'
 import type { Extraction } from '../validate/extraction'
 import fixture from '../../fixtures/mockup.json'
@@ -158,6 +158,12 @@ interface FxPatrimoine {
   items: { label: Json; amount: number }[]; note?: Json
 }
 
+interface FxAnalysis {
+  id: number; entity_id: number; asked: string; asked_by: string; agent: string
+  scenario_label?: Json; runway_after_months?: number | null
+  question: Json; verdict: Json; figures: Json[]; based_on: Json[]
+}
+
 const F = fixture as unknown as {
   ENTITIES: FxEntity[]
   ACCOUNTS: { no: string; class: number; label: Json; statement: string; statement_position: string }[]
@@ -168,6 +174,9 @@ const F = fixture as unknown as {
   RI_ENTRIES: FxRi[]
   PATRIMOINE: FxPatrimoine[]
   PIECE_INBOX: FxPiece[]
+  ANALYSES: FxAnalysis[]
+  ANALYTIQUE_CATEGORIES: { key: string; accounts: string[]; label: Json }[]
+  TAX_INFO: { ifd: Json; vd_cantonal: Json; communal_renens: Json; capital_tax: Record<string, unknown> }
 }
 
 export const SEED_SLUG = 'blackcode'
@@ -745,6 +754,65 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
         note: p.note ?? null,
       })
     }
+  }
+
+  // ---- management: categories, tax parameters, filed analyses -------------
+  // Categories and tax parameters for every double-entry book: the fixture's
+  // five buckets, and the Vaud/Renens rates all three seeded books actually
+  // sit under. capital_tax seeds UNCONFIRMED: the mockup marked it confirmed
+  // while carrying an open question for the fiduciary in the same block, and
+  // until she answers, false is the honest flag (decided with Mustneer,
+  // 2026-08-19).
+  const seededParams = {
+    ifd: F.TAX_INFO.ifd,
+    cantonal: F.TAX_INFO.vd_cantonal,
+    communal: F.TAX_INFO.communal_renens,
+    capital_tax: { ...F.TAX_INFO.capital_tax, confirmed: false },
+  }
+  for (const e of F.ENTITIES) {
+    if (e.legal_form === 'RI') continue
+    const dbEntity = entityId.get(e.id)!
+    for (const c of F.ANALYTIQUE_CATEGORIES) {
+      await db.insert(booksAnalytiqueCategory).values({
+        workspace_id: ws.id,
+        entity_id: dbEntity,
+        seq: nextSeq('category'),
+        key: c.key,
+        label: c.label,
+        accounts: c.accounts,
+      })
+    }
+    await db.insert(booksTaxParams).values({
+      workspace_id: ws.id,
+      entity_id: dbEntity,
+      canton: 'VD',
+      commune: 'Renens',
+      params: seededParams,
+    })
+  }
+
+  // The filed analyses, verbatim. Their `based_on` snapshots are permanent
+  // records of what the agent read at answer time and stay exactly as filed —
+  // the fixture's minute-precision timestamps are Europe/Zurich, August,
+  // hence the fixed +02:00.
+  for (const a of F.ANALYSES) {
+    await db.insert(booksAnalysis).values({
+      workspace_id: ws.id,
+      entity_id: entityId.get(a.entity_id)!,
+      seq: nextSeq('analysis'),
+      asked: new Date(a.asked + ':00+02:00'),
+      asked_by: a.asked_by,
+      agent: a.agent,
+      scenario_label: a.scenario_label ?? null,
+      runway_after_months:
+        a.runway_after_months === undefined || a.runway_after_months === null
+          ? null
+          : String(a.runway_after_months),
+      question: a.question,
+      verdict: a.verdict,
+      figures: a.figures,
+      based_on: a.based_on,
+    })
   }
 
   // ---- counters ----------------------------------------------------------

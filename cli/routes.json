@@ -27,6 +27,30 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/analyses",
+      "command": "bk books analyse list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/analyses/{number}",
+      "command": "bk books analyse show",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/analytique",
+      "command": "bk books analytique",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/analytique/categories",
+      "command": "bk books category list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/bilan",
       "command": "bk books bilan",
       "app": "books"
@@ -117,6 +141,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/tax-snapshot",
+      "command": "bk books tax",
+      "app": "books"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/worklist",
       "command": "bk books worklist",
       "app": "books"
@@ -137,6 +167,18 @@
       "method": "POST",
       "path": "/api/workspaces",
       "command": "bk books workspace create",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/analyses",
+      "command": "bk books analyse record",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/analytique/categories",
+      "command": "bk books category create",
       "app": "books"
     },
     {
