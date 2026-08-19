@@ -57,7 +57,7 @@
 // gate buys is that a missed affordance FAILS LOUDLY instead of writing.
 //
 // ===========================================================================
-// FOUR OF THE FIVE ARE REAL. THE LAST ONE IS STILL COMMENTED.
+// ALL FIVE ARE REAL SINCE 2026-08-19. THE FIFTH IS THE COMPLIANCE REVIEW.
 // ===========================================================================
 // `useResolveEntry` and `useCreateRule` landed with phase 2; `useMatchPiece`
 // with phase 3, both on 2026-08-18. **`usePostEntry` landed with phase 4A on
@@ -66,9 +66,22 @@
 // a gap under START-ANYWHERE-FINISH-IN-SYNC unless it is a recorded decision.
 // It is not recorded as one; it is on the documented five. So it is built.
 //
-// Compliance approval is not real, and it stays COMMENTED rather than stubbed
-// for the reason that has not changed: a stub that returns success is a lie a
-// component builds on.
+// `useReviewComplianceRule` closed the set on 2026-08-19, with phase 5.
+//
+// ── AND THE STUB IT REPLACED HAD THE WRONG ROUTE IN IT ───────────────────
+// It stood commented out for two phases as
+// `('PATCH', '/api/workspaces/{ws}/compliance-rules/{ruleId}')`, and the rules
+// are NOT workspace-scoped — the route is `/api/compliance-rules/{rule}`,
+// global, because the same law binds every book. A commented stub is still a
+// claim about the wire, and this one was wrong the whole time with nothing to
+// contradict it. **That is the argument for commenting rather than stubbing,
+// arriving from a direction nobody expected**: a stub that returned success
+// would have been a lie a component built on, and a stub that returns nothing
+// was a lie a component would have been WIRED to. Neither is free; what a
+// comment buys is that it is read when it is finally used.
+//
+// `MATCH_WRITE_ENABLED` in `components/pieces-inbox.tsx` still switches the
+// third one off in the UI — see decision D-G's correction, and ticket #53.
 //
 // ===========================================================================
 // A WRITE ANSWERS WITH A RESULT. IT DOES NOT ANSWER WITH `null` AND A FLAG.
@@ -107,7 +120,7 @@
 
 import { useCallback, useState } from 'react'
 import { apiSend, ApiRequestError } from './client'
-import type { RecognitionRule, ResolveResult } from './types'
+import type { ComplianceRule, RecognitionRule, ResolveResult } from './types'
 
 /**
  * Whether this session may write.
@@ -497,10 +510,62 @@ export function usePostEntry(ws: string | undefined, number: number) {
   )
 }
 
-/** Phase 5. Fiduciary sign-off on a compliance rule. */
-// export function useApproveComplianceRule(ws: string, ruleId: string) {
-//   return useRecordMutation<void>('PATCH', `/api/workspaces/${ws}/compliance-rules/${ruleId}`)
-// }
+/**
+ * Phase 5. The fiduciary's sign-off on one compliance rule — **the fifth write,
+ * and the last of the five to land.**
+ *
+ * ===========================================================================
+ * IT IS `PATCH`, AND IT IS NOT UNDER `/api/workspaces/{ws}/`
+ * ===========================================================================
+ * The stub that stood here until 2026-08-19 said
+ * `('PATCH', \`/api/workspaces/${ws}/compliance-rules/${ruleId}\`)` and took a
+ * `ws` argument. **Both halves of that address are wrong**, and this is why the
+ * file's own rule is that a write stays commented rather than stubbed: a stub is
+ * a claim about a route, and this one had been carrying a wrong claim for two
+ * phases with nothing to contradict it.
+ *
+ * The route is `/api/compliance-rules/{rule}` — global, like the rules
+ * themselves. Its own header: *"The 19 statutory rules, global like the
+ * vocabularies: the same law binds every book, so this is not under
+ * /workspaces."* A workspace in the path would 404, and the screen would have
+ * reported a missing rule.
+ *
+ * ── SO THIS HOOK TAKES NO WORKSPACE ─────────────────────────────────────
+ * Deliberately, rather than accepting one and dropping it. Every other write in
+ * this file is workspace-scoped and a reader will assume this one is too unless
+ * the signature says otherwise.
+ *
+ * ===========================================================================
+ * A REVIEW CANNOT BE TAKEN BACK, AND THE ROUTE HAS NO UNDO TO OFFER
+ * ===========================================================================
+ * There is no DELETE, no un-review, and `draft` is refused as a review verdict:
+ * *"draft is where rules are born, not a state a review sets"* — reviewing
+ * backwards would erase the fact that somebody looked. The row records WHO and
+ * WHEN, from the session (`user.email`), and the client cannot set either.
+ *
+ * That puts this in the same class as `entry post` for the CONFIRMATION, and
+ * `<ComplianceReviewForm>` says so before the button appears. It is NOT in the
+ * same class for the RING: posting crosses into ring 0 and freezes amounts;
+ * this is ring 2, it writes meaning, and it moves no franc. So it does not take
+ * the typed-target ritual — what it takes is a confirmation that names what
+ * becomes permanent.
+ *
+ * ── THE REFUSALS, EACH OF WHICH A PERSON CAN ACT ON ──────────────────────
+ *   rule_not_found      404 — no rule with that id
+ *   bad_state           400 — not one of approved/edited/rejected. Its
+ *                       suggestion is the sentence about draft, above
+ *   edited_needs_logic  400 — **the one this screen exists to render**: *"an
+ *                       edit without the corrected wording is an approval
+ *                       wearing a different name"*
+ *   missing_reviewer    400 — cannot happen from here; the route reads the
+ *                       session and 401s before this if there is none
+ *
+ * Read them off the `WriteResult`, never off `mutation.error` — this file's
+ * header, and the reason it is a rule rather than a preference.
+ */
+export function useReviewComplianceRule(ruleId: string) {
+  return useRecordMutation<ComplianceRule>('PATCH', `/api/compliance-rules/${ruleId}`)
+}
 
 // Re-exported so a component never reaches into lib/client.ts for it.
 export { ApiRequestError }

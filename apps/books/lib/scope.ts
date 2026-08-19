@@ -216,7 +216,34 @@ export function useScope(): ScopeState {
     // workspace but is still resolving one, which is a permanent skeleton. What
     // this must mean is "this book's years have been answered for", and once
     // there is no book to ask about there is nothing to wait for either.
-    exercicesReady: record === null ? true : yearsFetched && !yearsPending,
+    //
+    // ── AND `booksLoading` IS THE FIRST TEST, SINCE 2026-08-19 ─────────────
+    // `record === null` meant TWO things and the guard could not tell them
+    // apart: "the URL names a book this account does not have" (nothing to wait
+    // for — correct) and **"the book list has not arrived yet"** (everything to
+    // wait for). On a page opened DIRECTLY at `?entity=aios`, the second is the
+    // first frame: `entity` is read from the URL and is `'aios'` immediately,
+    // `entities` is still `[]` so `record` is null, and `exercicesReady` said
+    // true. Every scoped read then fired with `?entity=aios` and **no
+    // `?exercice=`**, which `resolveScope` answers with the book's newest year.
+    //
+    // That is the exact failure this field was created for, arriving through the
+    // door it did not cover — the frame sequence in the doc comment above was
+    // recorded while SWITCHING book, and switching is the case it did fix.
+    //
+    // **Measured in the browser on 2026-08-19**, not reasoned about. Opening
+    // `/dashboard/{ws}/balance-sheet?entity=aios` cold produced two requests:
+    //
+    //     GET …/bilan?entity=aios                  200   ← the year nobody chose
+    //     GET …/bilan?entity=aios&exercice=2026    200
+    //
+    // Nothing rendered wrongly, because `<ScreenFrame>` holds the page on a
+    // skeleton until the books arrive — but the first answer lands in the cache
+    // under `{entity:'aios', exercice:null}`, indistinguishable from a
+    // deliberate one, and a book whose newest year is CLOSED would be served
+    // from it. Found on the taxes screen, which inherits the same guard, and
+    // fixed here because it is one guard and eight screens.
+    exercicesReady: booksLoading ? false : record === null ? true : yearsFetched && !yearsPending,
     source: meta?.entities.source ?? null,
     meta,
     isLoading,

@@ -95,10 +95,13 @@ export default function OverviewPage() {
 
       {!single && overview.data && <RollupPanel totals={totals} />}
 
-      {/* The only way into the taxes screen — it is deliberately not in the nav
-          (`lib/nav.ts`): tax TRACKING over time is a different product, and this
-          is a statutory snapshot reached from here. The link keeps the scope. */}
-      <p className="mt-6 text-sm">
+      {/* The two off-nav screens, and the only way into either — both are
+          deliberately not in the sidebar (`lib/nav.ts`). Tax TRACKING over time
+          is a different product and this is a statutory snapshot; the compliance
+          register is not part of a working loop. The links keep the scope, which
+          matters for the first and is harmless for the second — the rules are
+          the same for every book, and `/compliance` says so. */}
+      <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm">
         <Link
           href={scopedHref(base, '/taxes', scope)}
           className="inline-flex items-center gap-1.5 text-primary-strong hover:underline"
@@ -106,7 +109,14 @@ export default function OverviewPage() {
           Statutory tax snapshot
           <ArrowRight size={14} />
         </Link>
-      </p>
+        <Link
+          href={scopedHref(base, '/compliance', scope)}
+          className="inline-flex items-center gap-1.5 text-primary-strong hover:underline"
+        >
+          Compliance rules
+          <ArrowRight size={14} />
+        </Link>
+      </div>
     </div>
   )
 }

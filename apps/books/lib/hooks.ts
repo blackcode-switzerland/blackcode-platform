@@ -20,9 +20,11 @@ import { booksGlobalKey, booksKey, type Scope } from './query-keys'
 import type { Journal } from './journal'
 import type {
   Account,
+  Analysis,
   AnalytiqueCategoryConfig,
   AnalytiqueResult,
   BilanResult,
+  ComplianceRule,
   CrResult,
   Entity,
   Entry,
@@ -37,6 +39,7 @@ import type {
   RiEntry,
   Source,
   SourceDetail,
+  TaxSnapshotResult,
   Term,
   WorklistResult,
   WorklistRow,
@@ -833,5 +836,155 @@ export function useAnalytiqueCategories(ws: string | undefined, entity: string |
         `/api/workspaces/${ws}/analytique/categories?entity=${encodeURIComponent(entity ?? '')}`
       ).then((r) => r.data),
     enabled: !!ws && !!entity,
+  })
+}
+
+// ===========================================================================
+// PHASE 5 — THE ANALYSES JOURNAL, THE TAX SNAPSHOT, THE COMPLIANCE RULES
+// ===========================================================================
+// Three reads, and they are scoped three DIFFERENT ways. That is not an
+// accident of the routes and it is worth reading before adding a fourth:
+//
+//   analyses         `booksKey`, entity as a FILTER, no exercice. An analysis
+//                    belongs to a book but not to a fiscal year — there is no
+//                    `exercice_id` on `books.analysis`, so a year in the key
+//                    would be a claim the URL does not make.
+//   tax-snapshot     `booksKey` with the WHOLE scope. It is (book, exercice)
+//                    exactly like the bilan, and it takes `scopeReady` for the
+//                    same reason: a request with no `?exercice=` gets
+//                    `resolveScope`'s newest, which is a real answer to a
+//                    question the reader did not ask.
+//   compliance-rules `booksGlobalKey`. **The third one in this app, and the
+//                    first that is not about the signed-in person or the
+//                    contract.** The same law binds every book, the route is
+//                    not under `/workspaces` at all, and two workspaces would
+//                    answer identically — which is `lib/query-keys.ts`'s own
+//                    test for the global spelling.
+
+/**
+ * The analyses journal for one book. `GET …/analyses?entity=`.
+ *
+ * ── `{data, next_cursor}` — SO `apiList`, AND THE CURSOR IS ALWAYS NULL ───
+ * `jsonList(rows.map(publicAnalysis), null)`. The route serves every row and
+ * paginates nothing; it is a journal of questions a person asked, so the count
+ * is small by construction.
+ *
+ * ── THE ENTITY IS A FILTER AND OMITTING IT IS A DIFFERENT QUESTION ────────
+ * With no `?entity=` the route serves the WHOLE workspace's journal, across
+ * books. That is a legitimate read and it is not what the Analyses screen wants:
+ * the screen is book-scoped (`lib/nav.ts`), so it always sends one. The null
+ * still goes in the key — "every book" and "book `aios`" are different results
+ * and must not share a cache slot.
+ *
+ * ── NO EXERCICE, ANYWHERE ────────────────────────────────────────────────
+ * `books.analysis` has no `exercice_id` and the route reads no `?exercice=`. A
+ * year in this key would say the result changes with the year selector, and it
+ * does not; the screen says so in words rather than leaving a control that
+ * appears to do nothing.
+ */
+export function useAnalyses(ws: string | undefined, entity: string | null) {
+  return useQuery({
+    queryKey: booksKey('analyses', { entity, exercice: null }, { ws }),
+    queryFn: () =>
+      apiList<Analysis>(
+        `/api/workspaces/${ws}/analyses${entity ? `?entity=${encodeURIComponent(entity)}` : ''}`
+      ).then((r) => r.data),
+    enabled: !!ws,
+  })
+}
+
+/**
+ * One filed analysis. `GET …/analyses/{number}` — a bare entity, not a list.
+ *
+ * ── THE ROUTE IS WORKSPACE-SCOPED, AND THE KEY IS BOOK-SCOPED ANYWAY ──────
+ * `getAnalysis` resolves on `(workspace_id, seq)` and does not filter by book,
+ * exactly like `getEntryByNumber`. Unlike the entry route there is no ambiguity
+ * to fix here — `books.analysis.seq` names one row, there is no second journal —
+ * but the record CARRIES its own `entity`, so the screen states the book from
+ * the payload and never from the scope. That is the fix `/ledger/{n}` had to
+ * make after relabelling one company's écriture with another's name.
+ *
+ * The scope is still in the key: arriving at `?entity=blackcode` and at
+ * `?entity=aios` are two different claims about the page, and the screen
+ * compares the two out loud.
+ */
+export function useAnalysis(ws: string | undefined, scope: Scope, number: number | null) {
+  return useQuery({
+    queryKey: booksKey('analysis', scope, { number, ws }),
+    queryFn: () => apiGet<Analysis>(`/api/workspaces/${ws}/analyses/${number}`),
+    enabled: !!ws && number !== null && Number.isInteger(number),
+  })
+}
+
+/** The tax route refuses a simplified book by CODE, like the two statements. */
+export const NO_TAX_SNAPSHOT_REFUSAL = 'no_tax_snapshot_for_simplified'
+
+/**
+ * Is this error the statutory refusal rather than a failure?
+ *
+ * Same shape and same reasoning as `isSimplifiedRefusal` above, and a separate
+ * function rather than a third member of that list, because the two say
+ * different things to the reader: a sole proprietorship has no bilan *at all*,
+ * and its result is taxed as its owner's personal income *somewhere else*. One
+ * notice for both would have to be vague about which.
+ *
+ * **Matched on the `code`, never on the message.** The message names the book
+ * and is French-inflected prose.
+ */
+export function isNoTaxSnapshotRefusal(error: unknown): error is ApiRequestError {
+  return error instanceof ApiRequestError && error.code === NO_TAX_SNAPSHOT_REFUSAL
+}
+
+/**
+ * The statutory tax position of one (book, exercice). `GET …/tax-snapshot`.
+ *
+ * ── RING 3: DERIVED AT REQUEST TIME, STORED NOWHERE ───────────────────────
+ * Nothing on this payload is a column. VAT comes from the entries' own TVA
+ * fields, profit and equity from the two statements, and the two tax figures
+ * from the book's parameter record. **No figure from it may be cached AS A
+ * FIGURE** — what the query cache holds is a response, invalidated at the app
+ * root by any write. Same rule as `useAnalytique`.
+ *
+ * ── AND IT IS NOT TAX TRACKING ───────────────────────────────────────────
+ * A position over time is a different product (b/tax). This is one snapshot,
+ * which is why the screen is off-nav and reached from the overview's cross-link.
+ */
+export function useTaxSnapshot(ws: string | undefined, scope: ReadScope) {
+  return useQuery({
+    queryKey: booksKey('tax-snapshot', scope, { ws }),
+    queryFn: () =>
+      apiGet<TaxSnapshotResult>(`/api/workspaces/${ws}/tax-snapshot?${scopeQuery(scope)}`),
+    enabled: !!ws && !!scope.entity && scopeReady(scope),
+  })
+}
+
+/**
+ * The nineteen statutory compliance rules. `GET /api/compliance-rules`.
+ *
+ * ===========================================================================
+ * THE ONLY READ IN THIS APP THAT IS NEITHER WORKSPACE- NOR BOOK-SCOPED
+ * ===========================================================================
+ * The route is not under `/api/workspaces/{ws}/` and it is unauthenticated, for
+ * the reason its own header gives: the payload is law text with citations,
+ * holding no amounts and no names. The same law binds every book, so two
+ * workspaces answer identically — `lib/query-keys.ts`'s test for
+ * `booksGlobalKey`, met properly for the first time by something that is not the
+ * contract or the account.
+ *
+ * ── AND IT TAKES NO `ws` ARGUMENT AT ALL ─────────────────────────────────
+ * Deliberately, rather than accepting one and ignoring it. A parameter a hook
+ * does not use is a parameter a reader believes scopes the result.
+ *
+ * ── `staleTime` IS SHORT, BECAUSE THIS ONE IS WRITTEN FROM THE SCREEN ─────
+ * Unlike `/api/meta`, which changes on a deploy. A review is the fifth write and
+ * it lands here; the write invalidates the whole app root, so this refetches
+ * with everything else — the stale time only governs a reader who left the tab
+ * open while somebody else signed a rule off.
+ */
+export function useComplianceRules() {
+  return useQuery({
+    queryKey: booksGlobalKey('compliance-rules'),
+    queryFn: () => apiList<ComplianceRule>('/api/compliance-rules').then((r) => r.data),
+    staleTime: 30_000,
   })
 }

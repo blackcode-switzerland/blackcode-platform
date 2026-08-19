@@ -51,6 +51,8 @@ import { DriveLink } from '@/components/drive-link'
 import { Money } from '@/components/money'
 import { HistoryTrail, hasHistory } from '@/components/history-trail'
 import { PostEntryForm, PostedNotice } from '@/components/post-entry-form'
+import { VerdictPanel } from '@/components/verdict-panel'
+import { blocksPosting } from '@/lib/verdict'
 import type { PostResult } from '@/lib/mutations'
 
 export default function Page() {
@@ -189,6 +191,25 @@ export default function Page() {
             </p>
           </header>
 
+          {/* ── THE COMPLIANCE VERDICT, ON EVERY ENTRY INCLUDING THE ONES
+              NOBODY HAS CHECKED ────────────────────────────────────────────
+              Rendered unconditionally, which is the opposite of how every other
+              optional block on this page works — and it is why `<VerdictPanel>`
+              exists. `verdict: null` means NEVER CHECKED, not clean, and a
+              section that simply disappeared for a null would let the absence
+              read as an accepted verdict. `lib/verdict.ts` holds the four states
+              where a test can reach them.
+
+              It sits ABOVE Posting deliberately: a blocked verdict is what stops
+              the write below it, and a reader has to meet the reason before the
+              button. */}
+          <section className="mt-4">
+            <H2>Compliance</H2>
+            <div className="mt-1.5">
+              <VerdictPanel verdict={entry.data.verdict} base={base} scope={scope} />
+            </div>
+          </section>
+
           {/* ── THE POSTING TRANSITION ────────────────────────────────────
               Rendered only for a STAGED entry, and gone the moment it is
               posted — there is nothing to offer on a posted one, and a disabled
@@ -205,6 +226,22 @@ export default function Page() {
                 This entry is staged. It is recorded and it counts in nothing: the balance sheet
                 and the income statement both derive from posted entries only.
               </p>
+              {/* ── THE FORM IS STILL OFFERED ON A BLOCKED ENTRY ─────────
+                  The refusal is the SERVER'S — `postEntry` raises
+                  `verdict_blocked` with the pass's own `resolves` text as the
+                  suggestion — and hiding the form would replace that sentence
+                  with this app's guess at it. What the reader gets instead is
+                  the verdict above the button and the route's own words after
+                  it, which is the same arrangement `<PostEntryForm>` uses for
+                  migration 0004's guard: the last word belongs to whoever
+                  actually refuses. */}
+              {blocksPosting(entry.data.verdict) && (
+                <p className="mt-1.5 text-[12px] text-muted-foreground">
+                  A compliance pass has blocked this entry, so posting it will be refused. The
+                  refusal is the server&apos;s and it carries the pass&apos;s own way out — the
+                  panel above has it too.
+                </p>
+              )}
               {posted ? (
                 <PostedNotice result={posted} />
               ) : (

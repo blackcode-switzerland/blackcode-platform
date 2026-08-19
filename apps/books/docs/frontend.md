@@ -4,9 +4,17 @@
 `@blackcode/platform-ui` primitives, the app shell pattern, are in the root
 [`docs/frontend.md`](../../../docs/frontend.md) and are not repeated here.
 
-**Status: phase 0 complete, 2026-08-17.** The contract exists. No b/books screen
-exists yet. One books route is live. What each phase turns on is in
-[`docs/books-app-plan/`](../../../docs/books-app-plan/README.md).
+**Status: all thirteen screens exist, 2026-08-19.** Phases 0 through 5 have
+landed on the web surface; nothing renders `<NotBuiltYet>`. What each phase
+turned on is in
+[`docs/books-app-plan/`](../../../docs/books-app-plan/README.md), and §8 below
+maps every screen to the phase that gave it data.
+
+> This line read *"phase 0 complete … no b/books screen exists yet"* until
+> 2026-08-19, five phases after it stopped being true. §2 records what a stale
+> paragraph in this file costs: the overview was built against the phase-0
+> version of that section and rendered "You have no books yet" over a workspace
+> holding three books and seventeen entries.
 
 ---
 
@@ -72,13 +80,31 @@ The books' own routes, all workspace-scoped under `/api/workspaces/{ws}/`:
 | 1 | `entities`, `exercices`, `accounts`, `entries`, `entries/{n}`, `bilan`, `compte-resultat`, `overview`, `patrimoine` |
 | 2 | `worklist`, `rules` (GET, POST), `entries/{n}/resolve` (POST) |
 | 3 | `sources`, `sources/{n}`, `sources/{n}/manifest`, `pieces`, `pieces/{n}/match` (POST), `pieces/ingest` (POST — the robot door, no UI) |
-| 4B | `analytique`, `analytique/categories` (GET, POST) |
+| 4B | `analytique`, `analytique/categories` (GET, POST), `analyses` (GET, POST), `analyses/{n}`, `tax-snapshot` |
+| 5 | `entries/{n}/verdict` (POST) — and, **NOT workspace-scoped**, `/api/compliance-rules` (GET) and `/api/compliance-rules/{rule}` (GET, PATCH) |
 
 Three of these do **not** use the shared `{data, next_cursor}` envelope, and a
 hook that reached for `apiList` would render an empty screen over a full one:
 `…/worklist` is `{entity, exercice, count, rows}` and `…/sources/{n}/manifest`
 is `{source, files}`. `…/sources` and `…/pieces` ARE list routes. All four are
 pinned in `lib/wire-parity.test.ts`.
+
+**Two phase-5 routes are not under `/api/workspaces/{ws}/` at all**, and that is
+the only pair in this app like it: `GET /api/compliance-rules` and
+`PATCH /api/compliance-rules/{rule}`. The same law binds every book, so the
+rules are global like the vocabularies, and the GET is unauthenticated for
+`/api/meta`'s reason — the payload is law text with citations, holding no
+amounts and no names. `useComplianceRules` is therefore the third
+`booksGlobalKey` in `lib/hooks.ts`, and `useReviewComplianceRule` is the only
+write in `lib/mutations.ts` that takes no workspace.
+
+> **The commented-out stub that stood in `lib/mutations.ts` for two phases had
+> the wrong address in it** — `PATCH /api/workspaces/{ws}/compliance-rules/{id}`
+> — and would have 404'd. A commented stub is still a claim about the wire, and
+> nothing contradicted that one until somebody used it. Recorded in that file's
+> header, because the usual argument for commenting rather than stubbing is
+> about a stub that returns success, and this is the same lesson from a
+> direction nobody expected.
 
 **Phase 3 also changed a phase-2 payload without changing a route.** `getWorklist`
 gained `kind: 'piece'` rows and a `suggested_entries` field. `lib/types.ts` said
@@ -312,12 +338,73 @@ user owns the client. Authorisation is workspace membership and the role, on the
 server. What the gate buys is that a missed affordance fails loudly instead of
 writing.
 
-**Four of the five write hooks are real** (2026-08-19): `useResolveEntry` and
-`useCreateRule` from phase 2, `useMatchPiece` from phase 3, and **`usePostEntry`
-from phase 4A**, all in [`lib/mutations.ts`](../lib/mutations.ts).
-`useApproveComplianceRule` is still commented out and arrives with the screen
-that needs it. It is commented rather than stubbed, because a stub that returns
-success is a lie a component builds on.
+**All five write hooks are real since 2026-08-19**, all in
+[`lib/mutations.ts`](../lib/mutations.ts): `useResolveEntry` and `useCreateRule`
+from phase 2, `useMatchPiece` from phase 3, `usePostEntry` from phase 4A, and
+**`useReviewComplianceRule` from phase 5**, which closed the set.
+
+`useMatchPiece` is still switched OFF in the UI (`MATCH_WRITE_ENABLED` in
+`components/pieces-inbox.tsx`, ticket #53) — the capability exists and is
+recorded, and it is gated because the grand-livre lookup does not filter by
+book.
+
+### The fifth write: reviewing a compliance rule
+
+`PATCH /api/compliance-rules/{rule}`, from
+[`components/compliance-review-form.tsx`](../components/compliance-review-form.tsx).
+Three outcomes — approve, edit with corrected wording, reject.
+
+- **There is no un-review and no delete**, and `draft` is refused as a review
+  verdict: reviewing backwards would erase the fact that somebody looked. So the
+  confirmation is a second, explicit step that says what becomes permanent
+  before the button appears.
+- **It is NOT `entry post`'s ritual**, and the difference is the ring rather
+  than the severity. Posting crosses out of ring 2 into ring 0 and freezes
+  amounts under migration 0004's triggers, so it makes the reader type the
+  target back. This is ring 2: it writes meaning about a rule and moves no
+  franc. A ritual used for everything is a ritual nobody reads.
+- **The submit button is not disabled for a missing correction.** The route
+  refuses `edited_needs_logic` — *"an edit without the corrected wording is an
+  approval wearing a different name"* — and the form renders that sentence
+  verbatim. `canSubmitReview` in `lib/compliance.ts` is the same test and drives
+  an inline hint instead, so the route keeps the last word and the reader
+  learns why rather than that something is broken.
+- **The wording box is not prefilled.** Prefilling it with `check_logic` would
+  make "edit" the cheapest button on the screen and produce a correction
+  identical to the original, with a fiduciary's name on it.
+
+### `draft`, severity and provenance are decided in a MODULE, not in JSX
+
+[`lib/compliance.ts`](../lib/compliance.ts) holds the tones and the wording, and
+`<TonePill>` only paints. Three claims live there because each is a `className`
+away from being wrong where only a browser could see it:
+
+- **`draft` is `calm`.** Nineteen researched rules waiting for a human is the
+  resting state of that screen, not a backlog.
+- **`source_confidence` carries no tone at all.** It is a fact about the SOURCE
+  — `needs_fiduciary_check` means the article is not settled, not that the rule
+  is doubtful — and drawing a disclosure as a defect is how people stop reading
+  it.
+- **An unknown value is named, never binned.** All three columns are `varchar`,
+  not enums this bundle owns; a lookup returns `null` and the screen prints the
+  raw string. Falling into `draft` would hide a rejection and falling into
+  `blocker` would invent one.
+
+### `verdict: null` means NEVER CHECKED, not clean
+
+[`lib/verdict.ts`](../lib/verdict.ts), rendered by
+[`components/verdict-panel.tsx`](../components/verdict-panel.tsx) on **every**
+entry — including the ones nothing has looked at, which is the point. A section
+that simply disappeared for a null would let the absence read as an accepted
+verdict, which is an assurance nobody gave. It is F-2's `undefined !== null`
+mistake one field over.
+
+`POST /entries/{n}/verdict` is the agent's door (`bk books verdict`) and no
+button in this app files one. The one enforced consequence is server-side:
+`postEntry` refuses a `blocked` entry with `verdict_blocked`, carrying the
+agent's own `resolves` text as the suggestion, and `<PostEntryForm>` prints it
+verbatim. The form is still OFFERED on a blocked entry — hiding it would replace
+the server's sentence with this app's guess at it.
 
 ### `entry post` is the only write that leaves ring 2
 
@@ -527,7 +614,18 @@ not going to edit `lib/types.ts`.
 | Reconnaissance | phase 2 | **yes, 2026-08-18** |
 | Comptes & sources, Source detail, Pièces justificatives | phase 3 | **yes, 2026-08-18** |
 | Compta analytique | phase 4B | **yes, 2026-08-19** |
-| Analyses, Analyse detail, Impôts | phase 4B / 5 | no |
+| Analyses, Analyse detail, Impôts | phase 4B / 5 | **yes, 2026-08-19** |
+| Compliance rules | phase 5 | **yes, 2026-08-19** |
+
+**Nothing in this app renders `<NotBuiltYet>` any more.** The component stays,
+because the next route this app grows will need it.
+
+**Two of these are OFF-NAV and reached from a cross-link on the overview**
+(`lib/nav.ts`): Impôts, because tax tracking over time is a different product
+and a permanent nav item would promise it; and Compliance rules, because signing
+a rule off is not part of a working loop. Compliance is also the only entry in
+that file with `scoped: false` because of the DATA rather than the screen — the
+route is not under `/api/workspaces/{ws}/` at all.
 
 **Two of phase 3's screens are NOT book-scoped, and `lib/nav.ts` says so.** A
 source can feed more than one book and `books.source.entity_id` is nullable; a

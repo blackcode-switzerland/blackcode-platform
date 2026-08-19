@@ -99,6 +99,21 @@ export const OFF_NAV: readonly NavItem[] = [
    * `scoped: true`: it is entirely a property of one book.
    */
   { seg: '/patrimoine', label: 'Patrimoine', icon: 'scale', scoped: true },
+  /**
+   * The compliance register — nineteen statutory rules and their sign-off.
+   *
+   * OFF-NAV for Taxes' reason and one of its own. It is not part of a person's
+   * working loop: a fiduciary signs a rule off once and does not come back
+   * daily, and a permanent item would teach the reader to skip past the sidebar.
+   *
+   * **`scoped: false`, and it is the only item in this file where that is true
+   * of the DATA rather than of the screen.** `GET /api/compliance-rules` is not
+   * under `/api/workspaces/{ws}/` at all: the same law binds every book, so
+   * there is no book to filter by and the switcher is hidden rather than shown
+   * and ignored — this file's own rule about a control that appears to do
+   * nothing.
+   */
+  { seg: '/compliance', label: 'Compliance rules', icon: 'scale', scoped: false },
 ]
 
 export const ALL_NAV: readonly NavItem[] = [...NAV, ...OFF_NAV]
