@@ -1467,7 +1467,8 @@ export interface Analysis {
   asked_by: string
   /** Which agent answered: `claude-code`, `companion`, … Free text. */
   agent: string
-  scenario_label: Label | null
+  /** Verbatim as filed: usually {fr, en}, a bare string when an agent files one. */
+  scenario_label: Label | string | null
   /**
    * The scenario's runway, in months, as the agent computed it. Null when the
    * question had no runway answer.
@@ -1476,8 +1477,13 @@ export interface Analysis {
    * the mockup's gauges each need both sides and this payload has one.
    */
   runway_after_months: number | null
-  question: Label
-  verdict: Label
+  /**
+   * Verbatim as filed. Usually {fr, en}; a BARE STRING when an agent files
+   * one — the door's `speaks()` accepts both, and real filings use both.
+   * Render through `speech()`, never `en()`.
+   */
+  question: Label | string
+  verdict: Label | string
   figures: AnalysisFigure[]
   /** What the agent READ. The snapshot. Permanent, and never recomputed. */
   based_on: AnalysisFigure[]

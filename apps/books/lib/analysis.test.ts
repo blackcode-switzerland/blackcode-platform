@@ -12,7 +12,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { analysisRows, bookHasSomethingToSay, bookToday, hasSnapshot } from './analysis'
-import { en } from './label'
+import { en, speech } from './label'
 
 const label = { fr: 'Trésorerie', en: 'Cash' }
 
@@ -66,6 +66,17 @@ describe('analysisRows — the jsonb guard', () => {
     expect(out.dropped).toBe(0)
     expect(out.rows.map((r) => en(r.label))).toEqual(['runway now (months)', 'cash (tresorerie) 2026-08'])
     expect(out.rows.map((r) => r.value)).toEqual(['49.2', '72189.43'])
+  })
+
+  // The list rendered analyses #3–#6 as EMPTY headlines: `en()` on a filed
+  // bare-string question finds no `.en` and answers ''. `speech()` is the
+  // reader for verbatim record fields; `en()` stays for statement labels.
+  it('speech() reads a filed question whichever way the agent said it', () => {
+    expect(speech('Can we afford the raise?')).toBe('Can we afford the raise?')
+    expect(speech({ fr: 'Question', en: 'Question' })).toBe('Question')
+    expect(speech({ fr: 'Sans bureau' })).toBe('Sans bureau')
+    expect(speech(null)).toBe('')
+    expect(en({ fr: 'x', en: '' }), 'en() on a statement label still works').toBe('x')
   })
 
   it('a blank string is still not a label', () => {
