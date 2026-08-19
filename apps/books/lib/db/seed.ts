@@ -833,6 +833,34 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
     })
   }
 
+  // ---- shape coverage: the door's OTHER legal shape, permanently seeded ----
+  // NOT from the mockup (mockup.json stays Andrea's file, verbatim). Every
+  // mockup record speaks {fr, en}, so no screen tested against the seed ever
+  // met a bare string — and on 2026-08-19 the first real agent filing found
+  // THREE readers that choked on one (figure rows, the journal list, the
+  // record header), each shipped green against seeded data. `speaks()` accepts
+  // a bare string at the door; from now on the seed serves one on every dev
+  // database, so a reader that only understands {fr, en} goes red on the
+  // parity suite instead of in front of a user.
+  await db.insert(booksAnalysis).values({
+    workspace_id: ws.id,
+    entity_id: entityId.get(1)!,
+    seq: nextSeq('analysis'),
+    asked: new Date('2026-08-19T18:00:00+02:00'),
+    asked_by: 'Mustneer',
+    agent: 'claude-code',
+    scenario_label: 'shape-coverage',
+    runway_after_months: null,
+    question: 'Does every screen render a bare-string filing, the shape the door accepts?',
+    verdict:
+      'This record is the test: its question, verdict, scenario and every row label are bare strings, not {fr, en}. A reader that only understands the bilingual shape drops or blanks this record, and the parity suite holds it.',
+    figures: [{ label: 'readers this shape broke on 2026-08-19', value: '3' }],
+    based_on: [
+      { label: 'door contract: speaks() accepts a bare string', value: 'management.ts' },
+      { label: 'rendering rule: record fields go through speech()', value: 'docs/changelog/books.md' },
+    ],
+  })
+
   // ---- compliance rules: GLOBAL, and reviews survive a reseed --------------
   // The 19 rules are law-derived and workspace-less. ON CONFLICT DO NOTHING
   // on purpose: a reseed replaces the demo WORKSPACE, but a fiduciary's
