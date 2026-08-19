@@ -315,6 +315,22 @@ export interface Fx {
 }
 
 /**
+ * The Devil's Advocate's structured verdict (0014, phase 5). A `jsonb` column
+ * served verbatim; the agent writes it through `POST /entries/{n}/verdict`
+ * and the server never edits it. `worst_case` and `resolves` are whatever the
+ * agent filed — usually plain text, possibly `{fr, en}` — so both are loose.
+ */
+export interface Verdict {
+  verdict: 'accepted' | 'accepted_with_warning' | 'blocked'
+  /** The compliance rule_ids that triggered, e.g. `["vat-008"]`. Never empty. */
+  rules: string[]
+  worst_case: unknown
+  resolves: unknown
+  at: string
+  by: string
+}
+
+/**
  * art. 959a al. 4 — the counterparty is a shareholder, a board member or another
  * book of the same owner.
  *
@@ -381,6 +397,13 @@ export interface Entry {
   piece: Piece | null
   /** The original-currency story (0011). Null for almost everything. */
   fx: Fx | null
+  /**
+   * The Devil's Advocate's flag (0014). Null until an external agent pass
+   * writes one; the server never computes a compliance judgment itself.
+   * `blocked` has exactly one enforced consequence: the entry refuses to
+   * post, server side — render the state, never re-derive it.
+   */
+  verdict: Verdict | null
   /** The entry this one reverses, as a serial id. Null for almost everything. */
   reverses_entry_id: number | null
   /**

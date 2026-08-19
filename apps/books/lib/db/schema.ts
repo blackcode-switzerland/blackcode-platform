@@ -442,6 +442,8 @@ export const booksEntry = booksSchema.table(
     fx: jsonb('fx'),
     /** 0012: the bank's own reference — the import door's idempotency key. */
     bank_ref: varchar('bank_ref', { length: 64 }),
+    /** 0014: the Devil's Advocate's flag {verdict, rules, worst_case, resolves, at, by}. NULL = never checked. */
+    verdict: jsonb('verdict'),
     /** The only correction path. */
     reverses_entry_id: integer('reverses_entry_id'),
     history: jsonb('history'),
@@ -526,6 +528,8 @@ export const booksRiEntry = booksSchema.table(
     source_id: integer('source_id').references(() => booksSource.id, {
       onDelete: 'set null',
     }),
+    /** 0014: the Devil's Advocate's flag {verdict, rules, worst_case, resolves, at, by}. NULL = never checked. */
+    verdict: jsonb('verdict'),
     history: jsonb('history'),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -777,6 +781,34 @@ export const booksAnalytiqueCategory = booksSchema.table(
  * with citations and `confirmed` flags. One row per entity; a book without one
  * shows "not configured" rather than someone else's rates.
  */
+/**
+ * 0014: the compliance rules — GLOBAL, like the vocabularies: the same law
+ * binds every book, so there is no workspace column. All 19 load as DRAFT;
+ * review (approve/edit/reject, with who and when) is the only write, and
+ * DELETE is revoked — a verdict may cite a rule forever.
+ */
+export const booksComplianceRule = booksSchema.table('compliance_rule', {
+  id: serial('id').primaryKey(),
+  rule_id: varchar('rule_id', { length: 20 }).notNull().unique(),
+  citation: text('citation').notNull(),
+  applies_to: varchar('applies_to', { length: 10 }).notNull(),
+  trigger_condition: text('trigger_condition').notNull(),
+  check_logic: text('check_logic').notNull(),
+  severity: varchar('severity', { length: 10 }).notNull(),
+  consequence: text('consequence').notNull(),
+  /** The human-sized {fr, en} one-liner, from the mockup's card. */
+  summary: jsonb('summary'),
+  source_confidence: varchar('source_confidence', { length: 30 }).notNull(),
+  review_state: varchar('review_state', { length: 10 }).default('draft').notNull(),
+  /** The fiduciary's corrected wording when review_state = 'edited'. The original stays. */
+  edited_logic: text('edited_logic'),
+  review_note: text('review_note'),
+  reviewed_by: varchar('reviewed_by', { length: 120 }),
+  reviewed_at: timestamp('reviewed_at', { withTimezone: true }),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 export const booksTaxParams = booksSchema.table('tax_params', {
   id: serial('id').primaryKey(),
   workspace_id: integer('workspace_id')
@@ -806,3 +838,4 @@ export type BooksPatrimoine = typeof booksPatrimoine.$inferSelect
 export type BooksAnalysis = typeof booksAnalysis.$inferSelect
 export type BooksAnalytiqueCategory = typeof booksAnalytiqueCategory.$inferSelect
 export type BooksTaxParams = typeof booksTaxParams.$inferSelect
+export type BooksComplianceRule = typeof booksComplianceRule.$inferSelect

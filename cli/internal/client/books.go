@@ -1023,3 +1023,84 @@ func (c *Client) GetBooksTaxSnapshot(ws string, s BooksScope) (*BooksTaxSnapshot
 	}
 	return &out, nil
 }
+
+// ---------------------------------------------------------------------------
+// Phase 5: compliance — rules, review, verdicts
+// ---------------------------------------------------------------------------
+
+type BooksComplianceRule struct {
+	RuleID           string         `json:"rule_id"`
+	Citation         string         `json:"citation"`
+	AppliesTo        string         `json:"applies_to"`
+	TriggerCondition string         `json:"trigger_condition"`
+	CheckLogic       string         `json:"check_logic"`
+	Severity         string         `json:"severity"`
+	Consequence      string         `json:"consequence"`
+	Summary          map[string]any `json:"summary"`
+	SourceConfidence string         `json:"source_confidence"`
+	ReviewState      string         `json:"review_state"`
+	EditedLogic      string         `json:"edited_logic"`
+	ReviewNote       string         `json:"review_note"`
+	ReviewedBy       string         `json:"reviewed_by"`
+	ReviewedAt       string         `json:"reviewed_at"`
+}
+
+func (c *Client) ListBooksComplianceRules() ([]BooksComplianceRule, error) {
+	var resp struct {
+		Data []BooksComplianceRule `json:"data"`
+	}
+	if err := c.get("/api/compliance-rules", &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) GetBooksComplianceRule(ruleID string) (*BooksComplianceRule, error) {
+	var out BooksComplianceRule
+	if err := c.get("/api/compliance-rules/"+ruleID, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ReviewBooksComplianceRuleRequest is the fiduciary's sign-off: approved,
+// edited (with the corrected wording; the original stays), or rejected.
+// There is no path back to draft — draft is where rules are born.
+type ReviewBooksComplianceRuleRequest struct {
+	State       string `json:"state"`
+	EditedLogic string `json:"edited_logic,omitempty"`
+	Note        string `json:"note,omitempty"`
+}
+
+func (c *Client) ReviewBooksComplianceRule(ruleID string, req ReviewBooksComplianceRuleRequest) (*BooksComplianceRule, error) {
+	var out BooksComplianceRule
+	if err := c.patchJSON("/api/compliance-rules/"+ruleID, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RecordBooksVerdictRequest is the Devil's Advocate's structured verdict:
+// accepted / accepted_with_warning / blocked, the rules that triggered, the
+// worst case and what would resolve it. blocked refuses to post, server side.
+type RecordBooksVerdictRequest struct {
+	Entity    string   `json:"entity,omitempty"`
+	Verdict   string   `json:"verdict"`
+	Rules     []string `json:"rules"`
+	WorstCase string   `json:"worst_case,omitempty"`
+	Resolves  string   `json:"resolves,omitempty"`
+}
+
+type BooksVerdictResult struct {
+	Journal string         `json:"journal"`
+	Number  int            `json:"number"`
+	Verdict map[string]any `json:"verdict"`
+}
+
+func (c *Client) RecordBooksVerdict(ws string, number int, req RecordBooksVerdictRequest) (*BooksVerdictResult, error) {
+	var out BooksVerdictResult
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/entries/%d/verdict", ws, number), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

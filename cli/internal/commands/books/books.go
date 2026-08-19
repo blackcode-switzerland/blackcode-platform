@@ -139,6 +139,9 @@ func nouns() []*cobra.Command {
 		newAnalyseCmd(),
 		newCategoryCmd(),
 		newTaxCmd(),
+		// Compliance — see compliance.go.
+		newComplianceCmd(),
+		newVerdictCmd(),
 	}
 }
 

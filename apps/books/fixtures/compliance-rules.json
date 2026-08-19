@@ -1,0 +1,285 @@
+{
+ "_meta": {
+  "purpose": "Machine-checkable Swiss accounting/tax compliance rules for the b/books Devil's Advocate agent",
+  "status": "DRAFT — researched by AI sub-agent against Fedlex, NOT reviewed by a fiduciary or lawyer",
+  "source_confidence_legend": {
+   "verified_fedlex": "text confirmed directly on Fedlex during research",
+   "doctrine_inferred": "standard accounting/tax practice, not verbatim in statute text checked",
+   "needs_fiduciary_check": "numeric/procedural detail that varies by canton or case — flag for human review before hard-coding"
+  },
+  "severity_legend": {
+   "blocker": "must not post/close without resolving or explicit override+reason logged",
+   "warning": "can post but must show a persistent flag until resolved",
+   "info": "informational, no gating"
+  },
+  "last_updated": "2026-08-07"
+ },
+ "rules": [
+  {
+   "rule_id": "bk-001",
+   "citation": "art. 957 al. 1 ch. 2 CO",
+   "applies_to": "SA",
+   "trigger_condition": "Entity legal form is SA or Sarl, regardless of turnover",
+   "check_logic": "IF entity.legal_form IN ('SA','Sarl') AND entity.bookkeeping_regime != 'double_entry' THEN flag BLOCKER",
+   "severity": "blocker",
+   "consequence_if_violated": "SA/Sarl have no simplified-bookkeeping option at any turnover level; single-entry books are not valid statutory accounts.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Une SA/Sàrl n'a JAMAIS d'option simplifiée, quel que soit le chiffre d'affaires.",
+    "en": "An SA/Sàrl NEVER has a simplified option, at any turnover."
+   }
+  },
+  {
+   "rule_id": "bk-002",
+   "citation": "art. 957 al. 2 CO",
+   "applies_to": "RI",
+   "trigger_condition": "RI/partnership with annual revenue < CHF 500,000 in the prior financial year",
+   "check_logic": "IF entity.legal_form = 'RI' AND entity.prior_year_revenue < 500000 THEN allow simplified regime BUT recommend double_entry anyway (per b/books design decision, see BRIEF.md sec 2.1)",
+   "severity": "info",
+   "consequence_if_violated": "N/A — this is a permissive floor, not a requirement. b/books runs double-entry for RI anyway.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "RI < CHF 500'000 : régime simplifié permis (plancher permissif, pas une obligation).",
+    "en": "RI < CHF 500,000: simplified regime allowed (permissive floor, not a duty)."
+   }
+  },
+  {
+   "rule_id": "ret-001",
+   "citation": "art. 958f al. 1 CO",
+   "applies_to": "both",
+   "trigger_condition": "Any ledger, voucher, or supporting document (pièce justificative) reaches or passes 10 years from creation without confirmed retention",
+   "check_logic": "IF document.age_years >= 10 AND document.retention_confirmed = FALSE THEN flag WARNING",
+   "severity": "warning",
+   "consequence_if_violated": "Deletion or loss before the 10-year mark breaches the statutory retention duty; documents needed in a later tax audit may be unavailable.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Conservation 10 ans des livres et pièces.",
+    "en": "10-year retention of books and documents."
+   }
+  },
+  {
+   "rule_id": "ret-002",
+   "citation": "art. 958f al. 3 CO",
+   "applies_to": "both",
+   "trigger_condition": "Records stored only in a format/medium that cannot be reliably read back on demand (e.g. proprietary format with no export, or degraded scan)",
+   "check_logic": "IF record.readback_verified = FALSE THEN flag BLOCKER at storage time",
+   "severity": "blocker",
+   "consequence_if_violated": "If records cannot be reliably linked or read back, the retention obligation is deemed unfulfilled — treated equivalent to non-retention in a tax audit.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Les enregistrements doivent rester lisibles/restituables pendant toute la durée.",
+    "en": "Records must stay readable/retrievable for the whole period."
+   }
+  },
+  {
+   "rule_id": "ret-003",
+   "citation": "art. 958f al. 2 CO",
+   "applies_to": "both",
+   "trigger_condition": "Year-end close event (rapport de gestion approved) with no printed and signed archival copy",
+   "check_logic": "IF event = 'annual_accounts_approved' AND archive.has_signed_printed_copy = FALSE THEN flag WARNING",
+   "severity": "warning",
+   "consequence_if_violated": "Weakens evidentiary value of governance documents in disputes; may be challenged by auditors/registrar.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Comptes annuels approuvés : exemplaire signé et imprimé archivé.",
+    "en": "Approved annual accounts: signed printed copy archived."
+   }
+  },
+  {
+   "rule_id": "ret-004",
+   "citation": "art. 957a al. 2 ch. 1 CO (principe de régularité) + immutability doctrine",
+   "applies_to": "both",
+   "trigger_condition": "A posted (closed-period) transaction is edited in place or hard-deleted instead of reversed via correcting entry",
+   "check_logic": "IF transaction.status = 'posted' AND action IN ('edit_in_place','hard_delete') THEN flag BLOCKER",
+   "severity": "blocker",
+   "consequence_if_violated": "Undermines traceability and regularity of the books (art. 957a al.2 ch.5); can be treated as falsification of business records in serious cases.",
+   "source_confidence": "doctrine_inferred",
+   "summary": {
+    "fr": "Jamais d'édition/suppression d'une écriture comptabilisée — extourne uniquement.",
+    "en": "Never edit/delete a posted entry — reversing entries only."
+   }
+  },
+  {
+   "rule_id": "vat-001",
+   "citation": "art. 10 al. 2 let. a LTVA",
+   "applies_to": "both",
+   "trigger_condition": "Worldwide annual taxable turnover reaches or exceeds CHF 100,000 in 12 months",
+   "check_logic": "IF entity.annual_taxable_turnover_worldwide >= 100000 AND entity.vat_registered = FALSE THEN flag BLOCKER",
+   "severity": "blocker",
+   "consequence_if_violated": "Retroactive VAT liability, late-registration penalties, default interest on unremitted VAT.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Assujettissement obligatoire dès CHF 100'000 de chiffre d'affaires.",
+    "en": "Mandatory VAT registration from CHF 100,000 turnover."
+   }
+  },
+  {
+   "rule_id": "vat-002",
+   "citation": "art. 26 al. 2 let. a LTVA",
+   "applies_to": "both",
+   "trigger_condition": "VAT invoice missing supplier name/locality or UID number",
+   "check_logic": "IF invoice.type = 'VAT_invoice' AND (invoice.supplier_name IS NULL OR invoice.supplier_uid_number IS NULL) THEN flag BLOCKER",
+   "severity": "blocker",
+   "consequence_if_violated": "Input-tax (impôt préalable) deduction may be denied by the AFC.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Facture sans nom/UID fournisseur : impôt préalable en danger.",
+    "en": "Invoice without supplier name/UID: input VAT at risk."
+   }
+  },
+  {
+   "rule_id": "vat-003",
+   "citation": "art. 26 al. 2 let. b LTVA",
+   "applies_to": "both",
+   "trigger_condition": "Invoice missing recipient name/locality",
+   "check_logic": "IF invoice.type = 'VAT_invoice' AND invoice.recipient_name IS NULL THEN flag WARNING 'check art.26 al.3 cash-register exception before treating as blocker'",
+   "severity": "warning",
+   "consequence_if_violated": "Can jeopardize input-tax deduction absent a qualifying simplified-receipt exception.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Destinataire manquant — vérifier l'exception ticket de caisse.",
+    "en": "Missing recipient — check the cash-register exception."
+   }
+  },
+  {
+   "rule_id": "vat-004",
+   "citation": "art. 26 al. 2 let. c LTVA",
+   "applies_to": "both",
+   "trigger_condition": "Invoice date differs from supply date/period with no stated supply date/period",
+   "check_logic": "IF invoice.supply_date != invoice.invoice_date AND invoice.stated_supply_date_or_period IS NULL THEN flag WARNING",
+   "severity": "warning",
+   "consequence_if_violated": "Ambiguity on VAT period can delay/deny input-tax deduction.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Date/période de prestation ambiguë.",
+    "en": "Ambiguous supply date/period."
+   }
+  },
+  {
+   "rule_id": "vat-005",
+   "citation": "art. 26 al. 2 let. d LTVA",
+   "applies_to": "both",
+   "trigger_condition": "Invoice lacks description of nature/object/volume of supply",
+   "check_logic": "IF invoice.line_item_description IS NULL OR invoice.line_item_description = '' THEN flag BLOCKER",
+   "severity": "blocker",
+   "consequence_if_violated": "Vague/generic descriptions are a classic reason the AFC denies input-tax deduction on audit.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Description de la prestation manquante/vague.",
+    "en": "Missing/vague supply description."
+   }
+  },
+  {
+   "rule_id": "vat-006",
+   "citation": "art. 26 al. 2 let. e LTVA",
+   "applies_to": "both",
+   "trigger_condition": "Invoice missing consideration amount",
+   "check_logic": "IF invoice.consideration_amount IS NULL THEN flag BLOCKER",
+   "severity": "blocker",
+   "consequence_if_violated": "Invoice cannot serve as VAT documentation; input-tax deduction refused.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Montant de la contre-prestation manquant.",
+    "en": "Missing consideration amount."
+   }
+  },
+  {
+   "rule_id": "vat-007",
+   "citation": "art. 26 al. 2 let. f LTVA",
+   "applies_to": "both",
+   "trigger_condition": "Invoice missing VAT rate and/or VAT amount",
+   "check_logic": "IF invoice.vat_rate IS NULL THEN flag BLOCKER",
+   "severity": "blocker",
+   "consequence_if_violated": "Single most common cause of input-tax deduction denial in AFC/ESTV audits.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Taux/montant TVA manquant — cause n°1 de refus d'impôt préalable.",
+    "en": "Missing VAT rate/amount — #1 cause of input-tax denial."
+   }
+  },
+  {
+   "rule_id": "vat-008",
+   "citation": "art. 28 al. 3 LTVA",
+   "applies_to": "both",
+   "trigger_condition": "Input VAT claimed on a transaction where only a bank payment record exists (no art.26-compliant invoice)",
+   "check_logic": "IF transaction.evidence_tier IN ('partial','bare') AND transaction.vat_input_claimed = TRUE THEN flag BLOCKER 'proof of payment alone does not satisfy art.26 invoice content requirement — input VAT credit is at high risk of denial'",
+   "severity": "blocker",
+   "consequence_if_violated": "Permanent loss of input-VAT credit even if the underlying expense survives for profit-tax purposes.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Une preuve de paiement seule ne remplace JAMAIS la facture art. 26 — crédit TVA perdu.",
+    "en": "Proof of payment alone NEVER replaces the art. 26 invoice — VAT credit lost."
+   }
+  },
+  {
+   "rule_id": "dt-001",
+   "citation": "art. 58 al. 1 let. a LIFD",
+   "applies_to": "SA",
+   "trigger_condition": "Business expense outflow with no invoice/receipt but a bank record exists (evidence_tier = partial or bare)",
+   "check_logic": "IF transaction.evidence_tier IN ('partial','bare') THEN require reconstruction_file (attestation, pattern-match to recurring supplier, or third-party confirmation) BEFORE treating as deductible; else flag WARNING 'plausibility (vraisemblance) not established — at risk of reprise fiscale'",
+   "severity": "warning",
+   "consequence_if_violated": "Tax authority may add the amount back to taxable profit (reprise) if business purpose cannot be made plausible.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Charge sans pièce : la vraisemblance doit être reconstruite, sinon reprise.",
+    "en": "Expense without document: plausibility must be reconstructed, else reprise."
+   }
+  },
+  {
+   "rule_id": "dt-002",
+   "citation": "art. 58 al. 1 let. b LIFD — prestation appréciable en argent / distribution dissimulée de bénéfice",
+   "applies_to": "SA",
+   "trigger_condition": "Outflow with evidence_tier = bare (no reconstructable business purpose) where beneficiary resolves to the shareholder or a related party",
+   "check_logic": "IF transaction.evidence_tier = 'bare' AND transaction.beneficiary_is_shareholder_or_related = TRUE THEN flag BLOCKER 'disguised profit distribution risk — non-deductible to the SA AND taxable as personal income to the shareholder (double hit); apply Geneva CJ triple-condition test'",
+   "severity": "blocker",
+   "consequence_if_violated": "Double tax hit: non-deductible to the company (reprise) and separately taxable as income to the shareholder. High-priority flag for sole-shareholder SAs.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Sortie inexpliquée vers une partie liée : risque de distribution dissimulée (double peine).",
+    "en": "Unexplained outflow to a related party: disguised-distribution risk (double hit)."
+   }
+  },
+  {
+   "rule_id": "audit-001",
+   "citation": "art. 727 / 727a CO",
+   "applies_to": "SA",
+   "trigger_condition": "SA exceeds two of three thresholds for two consecutive years (balance sheet total CHF 20M, revenue CHF 40M, 250 FTE average) OR fails to meet opt-out conditions",
+   "check_logic": "IF entity.legal_form = 'SA' AND entity.exceeds_ordinary_audit_thresholds THEN require contrôle_ordinaire ELSE IF entity.employee_consent_for_optout != TRUE THEN require contrôle_restreint",
+   "severity": "warning",
+   "consequence_if_violated": "Operating without the legally required audit level exposes the SA and its board to liability; needs_fiduciary_check for exact opt-out mechanics per entity.",
+   "source_confidence": "needs_fiduciary_check",
+   "summary": {
+    "fr": "Seuils de contrôle ordinaire / conditions d'opting-out à surveiller.",
+    "en": "Ordinary-audit thresholds / opt-out conditions to watch."
+   }
+  },
+  {
+   "rule_id": "receipt-001",
+   "citation": "art. 26 LTVA (simplified receipt threshold)",
+   "applies_to": "both",
+   "trigger_condition": "Scanned/photographed receipt total (TTC) exceeds CHF 400 but lacks full art.26 invoice fields",
+   "check_logic": "IF receipt.amount_ttc > 400 AND receipt.has_full_invoice_fields = FALSE THEN flag BLOCKER 'above CHF 400 simplified-receipt ceiling — full invoice required for VAT purposes'",
+   "severity": "blocker",
+   "consequence_if_violated": "Input VAT deduction denied above the simplified-receipt threshold without a compliant full invoice.",
+   "source_confidence": "verified_fedlex",
+   "summary": {
+    "fr": "Au-delà de CHF 400 TTC, le ticket simplifié ne suffit plus — facture complète requise.",
+    "en": "Above CHF 400 incl. VAT, a simplified receipt is not enough — full invoice required."
+   }
+  },
+  {
+   "rule_id": "receipt-002",
+   "citation": "art. 958f CO integrity/immutability doctrine",
+   "applies_to": "both",
+   "trigger_condition": "A captured receipt/bill image is edited or replaced after initial capture without a new hash+audit entry",
+   "check_logic": "IF document.captured = TRUE AND document.modified_after_capture = TRUE AND document.new_hash_logged = FALSE THEN flag BLOCKER 'capture integrity broken — raw scans must be immutable, corrections via new linked version only'",
+   "severity": "blocker",
+   "consequence_if_violated": "Breaks evidentiary chain for the 10-year retention requirement; scan can no longer be relied on as equivalent to the paper original.",
+   "source_confidence": "doctrine_inferred",
+   "summary": {
+    "fr": "Original scanné immuable : hash à la capture, corrections en version liée.",
+    "en": "Scanned original immutable: hash at capture, corrections as linked versions."
+   }
+  }
+ ]
+}

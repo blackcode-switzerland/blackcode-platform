@@ -228,6 +228,8 @@ const ENTRY_KEYS = [
   'piece',
   // 0011: the original-currency story, {original, rate, source} | null.
   'fx',
+  // 0014: the Devil's Advocate's flag, null until an agent pass writes one.
+  'verdict',
   'reverses_entry_id',
   'history',
 ]
@@ -394,6 +396,8 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
         'piece',
         // 0011: same story, same shape, on the RI journal.
         'fx',
+        // 0014: the Devil's Advocate reaches both journals.
+        'verdict',
       ].sort()
     )
   })

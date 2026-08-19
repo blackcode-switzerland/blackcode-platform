@@ -9,6 +9,18 @@
     },
     {
       "method": "GET",
+      "path": "/api/compliance-rules",
+      "command": "bk books compliance list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/compliance-rules/{rule}",
+      "command": "bk books compliance show",
+      "app": "books"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces",
       "command": "bk books workspace list, bk books workspace use",
       "app": "books"
@@ -153,6 +165,12 @@
     },
     {
       "method": "PATCH",
+      "path": "/api/compliance-rules/{rule}",
+      "command": "bk books compliance review",
+      "app": "books"
+    },
+    {
+      "method": "PATCH",
       "path": "/api/workspaces/{ws}/sources/{number}",
       "command": "bk books source edit",
       "app": "books"
@@ -203,6 +221,12 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/entries/{number}/resolve",
       "command": "bk books resolve",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/entries/{number}/verdict",
+      "command": "bk books verdict",
       "app": "books"
     },
     {

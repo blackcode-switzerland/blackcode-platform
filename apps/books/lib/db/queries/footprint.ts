@@ -1,35 +1,33 @@
-// WHAT THIS APP HOLDS FOR A PERSON — the scaffold's answer, and the shape to
-// copy.
+// WHAT THIS APP HOLDS FOR A PERSON — and why most of it CANNOT BE REMOVED.
 //
 // The interface is `packages/platform-api/src/account-footprint.ts`. Read it
 // before changing anything here; the two rules it states are load-bearing.
 //
 // ---------------------------------------------------------------------------
-// WHY YOUR COPY OF THIS APP MUST GET THIS RIGHT
+// B/BOOKS IS THE APP THE CLOSE FLOW HAS NEVER MET: ONE THAT REFUSES
 // ---------------------------------------------------------------------------
-// `AppContext.footprint` is REQUIRED. It is required because, until 2026-08-11,
-// closing a blackcode account soft-deleted `platform.users` and deleted one
-// app's workspaces — and every other app's data survived, owned by an account
-// that could no longer sign in. Not lost: **stranded**, invisible to its owner
-// and unrecoverable by them, because there was no sign-in left to recover with.
+// Art. 958f CO: books, vouchers and business records are retained TEN YEARS.
+// A workspace whose books hold statutory records — écritures, RI entries,
+// pièces, pull records, filed analyses — is not this person's to destroy, and
+// not this app's either. So:
 //
-// A new app that could not answer "what do I hold?" would be silently skipped by
-// the account close, which is that bug reintroduced. So this field has no
-// default, and the honest answer for an app holding nothing per person is
-// `UNKNOWN_FOOTPRINT` explicitly — not an omission.
+//   - `read` reports such workspaces under `blocked_by`, EXTENDING that
+//     field's meaning: the platform's own case is "other people are in it",
+//     and books adds "the law is in it". Both mean the same operational
+//     thing — the whole-account close must not proceed by deleting this.
+//   - `purge` REFUSES (throws, naming art. 958f) while any such workspace
+//     exists. No force flag. The account close reads the refusal and keeps
+//     `platform.users` untouched — a person can leave, and their books stay
+//     until the law is done with them.
 //
-// ---------------------------------------------------------------------------
-// TWO THINGS TO KEEP WHEN YOU ADAPT IT
-// ---------------------------------------------------------------------------
-//   1. **`purge` must never touch `platform.users`, `platform.api_tokens` or
-//      `platform.inbox_messages`.** Those are the ACCOUNT — the one thing every
-//      app shares — and closing it is a separate, louder act that happens once,
-//      from `DELETE /api/me`, after every app reports empty.
-//   2. **`purge` returns a FRESH read, not an optimistic construction.** The
-//      account close asserts on it before it soft-deletes the user. A 200 says
-//      the request was handled; the return value says the app is empty, and only
-//      the second one is what makes it safe to proceed (CLAUDE.md finding #16:
-//      assert the positive, treat the refusals as the weaker half).
+// The line is RECORDS, not structures: a workspace whose books hold no
+// écriture, no RI entry, no pièce, no pull and no analysis has recorded
+// nothing the law retains, and purging it is legal and honest. That is also
+// the only thing `will_delete` can ever contain here.
+//
+// The scaffold's version of this file deleted whole workspaces whenever the
+// caller was their only member, and counted `books.notes` — a table 0007
+// dropped. Phase 5 replaced it; the census had never actually met this app.
 
 import { inArray, eq, sql } from 'drizzle-orm'
 import type { AppFootprint, FootprintSource } from '@blackcode/platform-api'
@@ -44,18 +42,20 @@ export const booksFootprintSource: FootprintSource = {
     const before = await readFootprint(userId)
     if (before.blocked_by.length > 0) {
       // Refused here as well as at the route, because `purge` is also reached
-      // from ANOTHER app's account close over HTTP. A workspace with other
-      // people in it is not one app's to destroy.
+      // from ANOTHER app's account close over HTTP. Statutory records are
+      // retained ten years (art. 958f CO); a workspace with other members is
+      // not one app's to destroy either.
       throw new Error(
-        `refusing to purge ${APP_SLUG}: ${before.blocked_by.length} workspace(s) still have other members`
+        `refusing to purge ${APP_SLUG}: ${before.blocked_by.length} workspace(s) hold statutory records retained under art. 958f CO or still have other members. ` +
+          `b/books keeps books ten years; the account may close, the books stay.`
       )
     }
     const ids = before.will_delete.map((w) => w.workspace_id)
     if (ids.length > 0) {
-      // One DELETE. Every table cascades from the workspace, and the
-      // `platform.blob_references` triggers on the content tables maintain the
-      // blob index as the cascade runs — reproducing any of that by hand would
-      // be a second implementation of the thing nobody may get wrong.
+      // Only workspaces the read PROVED record-free reach this line. One
+      // DELETE: every table cascades from the workspace, and the
+      // `platform.blob_references` triggers maintain the blob index as the
+      // cascade runs.
       await getDb().delete(booksWorkspaces).where(inArray(booksWorkspaces.id, ids))
     }
     return readFootprint(userId)
@@ -67,18 +67,26 @@ async function readFootprint(userId: number): Promise<AppFootprint> {
     workspace_id: number
     name: string
     member_count: number
+    records: number
   }>(sql`
-    SELECT w.id AS workspace_id, w.name, COUNT(m.id)::int AS member_count
+    SELECT w.id AS workspace_id, w.name,
+           (SELECT COUNT(*)::int FROM ${booksWorkspaceMembers} m WHERE m.workspace_id = w.id) AS member_count,
+           (
+             (SELECT COUNT(*)::int FROM books.entry       e WHERE e.workspace_id = w.id)
+           + (SELECT COUNT(*)::int FROM books.ri_entry    r WHERE r.workspace_id = w.id)
+           + (SELECT COUNT(*)::int FROM books.piece_inbox p WHERE p.workspace_id = w.id)
+           + (SELECT COUNT(*)::int FROM books.source_pull s WHERE s.workspace_id = w.id)
+           + (SELECT COUNT(*)::int FROM books.analysis    a WHERE a.workspace_id = w.id)
+           ) AS records
     FROM ${booksWorkspaces} w
-    LEFT JOIN ${booksWorkspaceMembers} m ON m.workspace_id = w.id
     WHERE w.owner_id = ${userId}
-    GROUP BY w.id, w.name
   `)
 
   const blocked: AppFootprint['blocked_by'] = []
   const willDelete: AppFootprint['will_delete'] = []
   for (const r of owned.rows) {
-    if (Number(r.member_count) > 1) {
+    if (Number(r.member_count) > 1 || Number(r.records) > 0) {
+      // Other people, or the law. Either way: not deletable from here.
       blocked.push({
         workspace_id: r.workspace_id,
         name: r.name,
@@ -106,21 +114,24 @@ async function readFootprint(userId: number): Promise<AppFootprint> {
 }
 
 /**
- * What is inside the workspaces that would be destroyed, in THIS APP'S NOUNS.
+ * What is inside the workspaces that WOULD be destroyed, in this app's nouns.
  *
- * One entry per thing a person would recognise losing. The scaffold has one
- * entity, so it has one line; your copy will have several. Counts, not
- * workspaces — "3 workspaces" tells somebody nothing about what is in them.
- *
- * Scoped to `will_delete`, not to everything the person authored: a note they
- * wrote in a colleague's workspace is not lost, and overstating the damage on a
- * confirmation screen is its own kind of dishonesty.
+ * By construction these workspaces hold no statutory records — a workspace
+ * with any lands in `blocked_by` instead — so the honest report here is what
+ * remains: the books themselves (structure, not records) and their register.
+ * Usually empty, and empty is the point: nothing a person would recognise
+ * losing survives to this list.
  */
 async function countIn(workspaceIds: number[]): Promise<Array<{ label: string; count: number }>> {
   const ids = sql.raw(`(${workspaceIds.join(',')})`)
-  const res = await getDb().execute<{ notes: number }>(
-    sql`SELECT (SELECT COUNT(*)::int FROM books.notes WHERE workspace_id IN ${ids}) AS notes`
-  )
-  const notes = Number(res.rows[0]?.notes ?? 0)
-  return notes > 0 ? [{ label: 'notes', count: notes }] : []
+  const res = await getDb().execute<{ books: number; sources: number }>(sql`
+    SELECT (SELECT COUNT(*)::int FROM books.entity WHERE workspace_id IN ${ids}) AS books,
+           (SELECT COUNT(*)::int FROM books.source WHERE workspace_id IN ${ids}) AS sources
+  `)
+  const out: Array<{ label: string; count: number }> = []
+  const books = Number(res.rows[0]?.books ?? 0)
+  const sources = Number(res.rows[0]?.sources ?? 0)
+  if (books > 0) out.push({ label: 'empty books (no écritures)', count: books })
+  if (sources > 0) out.push({ label: 'register sources (no pulls)', count: sources })
+  return out
 }

@@ -92,6 +92,13 @@
       "when": 1787000500000,
       "tag": "0013_management",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787000600000,
+      "tag": "0014_compliance",
+      "breakpoints": true
     }
   ]
 }
