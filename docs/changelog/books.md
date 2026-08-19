@@ -32,6 +32,251 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-19 — The hardening pass: every open finding from the frontend reviews, closed
+
+Nine fixes, all of them answers to tickets #50/#51/#53/#55. Four change the
+wire — each one flips a pin the frontend deliberately left on the defect, and
+the pins now hold the fixed shape.
+
+**Refusals reach callers now, with their reasons:**
+
+- **The 0004 guard speaks (was: a bare 500).** Drizzle wraps a COMMIT failure,
+  so the database's sentence sits on the error's CAUSE CHAIN while `e.message`
+  says only "Failed query: COMMIT". The post route now reads the chain
+  (`sqlErrorText`): an unbalanced post answers
+  `400 guard_refused — entry N does not balance: debit X <> credit Y`.
+  Frontends carrying the client-side workaround can delete it, as your own
+  pin instructed.
+- **Every 404 carries its reason and its recovery.** Nine call sites answered
+  things like `error: 999`; all now pass the refusal's message and suggestion
+  through (`bk books piece match 2 --entry 999` answers "no entry #999 …" with
+  the worklist hint).
+
+**Wire changes (all additive or shape-corrections you asked for):**
+
+- **`account.label` is `{fr, en}`** — phase-0-contract.md's promise, kept at
+  the door: storage keeps the mockup's `{fr, enSuffix}`, `publicAccount`
+  normalizes. `en()` reads an account label like any other; the dedicated
+  helpers are gone. A custom label with no English half serves `en: ""`.
+- **Patrimoine item amounts are `numeric` strings**, like every other amount.
+  The hooks conversion is deleted, per the pin's own note.
+- **Entry payloads name their book and year**: `entity` (slug) and `exercice`
+  (year) on both journals' rows, list and show. The transaction screen can
+  state whose écriture it is instead of inferring it from a URL filter. And
+  stated as a decision: a bare `GET /entries/{n}` resolving workspace-wide is
+  INTENDED for reads — membership is the gate, and the payload now tells the
+  truth about what it found; every write path holds the entity boundary by
+  refusal.
+- **`fx` is a contract now**: when present, ALL THREE of
+  `{original, rate, source}` are — both writers always wrote the whole story;
+  the type finally says so.
+
+**The pièce pipeline:**
+
+- **SHA-256 for captured files (migration 0015).** `source.sha256` rides
+  ingest (64 hex chars, `bad_sha256` otherwise), dedupe prefers it, and a
+  matched entry cites `sha256:…` over Drive's md5. MD5 stays as Drive's own
+  cross-check and the legacy key.
+- **Duplicate suspects by IDENTICAL FACTS, not just identical bytes.** The
+  mockup's own twin pair — the Philfruits receipt and the EFT slip of the
+  same purchase — is different bytes and the same money, which checksum
+  dedupe could never flag. Ingest now also flags same-date-same-total within
+  the same book: `duplicate_of` set, `needs_review` true, never dropped
+  (refunds and split payments look identical; a human decides). The seeded
+  inbox finally shows the duplicate banner, honestly.
+- **`/api/meta`'s `source_types` carry a `note` each** saying whether that
+  type is expected to feed a ledger account — so no client invents the
+  sentence again that told PostFinance, a bank, that having no ledger account
+  is normal. Render the vocabulary's words.
+
+## 2026-08-19 — Phase 5: compliance, retention, and the app that refuses
+
+The last in-app phase. Three routes, one enforcement, one platform answer.
+
+**The 19 compliance rules are served** (`GET /api/compliance-rules`, `bk books
+compliance list/show`) — statutory rules researched against Fedlex, each with
+its citation, trigger, check logic, consequence, severity (blocker / warning /
+info) and `source_confidence`. **Every rule is DRAFT until the fiduciary signs
+off**, and the payload says so; render the state. `PATCH
+/api/compliance-rules/{rule}` (`bk books compliance review`) records the
+sign-off — approve, edit (corrected wording lands in `edited_logic`, the
+original stays), or reject — with who and when. No path back to draft, no
+delete, ever: a verdict may cite a rule forever.
+
+**Verdicts are the Devil's Advocate's door** — the eighth write, the third for
+an outside process. `POST /entries/{n}/verdict` (`bk books verdict`, `--entity`
+for an RI number) files a STRUCTURED verdict: `accepted`,
+`accepted_with_warning`, or `blocked`, with the `rules` that triggered (each
+must exist), `worst_case` and `resolves`. History-first: a replaced verdict
+stays in the entry's trail. The rule from #53 applies from birth: an `entity`
+that does not own the number refuses with `entry_other_book`.
+
+**One enforcement, server side:** a `blocked` entry refuses to post
+(`verdict_blocked`, carrying the agent's own `resolves` text as the way out).
+Warned entries post and stay visible. Nothing else is enforced — flags are
+facts, and the app computes no compliance judgment of its own.
+
+**Wire change, additive:** `entry` and `ri_entry` payloads gain `verdict`
+(null until an agent pass writes one) — pin it as `Verdict | null`.
+`/api/meta` gains `verdict_states`, `rule_review_states`, `rule_confidence`.
+
+**The footprint now answers honestly, and the answer is a refusal.** The
+scaffold's copy would have hard-deleted solely-owned workspaces — statutory
+records included — and counted a table 0007 dropped. Now: a workspace whose
+books hold records (écritures, RI entries, pièces, pulls, analyses) reports as
+`blocked_by`, and `purge` refuses naming **art. 958f CO** — ten-year
+retention. The account may close; the books stay. Only a workspace whose books
+recorded nothing purges. **Platform side, take note:** the whole-account close
+flow meets its first refusing app.
+
+**Invariants:** DATA-MODEL §17 is now an audited checklist —
+`lib/invariants.test.ts` tests what was untested (an SA/Sàrl with simplified
+books is refused at `createEntity` itself and at the route,
+`sa_needs_double_entry`; « consolidé » is grepped out of everywhere but the
+personal overview's disclaimer; the 958f purge refusal) and names the file
+pinning each of the other thirteen.
+
+Also: `bk guide books` rewritten for phases 4-5 (statuses and vocabularies
+still come from `bk meta`, never from the guide).
+
+## 2026-08-19 — Phase 4B: the management layer, and the agent write-back
+
+Five routes, two of them writes. Everything derived is computed at request
+time and never stored; everything filed is permanent.
+
+**New routes and `bk` verbs:**
+
+| Route | `bk` |
+|---|---|
+| `GET /analytique` | `bk books analytique` |
+| `GET /analytique/categories`, `POST` | `bk books category list` / `create` |
+| `GET /analyses`, `POST` | `bk books analyse list` / `record` |
+| `GET /analyses/{n}` | `bk books analyse show` |
+| `GET /tax-snapshot` | `bk books tax` |
+
+**The analytique** (`GET /analytique?entity=&exercice=`): the cost breakdown
+per category — each bucket carrying its underlying lines, largest first, an
+avoir counted against its bucket — and the `monthly_flows` series (produits /
+charges per month, POSTED lines only, exercice-scoped). A simplified book
+answers with its dépenses grouped by their own `category` label, uncategorized
+under a named bucket; its flows read the directions, and a neutral transfer is
+in neither series.
+
+**Categories are per book and writable** — the seventh write. Seeded with the
+mockup's five (`personnel`, `bureau`, `it_ai`, `admin`, `autres`) on every
+double-entry book. `POST` refuses: an account not in the book's chart
+(`unknown_account`), a bilan account (`not_a_flow_account` — a category counts
+flows), an account another ACTIVE category already counts (`accounts_claimed`
+— one franc, one bar), a duplicate key, a simplified book (`ri_no_categories`).
+Labels are normalized to `{fr, en}` on the wire, always. No delete: `retired`
+is the exit, and retired rows are served flagged.
+
+**The analyses journal** — the sixth write, and the agent write-back contract
+made real. `POST /analyses` files `{entity, asked_by, agent, question,
+verdict, figures[], based_on[], scenario_label?, runway_after_months?}`. The
+row is APPEND-ONLY: migration 0013 revokes UPDATE and DELETE from the app
+role, no edit route exists, and none will. `based_on` items need `label` and
+`value` (`based_on_incomplete` otherwise): the snapshot of what the agent READ
+is the point of the record, and it is never recomputed. A drifted answer is
+re-asked into a new row; both stand. `asked` is the server's clock;
+`runway_after_months` is served as a number so charts need no prose parsing.
+
+**The tax snapshot** (`GET /tax-snapshot?entity=&exercice=`): `profit` and
+`equity` from the statements, `vat` from the entries' own TVA columns (`null`
+when not registered; input counts only when CLAIMED), and the two PM tax
+ESTIMATES from the entity's parameter record — canton, commune, rates,
+citations, `confirmed` flags, served verbatim under `tax.params`. A book with
+no record answers `configured: false` and `tax: null` — an honest "not
+configured", never someone else's rates. Two flags worth reading:
+
+- **`capital_tax.confirmed` is `false` on the seeded books, deliberately.**
+  The art. 118 imputation question is open with the fiduciary; the snapshot
+  serves `gross`, `credited` and `net_due` so either reading is available.
+- A simplified book refuses the whole route
+  (`no_tax_snapshot_for_simplified`): its result is its owner's personal
+  income, which this app does not model.
+
+Nothing existing changed shape: no column moved, no route renamed, migrations
+0001-0012 untouched.
+## 2026-08-19 — The web ledger reads both journals, and posting is on the web
+
+**Not breaking for `bk`.** No route changed and no payload changed; this is the
+web UI catching up to what phase 4A's backend already serves. Two of the three
+items below are corrections to screens that were quietly wrong.
+
+### The general ledger now renders a simplified book
+
+`GET …/entries` has served two shapes since phase 4A — the grand livre for a
+double-entry book, the recettes-dépenses journal for a simplified one — with, by
+design, **no marker field on the payload**: the caller named the book, so the
+caller knows which shape it gets.
+
+The web ledger did not branch on it. On a simplified book it was drawing
+recettes-dépenses movements through grand-livre columns: no amount and no
+direction shown at all, a blank journal number, a blank posting status, "This
+entry has no lines." on every row — and each row linked to `/ledger/{n}`, which
+reads the double-entry journal, so following one **opened a different book's
+écriture** under the simplified book's name. The two journals keep separate
+number series, which is why the numbers resolved.
+
+It branches on the book's `bookkeeping_regime` before it reads a row now, and
+renders the simplified journal with its own columns (date, movement, category,
+direction, amount). Those rows are deliberately **not** links: nothing serves one
+recettes-dépenses movement on its own.
+
+*Nothing to adapt for an agent.* `bk books entry list --entity <simplified-book>`
+was always correct and is unchanged.
+
+### `?status=` and `?account=` are no longer sent to a simplified book
+
+Those two filters are **refused** by an RI journal (400 `ri_no_such_filter`),
+not ignored. The web UI was sending both: the ledger's status filter, and the
+income statement's account drill-down, which appends `?status=posted` so a figure
+reconciles to its own drill-down.
+
+The chart of accounts renders for a simplified book too, so every account number
+on that screen was a link to a 400. Those numbers are now shown as facts rather
+than as drill-downs — a simplified book has no chart mapping to drill into — and
+a URL that still carries either filter says on the page that it was not applied
+rather than dropping it silently.
+
+### Posting a staged entry is on the web
+
+`POST …/entries/{n}/post` and `bk books entry post` have both existed since
+phase 1; the web UI had no way to do it. It is on the entry detail page now, for
+a staged entry only.
+
+It is not an ordinary button, because posting is the one write in this product
+with no undo: it moves a line into the immutable record, where nobody — human or
+agent — can modify or delete it, and a correction becomes a new reversing entry.
+So it **requires the entry's #number to be typed back** before it will submit,
+the way `bk workspace delete <slug> --confirm <slug>` requires the slug, and it
+states what freezes (date, amounts, accounts) and what stays open (the
+explanation, counterparty, recognition state and supporting document).
+
+**`already: true` is rendered as "already posted", not as an error**, matching
+the route's deliberate idempotency: an agent that retries has not failed.
+
+### Known defect, not fixed here: the 0004 guard's refusal never reaches a client
+
+Migration 0004 checks at COMMIT that a posted entry balances, carries at least
+two lines and has every line mapped. The route means to translate that refusal
+into `guard_refused` (400) with the database's own sentence. **It cannot, and
+never has.** Under drizzle-orm 0.45 a failure raised at COMMIT arrives wrapped,
+with the database's message on the error's `cause`, so the route's check never
+matches and the refusal surfaces as **500 `internal_error`** — on `bk books entry
+post` exactly as on the web form.
+
+Reproduced with an entry whose two lines are mapped and unbalanced (77.00 against
+99.00): 500 on both surfaces, while the same statements in `psql` answer *"entry
+1272 does not balance: debit 77.00 <> credit 99.00"*.
+
+*How to adapt:* a 500 from `bk books entry post` means the entry was **not**
+posted and is unchanged — the transaction rolls back whole — and almost always
+means it failed one of those three conditions. `bk books entry show <n>` and its
+lines are what the guard reads. This is a route fix and is tracked; the message
+will start arriving as a 400 with a real sentence.
+
 ## 2026-08-18 — The match write holds the entity boundary
 
 The phase-3 review found that `POST /pieces/{n}/match` could attach a pièce to

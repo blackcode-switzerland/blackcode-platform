@@ -74,7 +74,13 @@ export interface ImportSummary {
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0]
 
 /** Next workspace seq for an entity type, seeded from the table's own maximum. */
-const SEQ_TABLES = { entry: 'entry', ri_entry: 'ri_entry', source: 'source' } as const
+const SEQ_TABLES = {
+  entry: 'entry',
+  ri_entry: 'ri_entry',
+  source: 'source',
+  analysis: 'analysis',
+  category: 'analytique_category',
+} as const
 export async function nextSeq(tx: Tx, workspaceId: number, entityType: keyof typeof SEQ_TABLES): Promise<number> {
   const table = SEQ_TABLES[entityType]
   const r = await tx.execute(sql`
@@ -345,6 +351,25 @@ export class PostRefused extends Error {
   }
 }
 
+/**
+ * Every message on an error's cause chain, joined.
+ *
+ * Drizzle 0.45 wraps a failure raised at COMMIT in DrizzleQueryError whose
+ * own message is literally "Failed query: COMMIT" — the database's sentence
+ * (0004's guard speaking) sits on `.cause`. Anything matching on the
+ * top-level message alone has never seen the guard's words: an unbalanced
+ * post answered 500 internal_error on every surface until the frontend
+ * review proved it live (ticket #55, 2026-08-19). Route catches translate
+ * through THIS, never through `e.message`.
+ */
+export function sqlErrorText(e: unknown): string {
+  let out = ''
+  for (let x = e as { message?: string; cause?: unknown } | undefined; x; x = x.cause as typeof x) {
+    out += (x.message ?? '') + '\n'
+  }
+  return out
+}
+
 export async function postEntry(
   workspaceId: number,
   entrySeq: number
@@ -361,6 +386,19 @@ export async function postEntry(
     }
     if (entry.status === 'posted') {
       return { number: entry.seq, entry_no: entry.entry_no, status: 'posted', already: true }
+    }
+
+    // Phase 5's ONE enforcement: a blocked verdict refuses to post, server
+    // side. The Devil's Advocate wrote the flag; a fresh verdict (or a
+    // correction of what it flagged) is the way through — never a force flag.
+    const v = entry.verdict as { verdict?: string; rules?: string[]; resolves?: unknown } | null
+    if (v?.verdict === 'blocked') {
+      const resolves = typeof v.resolves === 'string' ? v.resolves : null
+      throw new PostRefused(
+        'verdict_blocked',
+        `entry #${entrySeq} is blocked by compliance verdict (${(v.rules ?? []).join(', ')})`,
+        resolves ?? 'resolve what the verdict flagged, then have the reviewer re-run; blocked entries do not post'
+      )
     }
 
     const lines = await tx.select().from(booksEntryLine).where(eq(booksEntryLine.entry_id, entry.id))

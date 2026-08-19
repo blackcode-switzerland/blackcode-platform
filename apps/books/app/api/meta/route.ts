@@ -42,10 +42,13 @@ import {
   EVIDENCE_TIERS,
   MANIFEST_STATES,
   RECOGNITION,
+  RULE_CONFIDENCE,
+  RULE_REVIEW_STATES,
   SOURCE_LAYERS,
   SOURCE_STATUS,
   SOURCE_TYPES,
   TVA_RATES,
+  VERDICT_STATES,
 } from '@/lib/vocabularies'
 
 
@@ -80,6 +83,10 @@ export const GET = apiHandler(async (_req: NextRequest) => {
       source_layers: SOURCE_LAYERS,
       source_status: SOURCE_STATUS,
       manifest_states: MANIFEST_STATES,
+      // Phase 5: the Devil's Advocate's verdicts, and the rules' review lifecycle.
+      verdict_states: VERDICT_STATES,
+      rule_review_states: RULE_REVIEW_STATES,
+      rule_confidence: RULE_CONFIDENCE,
     },
 
     tva_rates: TVA_RATES,

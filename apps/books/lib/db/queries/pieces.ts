@@ -7,8 +7,10 @@
 // membership-checked, nothing special. What IS special is what this module
 // refuses to trust: the worker's validation verdict (recomputed server-side),
 // the worker's retry behaviour (idempotent on the file/checksum pair), and
-// the worker's deduplication (same checksum under a new file id is FLAGGED,
-// because a refund and a re-scan look identical and mean different money).
+// the worker's deduplication — suspects are FLAGGED here, never dropped, by
+// two detectors: identical bytes (same checksum, new file id) and identical
+// facts (same date and total for the same book — an EFT slip and the receipt
+// of one purchase, or a refund, or a split payment; a human decides which).
 //
 // A piece never touches a balance. No derivation reads this table; matching
 // one to an entry writes the ENTRY's piece_* interpretation columns, which
@@ -43,7 +45,10 @@ export interface IngestSource {
   file_id: string
   file_name?: string | null
   mime_type?: string | null
+  /** Drive's own checksum: the worker's cross-check, and the legacy dedupe key. */
   md5_checksum?: string | null
+  /** The worker's SHA-256 of the bytes it captured (0015). What the books cite. */
+  sha256?: string | null
   created_time?: string | null
   web_view_link?: string | null
 }
@@ -79,9 +84,35 @@ export async function ingestPiece(
   const review = needsReview(extraction, validation)
 
   return db.transaction(async (tx) => {
-    // Duplicate content under a DIFFERENT file id: flag, never drop.
+    // Duplicate suspects under a DIFFERENT file id: flag, never drop. Two
+    // detectors, in strength order.
+    //
+    // IDENTICAL BYTES — the same checksum (sha256 when both sides carry one,
+    // Drive's md5 otherwise): a copied or re-uploaded file.
+    //
+    // SAME FACTS — an earlier piece for the same book whose extraction names
+    // the same date and the same total: the mockup's own 9605/9601 pair, an
+    // EFT card slip and the itemized receipt of ONE purchase — different
+    // bytes, same money. A refund and a split payment look exactly like this
+    // too, which is why a suspect is flagged for a human and never dropped,
+    // and why a flagged piece is `needs_review` from the moment it lands.
     let duplicateOf: BooksPieceInbox | null = null
-    if (source.md5_checksum) {
+    if (source.sha256) {
+      const [dup] = await tx
+        .select()
+        .from(booksPieceInbox)
+        .where(
+          and(
+            eq(booksPieceInbox.workspace_id, workspaceId),
+            eq(booksPieceInbox.sha256, source.sha256),
+            sql`${booksPieceInbox.drive_file_id} <> ${source.file_id}`
+          )
+        )
+        .orderBy(asc(booksPieceInbox.id))
+        .limit(1)
+      duplicateOf = dup ?? null
+    }
+    if (!duplicateOf && source.md5_checksum) {
       const [dup] = await tx
         .select()
         .from(booksPieceInbox)
@@ -96,6 +127,32 @@ export async function ingestPiece(
         .limit(1)
       duplicateOf = dup ?? null
     }
+    if (!duplicateOf) {
+      const txn = extraction.transaction ?? (extraction as unknown as { tx?: Extraction['transaction'] }).tx
+      const total = toCentimes(txn?.total ?? 0)
+      const date = txn?.date ?? null
+      if (total !== 0n && date) {
+        const earlier = await tx
+          .select()
+          .from(booksPieceInbox)
+          .where(
+            and(
+              eq(booksPieceInbox.workspace_id, workspaceId),
+              sql`${booksPieceInbox.entity_id} IS NOT DISTINCT FROM ${entityId}`,
+              sql`${booksPieceInbox.drive_file_id} <> ${source.file_id}`
+            )
+          )
+          .orderBy(asc(booksPieceInbox.id))
+        for (const p of earlier) {
+          const px = p.extraction as unknown as Extraction & { tx?: Extraction['transaction'] }
+          const ptx = px.transaction ?? px.tx
+          if (ptx?.date === date && toCentimes(ptx?.total ?? 0) === total) {
+            duplicateOf = p
+            break
+          }
+        }
+      }
+    }
 
     const seqRow = await tx.execute(sql`
       INSERT INTO ${booksCounters} (workspace_id, entity_type, last_value)
@@ -106,18 +163,23 @@ export async function ingestPiece(
     `)
     const seq = Number((seqRow.rows[0] as { last_value: number }).last_value)
 
+    // A duplicate suspect needs a human whatever its own arithmetic said:
+    // "probably the same money twice" is exactly the judgment call this
+    // pipeline exists to surface rather than make.
+    const flagged = review || duplicateOf !== null
+
     const inserted = await tx.execute(sql`
       INSERT INTO books.piece_inbox
         (workspace_id, entity_id, seq, status, received, pipeline,
-         drive_file_id, file_name, mime_type, md5_checksum, drive_created_time, web_view_link,
+         drive_file_id, file_name, mime_type, md5_checksum, sha256, drive_created_time, web_view_link,
          extraction, validation, needs_review, duplicate_of_id)
       VALUES
         (${workspaceId}, ${entityId}, ${seq}, 'staged', ${receivedOn}, ${pipeline},
          ${source.file_id}, ${source.file_name ?? null}, ${source.mime_type ?? null},
-         ${source.md5_checksum ?? null}, ${source.created_time ?? null}, ${source.web_view_link ?? null},
+         ${source.md5_checksum ?? null}, ${source.sha256 ?? null}, ${source.created_time ?? null}, ${source.web_view_link ?? null},
          ${JSON.stringify(extraction)}::jsonb, ${JSON.stringify(validation)}::jsonb,
-         ${review}, ${duplicateOf?.id ?? null})
-      ON CONFLICT (workspace_id, drive_file_id, COALESCE(md5_checksum, '')) DO NOTHING
+         ${flagged}, ${duplicateOf?.id ?? null})
+      ON CONFLICT (workspace_id, drive_file_id, COALESCE(sha256, md5_checksum, '')) DO NOTHING
       RETURNING *
     `)
 
@@ -127,19 +189,20 @@ export async function ingestPiece(
       piece = inserted.rows[0] as unknown as BooksPieceInbox
     } else {
       created = false
-      const cs = source.md5_checksum ?? null
-      const [existing] = await tx
+      // The retry delivered the identical payload, so the row it converged on
+      // is the one whose dedupe key matches — sha256 when the delivery
+      // carried one, Drive's md5 otherwise.
+      const key = source.sha256 ?? source.md5_checksum ?? ''
+      const candidates = await tx
         .select()
         .from(booksPieceInbox)
         .where(
           and(
             eq(booksPieceInbox.workspace_id, workspaceId),
-            eq(booksPieceInbox.drive_file_id, source.file_id),
-            cs === null ? isNull(booksPieceInbox.md5_checksum) : eq(booksPieceInbox.md5_checksum, cs)
+            eq(booksPieceInbox.drive_file_id, source.file_id)
           )
         )
-        .limit(1)
-      piece = existing
+      piece = candidates.find((p) => (p.sha256 ?? p.md5_checksum ?? '') === key) ?? candidates[0]
       // The counter advanced for a row that never landed. A gap in piece
       // numbers is harmless; a duplicate number never is.
     }
@@ -169,7 +232,7 @@ export async function ingestPiece(
           VALUES
             (${workspaceId}, ${driveSource.id}, ${source.file_id}, ${source.file_name ?? null},
              ${source.mime_type ?? null}, ${source.created_time ?? null}, ${receivedOn},
-             ${piece.id}, ${review ? 'needs_review' : 'validated_staged'})
+             ${piece.id}, ${flagged ? 'needs_review' : 'validated_staged'})
           ON CONFLICT (workspace_id, file_id) DO UPDATE
             SET extracted_piece_id = EXCLUDED.extracted_piece_id,
                 state = EXCLUDED.state,
@@ -183,7 +246,7 @@ export async function ingestPiece(
       piece,
       created,
       validation,
-      needs_review: review,
+      needs_review: flagged,
       duplicate_of: duplicateOf?.seq ?? null,
     }
   })
@@ -310,6 +373,17 @@ export class MatchRefused extends Error {
   }
 }
 
+/**
+ * The hash an entry cites as proof of its pièce: SHA-256 when the worker
+ * captured one (0015), Drive's MD5 as the legacy fallback, prefixed so a
+ * reader always knows which algorithm proved the file.
+ */
+function pieceHashOf(piece: BooksPieceInbox): string | null {
+  if (piece.sha256) return `sha256:${piece.sha256}`
+  if (piece.md5_checksum) return `md5:${piece.md5_checksum}`
+  return null
+}
+
 /** History is append-only; a pre-existing narrative object becomes the first element — resolve.ts's rule. */
 function appendHistory(prior: unknown, event: Record<string, unknown>): unknown[] {
   return Array.isArray(prior) ? [...prior, event] : prior ? [prior, event] : [event]
@@ -395,7 +469,7 @@ export async function matchPiece(
         .update(booksRiEntry)
         .set({
           piece_drive_ref: piece.web_view_link ?? `drive://${piece.drive_file_id}`,
-          piece_hash: piece.md5_checksum ? `md5:${piece.md5_checksum}` : null,
+          piece_hash: pieceHashOf(piece),
           piece_captured: piece.received,
           history: appendHistory(ri.history, {
             at: new Date().toISOString(),
@@ -459,7 +533,7 @@ export async function matchPiece(
       .update(booksEntry)
       .set({
         piece_drive_ref: piece.web_view_link ?? `drive://${piece.drive_file_id}`,
-        piece_hash: piece.md5_checksum ? `md5:${piece.md5_checksum}` : null,
+        piece_hash: pieceHashOf(piece),
         piece_captured: piece.received,
         history: appendHistory(entry.history, {
           at: new Date().toISOString(),

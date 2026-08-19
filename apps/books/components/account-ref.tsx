@@ -21,9 +21,16 @@
 
 import Link from 'next/link'
 import { scopedHref } from '@/lib/nav'
-import { accountLabelEn } from '@/lib/label'
+// ── `en`, NOT `accountLabelEn`, SINCE 2026-08-19 ──────────────────────────
+// Account labels shipped as `{fr, enSuffix}` — the mockup's shortcut — while the
+// phase-0 contract said to normalise them at the door. They were not, so `en()`
+// fell back to the French and every account name in the chart and under every
+// income-statement line rendered in French on an English screen. The backend
+// normalised it in the hardening pass; storage keeps `enSuffix`, the wire says
+// `en`, and the second spelling this file needed is gone with it.
+import { en } from '@/lib/label'
 import { journalAccepts, type Journal } from '@/lib/journal'
-import type { AccountLabel } from '@/lib/types'
+import type { Label } from '@/lib/types'
 
 /**
  * What this component needs of the scope, and the third field is the point.
@@ -50,11 +57,11 @@ export function AccountRef({
   /** `"1020"`. Null renders the unmapped marker rather than a broken link. */
   no: string | null
   /**
-   * `{fr, enSuffix}` — an `AccountLabel`, NOT a `StatementLabel`. The two are
+   * `{fr, en}` since 2026-08-19 — the wire normalizes account labels. The two are
    * separate types precisely so this prop cannot be handed the wrong one and
    * silently render French; see `lib/label.ts`.
    */
-  label?: AccountLabel | null
+  label?: Label | null
   /** `/dashboard/{ws}` — the shell knows it; a page passes it down. */
   base: string
   scope: AccountRefScope
@@ -77,7 +84,7 @@ export function AccountRef({
       <span className="font-mono text-[12.5px] tabular-nums">{no}</span>
       {label && (
         <span className="text-[13px] text-muted-foreground group-hover:text-primary-strong">
-          {accountLabelEn(label)}
+          {en(label)}
         </span>
       )}
     </>

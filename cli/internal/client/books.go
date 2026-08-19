@@ -110,13 +110,14 @@ type CreateBooksExerciceRequest struct {
 
 // BooksAccount is one line of the Swiss PME chart.
 //
-// `Label` is left as raw JSON shape (fr + enSuffix) in the payload; the CLI prints
-// the French, which is the statutory wording.
+// `Label` is `{fr, en}` since 2026-08-19 (the wire normalizes the mockup's
+// enSuffix at the door); the CLI prints the French, the statutory wording.
 type BooksAccount struct {
 	No    string `json:"no"`
 	Class int    `json:"class"`
 	Label struct {
 		Fr string `json:"fr"`
+		En string `json:"en"`
 	} `json:"label"`
 	Statement         string `json:"statement"`
 	StatementPosition string `json:"statement_position"`
@@ -145,10 +146,14 @@ type BooksFx struct {
 // by; `EntryNo` is the statutory journal number, gapless per (book, year), which
 // is what a tax authority reads. Neither substitutes for the other.
 type BooksEntry struct {
-	Number  int    `json:"number"`
-	EntryNo int    `json:"entry_no"`
-	Date    string `json:"date"`
-	Status  string `json:"status"`
+	Number int `json:"number"`
+	// Which book and which year (2026-08-19): `number` is workspace-wide,
+	// these say whose écriture it is.
+	Entity   string `json:"entity"`
+	Exercice int    `json:"exercice"`
+	EntryNo  int    `json:"entry_no"`
+	Date     string `json:"date"`
+	Status   string `json:"status"`
 	// The RI journal's two fields. `entry list/show` serve BOTH journals since
 	// phase 4A, and the caller knows which book it asked for; these are empty
 	// on a grand-livre row, and Status/Lines are empty on an RI row.
@@ -378,7 +383,8 @@ type BooksPatrimoine struct {
 		Label struct {
 			Fr string `json:"fr"`
 		} `json:"label"`
-		Amount float64 `json:"amount"`
+		// A `numeric` string since 2026-08-19, like every other amount.
+		Amount string `json:"amount"`
 	} `json:"items"`
 }
 
@@ -835,4 +841,272 @@ func (c *Client) SetBooksRunbook(ws string, source int, body map[string]any) (ma
 		return nil, err
 	}
 	return out, nil
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4B: management — analytique, analyses, categories, tax snapshot
+// ---------------------------------------------------------------------------
+
+type BooksMonthlyFlow struct {
+	Month    string `json:"month"`
+	Produits string `json:"produits"`
+	Charges  string `json:"charges"`
+}
+
+type BooksCategoryLine struct {
+	Number       int    `json:"number"`
+	Date         string `json:"date"`
+	Counterparty string `json:"counterparty"`
+	Amount       string `json:"amount"`
+	Account      string `json:"account"`
+}
+
+type BooksCategoryBreakdown struct {
+	Key      string              `json:"key"`
+	Label    map[string]any      `json:"label"`
+	Accounts []string            `json:"accounts"`
+	Amount   string              `json:"amount"`
+	Lines    []BooksCategoryLine `json:"lines"`
+}
+
+type BooksAnalytique struct {
+	Entity       string                   `json:"entity"`
+	Exercice     int                      `json:"exercice"`
+	Categories   []BooksCategoryBreakdown `json:"categories"`
+	MonthlyFlows []BooksMonthlyFlow       `json:"monthly_flows"`
+}
+
+func (c *Client) GetBooksAnalytique(ws string, s BooksScope) (*BooksAnalytique, error) {
+	var out BooksAnalytique
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/analytique%s", ws, s.query()), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// BooksAnalysis is one FILED answer: question, verdict, figures, and the
+// based_on snapshot of what the agent read. The record never changes; a
+// drifted answer is re-asked into a new row.
+type BooksAnalysis struct {
+	Number            int              `json:"number"`
+	Entity            string           `json:"entity"`
+	Asked             string           `json:"asked"`
+	AskedBy           string           `json:"asked_by"`
+	Agent             string           `json:"agent"`
+	ScenarioLabel     any              `json:"scenario_label"`
+	RunwayAfterMonths *float64         `json:"runway_after_months"`
+	Question          any              `json:"question"`
+	Verdict           any              `json:"verdict"`
+	Figures           []map[string]any `json:"figures"`
+	BasedOn           []map[string]any `json:"based_on"`
+}
+
+func (c *Client) ListBooksAnalyses(ws string, entity string) ([]BooksAnalysis, error) {
+	var resp struct {
+		Data []BooksAnalysis `json:"data"`
+	}
+	q := ""
+	if entity != "" {
+		q = "?entity=" + entity
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/analyses%s", ws, q), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) GetBooksAnalysis(ws string, number int) (*BooksAnalysis, error) {
+	var out BooksAnalysis
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/analyses/%d", ws, number), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RecordBooksAnalysisRequest files one analysis — the agent write-back
+// contract. based_on items are {label, value, href?}: the snapshot of what
+// was read is the point of the record, and the server refuses one without it.
+type RecordBooksAnalysisRequest struct {
+	Entity            string           `json:"entity"`
+	AskedBy           string           `json:"asked_by"`
+	Agent             string           `json:"agent"`
+	Question          any              `json:"question"`
+	Verdict           any              `json:"verdict"`
+	Figures           []map[string]any `json:"figures,omitempty"`
+	BasedOn           []map[string]any `json:"based_on,omitempty"`
+	ScenarioLabel     any              `json:"scenario_label,omitempty"`
+	RunwayAfterMonths *float64         `json:"runway_after_months,omitempty"`
+}
+
+func (c *Client) RecordBooksAnalysis(ws string, req RecordBooksAnalysisRequest) (*BooksAnalysis, error) {
+	var out BooksAnalysis
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/analyses", ws), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type BooksCategory struct {
+	Number   int            `json:"number"`
+	Entity   string         `json:"entity"`
+	Key      string         `json:"key"`
+	Label    map[string]any `json:"label"`
+	Accounts []string       `json:"accounts"`
+	Retired  bool           `json:"retired"`
+}
+
+func (c *Client) ListBooksCategories(ws string, entity string) ([]BooksCategory, error) {
+	var resp struct {
+		Data []BooksCategory `json:"data"`
+	}
+	q := ""
+	if entity != "" {
+		q = "?entity=" + entity
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/analytique/categories%s", ws, q), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+type CreateBooksCategoryRequest struct {
+	Entity   string   `json:"entity"`
+	Key      string   `json:"key"`
+	Label    any      `json:"label"`
+	Accounts []string `json:"accounts"`
+}
+
+func (c *Client) CreateBooksCategory(ws string, req CreateBooksCategoryRequest) (*BooksCategory, error) {
+	var out BooksCategory
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/analytique/categories", ws), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type BooksVatPosition struct {
+	OpeningDue      string `json:"opening_due"`
+	OutputYtd       string `json:"output_ytd"`
+	InputClaimedYtd string `json:"input_claimed_ytd"`
+	NetDue          string `json:"net_due"`
+}
+
+type BooksProfitTax struct {
+	Cantonal     string  `json:"cantonal"`
+	Communal     string  `json:"communal"`
+	Ifd          string  `json:"ifd"`
+	Total        string  `json:"total"`
+	StatutoryPct float64 `json:"statutory_pct"`
+	EffectivePct float64 `json:"effective_pct"`
+}
+
+type BooksCapitalTax struct {
+	Gross    string `json:"gross"`
+	Credited string `json:"credited"`
+	NetDue   string `json:"net_due"`
+}
+
+type BooksTaxSnapshot struct {
+	Entity   string            `json:"entity"`
+	Exercice int               `json:"exercice"`
+	Profit   string            `json:"profit"`
+	Equity   string            `json:"equity"`
+	Vat      *BooksVatPosition `json:"vat"`
+	Tax      *struct {
+		Canton     string          `json:"canton"`
+		Commune    string          `json:"commune"`
+		ProfitTax  BooksProfitTax  `json:"profit_tax"`
+		CapitalTax BooksCapitalTax `json:"capital_tax"`
+		Params     map[string]any  `json:"params"`
+	} `json:"tax"`
+	Configured bool `json:"configured"`
+}
+
+func (c *Client) GetBooksTaxSnapshot(ws string, s BooksScope) (*BooksTaxSnapshot, error) {
+	var out BooksTaxSnapshot
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/tax-snapshot%s", ws, s.query()), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: compliance — rules, review, verdicts
+// ---------------------------------------------------------------------------
+
+type BooksComplianceRule struct {
+	RuleID           string         `json:"rule_id"`
+	Citation         string         `json:"citation"`
+	AppliesTo        string         `json:"applies_to"`
+	TriggerCondition string         `json:"trigger_condition"`
+	CheckLogic       string         `json:"check_logic"`
+	Severity         string         `json:"severity"`
+	Consequence      string         `json:"consequence"`
+	Summary          map[string]any `json:"summary"`
+	SourceConfidence string         `json:"source_confidence"`
+	ReviewState      string         `json:"review_state"`
+	EditedLogic      string         `json:"edited_logic"`
+	ReviewNote       string         `json:"review_note"`
+	ReviewedBy       string         `json:"reviewed_by"`
+	ReviewedAt       string         `json:"reviewed_at"`
+}
+
+func (c *Client) ListBooksComplianceRules() ([]BooksComplianceRule, error) {
+	var resp struct {
+		Data []BooksComplianceRule `json:"data"`
+	}
+	if err := c.get("/api/compliance-rules", &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (c *Client) GetBooksComplianceRule(ruleID string) (*BooksComplianceRule, error) {
+	var out BooksComplianceRule
+	if err := c.get("/api/compliance-rules/"+ruleID, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ReviewBooksComplianceRuleRequest is the fiduciary's sign-off: approved,
+// edited (with the corrected wording; the original stays), or rejected.
+// There is no path back to draft — draft is where rules are born.
+type ReviewBooksComplianceRuleRequest struct {
+	State       string `json:"state"`
+	EditedLogic string `json:"edited_logic,omitempty"`
+	Note        string `json:"note,omitempty"`
+}
+
+func (c *Client) ReviewBooksComplianceRule(ruleID string, req ReviewBooksComplianceRuleRequest) (*BooksComplianceRule, error) {
+	var out BooksComplianceRule
+	if err := c.patchJSON("/api/compliance-rules/"+ruleID, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RecordBooksVerdictRequest is the Devil's Advocate's structured verdict:
+// accepted / accepted_with_warning / blocked, the rules that triggered, the
+// worst case and what would resolve it. blocked refuses to post, server side.
+type RecordBooksVerdictRequest struct {
+	Entity    string   `json:"entity,omitempty"`
+	Verdict   string   `json:"verdict"`
+	Rules     []string `json:"rules"`
+	WorstCase string   `json:"worst_case,omitempty"`
+	Resolves  string   `json:"resolves,omitempty"`
+}
+
+type BooksVerdictResult struct {
+	Journal string         `json:"journal"`
+	Number  int            `json:"number"`
+	Verdict map[string]any `json:"verdict"`
+}
+
+func (c *Client) RecordBooksVerdict(ws string, number int, req RecordBooksVerdictRequest) (*BooksVerdictResult, error) {
+	var out BooksVerdictResult
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/entries/%d/verdict", ws, number), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }

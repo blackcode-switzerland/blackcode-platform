@@ -110,6 +110,17 @@ export async function createEntity(
     seat?: string | null
   }
 ): Promise<BooksEntity> {
+  // Invariant 1 (DATA-MODEL §17, compliance rule bk-001, art. 957 al. 1 ch. 2
+  // CO): a capital company has NO simplified-bookkeeping option at any
+  // turnover. Enforced here — the door every caller passes — so a code path
+  // to an SA with single-entry books does not exist, rather than being
+  // merely unused.
+  const capital = ['SA', 'SARL', 'SÀRL', 'AG', 'GMBH'].includes(data.legal_form.toUpperCase())
+  if (capital && data.bookkeeping_regime !== 'double_entry') {
+    throw new Error(
+      `a ${data.legal_form} keeps double-entry books, always (art. 957 al. 1 ch. 2 CO, rule bk-001): "${data.bookkeeping_regime}" is not a valid statutory regime for it`
+    )
+  }
   return getDb().transaction(async (tx) => {
     const seq = await allocateSeq(tx, workspaceId, 'entity')
     const [row] = await tx
@@ -570,18 +581,47 @@ export function publicExercice(x: BooksExercice) {
 }
 
 export function publicAccount(a: BooksAccount) {
+  // STORAGE keeps the mockup's `{fr, enSuffix}` verbatim (lib/chart.ts, the
+  // fixture, every existing row). The WIRE serves what phase-0-contract.md
+  // promised — `{fr, en}` — so `en()` reads an account name like any other
+  // label. Normalized here, at the door, rather than migrated: the stored
+  // shape is the mockup's own and the tests that pin it stay honest.
+  const raw = (a.label ?? {}) as { fr?: string; en?: string; enSuffix?: string }
   return {
     no: a.no,
     class: Number(a.class),
-    label: a.label,
+    label: { fr: raw.fr ?? '', en: raw.en ?? raw.enSuffix ?? '' },
     statement: a.statement,
     statement_position: a.statement_position,
   }
 }
 
-export function publicEntry({ entry: e, lines }: EntryWithLines) {
+/** The book and year a journal row belongs to, by their public names. */
+export interface JournalScope {
+  entity: string
+  exercice: number
+}
+
+/**
+ * Resolve (entity_id, exercice_id) to their public names — for the routes
+ * that find a row by bare workspace number and must still tell the reader
+ * WHOSE écriture it is. The transaction screen's whole job is to be
+ * defensible, and until 2026-08-19 it could not truthfully state the book
+ * (phase-3 handoff, ticket #53).
+ */
+export async function journalScopeOf(entityId: number, exerciceId: number): Promise<JournalScope> {
+  const db = getDb()
+  const [e] = await db.select().from(booksEntity).where(eq(booksEntity.id, entityId)).limit(1)
+  const [x] = await db.select().from(booksExercice).where(eq(booksExercice.id, exerciceId)).limit(1)
+  return { entity: e?.slug ?? '', exercice: x?.year ?? 0 }
+}
+
+export function publicEntry({ entry: e, lines }: EntryWithLines, scope: JournalScope) {
   return {
     number: e.seq,
+    /** Which book and which year. `seq` is workspace-wide; these say whose. */
+    entity: scope.entity,
+    exercice: scope.exercice,
     /** The statutory journal number. Not interchangeable with `number`. */
     entry_no: e.entry_no,
     date: e.date,
@@ -616,14 +656,19 @@ export function publicEntry({ entry: e, lines }: EntryWithLines) {
       : null,
     /** The original-currency story (0011): {original, rate, source}. Display-only. */
     fx: e.fx,
+    /** The Devil's Advocate's flag (0014): {verdict, rules, worst_case, resolves, at, by}. NULL = never checked. */
+    verdict: e.verdict,
     reverses_entry_id: e.reverses_entry_id,
     history: e.history,
   }
 }
 
-export function publicRiEntry(r: typeof booksRiEntry.$inferSelect) {
+export function publicRiEntry(r: typeof booksRiEntry.$inferSelect, scope: JournalScope) {
   return {
     number: r.seq,
+    /** Which book and which year. Same two fields as the grand livre's. */
+    entity: scope.entity,
+    exercice: scope.exercice,
     date: r.date,
     direction: r.direction,
     amount: r.amount,
@@ -639,13 +684,23 @@ export function publicRiEntry(r: typeof booksRiEntry.$inferSelect) {
       : null,
     /** The original-currency story (0011): {original, rate, source}. Display-only. */
     fx: r.fx,
+    /** The Devil's Advocate's flag (0014): {verdict, rules, worst_case, resolves, at, by}. NULL = never checked. */
+    verdict: r.verdict,
   }
 }
 
 export function publicPatrimoine(p: typeof booksPatrimoine.$inferSelect) {
-  const items = (p.items as { label: unknown; amount: number }[]) ?? []
+  const raw = (p.items as { label: unknown; amount: number | string }[]) ?? []
   let total = 0n
-  for (const i of items) total += toCentimes(i.amount)
+  const items = raw.map((i) => {
+    const cents = toCentimes(i.amount)
+    total += cents
+    // `numeric` strings like every other amount on the wire, since 2026-08-19.
+    // The jsonb stores the mockup's JSON numbers; the door formats them — the
+    // phase-1 handoff asked for exactly this, and the frontend's own pin said
+    // "the day this goes red, delete the conversion in lib/hooks.ts".
+    return { label: i.label, amount: fromCentimes(cents) }
+  })
   return {
     number: p.seq,
     as_of: p.as_of,

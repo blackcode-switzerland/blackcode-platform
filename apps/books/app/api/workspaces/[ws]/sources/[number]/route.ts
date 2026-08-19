@@ -25,7 +25,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const n = Number(number)
   if (!Number.isInteger(n) || n < 1) throw Errors.badRequest('bad_number', `"${number}" is not a source number`, 'from `bk books source list`')
   const src = await getSourceBySeq(ctx.workspace.id, n)
-  if (!src) throw Errors.notFound('source', String(n))
+  if (!src) throw Errors.notFound('source_not_found', `no source #${n} in this workspace`, 'bk books source list shows the register')
 
   const today = new Date().toISOString().slice(0, 10)
   const [pulls, runbook, slugs] = await Promise.all([pullsOf(src.id), runbookOf(src.id), entitySlugsById(ctx.workspace.id)])
@@ -63,7 +63,7 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
     return NextResponse.json({ number: s.seq, name: s.name, retired: s.retired })
   } catch (e) {
     if (e instanceof SourceRefused) {
-      if (e.code === 'source_not_found') throw Errors.notFound('source', String(n))
+      if (e.code === 'source_not_found') throw Errors.notFound(e.code, e.message, e.suggestion)
       throw Errors.badRequest(e.code, e.message, e.suggestion)
     }
     throw e

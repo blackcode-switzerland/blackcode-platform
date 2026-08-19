@@ -214,6 +214,9 @@ const ENTITY_KEYS = [
 
 const ENTRY_KEYS = [
   'number',
+  // 2026-08-19: seq is workspace-wide; these two say WHOSE écriture it is.
+  'entity',
+  'exercice',
   'entry_no',
   'date',
   'status',
@@ -231,6 +234,8 @@ const ENTRY_KEYS = [
   'piece',
   // 0011: the original-currency story, {original, rate, source} | null.
   'fx',
+  // 0014: the Devil's Advocate's flag, null until an agent pass writes one.
+  'verdict',
   'reverses_entry_id',
   'history',
 ]
@@ -311,19 +316,18 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     )
   })
 
-  // Mutation watched: renamed `enSuffix` to `en` in `lib/chart.ts`'s type. Red
-  // at compile time via the `satisfies` block below, and red here on the key.
-  //
-  // An account label is `{fr, enSuffix}`, NOT `{fr, en}`. Read through `en()`
-  // this renders the FRENCH on an English screen, silently — see `lib/label.ts`.
-  it('an account label is {fr, enSuffix} and NOT {fr, en}', () => {
+  // HISTORY: until 2026-08-19 this case pinned the OPPOSITE — the wire carried
+  // the mockup's `{fr, enSuffix}` and `en()` rendered the French on an English
+  // screen (phase-1 handoff finding). The backend now normalizes at the door:
+  // storage keeps the mockup's shape, the wire honours phase-0-contract.md.
+  it('an account label is {fr, en} on the wire, whatever storage spells it', () => {
     const out = publicAccount(row({ no: '1020', class: '1', label: { fr: 'Banque', enSuffix: 'Bank' } }))
-    expect(Object.keys(out.label ?? {}).sort()).toEqual(['enSuffix', 'fr'])
+    expect(out.label).toEqual({ fr: 'Banque', en: 'Bank' })
   })
 
   // Mutation watched: dropped `reverses_entry_id` from `publicEntry`. Red.
   it('publicEntry serves exactly these fields', () => {
-    const out = publicEntry({ entry: row({ seq: 1 }), lines: [] })
+    const out = publicEntry({ entry: row({ seq: 1 }), lines: [] }, { entity: 'blackcode', exercice: 2026 })
     expect(Object.keys(out).sort()).toEqual([...ENTRY_KEYS].sort())
   })
 
@@ -334,19 +338,21 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
   // and every screen would have written the check that does nothing instead of
   // the per-field ones that matter.
   it('publicEntry always serves a tva BLOCK, whose fields may be null', () => {
-    const out = publicEntry({ entry: row({ seq: 1, tva_rate: null }), lines: [] })
+    const out = publicEntry({ entry: row({ seq: 1, tva_rate: null }), lines: [] }, { entity: 'blackcode', exercice: 2026 })
     expect(out.tva, 'tva became nullable — every screen writes the wrong null check').not.toBeNull()
     expect(Object.keys(out.tva).sort()).toEqual(['amount', 'input_claimed', 'note', 'rate'])
   })
 
-  // Mutation watched: added `entity: e.entity_id` to `publicEntry`. Red.
-  //
-  // An entry payload says nothing about which book or year it belongs to — the
-  // REQUEST does. `lib/types.ts` declared both and both read `undefined`.
-  it('an entry payload does not name its book or its exercice', () => {
-    const out = publicEntry({ entry: row({ seq: 1 }), lines: [] })
-    expect('entity' in out).toBe(false)
-    expect('exercice' in out).toBe(false)
+  // HISTORY: until 2026-08-19 this pinned the OPPOSITE — the payload said
+  // nothing about its book or year, the transaction screen inferred both from
+  // the URL filter, and switching the book selector relabelled an unchanged
+  // écriture (ticket #53, 16:03). The backend now serves both BY NAME (slug
+  // and year, never ids), resolved from the row itself, so the screen states
+  // whose écriture it is instead of guessing.
+  it('an entry payload names its book and its exercice, truthfully', () => {
+    const out = publicEntry({ entry: row({ seq: 1 }), lines: [] }, { entity: 'blackcode', exercice: 2026 })
+    expect(out.entity).toBe('blackcode')
+    expect(out.exercice).toBe(2026)
   })
 
   // Mutation watched: dropped `total` from `publicPatrimoine`. Red.
@@ -360,16 +366,14 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     expect(out.total).toBe('12700.00')
   })
 
-  // Mutation watched: `amount: String(i.amount)` in the items map. Red.
-  //
-  // The wire really does carry these as JSON NUMBERS — `books.patrimoine.items`
-  // is `jsonb`, served verbatim. It is the only amount in the app that is not a
-  // `numeric` string, `usePatrimoine` converts it at the boundary, and the
-  // report asks for it to be served as a string. **If this ever goes red because
-  // the backend fixed it, delete the conversion in `lib/hooks.ts`.**
-  it('patrimoine item amounts are JSON numbers, unlike every other amount', () => {
+  // HISTORY: until 2026-08-19 this pinned the OPPOSITE — the items crossed the
+  // wire as JSON numbers, the only amount in the app that was not a `numeric`
+  // string, and `usePatrimoine` converted at the boundary. The backend now
+  // formats at the door (the phase-1 handoff's ask), the hooks conversion is
+  // deleted, and this case holds the fixed shape.
+  it('patrimoine item amounts are numeric strings, like every other amount', () => {
     const out = publicPatrimoine(row({ seq: 1, items: [{ label: {}, amount: 8200 }] }))
-    expect(typeof out.items[0].amount).toBe('number')
+    expect(out.items[0].amount).toBe('8200.00')
     expect(typeof out.total).toBe('string')
   })
 
@@ -380,10 +384,13 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
   })
 
   it('publicRiEntry serves the simplified book its own shape', () => {
-    const out = publicRiEntry(row({ seq: 1 }))
+    const out = publicRiEntry(row({ seq: 1 }), { entity: 'ri', exercice: 2026 })
     expect(Object.keys(out).sort()).toEqual(
       [
         'number',
+        // 2026-08-19: same two fields as the grand livre's.
+        'entity',
+        'exercice',
         'date',
         'direction',
         'amount',
@@ -397,6 +404,8 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
         'piece',
         // 0011: same story, same shape, on the RI journal.
         'fx',
+        // 0014: the Devil's Advocate reaches both journals.
+        'verdict',
       ].sort()
     )
   })

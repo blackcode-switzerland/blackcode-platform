@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
-import { postEntry, PostRefused } from '@/lib/db/queries/imports'
+import { postEntry, PostRefused, sqlErrorText } from '@/lib/db/queries/imports'
 
 interface Params { params: Promise<{ ws: string; number: string }> }
 
@@ -27,13 +27,18 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     return NextResponse.json(r)
   } catch (e) {
     if (e instanceof PostRefused) {
-      if (e.code === 'entry_not_found') throw Errors.notFound('entry', String(n))
+      if (e.code === 'entry_not_found') throw Errors.notFound(e.code, e.message, e.suggestion)
       throw Errors.badRequest(e.code, e.message, e.suggestion)
     }
-    // 0004's deferred guard speaks at COMMIT in Postgres's words; translate.
-    const msg = e instanceof Error ? e.message : String(e)
+    // 0004's deferred guard speaks at COMMIT in Postgres's words — which
+    // drizzle wraps, so the sentence sits on the CAUSE CHAIN, not on
+    // `e.message` (that one says "Failed query: COMMIT" and nothing else).
+    // Found live by the frontend review: an unbalanced post answered a bare
+    // 500 on every surface while psql said "entry 1272 does not balance".
+    const msg = sqlErrorText(e)
     if (/does not balance|cannot be posted/.test(msg)) {
-      throw Errors.badRequest('guard_refused', msg.replace(/^.*?(entry \d+)/, '$1'), 'resolve the lines, then post')
+      const line = msg.split('\n').find((l) => /does not balance|cannot be posted/.test(l)) ?? msg
+      throw Errors.badRequest('guard_refused', line.replace(/^.*?(entry \d+)/, '$1').trim(), 'resolve the lines, then post')
     }
     throw e
   }

@@ -75,7 +75,7 @@ import { useCanWrite, useResolveEntry, type ResolveBody } from '@/lib/mutations'
 import { booksCacheFilter } from '@/lib/query-keys'
 import type { ReadScope } from '@/lib/hooks'
 import type { ResolveResult, WorklistRow } from '@/lib/types'
-import { accountLabelEn } from '@/lib/label'
+import { en } from '@/lib/label'
 
 /**
  * Re-exported from `lib/resolvable.ts`, which owns both the types and the
@@ -391,7 +391,7 @@ export function ResolveForm({
                 <option value="">Leave unassigned</option>
                 {(accounts.data ?? []).map((a) => (
                   <option key={a.no} value={a.no}>
-                    {a.no} · {accountLabelEn(a.label)}
+                    {a.no} · {en(a.label)}
                   </option>
                 ))}
               </select>

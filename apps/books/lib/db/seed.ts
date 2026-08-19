@@ -103,10 +103,11 @@ import {
   type ChartAccount,
   type PostingLine,
 } from '../derive'
-import { booksSourcePull, booksRunbook } from './schema'
+import { booksSourcePull, booksRunbook, booksAnalysis, booksAnalytiqueCategory, booksTaxParams } from './schema'
 import { ingestPiece } from './queries/pieces'
 import type { Extraction } from '../validate/extraction'
 import fixture from '../../fixtures/mockup.json'
+import complianceRules from '../../fixtures/compliance-rules.json'
 
 /** Fixed-2 string, which is what `numeric(14,2)` wants. Never a float. */
 const money = (n: number | null | undefined): string => (n ?? 0).toFixed(2)
@@ -158,6 +159,12 @@ interface FxPatrimoine {
   items: { label: Json; amount: number }[]; note?: Json
 }
 
+interface FxAnalysis {
+  id: number; entity_id: number; asked: string; asked_by: string; agent: string
+  scenario_label?: Json; runway_after_months?: number | null
+  question: Json; verdict: Json; figures: Json[]; based_on: Json[]
+}
+
 const F = fixture as unknown as {
   ENTITIES: FxEntity[]
   ACCOUNTS: { no: string; class: number; label: Json; statement: string; statement_position: string }[]
@@ -168,9 +175,19 @@ const F = fixture as unknown as {
   RI_ENTRIES: FxRi[]
   PATRIMOINE: FxPatrimoine[]
   PIECE_INBOX: FxPiece[]
+  ANALYSES: FxAnalysis[]
+  ANALYTIQUE_CATEGORIES: { key: string; accounts: string[]; label: Json }[]
+  TAX_INFO: { ifd: Json; vd_cantonal: Json; communal_renens: Json; capital_tax: Record<string, unknown> }
 }
 
 export const SEED_SLUG = 'blackcode'
+
+interface FxComplianceRule {
+  rule_id: string; citation: string; applies_to: string; trigger_condition: string
+  check_logic: string; severity: string; consequence_if_violated: string
+  summary?: Json; source_confidence: string
+}
+const COMPLIANCE_RULES = (complianceRules as unknown as { rules: FxComplianceRule[] }).rules
 
 // ---------------------------------------------------------------------------
 // The reprise: closing one year to open the next
@@ -745,6 +762,83 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
         note: p.note ?? null,
       })
     }
+  }
+
+  // ---- management: categories, tax parameters, filed analyses -------------
+  // Categories and tax parameters for every double-entry book: the fixture's
+  // five buckets, and the Vaud/Renens rates all three seeded books actually
+  // sit under. capital_tax seeds UNCONFIRMED: the mockup marked it confirmed
+  // while carrying an open question for the fiduciary in the same block, and
+  // until she answers, false is the honest flag (decided with Mustneer,
+  // 2026-08-19).
+  const seededParams = {
+    ifd: F.TAX_INFO.ifd,
+    cantonal: F.TAX_INFO.vd_cantonal,
+    communal: F.TAX_INFO.communal_renens,
+    capital_tax: { ...F.TAX_INFO.capital_tax, confirmed: false },
+  }
+  for (const e of F.ENTITIES) {
+    if (e.legal_form === 'RI') continue
+    const dbEntity = entityId.get(e.id)!
+    for (const c of F.ANALYTIQUE_CATEGORIES) {
+      await db.insert(booksAnalytiqueCategory).values({
+        workspace_id: ws.id,
+        entity_id: dbEntity,
+        seq: nextSeq('category'),
+        key: c.key,
+        label: c.label,
+        accounts: c.accounts,
+      })
+    }
+    await db.insert(booksTaxParams).values({
+      workspace_id: ws.id,
+      entity_id: dbEntity,
+      canton: 'VD',
+      commune: 'Renens',
+      params: seededParams,
+    })
+  }
+
+  // The filed analyses, verbatim. Their `based_on` snapshots are permanent
+  // records of what the agent read at answer time and stay exactly as filed —
+  // the fixture's minute-precision timestamps are Europe/Zurich, August,
+  // hence the fixed +02:00.
+  for (const a of F.ANALYSES) {
+    await db.insert(booksAnalysis).values({
+      workspace_id: ws.id,
+      entity_id: entityId.get(a.entity_id)!,
+      seq: nextSeq('analysis'),
+      asked: new Date(a.asked + ':00+02:00'),
+      asked_by: a.asked_by,
+      agent: a.agent,
+      scenario_label: a.scenario_label ?? null,
+      runway_after_months:
+        a.runway_after_months === undefined || a.runway_after_months === null
+          ? null
+          : String(a.runway_after_months),
+      question: a.question,
+      verdict: a.verdict,
+      figures: a.figures,
+      based_on: a.based_on,
+    })
+  }
+
+  // ---- compliance rules: GLOBAL, and reviews survive a reseed --------------
+  // The 19 rules are law-derived and workspace-less. ON CONFLICT DO NOTHING
+  // on purpose: a reseed replaces the demo WORKSPACE, but a fiduciary's
+  // approve/edit/reject on a rule is real work this table is the only record
+  // of, and `npm run db:seed` must never quietly reset it to draft.
+  for (const r of COMPLIANCE_RULES) {
+    await db.execute(sql`
+      INSERT INTO books.compliance_rule
+        (rule_id, citation, applies_to, trigger_condition, check_logic, severity,
+         consequence, summary, source_confidence)
+      VALUES
+        (${r.rule_id}, ${r.citation}, ${r.applies_to}, ${r.trigger_condition},
+         ${r.check_logic}, ${r.severity}, ${r.consequence_if_violated},
+         ${r.summary ? JSON.stringify(r.summary) : null}::jsonb, ${r.source_confidence})
+      ON CONFLICT (rule_id) DO NOTHING
+    `)
   }
 
   // ---- counters ----------------------------------------------------------

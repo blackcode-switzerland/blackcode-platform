@@ -64,12 +64,20 @@ export const ENTRY_STATUS: Term[] = [
 ]
 
 /** Spend-side channels only. Income is b/billing's job. */
+/**
+ * `note` states whether a source of this type is expected to feed a ledger
+ * account — SERVED so clients render the true sentence per type instead of
+ * inventing one. The phase-3 review caught PostFinance (a bank) being told
+ * that having no ledger account "is normal for a card, a processor or a
+ * Drive folder": for a bank it is a gap worth explaining, never a normal
+ * state, and only the vocabulary can say which is which.
+ */
 export const SOURCE_TYPES: Term[] = [
-  { value: 'bank', label: 'Bank', icon: 'landmark' },
-  { value: 'card', label: 'Card', icon: 'credit-card' },
-  { value: 'processor', label: 'Payment processor', icon: 'repeat' },
-  { value: 'saas', label: 'SaaS spend', icon: 'app-window' },
-  { value: 'drive_folder', label: 'Drive folder', icon: 'folder' },
+  { value: 'bank', label: 'Bank', icon: 'landmark', note: 'Holds the money and feeds a ledger account. A bank source with no ledger account is a gap to explain, not a normal state.' },
+  { value: 'card', label: 'Card', icon: 'credit-card', note: 'Draws on a bank and settles there; it may carry no ledger account of its own.' },
+  { value: 'processor', label: 'Payment processor', icon: 'repeat', note: 'Sits in front of a bank and settles into it; it may carry no ledger account of its own.' },
+  { value: 'saas', label: 'SaaS spend', icon: 'app-window', note: 'A routing layer that documents spend; it settles elsewhere and carries no ledger account.' },
+  { value: 'drive_folder', label: 'Drive folder', icon: 'folder', note: 'A document feed. No money moves here, so no ledger account, ever.' },
 ]
 
 /**
@@ -116,3 +124,29 @@ export const MANIFEST_STATES: Term[] = [
  * rate exists.
  */
 export const TVA_RATES: number[] = [8.1, 2.6, 3.8, 0]
+
+/**
+ * The Devil's Advocate's verdict vocabulary (0014). `blocked` is the only one
+ * the server acts on: it refuses to post. Warned entries post and stay
+ * visible; nothing is silently accepted (compliance/DEVILS-ADVOCATE-AGENT.md).
+ */
+export const VERDICT_STATES: Term[] = [
+  { value: 'accepted', label: 'Accepted', color: '#3fb27f' },
+  { value: 'accepted_with_warning', label: 'Accepted with warning', color: '#f0b66b' },
+  { value: 'blocked', label: 'Blocked', color: '#ef6f6f' },
+]
+
+/** A rule's review lifecycle. Rules are BORN draft; review never goes back. */
+export const RULE_REVIEW_STATES: Term[] = [
+  { value: 'draft', label: 'Draft — not fiduciary-reviewed', color: '#f0b66b' },
+  { value: 'approved', label: 'Approved', color: '#3fb27f' },
+  { value: 'edited', label: 'Edited — corrected wording applies', color: '#3fb27f' },
+  { value: 'rejected', label: 'Rejected', color: '#ef6f6f' },
+]
+
+/** Where a rule's legal claim comes from, and how far to trust it unreviewed. */
+export const RULE_CONFIDENCE: Term[] = [
+  { value: 'verified_fedlex', label: 'Verified against Fedlex', color: '#3fb27f' },
+  { value: 'doctrine_inferred', label: 'Inferred from doctrine', color: '#f0b66b' },
+  { value: 'needs_fiduciary_check', label: 'Needs a fiduciary check', color: '#ef6f6f' },
+]

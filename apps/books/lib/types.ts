@@ -201,18 +201,19 @@ export interface Entity {
  * A separate type makes that a compile error at the call site instead. Use
  * `accountLabelEn()` / `accountLabelFr()` in `lib/label.ts`.
  */
-export interface AccountLabel {
-  fr: string
-  enSuffix: string
-}
+/**
+ * HISTORY: `AccountLabel {fr, enSuffix}` lived here until 2026-08-19, when the
+ * backend started normalizing account labels to `{fr, en}` at the wire
+ * (phase-0-contract.md's promise, phase-1 handoff finding). Storage still
+ * spells it `enSuffix`; no client sees that any more.
+ */
 
 export interface Account {
   /** Swiss PME chart number: `1020`, `6570`. The primary key, per entity. */
   no: string
   /** Class 1-9. Classes 1-2 feed the bilan, 3-8 the compte de résultat. */
   class: number
-  /** `{fr, enSuffix}`. NOT a `Label` — read the type above before using it. */
-  label: AccountLabel
+  label: Label
   statement: 'bilan' | 'cr'
   /** Exactly one line of the statutory structure. The only touchable mapping. */
   statement_position: string
@@ -308,10 +309,36 @@ export interface Piece {
  * computes with this. Free-text strings; the writer may omit any field, so
  * render what is present.
  */
+/**
+ * The original-currency story (0011). CONTRACT (2026-08-19): when `fx` is
+ * present, ALL THREE fields are — both writers (the bank door's camt.053
+ * parser and the manual 0011 path) write the complete story or none, so a
+ * client never meets a rate without its original. No field is optional
+ * inside the block; absence is `fx: null` on the row.
+ */
 export interface Fx {
-  original?: string
-  rate?: string
-  source?: string
+  /** e.g. "EUR 420.00" — the bank's own words for what was converted. */
+  original: string
+  /** e.g. "0.9494" — a display string, never computed with. */
+  rate: string
+  /** Where the story came from: "camt.053", "manual", … */
+  source: string
+}
+
+/**
+ * The Devil's Advocate's structured verdict (0014, phase 5). A `jsonb` column
+ * served verbatim; the agent writes it through `POST /entries/{n}/verdict`
+ * and the server never edits it. `worst_case` and `resolves` are whatever the
+ * agent filed — usually plain text, possibly `{fr, en}` — so both are loose.
+ */
+export interface Verdict {
+  verdict: 'accepted' | 'accepted_with_warning' | 'blocked'
+  /** The compliance rule_ids that triggered, e.g. `["vat-008"]`. Never empty. */
+  rules: string[]
+  worst_case: unknown
+  resolves: unknown
+  at: string
+  by: string
 }
 
 /**
@@ -348,8 +375,16 @@ export interface RelatedParty {
  * book takes it from the scope, not from the row.
  */
 export interface Entry {
+  /**
+   * Which book and which year (2026-08-19). `number` is workspace-wide, so
+   * these two say WHOSE écriture this is — state them, never infer them from
+   * a URL filter (the relabelled-AIOS bug the transaction screen shipped
+   * around, ticket #53).
+   */
   /** The workspace #number. Never the serial id. */
   number: number
+  entity: string
+  exercice: number
   /**
    * Gapless journal number within (entity, exercice). Distinct from `number`.
    *
@@ -381,6 +416,13 @@ export interface Entry {
   piece: Piece | null
   /** The original-currency story (0011). Null for almost everything. */
   fx: Fx | null
+  /**
+   * The Devil's Advocate's flag (0014). Null until an external agent pass
+   * writes one; the server never computes a compliance judgment itself.
+   * `blocked` has exactly one enforced consequence: the entry refuses to
+   * post, server side — render the state, never re-derive it.
+   */
+  verdict: Verdict | null
   /** The entry this one reverses, as a serial id. Null for almost everything. */
   reverses_entry_id: number | null
   /**
@@ -907,7 +949,8 @@ export interface OverviewResult {
  */
 export interface PatrimoineItem {
   label: Label
-  amount: number
+  /** A `numeric` string since 2026-08-19, like every other amount. */
+  amount: Money
 }
 
 export interface PatrimoineSnapshot {

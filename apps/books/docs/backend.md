@@ -5,10 +5,10 @@
 model in [`docs/platform-db.md`](../../../docs/platform-db.md). Neither is
 repeated here.
 
-**Status: phase 4A, 2026-08-18.** The statutory core, recognition, the sources register, the pièces pipeline, and now the BANK DOOR: `POST /sources/{n}/import` parses camt.053 server-side, stages every booked line in the right journal, runs rules at arrival (`inferred`, never resolved), writes fx when the bank converted, and converges on the bank's own references. Posting (staged → posted, write path #4) is live behind `/entries/{n}/post`. The RI journal reads and resolves like the grand livre (`entry list/show`, `resolve --entity`), cash declares through `entry declare`, and the register takes writes (`source create/edit/record-pull/runbook-set` — the Companion's upkeep verbs, with runbooks refusing anything that is not a credential reference). Migrated 0001-0012. What each phase adds
+**Status: phase 5, 2026-08-19 — feature-complete for the MVP.** Everything through the management layer, plus COMPLIANCE: the 19 Fedlex-researched rules served globally with citations and `review_state` (all DRAFT until the fiduciary signs off — `PATCH /compliance-rules/{rule}` records approve/edit/reject, permanently), the Devil's Advocate's verdict door (`POST /entries/{n}/verdict`, structured {verdict, rules, worst_case, resolves}, history-first, both journals), and exactly ONE enforcement: a `blocked` entry refuses to post. The footprint answers the account-close flow honestly — a workspace whose books hold records is `blocked_by` and purge refuses citing art. 958f CO; the account may close, the books stay. DATA-MODEL §17 is an audited checklist in `lib/invariants.test.ts`. Migrated 0001-0014. Remaining: deploy (steps 7-10 of adding-an-app) and the statutory PDF export, which is a print-stylesheet task over the already-bilingual statements. What each phase adds
 is in [`docs/books-app-plan/`](../../../docs/books-app-plan/README.md).
 
-Migrations applied: 12 of 12, `__drizzle_migrations_books`.
+Migrations applied: 14 of 14, `__drizzle_migrations_books`.
 
 ---
 

@@ -1,7 +1,7 @@
 -- Rollback for apps/books migration 0012 — remove the bank door's columns.
 --
--- Rollbacks run in REVERSE: this file FIRST, then 0011, 0010, 0009 … down to
--- 0001. Each file's header names its place.
+-- Rollbacks run in REVERSE: 0013's file first, THEN this one, then 0011,
+-- 0010, 0009 … down to 0001. Each file's header names its place.
 --
 -- ---------------------------------------------------------------------------
 -- WHAT THIS DESTROYS
@@ -19,6 +19,12 @@ BEGIN;
 DO $do$
 DECLARE n integer;
 BEGIN
+  -- Order guard: 0013's tables must already be gone, or the reverse walk
+  -- is being run out of order.
+  IF to_regclass('books.analysis') IS NOT NULL THEN
+    RAISE EXCEPTION 'REFUSING: books.analysis still exists. Run books-0013-rollback.sql first — rollbacks run in reverse.';
+  END IF;
+
   SELECT (SELECT count(*) FROM books.entry    WHERE bank_ref IS NOT NULL)
        + (SELECT count(*) FROM books.ri_entry WHERE bank_ref IS NOT NULL) INTO n;
   IF n > 0 THEN
