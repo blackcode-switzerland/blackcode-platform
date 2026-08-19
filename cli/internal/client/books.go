@@ -145,10 +145,15 @@ type BooksFx struct {
 // by; `EntryNo` is the statutory journal number, gapless per (book, year), which
 // is what a tax authority reads. Neither substitutes for the other.
 type BooksEntry struct {
-	Number       int              `json:"number"`
-	EntryNo      int              `json:"entry_no"`
-	Date         string           `json:"date"`
-	Status       string           `json:"status"`
+	Number  int    `json:"number"`
+	EntryNo int    `json:"entry_no"`
+	Date    string `json:"date"`
+	Status  string `json:"status"`
+	// The RI journal's two fields. `entry list/show` serve BOTH journals since
+	// phase 4A, and the caller knows which book it asked for; these are empty
+	// on a grand-livre row, and Status/Lines are empty on an RI row.
+	Direction    string           `json:"direction"`
+	Amount       string           `json:"amount"`
 	RawLabel     string           `json:"raw_label"`
 	Counterparty string           `json:"counterparty"`
 	Lines        []BooksEntryLine `json:"lines"`
@@ -324,9 +329,13 @@ func (c *Client) ListBooksEntries(ws string, s BooksScope, status, recognition, 
 }
 
 // GetBooksEntry takes the workspace #number, never a row id.
-func (c *Client) GetBooksEntry(ws string, number int) (*BooksEntry, error) {
+func (c *Client) GetBooksEntry(ws string, number int, entity string) (*BooksEntry, error) {
 	var out BooksEntry
-	if err := c.get(fmt.Sprintf("/api/workspaces/%s/entries/%d", ws, number), &out); err != nil {
+	path := fmt.Sprintf("/api/workspaces/%s/entries/%d", ws, number)
+	if entity != "" {
+		path += "?entity=" + url.QueryEscape(entity)
+	}
+	if err := c.get(path, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -475,6 +484,9 @@ func (c *Client) CreateBooksRule(ws string, req CreateBooksRuleRequest) (*BooksR
 // ResolveBooksEntryRequest is the first write: what this money was. `Rule`
 // teaches one from the resolution; the server keys it to the entry's source.
 type ResolveBooksEntryRequest struct {
+	// Entity names a SIMPLIFIED book to resolve in its recettes-dépenses
+	// journal; empty means the grand livre.
+	Entity       string         `json:"entity,omitempty"`
 	Explanation  map[string]any `json:"explanation"`
 	Recognition  string         `json:"recognition,omitempty"`
 	Counterparty string         `json:"counterparty,omitempty"`
@@ -672,4 +684,155 @@ func (c *Client) MatchBooksPiece(ws string, piece, entry int) (*BooksPiece, erro
 		return nil, err
 	}
 	return &out, nil
+}
+
+// ===========================================================================
+// THE BANK DOOR AND POSTING (phase 4A)
+// ===========================================================================
+
+// BooksImportSummary is what one statement import did — and did not — do.
+type BooksImportSummary struct {
+	Source  int    `json:"source"`
+	File    string `json:"file"`
+	Journal string `json:"journal"`
+	Period  struct {
+		From *string `json:"from"`
+		To   *string `json:"to"`
+	} `json:"period"`
+	Opening      string `json:"opening"`
+	Closing      string `json:"closing"`
+	LinesTotal   int    `json:"lines_total"`
+	Imported     int    `json:"imported"`
+	Inferred     int    `json:"inferred"`
+	Unrecognized int    `json:"unrecognized"`
+	AlreadyKnown int    `json:"already_known"`
+	WithFx       int    `json:"with_fx"`
+	Staged       []int  `json:"staged"`
+}
+
+func (c *Client) ImportBooksSource(ws string, source int, file, xml string) (*BooksImportSummary, error) {
+	var out BooksImportSummary
+	body := map[string]string{"file": file, "xml": xml}
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/sources/%d/import", ws, source), body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// BooksPostResult reports one posting. `Already` marks the idempotent no-op.
+type BooksPostResult struct {
+	Number  int    `json:"number"`
+	EntryNo int    `json:"entry_no"`
+	Status  string `json:"status"`
+	Already bool   `json:"already"`
+}
+
+func (c *Client) PostBooksEntry(ws string, entry int) (*BooksPostResult, error) {
+	var out BooksPostResult
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/entries/%d/post", ws, entry), nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ===========================================================================
+// DECLARE AND THE REGISTER'S WRITE HALF (phase 4A)
+// ===========================================================================
+
+// DeclareBooksEntryRequest is money no feed will deliver: a cash expense,
+// declared. Double-entry books need Account + Contra; RI books need Direction.
+type DeclareBooksEntryRequest struct {
+	Entity       string         `json:"entity"`
+	Date         string         `json:"date"`
+	Amount       string         `json:"amount"`
+	Label        string         `json:"label"`
+	Explanation  map[string]any `json:"explanation"`
+	Counterparty string         `json:"counterparty,omitempty"`
+	Direction    string         `json:"direction,omitempty"`
+	Account      string         `json:"account,omitempty"`
+	Contra       string         `json:"contra,omitempty"`
+}
+
+type BooksDeclareResult struct {
+	Number  int    `json:"number"`
+	Journal string `json:"journal"`
+	EntryNo *int   `json:"entry_no"`
+}
+
+func (c *Client) DeclareBooksEntry(ws string, req DeclareBooksEntryRequest) (*BooksDeclareResult, error) {
+	var out BooksDeclareResult
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/entries", ws), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type CreateBooksSourceRequest struct {
+	Entity         string         `json:"entity"`
+	Name           string         `json:"name"`
+	Type           string         `json:"type"`
+	Expected       string         `json:"expected,omitempty"`
+	LedgerAccounts []string       `json:"ledger_accounts,omitempty"`
+	Method         string         `json:"method,omitempty"`
+	Notes          map[string]any `json:"notes,omitempty"`
+}
+
+type BooksSourceWriteResult struct {
+	Number  int    `json:"number"`
+	Name    string `json:"name"`
+	Type    string `json:"type,omitempty"`
+	Retired bool   `json:"retired,omitempty"`
+}
+
+func (c *Client) CreateBooksSource(ws string, req CreateBooksSourceRequest) (*BooksSourceWriteResult, error) {
+	var out BooksSourceWriteResult
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/sources", ws), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// EditBooksSource sends only the fields the caller set; the server leaves the
+// rest untouched.
+func (c *Client) EditBooksSource(ws string, source int, patch map[string]any) (*BooksSourceWriteResult, error) {
+	var out BooksSourceWriteResult
+	if err := c.patchJSON(fmt.Sprintf("/api/workspaces/%s/sources/%d", ws, source), patch, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type RecordBooksPullRequest struct {
+	File     string `json:"file"`
+	Period   string `json:"period,omitempty"`
+	Format   string `json:"format,omitempty"`
+	Hash     string `json:"hash,omitempty"`
+	DriveRef string `json:"drive_ref,omitempty"`
+	Pulled   string `json:"pulled,omitempty"`
+}
+
+type BooksPullRecordResult struct {
+	File    string `json:"file"`
+	Period  string `json:"period"`
+	Hash    string `json:"hash"`
+	Created bool   `json:"created"`
+}
+
+func (c *Client) RecordBooksPull(ws string, source int, req RecordBooksPullRequest) (*BooksPullRecordResult, error) {
+	var out BooksPullRecordResult
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/sources/%d/pulls", ws, source), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SetBooksRunbook replaces the source's runbook in place — one per source,
+// history belongs to git. The payload travels as-is; the server refuses a
+// credential where a reference belongs.
+func (c *Client) SetBooksRunbook(ws string, source int, body map[string]any) (map[string]any, error) {
+	var out map[string]any
+	if err := c.putJSON(fmt.Sprintf("/api/workspaces/%s/sources/%d/runbook", ws, source), body, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

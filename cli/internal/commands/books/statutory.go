@@ -287,7 +287,7 @@ func newEntryCmd() *cobra.Command {
 		Use:   "entry",
 		Short: "The grand livre — écritures",
 	}
-	cmd.AddCommand(newEntryListCmd(), newEntryShowCmd())
+	cmd.AddCommand(newEntryListCmd(), newEntryShowCmd(), newEntryPostCmd(), newEntryDeclareCmd())
 	return cmd
 }
 
@@ -320,11 +320,23 @@ func newEntryListCmd() *cobra.Command {
 			}
 			return output.Render(format, rows, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "#\tNO\tDATE\tSTATUS\tTIER\tRECOGNITION\tLABEL")
-				for _, e := range rows {
-					fmt.Fprintf(tw, "%d\t%d\t%s\t%s\t%s\t%s\t%s\n",
-						e.Number, e.EntryNo, e.Date, e.Status, e.EvidenceTier, e.Recognition,
-						cmdutil.Truncate(e.RawLabel, 30))
+				// The route serves BOTH journals; an RI row carries a direction
+				// and no status. The caller named the book, so the shape is known.
+				ri := len(rows) > 0 && rows[0].Direction != ""
+				if ri {
+					fmt.Fprintln(tw, "#\tDATE\tDIRECTION\tAMOUNT\tTIER\tRECOGNITION\tLABEL")
+					for _, e := range rows {
+						fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
+							e.Number, e.Date, e.Direction, e.Amount, e.EvidenceTier, e.Recognition,
+							cmdutil.Truncate(e.RawLabel, 30))
+					}
+				} else {
+					fmt.Fprintln(tw, "#\tNO\tDATE\tSTATUS\tTIER\tRECOGNITION\tLABEL")
+					for _, e := range rows {
+						fmt.Fprintf(tw, "%d\t%d\t%s\t%s\t%s\t%s\t%s\n",
+							e.Number, e.EntryNo, e.Date, e.Status, e.EvidenceTier, e.Recognition,
+							cmdutil.Truncate(e.RawLabel, 30))
+					}
 				}
 				if err := tw.Flush(); err != nil {
 					return err
@@ -345,6 +357,7 @@ func newEntryListCmd() *cobra.Command {
 }
 
 func newEntryShowCmd() *cobra.Command {
+	var entity string
 	cmd := &cobra.Command{
 		Use:         "show <number>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/entries/{number}"},
@@ -366,11 +379,33 @@ func newEntryShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			e, err := c.GetBooksEntry(ws, n)
+			e, err := c.GetBooksEntry(ws, n, entity)
 			if err != nil {
 				return err
 			}
 			return output.Render(format, e, func(w io.Writer) error {
+				if e.Direction != "" {
+					// An RI journal row: no lines, no posting status.
+					fmt.Fprintf(w, "entry #%d  (recettes-dépenses)\n", e.Number)
+					fmt.Fprintf(w, "  date         %s\n", e.Date)
+					fmt.Fprintf(w, "  direction    %s\n", e.Direction)
+					fmt.Fprintf(w, "  amount       %s\n", e.Amount)
+					fmt.Fprintf(w, "  raw label    %s\n", e.RawLabel)
+					if e.Counterparty != "" {
+						fmt.Fprintf(w, "  counterparty %s\n", e.Counterparty)
+					}
+					fmt.Fprintf(w, "  recognition  %s\n", e.Recognition)
+					fmt.Fprintf(w, "  evidence     %s\n", e.EvidenceTier)
+					if e.Piece != nil {
+						fmt.Fprintf(w, "  pièce        %s (captured %s)\n", e.Piece.DriveRef, e.Piece.Captured)
+					} else {
+						fmt.Fprintf(w, "  pièce        none on record\n")
+					}
+					if e.Fx != nil {
+						fmt.Fprintf(w, "  fx           %s\n", fxLine(e.Fx))
+					}
+					return nil
+				}
 				fmt.Fprintf(w, "entry #%d  (journal no. %d)\n", e.Number, e.EntryNo)
 				fmt.Fprintf(w, "  date         %s\n", e.Date)
 				fmt.Fprintf(w, "  status       %s\n", e.Status)
@@ -407,6 +442,7 @@ func newEntryShowCmd() *cobra.Command {
 			})
 		},
 	}
+	cmd.Flags().StringVar(&entity, "entity", "", "A SIMPLIFIED book's slug: read its recettes-dépenses journal")
 	return cmd
 }
 
@@ -616,4 +652,108 @@ func fxLine(fx *client.BooksFx) string {
 		s += " (" + fx.Source + ")"
 	}
 	return s
+}
+
+func newEntryPostCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:         "post <number>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/entries/{number}/post"},
+		Short:       "Post a staged écriture — after review, it becomes immutable",
+		Long: "Staged -> posted, after review. The database has the last word: a posted\n" +
+			"entry must balance, carry at least two lines, and have every line mapped to\n" +
+			"an account — resolve it first if it does not. Posted is immutable; from here\n" +
+			"on, a correction is a reversing entry. Posting a posted entry is a no-op that\n" +
+			"says so, because a retry is not an error.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			n, err := strconv.Atoi(args[0])
+			if err != nil || n < 1 {
+				return fmt.Errorf("%q is not an entry number", args[0])
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			r, err := c.PostBooksEntry(ws, n)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, r, func(w io.Writer) error {
+				if r.Already {
+					_, err := fmt.Fprintf(w, "entry #%d was already posted (journal no. %d)\n", r.Number, r.EntryNo)
+					return err
+				}
+				_, err := fmt.Fprintf(w, "posted entry #%d (journal no. %d) — now immutable; corrections are reversing entries\n", r.Number, r.EntryNo)
+				return err
+			})
+		},
+	}
+	return cmd
+}
+
+func newEntryDeclareCmd() *cobra.Command {
+	var req client.DeclareBooksEntryRequest
+	var explanation string
+	cmd := &cobra.Command{
+		Use:         "declare --entity <book> --date <yyyy-mm-dd> --amount <chf> --label <text> --explanation <text>",
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/entries"},
+		Short:       "Declare money no feed will deliver — a cash expense, the owner's note",
+		Long: "Declare an entry directly: cash and private payments never cross a bank line,\n" +
+			"so no import will ever bring them. The declarer IS the explanation — the entry\n" +
+			"arrives known_one_off with your words attached, and your name in its history.\n\n" +
+			"It still lands STAGED and passes the same posting gate as imported money.\n" +
+			"A double-entry book needs both sides: --account (the charge) and --contra\n" +
+			"(what settles it, e.g. the owner's compte courant — there is no caisse, on\n" +
+			"purpose). A simplified book needs --direction recette|depense|neutral.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			if explanation == "" {
+				return fmt.Errorf("--explanation is required: a declaration IS an explanation")
+			}
+			req.Explanation = map[string]any{"en": explanation}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			r, err := c.DeclareBooksEntry(ws, req)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, r, func(w io.Writer) error {
+				if r.Journal == "recettes_depenses" {
+					// No "(staged)" here: an RI journal has no posting lifecycle.
+					_, err := fmt.Fprintf(w, "declared entry #%d in the recettes-dépenses journal\n", r.Number)
+					return err
+				}
+				no := 0
+				if r.EntryNo != nil {
+					no = *r.EntryNo
+				}
+				_, err := fmt.Fprintf(w, "declared entry #%d (journal no. %d, staged) — post it after review: bk books entry post %d\n", r.Number, no, r.Number)
+				return err
+			})
+		},
+	}
+	cmd.Flags().StringVar(&req.Entity, "entity", "", "Book slug (required)")
+	cmd.Flags().StringVar(&req.Date, "date", "", "Booking date, YYYY-MM-DD (required)")
+	cmd.Flags().StringVar(&req.Amount, "amount", "", "Amount in CHF, e.g. 45.00 (required)")
+	cmd.Flags().StringVar(&req.Label, "label", "", "The journal line's text (required)")
+	cmd.Flags().StringVar(&explanation, "explanation", "", "What this money was (required)")
+	cmd.Flags().StringVar(&req.Counterparty, "counterparty", "", "Who was paid, or who paid")
+	cmd.Flags().StringVar(&req.Direction, "direction", "", "RI books: recette, depense or neutral")
+	cmd.Flags().StringVar(&req.Account, "account", "", "Double-entry books: the charge account")
+	cmd.Flags().StringVar(&req.Contra, "contra", "", "Double-entry books: the settling account")
+	_ = cmd.MarkFlagRequired("entity")
+	_ = cmd.MarkFlagRequired("date")
+	_ = cmd.MarkFlagRequired("amount")
+	_ = cmd.MarkFlagRequired("label")
+	return cmd
 }

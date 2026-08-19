@@ -288,6 +288,7 @@ func newResolveCmd() *cobra.Command {
 	cmd.Flags().StringVar(&req.Recognition, "recognition", "", "known_one_off or known_recurring (default: from whether a rule is taught)")
 	cmd.Flags().StringVar(&req.Counterparty, "counterparty", "", "Counterparty, once identified")
 	cmd.Flags().StringVar(&req.Account, "account", "", "Account for the staged line that has none (refused on posted entries)")
+	cmd.Flags().StringVar(&req.Entity, "entity", "", "A SIMPLIFIED book's slug: resolve in its recettes-dépenses journal")
 	cmd.Flags().StringVar(&ruleCounterparty, "rule-counterparty", "", "Teach a rule: fragment matched against future labels")
 	cmd.Flags().Float64Var(&ruleAmount, "rule-amount", 0, "Taught rule's expected amount in CHF")
 	cmd.Flags().Float64Var(&ruleTolerance, "rule-tolerance", 0, "Taught rule's accepted deviation in CHF")

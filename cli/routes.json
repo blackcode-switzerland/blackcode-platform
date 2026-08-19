@@ -122,6 +122,12 @@
       "app": "books"
     },
     {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/sources/{number}",
+      "command": "bk books source edit",
+      "app": "books"
+    },
+    {
       "method": "POST",
       "path": "/api/me/active-workspace",
       "command": "bk books workspace use",
@@ -137,6 +143,18 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/entities",
       "command": "bk books entity create",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/entries",
+      "command": "bk books entry declare",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/entries/{number}/post",
+      "command": "bk books entry post",
       "app": "books"
     },
     {
@@ -173,6 +191,30 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/rules",
       "command": "bk books rule create",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/sources",
+      "command": "bk books source create",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/sources/{number}/import",
+      "command": "bk books source import",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/sources/{number}/pulls",
+      "command": "bk books source record-pull",
+      "app": "books"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/workspaces/{ws}/sources/{number}/runbook",
+      "command": "bk books source runbook-set",
       "app": "books"
     },
     {

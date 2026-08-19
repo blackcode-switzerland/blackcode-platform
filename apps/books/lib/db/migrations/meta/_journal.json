@@ -78,6 +78,13 @@
       "when": 1787000300000,
       "tag": "0011_fx_vocabulary",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1787000400000,
+      "tag": "0012_bank_import",
+      "breakpoints": true
     }
   ]
 }

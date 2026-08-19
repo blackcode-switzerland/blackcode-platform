@@ -1,7 +1,7 @@
 -- Rollback for apps/books migration 0011 — drop the FX vocabulary.
 --
--- Rollbacks run in REVERSE: this file FIRST, then 0010, 0009, 0008, 0007 …
--- down to 0001. Each file's header names its place.
+-- Runs after books-0012-rollback.sql in the reverse walk, and REFUSES to run
+-- before it. Next after this: books-0010-rollback.sql.
 --
 -- ---------------------------------------------------------------------------
 -- WHAT THIS DESTROYS
@@ -18,6 +18,15 @@ BEGIN;
 DO $do$
 DECLARE n integer;
 BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'books' AND table_name = 'entry' AND column_name = 'bank_ref'
+  ) THEN
+    RAISE EXCEPTION
+      'REFUSING: 0012''s columns still exist. Run docs/sql/books-0012-rollback.sql first — '
+      'the walk is 0012, then this, then 0010 … down to 0001.';
+  END IF;
+
   SELECT (SELECT count(*) FROM books.entry WHERE fx IS NOT NULL)
        + (SELECT count(*) FROM books.ri_entry WHERE fx IS NOT NULL) INTO n;
   IF n > 0 THEN

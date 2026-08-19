@@ -11,7 +11,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
-import { resolveEntry, ResolveRefused } from '@/lib/db/queries/resolve'
+import { resolveEntry, resolveRiEntry, ResolveRefused } from '@/lib/db/queries/resolve'
+import { getEntityBySlug } from '@/lib/db/queries/statutory'
 
 interface Params { params: Promise<{ ws: string; number: string }> }
 
@@ -47,8 +48,21 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     throw Errors.badRequest('bad_rule', 'a taught rule needs a counterparty fragment', 'rule: { counterparty: "IMMOREGIE" }')
   }
 
+  // Which journal does the number name? Bare, it is the grand livre. A
+  // simplified book's rows are addressed WITH their book: body.entity names
+  // it, and the resolution runs against the recettes-dépenses journal.
+  let riEntityId: number | null = null
+  const entitySlug = typeof body?.entity === 'string' ? body.entity.trim() : null
+  if (entitySlug) {
+    const e = await getEntityBySlug(ctx.workspace.id, entitySlug)
+    if (!e) throw Errors.badRequest('bad_entity', `no book with slug "${entitySlug}"`, 'bk books entity list')
+    if (e.bookkeeping_regime === 'simplified') riEntityId = e.id
+  }
+
   try {
-    const result = await resolveEntry(ctx.workspace.id, n, {
+    const doResolve = (data: Parameters<typeof resolveEntry>[2]) =>
+      riEntityId !== null ? resolveRiEntry(ctx.workspace.id, riEntityId, n, data) : resolveEntry(ctx.workspace.id, n, data)
+    const result = await doResolve({
       explanation: explanation as Record<string, unknown>,
       recognition: recognition as 'known_one_off' | 'known_recurring' | undefined,
       counterparty: typeof body?.counterparty === 'string' ? body.counterparty : undefined,

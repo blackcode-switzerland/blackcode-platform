@@ -29,7 +29,7 @@
 
 import { and, eq, isNull } from 'drizzle-orm'
 import { getDb } from '../client'
-import { booksEntry, booksEntryLine, booksRule, type BooksEntry } from '../schema'
+import { booksEntry, booksEntryLine, booksRiEntry, booksRule, type BooksEntry, type BooksRiEntry } from '../schema'
 import { insertRule, type CreateRuleData, type Tx } from './rules'
 
 export interface ResolveData {
@@ -156,6 +156,103 @@ export async function resolveEntry(
         .set({ account_no: data.account })
         .where(and(eq(booksEntryLine.entry_id, entry.id), isNull(booksEntryLine.account_no)))
     }
+
+    return { entry: updated, taughtRuleSeq }
+  })
+}
+
+/**
+ * Resolve one RI entry — phase 4A closes the gap phase 2 left open: the
+ * worklist has served RI rows since then, but nothing could resolve one.
+ *
+ * Same doctrine, one deliberate difference: there is NO account to fill,
+ * because an RI entry has no lines — `data.account` is refused with words
+ * rather than ignored. Rule teaching keys to the row's `source_id` (0012):
+ * an imported RI line knows its feed, so the pair doctrine finally works for
+ * simplified books too; a pre-import row teaches a sourceless rule, which is
+ * exactly what rule 107 always was.
+ */
+export async function resolveRiEntry(
+  workspaceId: number,
+  entityId: number,
+  entryNumber: number,
+  data: ResolveData
+): Promise<{ entry: BooksRiEntry; taughtRuleSeq: number | null }> {
+  const db = getDb()
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(booksRiEntry)
+      .where(
+        and(
+          eq(booksRiEntry.workspace_id, workspaceId),
+          eq(booksRiEntry.entity_id, entityId),
+          eq(booksRiEntry.seq, entryNumber)
+        )
+      )
+      .limit(1)
+    if (!row) {
+      throw new ResolveRefused('not_found', `no entry #${entryNumber} in this book's recettes-dépenses journal`, 'bk books worklist lists the numbers')
+    }
+    if (row.deleted_at) {
+      throw new ResolveRefused('deleted', `entry #${entryNumber} is deleted`, 'nothing to resolve')
+    }
+    if (data.account) {
+      throw new ResolveRefused(
+        'ri_no_lines',
+        `entry #${entryNumber} is an RI entry: there are no lines to put an account on`,
+        'a simplified book keeps recettes and dépenses, not a chart mapping — drop --account'
+      )
+    }
+
+    const was = {
+      at: new Date().toISOString(),
+      event: 'resolved',
+      was: {
+        recognition: row.recognition,
+        counterparty: row.counterparty,
+        explanation: row.explanation,
+        matched_rule_id: row.matched_rule_id,
+      },
+    }
+    const prior = row.history
+    const history = Array.isArray(prior) ? [...prior, was] : prior ? [prior, was] : [was]
+
+    let taughtRuleSeq: number | null = null
+    let taughtRuleId: number | null = null
+    if (data.rule) {
+      const rule = await insertRule(tx, workspaceId, {
+        entityId: row.entity_id,
+        sourceId: row.source_id,
+        pattern: {
+          counterparty: data.rule.counterparty,
+          amount_chf: data.rule.amount_chf ?? null,
+          tolerance_chf: data.rule.tolerance_chf ?? null,
+          interval: data.rule.interval ?? null,
+        },
+        explanation: data.explanation,
+        accountNo: null,
+        learnedFrom: data.rule.learnedFrom ?? 'manual',
+        createdFromEntryId: row.id,
+      })
+      taughtRuleSeq = rule.seq
+      taughtRuleId = rule.id
+    }
+
+    const recognition = data.recognition ?? (data.rule ? 'known_recurring' : 'known_one_off')
+    const [updated] = await tx
+      .update(booksRiEntry)
+      .set({
+        explanation: data.explanation,
+        recognition,
+        counterparty: data.counterparty === undefined ? row.counterparty : data.counterparty,
+        evidence_note: data.evidenceNote === undefined ? row.evidence_note : data.evidenceNote,
+        matched_rule_id: taughtRuleId ?? row.matched_rule_id,
+        history,
+        updated_at: new Date(),
+      })
+      .where(eq(booksRiEntry.id, row.id))
+      .returning()
 
     return { entry: updated, taughtRuleSeq }
   })

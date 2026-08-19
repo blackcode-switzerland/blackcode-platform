@@ -980,7 +980,10 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
   it('the source detail route spreads publicSource rather than nesting it', () => {
     const src = readFileSync(join(APP_ROOT, 'app/api/workspaces/[ws]/sources/[number]/route.ts'), 'utf8')
     expect(src, 'the source detail route no longer calls publicSource').toContain('publicSource')
-    const keys = envelopeKeys(src, { label: 'sources/{number}' })
+    // Anchored to the GET since phase 4A gave this file a PATCH too: unanchored,
+    // the reader walks the file's LAST response, which is now the edit
+    // confirmation — the invitations case's bug, one merge later.
+    const keys = envelopeKeys(src, { after: 'export const GET', label: 'sources/{number} GET' })
     expect(keys.length, 'found no envelope keys — the response moved').toBeGreaterThan(0)
     expect(keys.sort()).toEqual(['...publicSource', 'pulls', 'runbook'].sort())
   })
@@ -1286,6 +1289,8 @@ type _Scalars = [
   // either way, and it must stay one — `<Money>` has no numeric overload.
   Mutual<WorklistRowWire['amount'], WorklistRow['amount']>,
   Mutual<WorklistRowWire['suggested_rules'], WorklistRow['suggested_rules']>,
+  // Pièces only — entry #numbers this document could prove.
+  Mutual<WorklistRowWire['suggested_entries'], WorklistRow['suggested_entries']>,
 
   // ── PHASE 3 ────────────────────────────────────────────────────────────
   Mutual<SourceWire['number'], Source['number']>,
@@ -1430,9 +1435,10 @@ const _scalars: _Scalars = [
   // the three nested `piece` fields
   true, true, true,
   true, true, true, true, true,
-  // phase 2: five rule fields, six worklist fields
+  // phase 2: five rule fields, seven worklist fields (suggested_entries is
+  // phase 3's piece column, pinned beside its sibling)
   true, true, true, true, true,
-  true, true, true, true, true, true,
+  true, true, true, true, true, true, true,
   // phase 3: thirteen source fields, six pull, five runbook, eight manifest,
   // sixteen pièce
   true, true, true, true, true, true, true, true, true, true, true, true, true,
