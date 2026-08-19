@@ -33,7 +33,7 @@ export const PUT = apiHandler(async (req: NextRequest, { params }: Params) => {
     return NextResponse.json(publicRunbook(r))
   } catch (e) {
     if (e instanceof SourceRefused) {
-      if (e.code === 'source_not_found') throw Errors.notFound('source', String(n))
+      if (e.code === 'source_not_found') throw Errors.notFound(e.code, e.message, e.suggestion)
       throw Errors.badRequest(e.code, e.message, e.suggestion)
     }
     throw e

@@ -32,6 +32,11 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   if (!source || typeof source.file_id !== 'string' || !source.file_id) {
     throw Errors.badRequest('missing_file_id', 'source.file_id is required', 'it is the idempotency key; the worker always has it')
   }
+  // 0015: the worker hashes the bytes it captured. A malformed hash is worse
+  // than none — it would sit on an entry as proof that proves nothing.
+  if (source.sha256 != null && !/^[0-9a-f]{64}$/i.test(String(source.sha256))) {
+    throw Errors.badRequest('bad_sha256', 'source.sha256 is not a SHA-256 hex digest', '64 hex characters, lowercase or upper; omit the field if the worker did not hash the file')
+  }
 
   const refusal = structuralRefusal(body)
   if (refusal) throw Errors.badRequest('bad_extraction', refusal, 'see extraction-schema.json (ExtractionResult v0.1)')

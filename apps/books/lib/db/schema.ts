@@ -238,7 +238,8 @@ export const booksExercice = booksSchema.table(
 /**
  * The Swiss PME chart, per book.
  *
- * `label` holds the mockup's own `{ fr, enSuffix }` shape verbatim, including the
+ * `label` STORES the mockup's own `{ fr, enSuffix }` shape verbatim (the wire
+ * normalizes it to `{fr, en}` in `publicAccount` since 2026-08-19), including the
  * unusual key name, because the frontend codes against that JSON.
  */
 export const booksAccount = booksSchema.table(
@@ -652,7 +653,10 @@ export const booksPieceInbox = booksSchema.table(
     drive_file_id: varchar('drive_file_id', { length: 120 }).notNull(),
     file_name: varchar('file_name', { length: 300 }),
     mime_type: varchar('mime_type', { length: 120 }),
+    /** Drive's own checksum: the worker's cross-check, and the legacy dedupe key. */
     md5_checksum: varchar('md5_checksum', { length: 64 }),
+    /** 0015: the worker's hash of the bytes it captured. What the books cite. */
+    sha256: varchar('sha256', { length: 64 }),
     drive_created_time: timestamp('drive_created_time', { withTimezone: true }),
     web_view_link: text('web_view_link'),
     extraction: jsonb('extraction').notNull(),

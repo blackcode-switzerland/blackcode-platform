@@ -37,7 +37,8 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     let rows = await listRiEntries(scope.entity.id, scope.exercice.id)
     const rec = q.get('recognition')
     if (rec) rows = rows.filter((r) => r.recognition === rec)
-    return jsonList(rows.map(publicRiEntry), null)
+    const names = { entity: scope.entity.slug, exercice: scope.exercice.year }
+    return jsonList(rows.map((r) => publicRiEntry(r, names)), null)
   }
 
   const rows = await listEntries(scope.entity.id, scope.exercice.id, {
@@ -46,7 +47,8 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     account: q.get('account') ?? undefined,
     limit: q.get('limit') ? Number(q.get('limit')) : undefined,
   })
-  return jsonList(rows.map(publicEntry), null)
+  const names = { entity: scope.entity.slug, exercice: scope.exercice.year }
+  return jsonList(rows.map((r) => publicEntry(r, names)), null)
 })
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {

@@ -386,7 +386,7 @@ func newEntryShowCmd() *cobra.Command {
 			return output.Render(format, e, func(w io.Writer) error {
 				if e.Direction != "" {
 					// An RI journal row: no lines, no posting status.
-					fmt.Fprintf(w, "entry #%d  (recettes-dépenses)\n", e.Number)
+					fmt.Fprintf(w, "entry #%d · %s · %d  (recettes-dépenses)\n", e.Number, e.Entity, e.Exercice)
 					fmt.Fprintf(w, "  date         %s\n", e.Date)
 					fmt.Fprintf(w, "  direction    %s\n", e.Direction)
 					fmt.Fprintf(w, "  amount       %s\n", e.Amount)
@@ -406,7 +406,7 @@ func newEntryShowCmd() *cobra.Command {
 					}
 					return nil
 				}
-				fmt.Fprintf(w, "entry #%d  (journal no. %d)\n", e.Number, e.EntryNo)
+				fmt.Fprintf(w, "entry #%d · %s · %d  (journal no. %d)\n", e.Number, e.Entity, e.Exercice, e.EntryNo)
 				fmt.Fprintf(w, "  date         %s\n", e.Date)
 				fmt.Fprintf(w, "  status       %s\n", e.Status)
 				fmt.Fprintf(w, "  raw label    %s\n", e.RawLabel)
@@ -622,7 +622,7 @@ func newPatrimoineCmd() *cobra.Command {
 					fmt.Fprintf(w, "PATRIMOINE au %s (compiled %s)\n", p.AsOf, p.Compiled)
 					tw := output.Tabwriter(w)
 					for _, i := range p.Items {
-						fmt.Fprintf(tw, "  %s\t%.2f\n", i.Label.Fr, i.Amount)
+						fmt.Fprintf(tw, "  %s\t%s\n", i.Label.Fr, i.Amount)
 					}
 					fmt.Fprintf(tw, "  TOTAL\t%s\n", p.Total)
 					if err := tw.Flush(); err != nil {

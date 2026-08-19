@@ -63,17 +63,20 @@ d('the original-currency story', () => {
 
   it('round-trips through publicRiEntry, and is null when there is none', async () => {
     const { listRiEntries, publicRiEntry } = await import('./queries/statutory')
-    const rows = (await listRiEntries(entityId, exerciceId)).map(publicRiEntry)
+    const rows = (await listRiEntries(entityId, exerciceId)).map((r) => publicRiEntry(r, { entity: 'fx', exercice: 2026 }))
     expect(rows.find((r: { number: number }) => r.number === 1)!.fx).toEqual(FX)
     expect(rows.find((r: { number: number }) => r.number === 2)!.fx, 'no story, no field').toBeNull()
   })
 
   it('publicEntry carries it for the grand livre the same way', async () => {
     const { publicEntry } = await import('./queries/statutory')
-    const shaped = publicEntry({
-      entry: { seq: 9, entry_no: 9, fx: FX, piece_drive_ref: null } as any,
-      lines: [],
-    } as any)
+    const shaped = publicEntry(
+      {
+        entry: { seq: 9, entry_no: 9, fx: FX, piece_drive_ref: null } as any,
+        lines: [],
+      } as any,
+      { entity: 'fx', exercice: 2026 }
+    )
     expect(shaped.fx).toEqual(FX)
   })
 

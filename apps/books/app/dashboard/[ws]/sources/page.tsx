@@ -46,16 +46,16 @@
 // answer to "this figure is wrong" is that this mapping, or the entry's
 // account, is wrong. **Never the legal category.**
 //
-// ── THE LABELS ARE `{fr, enSuffix}` AND NOT `{fr, en}` ────────────────────
-// `accountLabelEn` / `accountLabelFr`, never `en()` / `legal()`. Handed an
-// account label, `en()` finds no `.en`, falls back to the French, and renders
-// it on an English screen with nothing to say so. See `lib/label.ts`.
+// ── ACCOUNT LABELS ARE `{fr, en}` SINCE 2026-08-19 ────────────────────────
+// The wire used to carry the mockup's `{fr, enSuffix}` and needed dedicated
+// helpers; the backend now normalizes at the door, so `en()` reads an account
+// label like any other. See `lib/label.ts` for the closed case.
 
 import { useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { useScope } from '@/lib/scope'
 import { useAccounts, useSources } from '@/lib/hooks'
-import { accountLabelEn, accountLabelFr } from '@/lib/label'
+import { en } from '@/lib/label'
 import { ScreenFrame } from '@/components/screen-frame'
 import { DataTable, type Column } from '@/components/data-table'
 import { AccountRef } from '@/components/account-ref'
@@ -84,13 +84,13 @@ export default function Page() {
         header: 'Account',
         cell: (a) => (
           <span>
-            <span className="text-foreground">{accountLabelFr(a.label)}</span>
+            <span className="text-foreground">{a.label.fr}</span>
             <span className="ml-2 text-[12px] text-muted-foreground">
-              {accountLabelEn(a.label)}
+              {en(a.label)}
             </span>
           </span>
         ),
-        sortValue: (a) => accountLabelFr(a.label),
+        sortValue: (a) => a.label.fr,
       },
       {
         key: 'class',

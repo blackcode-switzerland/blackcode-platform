@@ -110,13 +110,14 @@ type CreateBooksExerciceRequest struct {
 
 // BooksAccount is one line of the Swiss PME chart.
 //
-// `Label` is left as raw JSON shape (fr + enSuffix) in the payload; the CLI prints
-// the French, which is the statutory wording.
+// `Label` is `{fr, en}` since 2026-08-19 (the wire normalizes the mockup's
+// enSuffix at the door); the CLI prints the French, the statutory wording.
 type BooksAccount struct {
 	No    string `json:"no"`
 	Class int    `json:"class"`
 	Label struct {
 		Fr string `json:"fr"`
+		En string `json:"en"`
 	} `json:"label"`
 	Statement         string `json:"statement"`
 	StatementPosition string `json:"statement_position"`
@@ -145,10 +146,14 @@ type BooksFx struct {
 // by; `EntryNo` is the statutory journal number, gapless per (book, year), which
 // is what a tax authority reads. Neither substitutes for the other.
 type BooksEntry struct {
-	Number  int    `json:"number"`
-	EntryNo int    `json:"entry_no"`
-	Date    string `json:"date"`
-	Status  string `json:"status"`
+	Number int `json:"number"`
+	// Which book and which year (2026-08-19): `number` is workspace-wide,
+	// these say whose écriture it is.
+	Entity   string `json:"entity"`
+	Exercice int    `json:"exercice"`
+	EntryNo  int    `json:"entry_no"`
+	Date     string `json:"date"`
+	Status   string `json:"status"`
 	// The RI journal's two fields. `entry list/show` serve BOTH journals since
 	// phase 4A, and the caller knows which book it asked for; these are empty
 	// on a grand-livre row, and Status/Lines are empty on an RI row.
@@ -378,7 +383,8 @@ type BooksPatrimoine struct {
 		Label struct {
 			Fr string `json:"fr"`
 		} `json:"label"`
-		Amount float64 `json:"amount"`
+		// A `numeric` string since 2026-08-19, like every other amount.
+		Amount string `json:"amount"`
 	} `json:"items"`
 }
 
