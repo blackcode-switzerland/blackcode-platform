@@ -81,6 +81,7 @@ import { journalAccepts, JOURNAL_NAME, type Journal } from '@/lib/journal'
 import { scopedHref } from '@/lib/nav'
 import { en } from '@/lib/label'
 import { ScreenFrame } from '@/components/screen-frame'
+import { usePageTitle } from '@/components/books-shell'
 import { DataTable, type Column } from '@/components/data-table'
 import { EmptyState, Loading } from '@/components/states'
 import { DateText } from '@/components/date-text'
@@ -103,6 +104,25 @@ export default function Page() {
   const recognition = search?.get('recognition') ?? null
 
   const journal = scope.journal
+
+  /**
+   * The heading, and the SHELL is told it too.
+   *
+   * `<ScreenFrame title>` labels the loading and error states and nothing else,
+   * so setting it here alone left the H1 reading "General ledger" over a book
+   * that keeps no general ledger — the ternary was correct and rendered nowhere
+   * (phase-4A review, F-5). `usePageTitle` is what reaches the header.
+   *
+   * `null` while the journal is unknown, so the nav label stands rather than
+   * this screen guessing which document the reader is looking at.
+   */
+  const heading =
+    journal === 'recettes_depenses'
+      ? 'Receipts and expenses'
+      : journal === 'grand_livre'
+        ? 'General ledger'
+        : 'Journal'
+  usePageTitle(journal === null ? null : heading)
 
   // ── THE FILTERS ARE SPLIT BY WHAT THIS JOURNAL WILL ACCEPT ──────────────
   // Not by what the URL says. `?status=` and `?account=` are REFUSED by an RI
@@ -143,7 +163,7 @@ export default function Page() {
   }
 
   return (
-    <ScreenFrame title={journal === 'recettes_depenses' ? 'Receipts and expenses' : 'General ledger'}>
+    <ScreenFrame title={heading}>
       <div className="mb-4">
         <h1 className="text-lg font-semibold text-foreground">
           {/* The statutory document's own name, which is French for both of them

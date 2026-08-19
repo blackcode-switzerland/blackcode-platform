@@ -255,6 +255,7 @@ export default function Page() {
         <RulesPanel
           ws={params.ws}
           scope={scope}
+          journal={scope.journal}
           base={base}
           rules={rules.data}
           isLoading={rules.isLoading}
