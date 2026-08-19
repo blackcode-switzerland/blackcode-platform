@@ -44,7 +44,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     return NextResponse.json(summary)
   } catch (e) {
     if (e instanceof ImportRefused) {
-      if (e.code === 'source_not_found') throw Errors.notFound('source', String(n))
+      if (e.code === 'source_not_found') throw Errors.notFound(e.code, e.message, 'bk books source list shows the register')
       throw Errors.badRequest(e.code, e.message, e.problems.join(' · ') || 'fix the file and import again — nothing landed')
     }
     throw e

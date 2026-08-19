@@ -1,7 +1,7 @@
 -- Rollback for apps/books migration 0014 — remove the compliance layer.
 --
--- Rollbacks run in REVERSE: this file FIRST, then 0013, 0012 … down to 0001.
--- Each file's header names its place.
+-- Rollbacks run in REVERSE: 0015's file first, THEN this one, then 0013,
+-- 0012 … down to 0001. Each file's header names its place.
 --
 -- ---------------------------------------------------------------------------
 -- WHAT THIS DESTROYS
@@ -21,6 +21,13 @@ BEGIN;
 DO $do$
 DECLARE n integer;
 BEGIN
+  -- Order guard: 0015's column must already be gone, or the reverse walk is
+  -- being run out of order.
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'books' AND table_name = 'piece_inbox' AND column_name = 'sha256') THEN
+    RAISE EXCEPTION 'REFUSING: books.piece_inbox.sha256 still exists. Run books-0015-rollback.sql first — rollbacks run in reverse.';
+  END IF;
+
   SELECT count(*) FROM books.compliance_rule WHERE review_state <> 'draft' INTO n;
   IF n > 0 THEN
     RAISE EXCEPTION

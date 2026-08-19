@@ -351,6 +351,25 @@ export class PostRefused extends Error {
   }
 }
 
+/**
+ * Every message on an error's cause chain, joined.
+ *
+ * Drizzle 0.45 wraps a failure raised at COMMIT in DrizzleQueryError whose
+ * own message is literally "Failed query: COMMIT" — the database's sentence
+ * (0004's guard speaking) sits on `.cause`. Anything matching on the
+ * top-level message alone has never seen the guard's words: an unbalanced
+ * post answered 500 internal_error on every surface until the frontend
+ * review proved it live (ticket #55, 2026-08-19). Route catches translate
+ * through THIS, never through `e.message`.
+ */
+export function sqlErrorText(e: unknown): string {
+  let out = ''
+  for (let x = e as { message?: string; cause?: unknown } | undefined; x; x = x.cause as typeof x) {
+    out += (x.message ?? '') + '\n'
+  }
+  return out
+}
+
 export async function postEntry(
   workspaceId: number,
   entrySeq: number

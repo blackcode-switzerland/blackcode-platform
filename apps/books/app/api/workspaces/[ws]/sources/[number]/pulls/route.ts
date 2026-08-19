@@ -35,7 +35,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     return NextResponse.json({ ...publicPull(r.pull), created: r.created }, { status: r.created ? 201 : 200 })
   } catch (e) {
     if (e instanceof SourceRefused) {
-      if (e.code === 'source_not_found') throw Errors.notFound('source', String(n))
+      if (e.code === 'source_not_found') throw Errors.notFound(e.code, e.message, e.suggestion)
       throw Errors.badRequest(e.code, e.message, e.suggestion)
     }
     throw e

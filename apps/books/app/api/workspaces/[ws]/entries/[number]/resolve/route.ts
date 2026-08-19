@@ -87,7 +87,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     })
   } catch (e) {
     if (e instanceof ResolveRefused) {
-      if (e.code === 'not_found') throw Errors.notFound('entry', String(n))
+      if (e.code === 'not_found') throw Errors.notFound('entry_not_found', e.message, e.suggestion)
       throw Errors.badRequest(e.code, e.message, e.suggestion)
     }
     throw e

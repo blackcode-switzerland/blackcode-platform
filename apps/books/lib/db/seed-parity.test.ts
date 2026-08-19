@@ -267,6 +267,24 @@ d('the seeded database', () => {
     }
   })
 
+  ifSeeded("flags the mockup's twin pièces: the EFT slip is a duplicate suspect of the receipt", async () => {
+    // 9605 is the card slip of the SAME purchase 9601 documents — the
+    // mockup's own data says `duplicate_of: 9601`, by same-date-same-total
+    // similarity, not by checksum (different documents, same money). The
+    // seed could never show this while dedupe was checksum-only (#53).
+    const { getDb } = await import('./client')
+    const rows = await getDb().execute(
+      (await import('drizzle-orm')).sql`
+        SELECT p.file_name, p.needs_review, dup.file_name AS dup_of
+        FROM books.piece_inbox p
+        LEFT JOIN books.piece_inbox dup ON dup.id = p.duplicate_of_id
+        WHERE p.workspace_id = ${ws} AND p.file_name = 'Scanned_20260813-1546-04.jpg'`
+    )
+    expect(rows.rows.length).toBe(1)
+    expect(rows.rows[0].dup_of, 'the slip points at the receipt').toBe('Scanned_20260813-1357.jpg')
+    expect(rows.rows[0].needs_review, 'a suspect is a human call').toBe(true)
+  })
+
   ifSeeded('numbers each journal from 1 within its own exercice', async () => {
     const [bc] = await q.listEntities(ws)
     const [x2026, x2025] = await q.listExercices(ws, bc.id)

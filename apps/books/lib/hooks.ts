@@ -455,11 +455,9 @@ export function usePatrimoine(ws: string | undefined, scope: ReadScope) {
         r.data.map(
           (snapshot): PatrimoineView => ({
             ...snapshot,
-            items: (snapshot.items ?? []).map((i) => ({
-              label: i.label,
-              // The one conversion. See the header above before adding a second.
-              amount: typeof i.amount === 'number' ? i.amount.toFixed(2) : String(i.amount ?? ''),
-            })),
+            // Served as `numeric` strings since 2026-08-19; the conversion
+            // that lived here is deleted, as the wire-parity pin instructed.
+            items: snapshot.items ?? [],
           })
         )
       ),

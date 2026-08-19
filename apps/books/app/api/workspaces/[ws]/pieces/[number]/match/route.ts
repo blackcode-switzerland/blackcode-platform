@@ -28,7 +28,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     return NextResponse.json({ number: r.piece.seq, status: r.piece.status, matched_entry: r.entryNumber, matched_journal: r.journal })
   } catch (e) {
     if (e instanceof MatchRefused) {
-      if (e.code.endsWith('not_found')) throw Errors.notFound(e.code.replace('_not_found', ''), String(e.code === 'piece_not_found' ? n : entry))
+      if (e.code.endsWith('not_found')) throw Errors.notFound(e.code, e.message, e.suggestion)
       throw Errors.badRequest(e.code, e.message, e.suggestion)
     }
     throw e

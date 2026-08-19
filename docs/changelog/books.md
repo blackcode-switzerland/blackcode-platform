@@ -32,6 +32,63 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-19 — The hardening pass: every open finding from the frontend reviews, closed
+
+Nine fixes, all of them answers to tickets #50/#51/#53/#55. Four change the
+wire — each one flips a pin the frontend deliberately left on the defect, and
+the pins now hold the fixed shape.
+
+**Refusals reach callers now, with their reasons:**
+
+- **The 0004 guard speaks (was: a bare 500).** Drizzle wraps a COMMIT failure,
+  so the database's sentence sits on the error's CAUSE CHAIN while `e.message`
+  says only "Failed query: COMMIT". The post route now reads the chain
+  (`sqlErrorText`): an unbalanced post answers
+  `400 guard_refused — entry N does not balance: debit X <> credit Y`.
+  Frontends carrying the client-side workaround can delete it, as your own
+  pin instructed.
+- **Every 404 carries its reason and its recovery.** Nine call sites answered
+  things like `error: 999`; all now pass the refusal's message and suggestion
+  through (`bk books piece match 2 --entry 999` answers "no entry #999 …" with
+  the worklist hint).
+
+**Wire changes (all additive or shape-corrections you asked for):**
+
+- **`account.label` is `{fr, en}`** — phase-0-contract.md's promise, kept at
+  the door: storage keeps the mockup's `{fr, enSuffix}`, `publicAccount`
+  normalizes. `en()` reads an account label like any other; the dedicated
+  helpers are gone. A custom label with no English half serves `en: ""`.
+- **Patrimoine item amounts are `numeric` strings**, like every other amount.
+  The hooks conversion is deleted, per the pin's own note.
+- **Entry payloads name their book and year**: `entity` (slug) and `exercice`
+  (year) on both journals' rows, list and show. The transaction screen can
+  state whose écriture it is instead of inferring it from a URL filter. And
+  stated as a decision: a bare `GET /entries/{n}` resolving workspace-wide is
+  INTENDED for reads — membership is the gate, and the payload now tells the
+  truth about what it found; every write path holds the entity boundary by
+  refusal.
+- **`fx` is a contract now**: when present, ALL THREE of
+  `{original, rate, source}` are — both writers always wrote the whole story;
+  the type finally says so.
+
+**The pièce pipeline:**
+
+- **SHA-256 for captured files (migration 0015).** `source.sha256` rides
+  ingest (64 hex chars, `bad_sha256` otherwise), dedupe prefers it, and a
+  matched entry cites `sha256:…` over Drive's md5. MD5 stays as Drive's own
+  cross-check and the legacy key.
+- **Duplicate suspects by IDENTICAL FACTS, not just identical bytes.** The
+  mockup's own twin pair — the Philfruits receipt and the EFT slip of the
+  same purchase — is different bytes and the same money, which checksum
+  dedupe could never flag. Ingest now also flags same-date-same-total within
+  the same book: `duplicate_of` set, `needs_review` true, never dropped
+  (refunds and split payments look identical; a human decides). The seeded
+  inbox finally shows the duplicate banner, honestly.
+- **`/api/meta`'s `source_types` carry a `note` each** saying whether that
+  type is expected to feed a ledger account — so no client invents the
+  sentence again that told PostFinance, a bank, that having no ledger account
+  is normal. Render the vocabulary's words.
+
 ## 2026-08-19 — Phase 5: compliance, retention, and the app that refuses
 
 The last in-app phase. Three routes, one enforcement, one platform answer.

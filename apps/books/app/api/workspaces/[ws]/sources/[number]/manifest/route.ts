@@ -18,7 +18,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const n = Number(number)
   if (!Number.isInteger(n) || n < 1) throw Errors.badRequest('bad_number', `"${number}" is not a source number`, 'from `bk books source list`')
   const src = await getSourceBySeq(ctx.workspace.id, n)
-  if (!src) throw Errors.notFound('source', String(n))
+  if (!src) throw Errors.notFound('source_not_found', `no source #${n} in this workspace`, 'bk books source list shows the register')
 
   const rows = await manifestOf(src.id)
   const pieceIds = rows.map((r) => r.extracted_piece_id).filter((x): x is number => x !== null)

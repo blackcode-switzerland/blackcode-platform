@@ -64,12 +64,20 @@ export const ENTRY_STATUS: Term[] = [
 ]
 
 /** Spend-side channels only. Income is b/billing's job. */
+/**
+ * `note` states whether a source of this type is expected to feed a ledger
+ * account — SERVED so clients render the true sentence per type instead of
+ * inventing one. The phase-3 review caught PostFinance (a bank) being told
+ * that having no ledger account "is normal for a card, a processor or a
+ * Drive folder": for a bank it is a gap worth explaining, never a normal
+ * state, and only the vocabulary can say which is which.
+ */
 export const SOURCE_TYPES: Term[] = [
-  { value: 'bank', label: 'Bank', icon: 'landmark' },
-  { value: 'card', label: 'Card', icon: 'credit-card' },
-  { value: 'processor', label: 'Payment processor', icon: 'repeat' },
-  { value: 'saas', label: 'SaaS spend', icon: 'app-window' },
-  { value: 'drive_folder', label: 'Drive folder', icon: 'folder' },
+  { value: 'bank', label: 'Bank', icon: 'landmark', note: 'Holds the money and feeds a ledger account. A bank source with no ledger account is a gap to explain, not a normal state.' },
+  { value: 'card', label: 'Card', icon: 'credit-card', note: 'Draws on a bank and settles there; it may carry no ledger account of its own.' },
+  { value: 'processor', label: 'Payment processor', icon: 'repeat', note: 'Sits in front of a bank and settles into it; it may carry no ledger account of its own.' },
+  { value: 'saas', label: 'SaaS spend', icon: 'app-window', note: 'A routing layer that documents spend; it settles elsewhere and carries no ledger account.' },
+  { value: 'drive_folder', label: 'Drive folder', icon: 'folder', note: 'A document feed. No money moves here, so no ledger account, ever.' },
 ]
 
 /**
