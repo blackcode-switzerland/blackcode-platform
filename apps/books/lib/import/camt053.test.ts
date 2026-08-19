@@ -49,6 +49,23 @@ describe('parseCamt053 on the golden statement', () => {
     expect(stmt.lines[1].fx, 'a plain CHF movement carries no fx').toBeNull()
   })
 
+  it('drops fx when the bank stated no rate: the wire contract is all three fields or null', () => {
+    // Same conversion story as the golden Hetzner line, XchgRate removed.
+    const xml = `<Document><BkToCstmrStmt><Stmt>
+      <Bal><Tp><CdOrPrtry><Cd>OPBD</Cd></CdOrPrtry></Tp><Amt Ccy="CHF">100.00</Amt><CdtDbtInd>CRDT</CdtDbtInd><Dt><Dt>2026-03-01</Dt></Dt></Bal>
+      <Bal><Tp><CdOrPrtry><Cd>CLBD</Cd></CdOrPrtry></Tp><Amt Ccy="CHF">60.00</Amt><CdtDbtInd>CRDT</CdtDbtInd><Dt><Dt>2026-03-31</Dt></Dt></Bal>
+      <Ntry><NtryRef>R-1</NtryRef><Amt Ccy="CHF">40.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-03-10</Dt></BookgDt>
+        <NtryDtls><TxDtls>
+          <AmtDtls><InstdAmt><Amt Ccy="EUR">42.00</Amt></InstdAmt></AmtDtls>
+          <RmtInf><Ustrd>HETZNER CLOUD MARS</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+    </Stmt></BkToCstmrStmt></Document>`
+    const noRate = parseCamt053(xml)
+    expect(noRate.lines[0].fx, 'the narrative still tells the story; fx does not half-tell it').toBeNull()
+  })
+
   it('verifies: opening plus lines equals closing, to the rappen', () => {
     expect(verifyCamt(stmt)).toEqual([])
   })

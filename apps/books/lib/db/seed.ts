@@ -104,6 +104,16 @@ import {
   type PostingLine,
 } from '../derive'
 import { booksSourcePull, booksRunbook, booksAnalysis, booksAnalytiqueCategory, booksTaxParams } from './schema'
+import type {
+  StoredAccountLabel,
+  StoredBasedOn,
+  StoredBiText,
+  StoredFigure,
+  StoredHistory,
+  StoredPatrimoineItem,
+  StoredRulePattern,
+  StoredSpeech,
+} from './schema'
 import { ingestPiece } from './queries/pieces'
 import type { Extraction } from '../validate/extraction'
 import fixture from '../../fixtures/mockup.json'
@@ -462,7 +472,7 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
         entity_id: row.id,
         no: a.no,
         class: a.class,
-        label: a.label,
+        label: a.label as StoredAccountLabel,
         statement: a.statement,
         statement_position: a.statement_position,
       }))
@@ -613,7 +623,7 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
         active: r.active,
         // The mockup calls this `source`; renamed to avoid reading as `source_id`.
         learned_from: r.source ?? null,
-        pattern: r.pattern,
+        pattern: r.pattern as StoredRulePattern,
         explanation: r.explanation ?? null,
         account_no: r.account,
         created_from_entry_id: null, // patched below
@@ -671,7 +681,7 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
           piece_drive_ref: t.piece?.drive_ref ?? null,
           piece_hash: t.piece?.hash ?? null,
           piece_captured: t.piece?.captured ?? null,
-          history: t.history ?? null,
+          history: (t.history ?? null) as StoredHistory | null,
         })
         .returning()
       entryId.set(t.id, row.id)
@@ -758,7 +768,7 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
         seq: nextSeq('patrimoine'),
         as_of: p.as_of,
         compiled: p.compiled,
-        items: p.items,
+        items: p.items as StoredPatrimoineItem[],
         note: p.note ?? null,
       })
     }
@@ -786,7 +796,7 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
         entity_id: dbEntity,
         seq: nextSeq('category'),
         key: c.key,
-        label: c.label,
+        label: c.label as StoredBiText,
         accounts: c.accounts,
       })
     }
@@ -811,15 +821,15 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
       asked: new Date(a.asked + ':00+02:00'),
       asked_by: a.asked_by,
       agent: a.agent,
-      scenario_label: a.scenario_label ?? null,
+      scenario_label: (a.scenario_label ?? null) as StoredSpeech | null,
       runway_after_months:
         a.runway_after_months === undefined || a.runway_after_months === null
           ? null
           : String(a.runway_after_months),
-      question: a.question,
-      verdict: a.verdict,
-      figures: a.figures,
-      based_on: a.based_on,
+      question: a.question as StoredSpeech,
+      verdict: a.verdict as StoredSpeech,
+      figures: a.figures as StoredFigure[],
+      based_on: a.based_on as StoredBasedOn[],
     })
   }
 

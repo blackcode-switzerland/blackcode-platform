@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Errors, jsonList } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
 import { getEntityBySlug } from '@/lib/db/queries/statutory'
+import type { StoredBasedOn, StoredFigure, StoredSpeech } from '@/lib/db/schema'
 import { listAnalyses, ManagementRefused, publicAnalysis, recordAnalysis } from '@/lib/db/queries/management'
 
 interface Params { params: Promise<{ ws: string }> }
@@ -51,11 +52,11 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       entitySlug: need('entity'),
       askedBy: need('asked_by'),
       agent: need('agent'),
-      question: body.question,
-      verdict: body.verdict,
-      figures: Array.isArray(body.figures) ? body.figures : undefined,
-      basedOn: Array.isArray(body.based_on) ? body.based_on : undefined,
-      scenarioLabel: body.scenario_label,
+      question: body.question as StoredSpeech,
+      verdict: body.verdict as StoredSpeech,
+      figures: Array.isArray(body.figures) ? (body.figures as StoredFigure[]) : undefined,
+      basedOn: Array.isArray(body.based_on) ? (body.based_on as StoredBasedOn[]) : undefined,
+      scenarioLabel: body.scenario_label as StoredSpeech | null | undefined,
       runwayAfterMonths: typeof body.runway_after_months === 'number' ? body.runway_after_months : null,
     })
     return NextResponse.json(publicAnalysis(r), { status: 201 })

@@ -11,14 +11,18 @@
 // drifted answer is answered again, in a new row; both rows stand.
 //
 // ===========================================================================
-// CATEGORIES ARE CONFIGURATION, AND THE SEVENTH WRITE
+// CATEGORIES ARE CONFIGURATION, WITH A WRITE DOOR OF THEIR OWN
 // ===========================================================================
+// (No ordinal here: three documents counted "the writes" three different ways.
+// The canonical enumeration lives in docs/changelog/books.md, once.)
+//
 // The breakdown's buckets. Seeded with the mockup's five, creatable from the
-// UI and the CLI (decided with Mustneer, 2026-08-19). Two integrity rules the
-// create enforces because nothing else could: every account named must exist
-// in the entity's chart, and no account may sit in two ACTIVE categories —
-// a franc that appears in two bars is counted twice, which is exactly the
-// kind of quiet misstatement this app exists to refuse.
+// UI and the CLI (decided with Mustneer, 2026-08-19). Three integrity rules
+// the create enforces because nothing else could: every account named must
+// exist in the entity's chart; no account may sit in two ACTIVE categories —
+// a franc that appears in two bars is counted twice; and no class-3 account
+// may pose as a cost — revenue in a charge bucket is the same quiet
+// misstatement with the sign flipped.
 //
 // Everything else here is a READ over postings, derived at request time
 // (lib/derive/management.ts), never stored.
@@ -38,6 +42,10 @@ import {
   type BooksEntity,
   type BooksExercice,
   type BooksTaxParams,
+  type StoredBasedOn,
+  type StoredBiText,
+  type StoredFigure,
+  type StoredSpeech,
 } from '../schema'
 import { nextSeq } from './imports'
 import { getBilan, getCr, listAccounts, listRiEntries } from './statutory'
@@ -102,11 +110,11 @@ export interface RecordAnalysisData {
   entitySlug: string
   askedBy: string
   agent: string
-  question: unknown
-  verdict: unknown
-  figures?: unknown[]
-  basedOn?: unknown[]
-  scenarioLabel?: unknown
+  question: StoredSpeech
+  verdict: StoredSpeech
+  figures?: StoredFigure[]
+  basedOn?: StoredBasedOn[]
+  scenarioLabel?: StoredSpeech | null
   runwayAfterMonths?: number | null
 }
 
@@ -209,8 +217,9 @@ export interface CreateCategoryData {
 }
 
 /**
- * Create one cost category. Refuses an account the chart does not hold and an
- * account another ACTIVE category already claims — one franc, one bar.
+ * Create one cost category. Refuses an account the chart does not hold, an
+ * account another ACTIVE category already claims — one franc, one bar — and a
+ * class-3 account: revenue in a cost bucket would be counted as a charge.
  */
 export async function createCategory(
   workspaceId: number,
@@ -261,6 +270,18 @@ export async function createCategory(
       'a category counts flows; a bilan account here would chart balance movements as charges'
     )
   }
+  // `statement === 'cr'` admits class 3, and a revenue line inside a cost
+  // bucket makes the breakdown count produits as charges — the bars carry no
+  // sign, so nothing downstream could ever tell.
+  const revenueAccounts = new Set(chart.filter((a) => Number(a.class) === 3).map((a) => a.no))
+  const revenue = data.accounts.filter((a) => revenueAccounts.has(a))
+  if (revenue.length > 0) {
+    throw new ManagementRefused(
+      'revenue_not_a_cost',
+      `class 3 is revenue, not a charge: ${revenue.join(', ')}`,
+      'a category buckets costs; produits already carry their own line on the compte de résultat'
+    )
+  }
 
   const existing = await listCategories(entity.id)
   if (existing.some((c) => c.key === data.key)) {
@@ -282,8 +303,13 @@ export async function createCategory(
 
   // A category label is CONFIGURATION, so it is normalized rather than kept
   // verbatim (unlike an analysis, which is a record): the wire always carries
-  // {fr, en}, and a client typing it as an object never meets a bare string.
-  const label = typeof data.label === 'string' ? { fr: data.label, en: data.label } : data.label
+  // {fr, en}, and a client typing it as an object never meets a bare string —
+  // including a half-spoken {fr}-only object, whose other half is filled in.
+  const given = data.label as string | { fr?: string; en?: string }
+  const label: StoredBiText =
+    typeof given === 'string'
+      ? { fr: given, en: given }
+      : { fr: (given.fr ?? given.en)!, en: (given.en ?? given.fr)! }
 
   return db.transaction(async (tx) => {
     const seq = await nextSeq(tx, workspaceId, 'category')
