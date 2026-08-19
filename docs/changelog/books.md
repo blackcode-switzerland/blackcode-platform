@@ -32,6 +32,141 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-20 — A book can now be started and a year can now be ended
+
+**Four new write doors, one new migration, and one refusal that changes what
+`bk books entry declare` accepts.** Until today the CLI could run the fiscal
+year it was already inside — import a statement, work the worklist, resolve,
+post, read the statements — and could do neither of the two things at the ends
+of it. A workspace clone made the gap concrete on 2026-08-19: every cloned book
+opened at zero, because opening balances had no write door anywhere, and every
+cloned year opened `open`, because closing had none either.
+
+### `bk books account create` — the chart is a starting point, not a ceiling
+
+`lib/chart.ts` has always said the PME template "belongs to the book once
+applied", and `lib/chart.test.ts` pins the proof: the seeded books carry `1021`
+(UBS gelée) and `1022` (Yapeal) which the 24-account template deliberately does
+not, and the test calls them "a book customization, not template material".
+There was no door to make one, so every book created through the app had
+exactly 24 accounts forever while the demo books showed 26.
+
+    bk books account create --entity acme --no 1022 --class 1 \
+      --label-fr Yapeal --position tresorerie
+
+Refuses `bad_account_no`, `bad_class`, `missing_label`, `account_exists`,
+`unknown_position`, and `class_position_mismatch` — a class 6 charge mapped to
+a bilan line is refused, because art. 959a and 959b decide which statement a
+class reports on. No edit and no delete: entries point at an account by number.
+
+### `bk books entry declare` and `bk books resolve` refuse an account off the chart
+
+**This is a behaviour change on an existing command.** `books.entry_line.account_no`
+is a varchar, not a foreign key — the chart is scoped to the entity and the line
+only knows its entry — and nothing checked it. A posting to an account the book
+does not carry is invisible to every derivation, which walks the CHART and looks
+movements up by account, so the credit side simply vanished from the balance
+sheet while the debit side counted.
+
+Measured, not theorised: a clone posted CHF 43.70 to `1022` in a book with no
+`1022` and produced a POSTED, debit-equals-credit entry whose bilan reported
+`balanced: false`, actif 2400.10 against passif 2356.40. The 0004 balance
+trigger cannot see this; only the chart knows the account is a ghost.
+
+Both doors now answer `unknown_account`, naming the number and pointing at
+`account create`. NULL is still fine: a staged bank line with no account yet is
+the normal arrival state from an import.
+
+### `bk books opening set` / `bk books opening list` — the first year is typed
+
+The question this settles is whether openings are typed or produced by a close.
+**Both, and the split is the design:**
+
+* a book's **first** fiscal year is **typed** — a migration from whatever kept
+  the books before this app, done once;
+* every **later** year is **produced** by closing the year before it.
+
+So `opening set` refuses `not_first_exercice` on any other year, and names the
+close command in the suggestion. It replaces the **whole set** for the year in
+one transaction, never one line, because a balance sheet is one statement that
+must balance — which is what lets it refuse `openings_unbalanced` on the day
+somebody types the migration rather than at the first close months later.
+
+    bk books opening set --entity martigny \
+      --balance 1020=50000.00 --balance 2800=50000.00
+    bk books opening set --entity martigny --file balances.json
+
+Also refuses `exercice_closed`, `unknown_account`, `duplicate_account`,
+`bad_amount`, and `not_a_bilan_account` (a trading year starts at zero,
+art. 958 al. 2). Amounts are in the account's natural direction and 2970 goes
+negative for a carried-forward loss.
+
+### `bk books exercice close` — the routine that ends a year
+
+Refuses before it writes anything: `already_closed`, `staged_entries` (money
+that has arrived and nobody has judged), `bilan_unbalanced`, `no_next_exercice`,
+`openings_exist`, `no_retained_earnings`. Then, in one transaction, it carries
+every **bilan** account's closing balance into next year, adds the year's
+result to account **2970** (bénéfice / perte reporté(e)), and marks the year
+closed last — so a failed carry leaves a year you can still close.
+
+Compte de résultat accounts do **not** carry. art. 958 al. 2: a fiscal year
+reports its own result, and carrying a charge account forward would make next
+year's compte de résultat report money spent in a year already filed. The
+result is **added** to 2970, never assigned: 2970 is cumulative and holds every
+prior year's undistributed result.
+
+**There is no reopen and there will not be one.** A closed year has been filed
+and art. 958f keeps it as filed for ten years, so something found afterwards is
+corrected in the current year with a reversing entry — the same doctrine that
+gives this app no un-post and no delete.
+
+### VAT can be recorded on an entry for the first time
+
+`books.entry` has carried `tva_rate`, `tva_amount`, `tva_input_claimed` and
+`tva_note` since 0003 and the tax snapshot has served a VAT position off them
+the whole time, but **no write door set any of them**. Every figure came from
+the fixture writing rows directly, so the VAT position was real for the three
+demo books and permanently zero for every book a person actually created.
+
+`bk books entry declare` and `bk books resolve` now take `--tva-rate`,
+`--tva-amount`, `--tva-input-claimed` and `--evidence-tier`. Three rules:
+
+1. **The rate is a closed vocabulary** — 8.1, 3.8, 2.6, 0 (art. 25 LTVA), the
+   same list `lib/validate/extraction.ts` already enforces on a receipt.
+   Anything else answers `bad_tva_rate`.
+2. **The amount is derived when omitted and checked when given.** Swiss prices
+   are TTC, so the tax inside a gross G at rate r is G × r / (100 + r). A
+   supplied figure wins — it is the supplier's own — unless it disagrees by
+   more than a rappen, which answers `tva_amount_mismatch`. One rappen of
+   tolerance is deliberate: a multi-line invoice legally rounds either side of
+   the single-line computation.
+3. **A claim needs full evidence.** 0004 already carries
+   `CHECK (tva_input_claimed = false OR evidence_tier = 'full')` for art. 28
+   al. 1 LTVA; the door now refuses `claim_needs_full_evidence` in words first,
+   instead of letting a raw SQL check fire.
+
+On a **posted** entry the rate and amount are frozen (`posted_tva_frozen`) and
+the claim is not — exactly as 0004's trigger comment says, because whether you
+claim input tax is a position that legitimately moves as evidence arrives. A
+recettes-dépenses journal has no VAT columns by design and answers
+`tva_not_on_ri` rather than dropping the flags silently.
+
+### Migration 0016 — the guards behind all of it
+
+Three triggers, no schema change, rollback in `docs/sql/books-0016-rollback.sql`:
+
+* `trg_exercice_frozen` — a closed year does not reopen, and its year, dates
+  and book are fixed.
+* `trg_opening_frozen` — no insert, update or delete of a closed year's
+  openings. This also stops the one destructive path the openings door could
+  have had, since `set` deletes before it inserts.
+* `trg_line_account_in_chart` — the backstop for the chart refusal above, for
+  anything reaching the table another way. NULL still allowed.
+
+The doors refuse first because a refusal can carry a suggestion and a SQL
+exception cannot.
+
 ## 2026-08-19 — The analyses journal renders bare-string questions and verdicts
 
 **Screen and wire-type only; no route or stored record changed.** Third

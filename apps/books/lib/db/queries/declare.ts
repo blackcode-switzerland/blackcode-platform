@@ -19,6 +19,8 @@ import { eq, sql } from 'drizzle-orm'
 import { getDb } from '../client'
 import { booksEntity, booksEntry, booksEntryLine, booksExercice, booksRiEntry, type StoredSpeech } from '../schema'
 import { nextSeq } from './imports'
+import { accountsNotInChart, ADD_ACCOUNT_HINT } from './chart-guard'
+import { tvaColumns, type TvaInput } from './tva'
 
 export class DeclareRefused extends Error {
   constructor(
@@ -43,6 +45,8 @@ export interface DeclareData {
   account?: string
   /** Double-entry books: the settling account (e.g. the owner's compte courant). */
   contra?: string
+  /** The VAT story, if the declarer has one. See `queries/tva.ts`. */
+  tva?: TvaInput
   declaredBy: string
 }
 
@@ -89,6 +93,17 @@ export async function declareEntry(
     ]
 
     if (entity.bookkeeping_regime === 'simplified') {
+      // `books.ri_entry` has no VAT columns and that is the design, not an
+      // omission: a recettes-dépenses journal records money in and money out.
+      // Silently dropping the flags would let somebody believe they had
+      // recorded a rate that is nowhere in the book.
+      if (data.tva && (data.tva.rate ?? null) !== null) {
+        throw new DeclareRefused(
+          'tva_not_on_ri',
+          'a recettes-dépenses journal records no VAT rate per entry',
+          'drop --tva-rate; art. 957 al. 2 bookkeeping reports VAT outside the journal'
+        )
+      }
       if (!data.direction) {
         throw new DeclareRefused('missing_direction', 'an RI declaration needs a direction', 'pass --direction recette|depense|neutral')
       }
@@ -119,6 +134,19 @@ export async function declareEntry(
       )
     }
 
+    // Both sides must be words in THIS book's chart. `chart-guard.ts` carries
+    // the balance sheet this refusal stopped going out of true.
+    const ghosts = await accountsNotInChart(tx, entity.id, [data.account, data.contra])
+    if (ghosts.length > 0) {
+      throw new DeclareRefused(
+        'unknown_account',
+        `this book's chart has no account ${ghosts.join(', ')}`,
+        ADD_ACCOUNT_HINT
+      )
+    }
+
+    const tva = tvaColumns(data.tva, data.amount)
+
     const seq = await nextSeq(tx, workspaceId, 'entry')
     // gapless per (book, year), inside this transaction
     const entryNoRow = await tx.execute(sql`
@@ -141,6 +169,7 @@ export async function declareEntry(
         recognition: 'known_one_off',
         evidence_tier: 'bare',
         history: provenance,
+        ...(tva ?? {}),
       })
       .returning({ id: booksEntry.id })
 

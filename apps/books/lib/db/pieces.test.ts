@@ -212,9 +212,13 @@ d('the pièces pipeline', () => {
                                piece_drive_ref, piece_hash, evidence_tier)
       VALUES (${ws}, ${b.id}, ${xb.id}, 2, 1, '2026-08-05', 'staged', 'VIREMENT AIOS',
               'https://drive.google.com/file/d/aios-proof', 'sha256:aios0deadbeef', 'full') RETURNING id`)
+    // 3400, not 3200: this book was created through `createEntity`, so its
+    // chart is the PME template, and 0016's `trg_line_account_in_chart` refuses
+    // a line naming an account the book does not carry. The account was never
+    // the point of this test — the entity boundary is.
     await db.execute(sql`
       INSERT INTO books.entry_line (entry_id, account_no, debit, credit)
-      VALUES (${Number(eb.rows[0].id)}, '1020', 12000, 0), (${Number(eb.rows[0].id)}, '3200', 0, 12000)`)
+      VALUES (${Number(eb.rows[0].id)}, '1020', 12000, 0), (${Number(eb.rows[0].id)}, '3400', 0, 12000)`)
     await db.execute(sql`UPDATE books.entry SET status = 'posted' WHERE id = ${Number(eb.rows[0].id)}`)
 
     const p = await db.execute(sql`

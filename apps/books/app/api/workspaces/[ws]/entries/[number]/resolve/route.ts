@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Errors } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
 import { resolveEntry, resolveRiEntry, ResolveRefused } from '@/lib/db/queries/resolve'
+import { TvaRefused } from '@/lib/db/queries/tva'
 import { getEntityBySlug } from '@/lib/db/queries/statutory'
 
 interface Params { params: Promise<{ ws: string; number: string }> }
@@ -68,6 +69,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       counterparty: typeof body?.counterparty === 'string' ? body.counterparty : undefined,
       account: typeof body?.account === 'string' ? body.account : undefined,
       evidenceNote: (body?.evidence_note as Record<string, unknown> | undefined) ?? undefined,
+      tva: tvaFromBody((body ?? {}) as Record<string, unknown>),
       rule: rule
         ? {
             counterparty: (rule.counterparty as string).trim(),
@@ -90,6 +92,23 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       if (e.code === 'not_found') throw Errors.notFound('entry_not_found', e.message, e.suggestion)
       throw Errors.badRequest(e.code, e.message, e.suggestion)
     }
+    if (e instanceof TvaRefused) throw Errors.badRequest(e.code, e.message, e.suggestion)
     throw e
   }
 })
+
+/** The VAT half of the payload. Same reading as the declare door. */
+function tvaFromBody(body: Record<string, unknown>) {
+  const tva = (body.tva ?? {}) as Record<string, unknown>
+  const rate = tva.rate ?? body.tva_rate
+  const amount = tva.amount ?? body.tva_amount
+  const claimed = tva.input_claimed ?? body.tva_input_claimed
+  const tier = tva.evidence_tier ?? body.evidence_tier
+  if (rate == null && amount == null && claimed == null && tier == null) return undefined
+  return {
+    rate: rate as number | string | null,
+    amount: typeof amount === 'string' ? amount : amount == null ? null : String(amount),
+    inputClaimed: claimed === true,
+    evidenceTier: typeof tier === 'string' ? tier : null,
+  }
+}

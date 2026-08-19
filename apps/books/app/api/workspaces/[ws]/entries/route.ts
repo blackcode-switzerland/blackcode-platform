@@ -16,6 +16,7 @@ import { Errors, jsonList } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace, appContext } from '@/lib/api'
 import { listEntries, listRiEntries, publicEntry, publicRiEntry, resolveScope } from '@/lib/db/queries/statutory'
 import { declareEntry, DeclareRefused } from '@/lib/db/queries/declare'
+import { TvaRefused } from '@/lib/db/queries/tva'
 
 interface Params { params: Promise<{ ws: string }> }
 
@@ -81,11 +82,35 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       direction: body.direction as 'recette' | 'depense' | 'neutral' | undefined,
       account: typeof body.account === 'string' ? body.account : undefined,
       contra: typeof body.contra === 'string' ? body.contra : undefined,
+      tva: tvaFromBody(body),
       declaredBy: user?.email ?? 'unknown caller',
     })
     return NextResponse.json(r, { status: 201 })
   } catch (e) {
     if (e instanceof DeclareRefused) throw Errors.badRequest(e.code, e.message, e.suggestion)
+    if (e instanceof TvaRefused) throw Errors.badRequest(e.code, e.message, e.suggestion)
     throw e
   }
 })
+
+/**
+ * The VAT half of the payload, or `undefined` when the caller said nothing.
+ *
+ * `undefined` and "all fields absent" have to stay distinct: an entry with no
+ * VAT story stores NULLs, and passing an empty object would look like a claim
+ * of 0%. See `queries/tva.ts`.
+ */
+function tvaFromBody(body: Record<string, unknown>) {
+  const tva = (body.tva ?? {}) as Record<string, unknown>
+  const rate = tva.rate ?? body.tva_rate
+  const amount = tva.amount ?? body.tva_amount
+  const claimed = tva.input_claimed ?? body.tva_input_claimed
+  const tier = tva.evidence_tier ?? body.evidence_tier
+  if (rate == null && amount == null && claimed == null && tier == null) return undefined
+  return {
+    rate: rate as number | string | null,
+    amount: typeof amount === 'string' ? amount : amount == null ? null : String(amount),
+    inputClaimed: claimed === true,
+    evidenceTier: typeof tier === 'string' ? tier : null,
+  }
+}

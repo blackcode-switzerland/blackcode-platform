@@ -38,6 +38,12 @@
       "app": "books"
     },
     {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/accounts",
+      "command": "bk books account create",
+      "app": "books"
+    },
+    {
       "method": "GET",
       "path": "/api/workspaces/{ws}/analyses",
       "command": "bk books analyse list",
@@ -281,6 +287,24 @@
       "method": "PUT",
       "path": "/api/workspaces/{ws}/sources/{number}/runbook",
       "command": "bk books source runbook-set",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/openings",
+      "command": "bk books opening list",
+      "app": "books"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/workspaces/{ws}/openings",
+      "command": "bk books opening set",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/exercices/{year}/close",
+      "command": "bk books exercice close",
       "app": "books"
     },
     {

@@ -496,6 +496,13 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
     }
 
     for (const year of years) {
+      // ── OPEN FIRST, CLOSE AFTERWARDS ──────────────────────────────────────
+      // 0016's `trg_opening_frozen` refuses any write to a CLOSED year's
+      // opening balances, because they are part of what was filed. So a past
+      // year cannot be inserted `closed` and then given its openings — the
+      // same shape as 0004's rule for entries ("INSERT staged, add the lines,
+      // then UPDATE to posted"), and correct for the same reason: closing is a
+      // transition, never an initial state.
       const [ex] = await db
         .insert(booksExercice)
         .values({
@@ -504,7 +511,7 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
           year,
           starts_on: `${year}-01-01`,
           ends_on: `${year}-12-31`,
-          status: year < CURRENT_YEAR ? 'closed' : 'open',
+          status: 'open',
         })
         .returning()
       exerciceIdByYear.set(`${e.id}/${year}`, ex.id)
@@ -519,6 +526,13 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
             amount: fromCentimes(cents),
           }))
         )
+      }
+
+      if (year < CURRENT_YEAR) {
+        await db
+          .update(booksExercice)
+          .set({ status: 'closed' })
+          .where(eq(booksExercice.id, ex.id))
       }
 
       // Roll forward. For the last year this feeds nobody and costs nothing.

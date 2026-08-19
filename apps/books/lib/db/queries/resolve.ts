@@ -31,6 +31,8 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { getDb } from '../client'
 import { booksEntry, booksEntryLine, booksRiEntry, booksRule, type BooksEntry, type BooksRiEntry } from '../schema'
 import { insertRule, type CreateRuleData, type Tx } from './rules'
+import { accountsNotInChart, ADD_ACCOUNT_HINT } from './chart-guard'
+import { tvaColumns, type TvaInput } from './tva'
 
 export interface ResolveData {
   /** Required: what this money was. The mockup's bilingual shape or plain text. */
@@ -41,6 +43,11 @@ export interface ResolveData {
   /** STAGED entries only: the account for the line that has none. */
   account?: string | null
   evidenceNote?: Record<string, unknown> | null
+  /**
+   * The VAT story. This is where it usually arrives: a bank line lands with no
+   * rate, and the rate is known once somebody reads the invoice behind it.
+   */
+  tva?: TvaInput
   /** Teach a rule from this resolution. Pattern defaults come from the entry. */
   rule?: {
     counterparty: string
@@ -91,6 +98,43 @@ export async function resolveEntry(
         'a correction is a reversing entry; resolve may still set explanation, counterparty and recognition'
       )
     }
+
+    // The account being filled in must exist in this book's chart. This is the
+    // door most likely to meet a typo: somebody is reading a bank line and
+    // typing the account it belongs to. See `chart-guard.ts`.
+    if (data.account) {
+      const ghosts = await accountsNotInChart(tx, entry.entity_id, [data.account])
+      if (ghosts.length > 0) {
+        throw new ResolveRefused(
+          'unknown_account',
+          `this book's chart has no account ${ghosts.join(', ')}`,
+          ADD_ACCOUNT_HINT
+        )
+      }
+    }
+
+    // ---- VAT ---------------------------------------------------------------
+    // 0004 freezes `tva_rate` and `tva_amount` on a posted entry and leaves
+    // `tva_input_claimed` free, in those words: the booked figures are history,
+    // whether you claim the input tax is a position that moves as evidence
+    // arrives. Refuse the frozen half here so the trigger never has to speak.
+    const lines = await linesOf(tx, entry.id)
+    const gross = lines.reduce(
+      (m, l) => Math.max(m, Number(l.debit ?? 0), Number(l.credit ?? 0)),
+      0
+    )
+    if (
+      entry.status === 'posted' &&
+      data.tva &&
+      (data.tva.rate ?? null) !== null
+    ) {
+      throw new ResolveRefused(
+        'posted_tva_frozen',
+        `entry #${entryNumber} is posted: the VAT rate and amount are booked figures`,
+        'a correction is a reversing entry; --tva-input-claimed and --evidence-tier may still change'
+      )
+    }
+    const tva = tvaColumns(data.tva, gross.toFixed(2))
 
     // ---- history first: the old state, kept forever ----------------------
     // Append-only array. A pre-existing non-array history (the mockup seeds
@@ -145,6 +189,7 @@ export async function resolveEntry(
         evidence_note: data.evidenceNote === undefined ? entry.evidence_note : data.evidenceNote,
         matched_rule_id: taughtRuleId ?? entry.matched_rule_id,
         history,
+        ...(tva ?? {}),
       })
       .where(eq(booksEntry.id, entry.id))
       .returning()

@@ -121,6 +121,7 @@ func nouns() []*cobra.Command {
 		newEntityCmd(),
 		newExerciceCmd(),
 		newAccountCmd(),
+		newOpeningCmd(),
 		newEntryCmd(),
 		newBilanCmd(),
 		newCrCmd(),

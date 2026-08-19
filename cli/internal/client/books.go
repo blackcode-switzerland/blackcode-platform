@@ -497,7 +497,13 @@ type ResolveBooksEntryRequest struct {
 	Recognition  string         `json:"recognition,omitempty"`
 	Counterparty string         `json:"counterparty,omitempty"`
 	Account      string         `json:"account,omitempty"`
-	Rule         *struct {
+	// TVA usually arrives HERE: a bank line lands with no rate, and the rate
+	// is known once somebody reads the invoice behind it.
+	TvaRate         string `json:"tva_rate,omitempty"`
+	TvaAmount       string `json:"tva_amount,omitempty"`
+	TvaInputClaimed bool   `json:"tva_input_claimed,omitempty"`
+	EvidenceTier    string `json:"evidence_tier,omitempty"`
+	Rule            *struct {
 		Counterparty string   `json:"counterparty"`
 		AmountChf    *float64 `json:"amount_chf,omitempty"`
 		ToleranceChf *float64 `json:"tolerance_chf,omitempty"`
@@ -757,6 +763,13 @@ type DeclareBooksEntryRequest struct {
 	Direction    string         `json:"direction,omitempty"`
 	Account      string         `json:"account,omitempty"`
 	Contra       string         `json:"contra,omitempty"`
+	// TVA. Rate is the percent as written on the invoice; the server derives
+	// the amount from the TTC gross when it is omitted, and refuses a given
+	// amount that disagrees by more than a rappen.
+	TvaRate         string `json:"tva_rate,omitempty"`
+	TvaAmount       string `json:"tva_amount,omitempty"`
+	TvaInputClaimed bool   `json:"tva_input_claimed,omitempty"`
+	EvidenceTier    string `json:"evidence_tier,omitempty"`
 }
 
 type BooksDeclareResult struct {
@@ -1106,6 +1119,101 @@ type BooksVerdictResult struct {
 func (c *Client) RecordBooksVerdict(ws string, number int, req RecordBooksVerdictRequest) (*BooksVerdictResult, error) {
 	var out BooksVerdictResult
 	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/entries/%d/verdict", ws, number), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ---------------------------------------------------------------------------
+// Chart, openings and the close — the doors that let a real book start and end
+// ---------------------------------------------------------------------------
+
+// CreateBooksAccountRequest adds an account the PME template does not carry.
+// The template is 24 accounts and a company's chart is its own: the seeded
+// books already keep two extra banks.
+type CreateBooksAccountRequest struct {
+	Entity            string `json:"entity"`
+	No                string `json:"no"`
+	Class             int    `json:"class"`
+	LabelFr           string `json:"label_fr"`
+	LabelEn           string `json:"label_en,omitempty"`
+	StatementPosition string `json:"statement_position"`
+}
+
+func (c *Client) CreateBooksAccount(ws string, req CreateBooksAccountRequest) (*BooksAccount, error) {
+	var out BooksAccount
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/accounts", ws), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// BooksOpening is one line of a book's starting balance sheet.
+type BooksOpening struct {
+	Entity   string `json:"entity"`
+	Exercice int    `json:"exercice"`
+	Account  string `json:"account"`
+	Amount   string `json:"amount"`
+}
+
+func (c *Client) ListBooksOpenings(ws string, s BooksScope) ([]BooksOpening, error) {
+	var resp struct {
+		Data []BooksOpening `json:"data"`
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/openings%s", ws, s.query()), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+// SetBooksOpeningsRequest REPLACES a year's openings. Whole set, never one
+// line: a balance sheet is one statement that must balance, and the server
+// refuses an unbalanced one.
+type SetBooksOpeningsRequest struct {
+	Entity   string             `json:"entity"`
+	Exercice int                `json:"exercice,omitempty"`
+	Balances []BooksOpeningLine `json:"balances"`
+}
+
+type BooksOpeningLine struct {
+	Account string `json:"account"`
+	Amount  string `json:"amount"`
+}
+
+type BooksOpeningsResult struct {
+	Entity      string `json:"entity"`
+	Exercice    int    `json:"exercice"`
+	Written     int    `json:"written"`
+	TotalActif  string `json:"totalActif"`
+	TotalPassif string `json:"totalPassif"`
+}
+
+func (c *Client) SetBooksOpenings(ws string, req SetBooksOpeningsRequest) (*BooksOpeningsResult, error) {
+	var out BooksOpeningsResult
+	if err := c.putJSON(fmt.Sprintf("/api/workspaces/%s/openings", ws), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// BooksCloseResult is what closing a year produced: the result carried, the
+// year it landed in, and the new balance of 2970.
+type BooksCloseResult struct {
+	Entity           string `json:"entity"`
+	Year             int    `json:"year"`
+	Resultat         string `json:"resultat"`
+	CarriedInto      int    `json:"carriedInto"`
+	Carried          int    `json:"carried"`
+	RetainedEarnings string `json:"retainedEarnings"`
+	ClosedAt         string `json:"closedAt"`
+}
+
+func (c *Client) CloseBooksExercice(ws string, year int, entity string) (*BooksCloseResult, error) {
+	var out BooksCloseResult
+	body := struct {
+		Entity string `json:"entity"`
+	}{Entity: entity}
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/exercices/%d/close", ws, year), body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

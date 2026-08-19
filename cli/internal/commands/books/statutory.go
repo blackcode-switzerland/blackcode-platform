@@ -159,7 +159,7 @@ func newExerciceCmd() *cobra.Command {
 		Use:   "exercice",
 		Short: "Fiscal years",
 	}
-	cmd.AddCommand(newExerciceListCmd(), newExerciceCreateCmd())
+	cmd.AddCommand(newExerciceListCmd(), newExerciceCreateCmd(), newExerciceCloseCmd())
 	return cmd
 }
 
@@ -239,7 +239,7 @@ func newAccountCmd() *cobra.Command {
 		Use:   "account",
 		Short: "The chart of accounts",
 	}
-	cmd.AddCommand(newAccountListCmd())
+	cmd.AddCommand(newAccountListCmd(), newAccountCreateCmd())
 	return cmd
 }
 
@@ -708,7 +708,11 @@ func newEntryDeclareCmd() *cobra.Command {
 			"It still lands STAGED and passes the same posting gate as imported money.\n" +
 			"A double-entry book needs both sides: --account (the charge) and --contra\n" +
 			"(what settles it, e.g. the owner's compte courant — there is no caisse, on\n" +
-			"purpose). A simplified book needs --direction recette|depense|neutral.",
+			"purpose). A simplified book needs --direction recette|depense|neutral.\n\n" +
+			"VAT: pass --tva-rate and the amount is derived from the TTC total. Pass\n" +
+			"--tva-amount too and the invoice's own figure is kept, unless it disagrees\n" +
+			"with the arithmetic by more than a rappen. Claiming input tax needs the\n" +
+			"pièce on file: --tva-input-claimed --evidence-tier full.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -751,6 +755,10 @@ func newEntryDeclareCmd() *cobra.Command {
 	cmd.Flags().StringVar(&req.Direction, "direction", "", "RI books: recette, depense or neutral")
 	cmd.Flags().StringVar(&req.Account, "account", "", "Double-entry books: the charge account")
 	cmd.Flags().StringVar(&req.Contra, "contra", "", "Double-entry books: the settling account")
+	cmd.Flags().StringVar(&req.TvaRate, "tva-rate", "", "VAT rate as written on the invoice: 8.1, 3.8, 2.6 or 0")
+	cmd.Flags().StringVar(&req.TvaAmount, "tva-amount", "", "VAT in CHF (default: derived from the TTC amount at that rate)")
+	cmd.Flags().BoolVar(&req.TvaInputClaimed, "tva-input-claimed", false, "Claim the input tax (art. 28 LTVA; needs --evidence-tier full)")
+	cmd.Flags().StringVar(&req.EvidenceTier, "evidence-tier", "", "full, partial or bare — full means the pièce is on file")
 	_ = cmd.MarkFlagRequired("entity")
 	_ = cmd.MarkFlagRequired("date")
 	_ = cmd.MarkFlagRequired("amount")
