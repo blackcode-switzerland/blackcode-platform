@@ -297,7 +297,16 @@ d('the seeded database', () => {
     const e26 = await q.listEntries(bc.id, x2026.id)
     expect(e25.map((r: { entry: { entry_no: number } }) => r.entry.entry_no)).toEqual([1, 2])
     expect(e26[0].entry.entry_no).toBe(1)
-    expect(e26.length).toBe(FX.TX.filter((t) => t.entity_id === 1 && t.date >= '2026-01-01').length)
+    // The journal is LIVE — a declare adds a row (an extourne did, 2026-08-19).
+    // The fixture's rows are pinned as the gapless head of the journal, not as
+    // its entire contents: the same rule as the analyses pin above — a parity
+    // test must not turn "somebody used the product" into a failure.
+    const seeded = FX.TX.filter((t) => t.entity_id === 1 && t.date >= '2026-01-01').length
+    expect(e26.length).toBeGreaterThanOrEqual(seeded)
+    expect(
+      e26.map((r: { entry: { entry_no: number } }) => r.entry.entry_no),
+      'entry_no is gapless from 1 within the exercice — the invariant itself'
+    ).toEqual(Array.from({ length: e26.length }, (_, i) => i + 1))
     // Every 2025-dated entry sits in the 2025 exercice. The point of the split.
     for (const r of e25) expect(r.entry.date < '2026-01-01').toBe(true)
     for (const r of e26) expect(r.entry.date >= '2026-01-01').toBe(true)
