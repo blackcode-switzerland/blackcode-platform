@@ -796,29 +796,51 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
   // delete the workaround in `<PostEntryForm>` rather than leaving a
   // self-described stopgap in the tree forever. A stopgap nothing watches is how
   // one becomes permanent.
-  it('the post route still reads `e.message` — so `guard_refused` cannot fire (backend ask)', () => {
-    const src = readFileSync(
+  // ── THIS PINNED A DEFECT UNTIL 2026-08-19, AND THEN FAILED TO NOTICE ─────
+  // It asserted that the post route did NOT read `.cause`, because until the
+  // hardening pass it did not, and migration 0004's refusal reached nobody: an
+  // unbalanced post answered a bare 500 on the web and on `bk`.
+  //
+  // The backend fixed it and **this case stayed green**, which is the part worth
+  // keeping. The fix extracts `sqlErrorText(e)` into `lib/db/queries/imports.ts`,
+  // so `.cause` never appears in the route file this scanned. Its own comment
+  // had said it "sees that file and nothing else" — the weakness it declared is
+  // the one that bit, and a pin that cannot see its subject being fixed will
+  // outlive the defect and mislead whoever reads it next.
+  //
+  // So it now pins the FIX, across both files, and was watched red under a
+  // mutation to each half. Verified live first, rather than on the strength of a
+  // commit message: an entry with two mapped, unbalanced lines answers
+  // `400 entry does not balance: debit 77.00 <> credit 99.00`, with a hint.
+  it('an SQL guard refusal reaches the caller: the route translates through sqlErrorText', () => {
+    const route = readFileSync(
       join(APP_ROOT, 'app/api/workspaces/[ws]/entries/[number]/post/route.ts'),
       'utf8'
     )
-    expect(src, 'the guard translation is gone entirely — this case is stale').toContain(
+    const helper = readFileSync(join(APP_ROOT, 'lib/db/queries/imports.ts'), 'utf8')
+
+    expect(route, 'the guard translation is gone entirely — this case is stale').toContain(
       'guard_refused'
     )
-    // ── THE PATTERN IS `.cause`, NOT `e.cause`, AND THAT MATTERED ────────
-    // Written as `/e\.cause/` first and watched: mutating the route to
-    // `String((e as {cause?: unknown}).cause ?? e.message)` — a realistic
-    // spelling of the fix, because `unknown` needs the cast — left this GREEN.
-    // The character before `.cause` was `)`, not `e`. **The granularity of a
-    // text scan is part of what it checks**, which is CLAUDE.md finding #11 in
-    // one character. It matches the property access itself now.
-    const readsCause = /\.cause\b/.test(src)
+    // The CALL, not the name. Written as `toContain('sqlErrorText')` first and
+    // watched: removing the call left the IMPORT line behind and the case stayed
+    // GREEN. That is the same defect a phase-3 check had with
+    // `route.includes('jsonList')`, reproduced here inside the file that
+    // documents it — which is finding #8's habit, and the reason each half of
+    // this case was mutated separately instead of together.
     expect(
-      readsCause,
-      'the post route now reads `e.cause`, so migration 0004\'s refusal may finally reach the ' +
-        'client. Try it (an entry with two mapped, unbalanced lines), and if `guard_refused` ' +
-        'now arrives as a 400, DELETE the `refusal.status === 500` block in ' +
-        'components/post-entry-form.tsx and its header section — it exists only for this defect.'
-    ).toBe(false)
+      /=\s*sqlErrorText\s*\(/.test(route),
+      'the post route stopped CALLING sqlErrorText. If it reads `e.message` again, migration ' +
+        '0004 refusals become bare 500s on every surface — that was the state until 2026-08-19.'
+    ).toBe(true)
+
+    // The half the old pin could not see. A COMMIT failure puts the database's
+    // sentence on the cause CHAIN, not on `message`, so the helper has to walk it.
+    expect(
+      /\.cause\b/.test(helper),
+      'sqlErrorText no longer reads the cause chain, so it cannot recover the database\'s own ' +
+        'sentence from a DrizzleQueryError whose message is "Failed query: COMMIT"'
+    ).toBe(true)
   })
 
   // The pièces list IS a list route, and that is worth pinning for the same
