@@ -106,6 +106,13 @@
       "when": 1787000700000,
       "tag": "0015_piece_sha256",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1787000800000,
+      "tag": "0016_year_close_guards",
+      "breakpoints": true
     }
   ]
 }

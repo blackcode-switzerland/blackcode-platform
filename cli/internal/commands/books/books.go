@@ -121,6 +121,7 @@ func nouns() []*cobra.Command {
 		newEntityCmd(),
 		newExerciceCmd(),
 		newAccountCmd(),
+		newOpeningCmd(),
 		newEntryCmd(),
 		newBilanCmd(),
 		newCrCmd(),
@@ -139,6 +140,7 @@ func nouns() []*cobra.Command {
 		newAnalyseCmd(),
 		newCategoryCmd(),
 		newTaxCmd(),
+		newTaxParamsCmd(),
 		// Compliance — see compliance.go.
 		newComplianceCmd(),
 		newVerdictCmd(),

@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -50,7 +51,7 @@ func newEntityCmd() *cobra.Command {
 		Use:   "entity",
 		Short: "Books — a workspace holds any number of them",
 	}
-	cmd.AddCommand(newEntityListCmd(), newEntityCreateCmd())
+	cmd.AddCommand(newEntityListCmd(), newEntityCreateCmd(), newEntityEditCmd())
 	return cmd
 }
 
@@ -159,7 +160,7 @@ func newExerciceCmd() *cobra.Command {
 		Use:   "exercice",
 		Short: "Fiscal years",
 	}
-	cmd.AddCommand(newExerciceListCmd(), newExerciceCreateCmd())
+	cmd.AddCommand(newExerciceListCmd(), newExerciceCreateCmd(), newExerciceCloseCmd())
 	return cmd
 }
 
@@ -239,7 +240,7 @@ func newAccountCmd() *cobra.Command {
 		Use:   "account",
 		Short: "The chart of accounts",
 	}
-	cmd.AddCommand(newAccountListCmd())
+	cmd.AddCommand(newAccountListCmd(), newAccountCreateCmd())
 	return cmd
 }
 
@@ -698,6 +699,7 @@ func newEntryPostCmd() *cobra.Command {
 func newEntryDeclareCmd() *cobra.Command {
 	var req client.DeclareBooksEntryRequest
 	var explanation string
+	var debits, credits []string
 	cmd := &cobra.Command{
 		Use:         "declare --entity <book> --date <yyyy-mm-dd> --amount <chf> --label <text> --explanation <text>",
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/entries"},
@@ -708,7 +710,11 @@ func newEntryDeclareCmd() *cobra.Command {
 			"It still lands STAGED and passes the same posting gate as imported money.\n" +
 			"A double-entry book needs both sides: --account (the charge) and --contra\n" +
 			"(what settles it, e.g. the owner's compte courant — there is no caisse, on\n" +
-			"purpose). A simplified book needs --direction recette|depense|neutral.",
+			"purpose). A simplified book needs --direction recette|depense|neutral.\n\n" +
+			"VAT: pass --tva-rate and the amount is derived from the TTC total. Pass\n" +
+			"--tva-amount too and the invoice's own figure is kept, unless it disagrees\n" +
+			"with the arithmetic by more than a rappen. Claiming input tax needs the\n" +
+			"pièce on file: --tva-input-claimed --evidence-tier full.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -719,6 +725,11 @@ func newEntryDeclareCmd() *cobra.Command {
 				return fmt.Errorf("--explanation is required: a declaration IS an explanation")
 			}
 			req.Explanation = map[string]any{"en": explanation}
+			lines, err := declareLines(debits, credits)
+			if err != nil {
+				return err
+			}
+			req.Lines = lines
 			c, ws, err := clientAndWorkspace()
 			if err != nil {
 				return err
@@ -744,16 +755,59 @@ func newEntryDeclareCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&req.Entity, "entity", "", "Book slug (required)")
 	cmd.Flags().StringVar(&req.Date, "date", "", "Booking date, YYYY-MM-DD (required)")
-	cmd.Flags().StringVar(&req.Amount, "amount", "", "Amount in CHF, e.g. 45.00 (required)")
+	cmd.Flags().StringVar(&req.Amount, "amount", "", "Amount in CHF, e.g. 45.00 (required, unless --debit/--credit give the lines)")
 	cmd.Flags().StringVar(&req.Label, "label", "", "The journal line's text (required)")
 	cmd.Flags().StringVar(&explanation, "explanation", "", "What this money was (required)")
 	cmd.Flags().StringVar(&req.Counterparty, "counterparty", "", "Who was paid, or who paid")
 	cmd.Flags().StringVar(&req.Direction, "direction", "", "RI books: recette, depense or neutral")
 	cmd.Flags().StringVar(&req.Account, "account", "", "Double-entry books: the charge account")
 	cmd.Flags().StringVar(&req.Contra, "contra", "", "Double-entry books: the settling account")
+	cmd.Flags().StringArrayVar(&debits, "debit", nil, "A debit line, repeatable: 5000=11600.00 (more than two sides)")
+	cmd.Flags().StringArrayVar(&credits, "credit", nil, "A credit line, repeatable: 1020=13350.00")
+	cmd.Flags().StringVar(&req.TvaRate, "tva-rate", "", "VAT rate as written on the invoice: 8.1, 3.8, 2.6 or 0")
+	cmd.Flags().StringVar(&req.TvaAmount, "tva-amount", "", "VAT in CHF (default: derived from the TTC amount at that rate)")
+	cmd.Flags().BoolVar(&req.TvaInputClaimed, "tva-input-claimed", false, "Claim the input tax (art. 28 LTVA; needs --evidence-tier full)")
+	cmd.Flags().StringVar(&req.EvidenceTier, "evidence-tier", "", "full, partial or bare — full means the pièce is on file")
 	_ = cmd.MarkFlagRequired("entity")
 	_ = cmd.MarkFlagRequired("date")
-	_ = cmd.MarkFlagRequired("amount")
 	_ = cmd.MarkFlagRequired("label")
 	return cmd
+}
+
+// declareLines turns repeated --debit/--credit pairs into posting lines.
+//
+// The two-line shorthand (--account/--contra) stays the common case and this
+// returns nil for it. A SALARY is not two lines and never was — the mockup's
+// own January payroll is 5000 salaires and 5700 charges sociales against 1020 —
+// and an agent running a company with employees meets that every month.
+//
+// Debits first, then credits, which is the order a journal is read in.
+func declareLines(debits, credits []string) ([]client.BooksDeclareLine, error) {
+	if len(debits) == 0 && len(credits) == 0 {
+		return nil, nil
+	}
+	out := make([]client.BooksDeclareLine, 0, len(debits)+len(credits))
+	for _, side := range []struct {
+		pairs   []string
+		isDebit bool
+	}{{debits, true}, {credits, false}} {
+		for _, p := range side.pairs {
+			account, amount, ok := strings.Cut(p, "=")
+			if !ok || strings.TrimSpace(account) == "" || strings.TrimSpace(amount) == "" {
+				flag := "--credit"
+				if side.isDebit {
+					flag = "--debit"
+				}
+				return nil, fmt.Errorf("%s %q is not account=amount, e.g. 5000=11600.00", flag, p)
+			}
+			line := client.BooksDeclareLine{Account: strings.TrimSpace(account)}
+			if side.isDebit {
+				line.Debit = strings.TrimSpace(amount)
+			} else {
+				line.Credit = strings.TrimSpace(amount)
+			}
+			out = append(out, line)
+		}
+	}
+	return out, nil
 }

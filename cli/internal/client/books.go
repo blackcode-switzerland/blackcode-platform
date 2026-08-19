@@ -497,7 +497,13 @@ type ResolveBooksEntryRequest struct {
 	Recognition  string         `json:"recognition,omitempty"`
 	Counterparty string         `json:"counterparty,omitempty"`
 	Account      string         `json:"account,omitempty"`
-	Rule         *struct {
+	// TVA usually arrives HERE: a bank line lands with no rate, and the rate
+	// is known once somebody reads the invoice behind it.
+	TvaRate         string `json:"tva_rate,omitempty"`
+	TvaAmount       string `json:"tva_amount,omitempty"`
+	TvaInputClaimed bool   `json:"tva_input_claimed,omitempty"`
+	EvidenceTier    string `json:"evidence_tier,omitempty"`
+	Rule            *struct {
 		Counterparty string   `json:"counterparty"`
 		AmountChf    *float64 `json:"amount_chf,omitempty"`
 		ToleranceChf *float64 `json:"tolerance_chf,omitempty"`
@@ -757,6 +763,24 @@ type DeclareBooksEntryRequest struct {
 	Direction    string         `json:"direction,omitempty"`
 	Account      string         `json:"account,omitempty"`
 	Contra       string         `json:"contra,omitempty"`
+	// TVA. Rate is the percent as written on the invoice; the server derives
+	// the amount from the TTC gross when it is omitted, and refuses a given
+	// amount that disagrees by more than a rappen.
+	TvaRate         string `json:"tva_rate,omitempty"`
+	TvaAmount       string `json:"tva_amount,omitempty"`
+	TvaInputClaimed bool   `json:"tva_input_claimed,omitempty"`
+	EvidenceTier    string `json:"evidence_tier,omitempty"`
+	// Lines carries an écriture with more than two sides — a salary is three:
+	// salaires and charges sociales against the bank. Mutually exclusive with
+	// Account/Contra, which IS the two-line shorthand.
+	Lines []BooksDeclareLine `json:"lines,omitempty"`
+}
+
+// BooksDeclareLine is one side. Exactly one of Debit and Credit is set.
+type BooksDeclareLine struct {
+	Account string `json:"account"`
+	Debit   string `json:"debit,omitempty"`
+	Credit  string `json:"credit,omitempty"`
 }
 
 type BooksDeclareResult struct {
@@ -1109,4 +1133,176 @@ func (c *Client) RecordBooksVerdict(ws string, number int, req RecordBooksVerdic
 		return nil, err
 	}
 	return &out, nil
+}
+
+// ---------------------------------------------------------------------------
+// Chart, openings and the close — the doors that let a real book start and end
+// ---------------------------------------------------------------------------
+
+// CreateBooksAccountRequest adds an account the PME template does not carry.
+// The template is 24 accounts and a company's chart is its own: the seeded
+// books already keep two extra banks.
+type CreateBooksAccountRequest struct {
+	Entity            string `json:"entity"`
+	No                string `json:"no"`
+	Class             int    `json:"class"`
+	LabelFr           string `json:"label_fr"`
+	LabelEn           string `json:"label_en,omitempty"`
+	StatementPosition string `json:"statement_position"`
+}
+
+func (c *Client) CreateBooksAccount(ws string, req CreateBooksAccountRequest) (*BooksAccount, error) {
+	var out BooksAccount
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/accounts", ws), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// BooksOpening is one line of a book's starting balance sheet.
+type BooksOpening struct {
+	Entity   string `json:"entity"`
+	Exercice int    `json:"exercice"`
+	Account  string `json:"account"`
+	Amount   string `json:"amount"`
+}
+
+func (c *Client) ListBooksOpenings(ws string, s BooksScope) ([]BooksOpening, error) {
+	var resp struct {
+		Data []BooksOpening `json:"data"`
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/openings%s", ws, s.query()), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+// SetBooksOpeningsRequest REPLACES a year's openings. Whole set, never one
+// line: a balance sheet is one statement that must balance, and the server
+// refuses an unbalanced one.
+type SetBooksOpeningsRequest struct {
+	Entity   string             `json:"entity"`
+	Exercice int                `json:"exercice,omitempty"`
+	Balances []BooksOpeningLine `json:"balances"`
+}
+
+type BooksOpeningLine struct {
+	Account string `json:"account"`
+	Amount  string `json:"amount"`
+}
+
+type BooksOpeningsResult struct {
+	Entity      string `json:"entity"`
+	Exercice    int    `json:"exercice"`
+	Written     int    `json:"written"`
+	TotalActif  string `json:"totalActif"`
+	TotalPassif string `json:"totalPassif"`
+}
+
+func (c *Client) SetBooksOpenings(ws string, req SetBooksOpeningsRequest) (*BooksOpeningsResult, error) {
+	var out BooksOpeningsResult
+	if err := c.putJSON(fmt.Sprintf("/api/workspaces/%s/openings", ws), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// BooksCloseResult is what closing a year produced: the result carried, the
+// year it landed in, and the new balance of 2970.
+type BooksCloseResult struct {
+	Entity           string `json:"entity"`
+	Year             int    `json:"year"`
+	Resultat         string `json:"resultat"`
+	CarriedInto      int    `json:"carriedInto"`
+	Carried          int    `json:"carried"`
+	RetainedEarnings string `json:"retainedEarnings"`
+	ClosedAt         string `json:"closedAt"`
+}
+
+func (c *Client) CloseBooksExercice(ws string, year int, entity string) (*BooksCloseResult, error) {
+	var out BooksCloseResult
+	body := struct {
+		Entity string `json:"entity"`
+	}{Entity: entity}
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/exercices/%d/close", ws, year), body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ---------------------------------------------------------------------------
+// Book facts, tax parameters, and switching a rule off
+// ---------------------------------------------------------------------------
+
+// EditBooksEntityRequest changes a book's own facts. Pointers throughout: a
+// nil field is "leave it", which is not the same as "clear it", and the VAT
+// registration flag in particular must be able to be set to false on purpose.
+//
+// Slug, legal form and bookkeeping regime are absent deliberately — the server
+// refuses each by name.
+type EditBooksEntityRequest struct {
+	Name           *string `json:"name,omitempty"`
+	Seat           *string `json:"seat,omitempty"`
+	VatRegistered  *bool   `json:"vat_registered,omitempty"`
+	VatMethod      *string `json:"vat_method,omitempty"`
+	VatFiling      *string `json:"vat_filing,omitempty"`
+	AuditStatus    *string `json:"audit_status,omitempty"`
+	RegimeElection *string `json:"regime_election,omitempty"`
+	FteCount       *string `json:"fte_count,omitempty"`
+	Accent         *string `json:"accent,omitempty"`
+}
+
+func (c *Client) EditBooksEntity(ws, slug string, req EditBooksEntityRequest) (*BooksEntity, error) {
+	var out BooksEntity
+	if err := c.patchJSON(fmt.Sprintf("/api/workspaces/%s/entities/%s", ws, slug), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// BooksTaxParams is where a company is taxed and at what rates. `Configured`
+// false is a real answer: nothing may assume a canton.
+type BooksTaxParams struct {
+	Entity     string         `json:"entity"`
+	Configured bool           `json:"configured"`
+	Canton     string         `json:"canton"`
+	Commune    string         `json:"commune"`
+	Params     map[string]any `json:"params"`
+}
+
+func (c *Client) GetBooksTaxParams(ws, entity string) (*BooksTaxParams, error) {
+	var out BooksTaxParams
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/tax-params?entity=%s", ws, entity), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type SetBooksTaxParamsRequest struct {
+	Entity                     string  `json:"entity"`
+	Canton                     string  `json:"canton"`
+	Commune                    string  `json:"commune"`
+	IfdRatePct                 float64 `json:"ifd_rate_pct"`
+	CantonalBaseRatePct        float64 `json:"cantonal_base_rate_pct"`
+	CantonalCoefficientPct     float64 `json:"cantonal_coefficient_pct"`
+	CommunalCoefficientPct     float64 `json:"communal_coefficient_pct"`
+	CapitalTaxBaseRatePermille float64 `json:"capital_tax_base_rate_permille"`
+}
+
+func (c *Client) SetBooksTaxParams(ws string, req SetBooksTaxParamsRequest) (*BooksTaxParams, error) {
+	var out BooksTaxParams
+	if err := c.putJSON(fmt.Sprintf("/api/workspaces/%s/tax-params", ws), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DeactivateBooksRule switches a rule off. Never deletes: a posted entry may
+// cite it for the ten years art. 958f keeps the entry.
+func (c *Client) DeactivateBooksRule(ws string, number int) error {
+	body := struct {
+		Active bool `json:"active"`
+	}{Active: false}
+	var out struct{}
+	return c.patchJSON(fmt.Sprintf("/api/workspaces/%s/rules/%d", ws, number), body, &out)
 }

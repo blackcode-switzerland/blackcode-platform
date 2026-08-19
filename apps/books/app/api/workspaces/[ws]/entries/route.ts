@@ -16,6 +16,7 @@ import { Errors, jsonList } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace, appContext } from '@/lib/api'
 import { listEntries, listRiEntries, publicEntry, publicRiEntry, resolveScope } from '@/lib/db/queries/statutory'
 import { declareEntry, DeclareRefused } from '@/lib/db/queries/declare'
+import { TvaRefused } from '@/lib/db/queries/tva'
 
 interface Params { params: Promise<{ ws: string }> }
 
@@ -70,22 +71,68 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     throw Errors.badRequest('missing_explanation', 'a declaration IS an explanation; there is nothing to save without one', 'pass --explanation')
   }
 
+  // Explicit lines, for an écriture with more than two sides — a salary is
+  // three. Shape-checked here; balance and one-side-per-line are checked in
+  // the door, which can say which way the entry is out.
+  let lines: { account: string; debit?: string; credit?: string }[] | undefined
+  if (body.lines !== undefined) {
+    if (!Array.isArray(body.lines)) {
+      throw Errors.badRequest(
+        'bad_lines',
+        'lines must be an array of { account, debit } / { account, credit }',
+        'e.g. [{"account":"5000","debit":"11600.00"},{"account":"1020","credit":"11600.00"}]'
+      )
+    }
+    lines = body.lines.map((l) => {
+      const o = (l ?? {}) as Record<string, unknown>
+      const n = (v: unknown) => (typeof v === 'number' ? v.toFixed(2) : typeof v === 'string' ? v : undefined)
+      return { account: typeof o.account === 'string' ? o.account : '', debit: n(o.debit), credit: n(o.credit) }
+    })
+  }
+
   try {
     const r = await declareEntry(ctx.workspace.id, {
       entitySlug: need('entity'),
       date: need('date'),
-      amount: need('amount'),
+      // With explicit lines the amount is the sum of one side, derived in the
+      // door. Requiring it here would invite a total that disagrees.
+      amount: lines ? String(body.amount ?? '') : need('amount'),
+      lines,
       label: need('label'),
       explanation: explanation as Record<string, unknown>,
       counterparty: typeof body.counterparty === 'string' ? body.counterparty : null,
       direction: body.direction as 'recette' | 'depense' | 'neutral' | undefined,
       account: typeof body.account === 'string' ? body.account : undefined,
       contra: typeof body.contra === 'string' ? body.contra : undefined,
+      tva: tvaFromBody(body),
       declaredBy: user?.email ?? 'unknown caller',
     })
     return NextResponse.json(r, { status: 201 })
   } catch (e) {
     if (e instanceof DeclareRefused) throw Errors.badRequest(e.code, e.message, e.suggestion)
+    if (e instanceof TvaRefused) throw Errors.badRequest(e.code, e.message, e.suggestion)
     throw e
   }
 })
+
+/**
+ * The VAT half of the payload, or `undefined` when the caller said nothing.
+ *
+ * `undefined` and "all fields absent" have to stay distinct: an entry with no
+ * VAT story stores NULLs, and passing an empty object would look like a claim
+ * of 0%. See `queries/tva.ts`.
+ */
+function tvaFromBody(body: Record<string, unknown>) {
+  const tva = (body.tva ?? {}) as Record<string, unknown>
+  const rate = tva.rate ?? body.tva_rate
+  const amount = tva.amount ?? body.tva_amount
+  const claimed = tva.input_claimed ?? body.tva_input_claimed
+  const tier = tva.evidence_tier ?? body.evidence_tier
+  if (rate == null && amount == null && claimed == null && tier == null) return undefined
+  return {
+    rate: rate as number | string | null,
+    amount: typeof amount === 'string' ? amount : amount == null ? null : String(amount),
+    inputClaimed: claimed === true,
+    evidenceTier: typeof tier === 'string' ? tier : null,
+  }
+}
