@@ -119,6 +119,117 @@ d('starting a book and ending a year', () => {
     expect(r.journal).toBe('grand_livre')
   })
 
+  // -------------------------------------------------------------------------
+  // more than two sides
+  // -------------------------------------------------------------------------
+
+  it('declares a three-line salary, which the two-line shorthand could not express', async () => {
+    const { declareEntry } = await import('./queries/declare')
+    const { getEntryByNumber } = await import('./queries/statutory')
+    // The mockup's own January payroll, and the entry a workspace clone could
+    // not replay on 2026-08-19.
+    const r = await declareEntry(ws, {
+      entitySlug: 'yr',
+      date: '2026-01-25',
+      amount: '',
+      label: 'WIR-SALAIRES JANVIER LOT-2026-01',
+      explanation: { en: 'January salaries, two employees' },
+      lines: [
+        { account: '5000', debit: '11600.00' },
+        { account: '5700', debit: '1750.00' },
+        { account: '1020', credit: '13350.00' },
+      ],
+      declaredBy: 'test',
+    })
+    const stored = await getEntryByNumber(ws, r.number)
+    expect(stored!.lines.length).toBe(3)
+    expect(
+      stored!.lines.map((l) => [l.account_no, l.debit, l.credit]),
+      'in the order given: debits, then what settles them'
+    ).toEqual([
+      ['5000', '11600.00', '0.00'],
+      ['5700', '1750.00', '0.00'],
+      ['1020', '0.00', '13350.00'],
+    ])
+  })
+
+  it('refuses lines that do not balance, saying which way', async () => {
+    const { declareEntry } = await import('./queries/declare')
+    await expect(
+      declareEntry(ws, {
+        entitySlug: 'yr',
+        date: '2026-01-26',
+        amount: '',
+        label: 'X',
+        explanation: { en: 'x' },
+        lines: [
+          { account: '5000', debit: '100.00' },
+          { account: '1020', credit: '90.00' },
+        ],
+        declaredBy: 'test',
+      })
+    ).rejects.toMatchObject({ code: 'lines_unbalanced' })
+  })
+
+  it('refuses a line that is both sides, or neither', async () => {
+    const { declareEntry } = await import('./queries/declare')
+    const base = {
+      entitySlug: 'yr',
+      date: '2026-01-26',
+      amount: '',
+      label: 'X',
+      explanation: { en: 'x' },
+      declaredBy: 'test',
+    }
+    await expect(
+      declareEntry(ws, {
+        ...base,
+        lines: [
+          { account: '5000', debit: '100.00', credit: '100.00' },
+          { account: '1020', credit: '100.00' },
+        ],
+      })
+    ).rejects.toMatchObject({ code: 'line_needs_one_side' })
+  })
+
+  it('refuses lines and the shorthand together', async () => {
+    const { declareEntry } = await import('./queries/declare')
+    await expect(
+      declareEntry(ws, {
+        entitySlug: 'yr',
+        date: '2026-01-26',
+        amount: '10.00',
+        label: 'X',
+        explanation: { en: 'x' },
+        account: '6570',
+        contra: '1020',
+        lines: [
+          { account: '5000', debit: '100.00' },
+          { account: '1020', credit: '100.00' },
+        ],
+        declaredBy: 'test',
+      })
+    ).rejects.toMatchObject({ code: 'lines_and_shorthand' })
+  })
+
+  it('refuses an account off the chart on ANY of the lines', async () => {
+    const { declareEntry } = await import('./queries/declare')
+    await expect(
+      declareEntry(ws, {
+        entitySlug: 'yr',
+        date: '2026-01-26',
+        amount: '',
+        label: 'X',
+        explanation: { en: 'x' },
+        lines: [
+          { account: '5000', debit: '100.00' },
+          { account: '9999', credit: '100.00' },
+        ],
+        declaredBy: 'test',
+      })
+    ).rejects.toMatchObject({ code: 'unknown_account' })
+  })
+
   it('refuses an account whose class contradicts its statutory line', async () => {
     const { createAccount } = await import('./queries/account')
     await expect(
@@ -206,18 +317,21 @@ d('starting a book and ending a year', () => {
 
     const r = await closeExercice(ws, entity.id, x2026)
 
-    // The only movement is the CHF 43.70 charge, so the year loses exactly it.
-    expect(r.resultat).toBe('-43.70')
+    // Two charges this year: the CHF 43.70 subscription and the CHF 13'350
+    // payroll (11'600 salaires + 1'750 charges sociales).
+    expect(r.resultat).toBe('-13393.70')
     expect(r.carriedInto).toBe(2027)
-    // 25000 carried, less this year's loss.
-    expect(r.retainedEarnings).toBe('24956.30')
+    // 25'000 carried in, less this year's loss.
+    expect(r.retainedEarnings).toBe('11606.30')
 
     const carried = new Map((await listOpenings(entity.id, x2027.id)).map((o) => [o.account_no, o.amount]))
-    expect(carried.get('1020'), 'untouched by the entry, carries whole').toBe('50000.00')
+    expect(carried.get('1020'), 'the bank, less the payroll it settled').toBe('36650.00')
     expect(carried.get('1022'), 'the new bank paid the charge').toBe('-43.70')
-    expect(carried.get('2970')).toBe('24956.30')
+    expect(carried.get('2970')).toBe('11606.30')
     expect(carried.get('3400'), 'a produit account never carries (art. 958 al. 2)').toBeUndefined()
     expect(carried.get('6570'), 'nor does a charge account').toBeUndefined()
+    expect(carried.get('5000'), 'nor salaires').toBeUndefined()
+    expect(carried.get('5700'), 'nor charges sociales').toBeUndefined()
 
     // And 2027 opens balanced, which is the whole point of the exercise.
     const { getBilan } = await import('./queries/statutory')

@@ -71,11 +71,33 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     throw Errors.badRequest('missing_explanation', 'a declaration IS an explanation; there is nothing to save without one', 'pass --explanation')
   }
 
+  // Explicit lines, for an écriture with more than two sides — a salary is
+  // three. Shape-checked here; balance and one-side-per-line are checked in
+  // the door, which can say which way the entry is out.
+  let lines: { account: string; debit?: string; credit?: string }[] | undefined
+  if (body.lines !== undefined) {
+    if (!Array.isArray(body.lines)) {
+      throw Errors.badRequest(
+        'bad_lines',
+        'lines must be an array of { account, debit } / { account, credit }',
+        'e.g. [{"account":"5000","debit":"11600.00"},{"account":"1020","credit":"11600.00"}]'
+      )
+    }
+    lines = body.lines.map((l) => {
+      const o = (l ?? {}) as Record<string, unknown>
+      const n = (v: unknown) => (typeof v === 'number' ? v.toFixed(2) : typeof v === 'string' ? v : undefined)
+      return { account: typeof o.account === 'string' ? o.account : '', debit: n(o.debit), credit: n(o.credit) }
+    })
+  }
+
   try {
     const r = await declareEntry(ctx.workspace.id, {
       entitySlug: need('entity'),
       date: need('date'),
-      amount: need('amount'),
+      // With explicit lines the amount is the sum of one side, derived in the
+      // door. Requiring it here would invite a total that disagrees.
+      amount: lines ? String(body.amount ?? '') : need('amount'),
+      lines,
       label: need('label'),
       explanation: explanation as Record<string, unknown>,
       counterparty: typeof body.counterparty === 'string' ? body.counterparty : null,

@@ -32,6 +32,105 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-20 — Payroll, VAT registration, tax parameters, and switching a rule off
+
+**Four more write doors, one of which unblocks the VAT work shipped earlier
+today.** Three holes that were invisible from inside the code and obvious the
+moment the CLI was driven the way a person drives it.
+
+### `bk books entity edit` — and the flag that silently switched VAT off
+
+`entity.vat_registered` defaults to **false**, `entity create` never set it, and
+nothing could update it. `getTaxSnapshot` gates the entire VAT position on
+exactly that flag:
+
+    if (entity.vat_registered) { …compute the VAT position… }
+
+So **every book created through this app reported no VAT position at all, for
+ever**, however its entries were booked. That stayed invisible while only the
+seeded books were looked at, because the seed writes the flag directly. It also
+meant a company crossing the art. 10 LTVA threshold had no way to say so, and
+registration is an event in a company's life rather than a property of the day
+it was founded.
+
+    bk books entity edit --entity acme --vat-registered \
+      --vat-method effective --vat-filing quarterly
+
+Editable: name, seat, the VAT trio, audit status, FTE count, accent, the
+art. 957 al. 2 regime election. Vocabularies are enforced — `bad_vat_method`
+(art. 37 LTVA), `bad_vat_filing` (art. 35), `bad_audit_status` (art. 727) — and
+registering without a method and a period is refused (`vat_needs_method_and_filing`),
+because a position nobody can file is not worth computing.
+
+Three fields are **permanent** and refused by name rather than ignored:
+`slug_is_permanent` (every URL, command and stored reference names the book by
+it), `legal_form_is_permanent` (a re-registration at the commercial register,
+with new books), `regime_is_permanent` (art. 957 decides it and 0004 holds it as
+a CHECK).
+
+### `bk books tax-params set` / `tax-params show`
+
+`books.tax_params` was `SELECT`-only in the whole application — only the seed
+ever wrote a row — so the three demo books had a tax picture and every book a
+person created answered `tax: null, configured: false` for ever.
+
+`lib/types.ts` is right that the answer must not be filled in: "the canton and
+the commune come from that row and from nowhere else (decision D-D)… a screen
+that supplied a default rate would be inventing somebody's tax bill." So this is
+a door, not a default.
+
+    bk books tax-params set --entity acme --canton VD --commune Renens \
+      --ifd-rate 8.5 --cantonal-base-rate 3.3333 --cantonal-coefficient 155 \
+      --communal-coefficient 78.5 --capital-tax-permille 0.6
+
+All five rates are required together: a snapshot built on four of them would be
+wrong invisibly. Refuses `bad_canton` (the 26, by code), `missing_commune`,
+`bad_rate`, and `no_tax_params_for_simplified` — an RI's result is taxed as its
+owner's personal income, which this app does not model and `getTaxSnapshot`
+already refuses outright.
+
+This is **configuration**, so it is an upsert: a coefficient that has been voted
+replaces the one before it. A snapshot already taken is unaffected (ring 3,
+derived at request time, stored nowhere), and an analysis that cited one keeps
+its own `based_on` verbatim, which is what that field is for.
+
+### `bk books entry declare --debit / --credit` — an écriture with more than two sides
+
+`--account` plus `--contra` is the two-line shorthand and stays the common case.
+A **salary is not that shape and never was**: the mockup's own January payroll is
+three lines, 5000 salaires and 5700 charges sociales against 1020. Until now the
+door could not express it, so an agent running a company with employees met the
+wall every month, and a workspace clone could not replay the seeded entry at all.
+
+    bk books entry declare --entity acme --date 2026-01-25 \
+      --label "WIR-SALAIRES JANVIER" --explanation "January salaries" \
+      --debit 5000=11600.00 --debit 5700=1750.00 --credit 1020=13350.00
+
+With explicit lines the entry's amount is **derived** from one side rather than
+asked for: asking would invite a total that disagrees with the lines it totals.
+Refuses `too_few_lines`, `line_without_account`, `line_needs_one_side` (a line
+that is both is two lines), `lines_unbalanced` (saying which way and by how
+much), and `lines_and_shorthand` — passing both would make the entry unreadable
+back. The chart check applies to **every** line, not only the first two.
+
+### `bk books rule deactivate` — a rule taught wrongly was permanent
+
+Teaching a rule is the core loop and the one an agent drives hardest.
+`deactivateRule` has existed in `queries/resolve.ts` the whole time and **no
+route imported it**, so a rule taught against the wrong fragment, or against an
+amount that later changed, kept marking every future import `inferred` and
+citing itself, with no way to stop it. The one write in this app that could
+quietly get worse over time.
+
+    bk books rule deactivate 8
+
+Deactivated, **never deleted**: `books.entry.matched_rule_id` is a real foreign
+key and a posted entry may cite the rule for the ten years art. 958f keeps it,
+so what it already explained keeps its explanation and only future imports stop
+seeing it. There is no reactivate — teaching it again is one `resolve` away, and
+the new rule records what it was learned from and when, which a flag flipped
+back would not.
+
 ## 2026-08-20 — A book can now be started and a year can now be ended
 
 **Four new write doors, one new migration, and one refusal that changes what

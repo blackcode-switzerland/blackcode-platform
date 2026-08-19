@@ -770,6 +770,17 @@ type DeclareBooksEntryRequest struct {
 	TvaAmount       string `json:"tva_amount,omitempty"`
 	TvaInputClaimed bool   `json:"tva_input_claimed,omitempty"`
 	EvidenceTier    string `json:"evidence_tier,omitempty"`
+	// Lines carries an écriture with more than two sides — a salary is three:
+	// salaires and charges sociales against the bank. Mutually exclusive with
+	// Account/Contra, which IS the two-line shorthand.
+	Lines []BooksDeclareLine `json:"lines,omitempty"`
+}
+
+// BooksDeclareLine is one side. Exactly one of Debit and Credit is set.
+type BooksDeclareLine struct {
+	Account string `json:"account"`
+	Debit   string `json:"debit,omitempty"`
+	Credit  string `json:"credit,omitempty"`
 }
 
 type BooksDeclareResult struct {
@@ -1217,4 +1228,81 @@ func (c *Client) CloseBooksExercice(ws string, year int, entity string) (*BooksC
 		return nil, err
 	}
 	return &out, nil
+}
+
+// ---------------------------------------------------------------------------
+// Book facts, tax parameters, and switching a rule off
+// ---------------------------------------------------------------------------
+
+// EditBooksEntityRequest changes a book's own facts. Pointers throughout: a
+// nil field is "leave it", which is not the same as "clear it", and the VAT
+// registration flag in particular must be able to be set to false on purpose.
+//
+// Slug, legal form and bookkeeping regime are absent deliberately — the server
+// refuses each by name.
+type EditBooksEntityRequest struct {
+	Name           *string `json:"name,omitempty"`
+	Seat           *string `json:"seat,omitempty"`
+	VatRegistered  *bool   `json:"vat_registered,omitempty"`
+	VatMethod      *string `json:"vat_method,omitempty"`
+	VatFiling      *string `json:"vat_filing,omitempty"`
+	AuditStatus    *string `json:"audit_status,omitempty"`
+	RegimeElection *string `json:"regime_election,omitempty"`
+	FteCount       *string `json:"fte_count,omitempty"`
+	Accent         *string `json:"accent,omitempty"`
+}
+
+func (c *Client) EditBooksEntity(ws, slug string, req EditBooksEntityRequest) (*BooksEntity, error) {
+	var out BooksEntity
+	if err := c.patchJSON(fmt.Sprintf("/api/workspaces/%s/entities/%s", ws, slug), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// BooksTaxParams is where a company is taxed and at what rates. `Configured`
+// false is a real answer: nothing may assume a canton.
+type BooksTaxParams struct {
+	Entity     string         `json:"entity"`
+	Configured bool           `json:"configured"`
+	Canton     string         `json:"canton"`
+	Commune    string         `json:"commune"`
+	Params     map[string]any `json:"params"`
+}
+
+func (c *Client) GetBooksTaxParams(ws, entity string) (*BooksTaxParams, error) {
+	var out BooksTaxParams
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/tax-params?entity=%s", ws, entity), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type SetBooksTaxParamsRequest struct {
+	Entity                     string  `json:"entity"`
+	Canton                     string  `json:"canton"`
+	Commune                    string  `json:"commune"`
+	IfdRatePct                 float64 `json:"ifd_rate_pct"`
+	CantonalBaseRatePct        float64 `json:"cantonal_base_rate_pct"`
+	CantonalCoefficientPct     float64 `json:"cantonal_coefficient_pct"`
+	CommunalCoefficientPct     float64 `json:"communal_coefficient_pct"`
+	CapitalTaxBaseRatePermille float64 `json:"capital_tax_base_rate_permille"`
+}
+
+func (c *Client) SetBooksTaxParams(ws string, req SetBooksTaxParamsRequest) (*BooksTaxParams, error) {
+	var out BooksTaxParams
+	if err := c.putJSON(fmt.Sprintf("/api/workspaces/%s/tax-params", ws), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DeactivateBooksRule switches a rule off. Never deletes: a posted entry may
+// cite it for the ten years art. 958f keeps the entry.
+func (c *Client) DeactivateBooksRule(ws string, number int) error {
+	body := struct {
+		Active bool `json:"active"`
+	}{Active: false}
+	var out struct{}
+	return c.patchJSON(fmt.Sprintf("/api/workspaces/%s/rules/%d", ws, number), body, &out)
 }

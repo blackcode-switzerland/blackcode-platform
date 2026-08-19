@@ -102,7 +102,7 @@ func newRuleCmd() *cobra.Command {
 		Use:   "rule",
 		Short: "Recognition rules — remembered judgments, keyed to the (source, counterparty) pair",
 	}
-	cmd.AddCommand(newRuleListCmd(), newRuleCreateCmd())
+	cmd.AddCommand(newRuleListCmd(), newRuleCreateCmd(), newRuleDeactivateCmd())
 	return cmd
 }
 
