@@ -32,6 +32,66 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-19 — Phase 4B: the management layer, and the agent write-back
+
+Five routes, two of them writes. Everything derived is computed at request
+time and never stored; everything filed is permanent.
+
+**New routes and `bk` verbs:**
+
+| Route | `bk` |
+|---|---|
+| `GET /analytique` | `bk books analytique` |
+| `GET /analytique/categories`, `POST` | `bk books category list` / `create` |
+| `GET /analyses`, `POST` | `bk books analyse list` / `record` |
+| `GET /analyses/{n}` | `bk books analyse show` |
+| `GET /tax-snapshot` | `bk books tax` |
+
+**The analytique** (`GET /analytique?entity=&exercice=`): the cost breakdown
+per category — each bucket carrying its underlying lines, largest first, an
+avoir counted against its bucket — and the `monthly_flows` series (produits /
+charges per month, POSTED lines only, exercice-scoped). A simplified book
+answers with its dépenses grouped by their own `category` label, uncategorized
+under a named bucket; its flows read the directions, and a neutral transfer is
+in neither series.
+
+**Categories are per book and writable** — the seventh write. Seeded with the
+mockup's five (`personnel`, `bureau`, `it_ai`, `admin`, `autres`) on every
+double-entry book. `POST` refuses: an account not in the book's chart
+(`unknown_account`), a bilan account (`not_a_flow_account` — a category counts
+flows), an account another ACTIVE category already counts (`accounts_claimed`
+— one franc, one bar), a duplicate key, a simplified book (`ri_no_categories`).
+Labels are normalized to `{fr, en}` on the wire, always. No delete: `retired`
+is the exit, and retired rows are served flagged.
+
+**The analyses journal** — the sixth write, and the agent write-back contract
+made real. `POST /analyses` files `{entity, asked_by, agent, question,
+verdict, figures[], based_on[], scenario_label?, runway_after_months?}`. The
+row is APPEND-ONLY: migration 0013 revokes UPDATE and DELETE from the app
+role, no edit route exists, and none will. `based_on` items need `label` and
+`value` (`based_on_incomplete` otherwise): the snapshot of what the agent READ
+is the point of the record, and it is never recomputed. A drifted answer is
+re-asked into a new row; both stand. `asked` is the server's clock;
+`runway_after_months` is served as a number so charts need no prose parsing.
+
+**The tax snapshot** (`GET /tax-snapshot?entity=&exercice=`): `profit` and
+`equity` from the statements, `vat` from the entries' own TVA columns (`null`
+when not registered; input counts only when CLAIMED), and the two PM tax
+ESTIMATES from the entity's parameter record — canton, commune, rates,
+citations, `confirmed` flags, served verbatim under `tax.params`. A book with
+no record answers `configured: false` and `tax: null` — an honest "not
+configured", never someone else's rates. Two flags worth reading:
+
+- **`capital_tax.confirmed` is `false` on the seeded books, deliberately.**
+  The art. 118 imputation question is open with the fiduciary; the snapshot
+  serves `gross`, `credited` and `net_due` so either reading is available.
+- A simplified book refuses the whole route
+  (`no_tax_snapshot_for_simplified`): its result is its owner's personal
+  income, which this app does not model.
+
+Nothing existing changed shape: no column moved, no route renamed, migrations
+0001-0012 untouched.
+
 ## 2026-08-18 — The match write holds the entity boundary
 
 The phase-3 review found that `POST /pieces/{n}/match` could attach a pièce to

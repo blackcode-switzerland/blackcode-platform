@@ -219,6 +219,54 @@ d('the seeded database', () => {
     expect(t.resultat).toBe('6391.00')
   })
 
+  ifSeeded('carries the management layer: five buckets per SA book, cited parameters, two filed analyses', async () => {
+    const m = await import('./queries/management')
+    const entities = await q.listEntities(ws)
+    const sa = entities.filter((e: { legal_form: string }) => e.legal_form !== 'RI')
+    expect(sa.length).toBe(2)
+
+    for (const e of sa) {
+      const cats = await m.listCategories(e.id)
+      expect(cats.map((c: { key: string }) => c.key), `${e.slug}'s buckets are the fixture's five`).toEqual([
+        'personnel', 'bureau', 'it_ai', 'admin', 'autres',
+      ])
+      const params = await m.getTaxParams(e.id)
+      expect(params?.canton).toBe('VD')
+      expect(params?.commune).toBe('Renens')
+      // The open question stands: capital tax ships UNCONFIRMED until the
+      // fiduciary answers (decided with Mustneer, 2026-08-19), whatever the
+      // fixture's own flag said next to its open_question.
+      expect((params?.params as { capital_tax: { confirmed: boolean } }).capital_tax.confirmed).toBe(false)
+      expect((params?.params as { ifd: { confirmed: boolean } }).ifd.confirmed).toBe(true)
+    }
+
+    const analyses = await m.listAnalyses(ws)
+    expect(analyses.length).toBe(2)
+    const first = m.publicAnalysis(analyses[analyses.length - 1])
+    expect(first.entity).toBe('blackcode')
+    expect(first.runway_after_months).toBe(6.9)
+    expect((first.based_on as { value: string }[]).map((b) => b.value)[0], 'the snapshot exactly as the fixture filed it').toBe("CHF 1'806.67")
+  })
+
+  ifSeeded('the seeded analytique buckets agree with the fixture, recomputed', async () => {
+    const m = await import('./queries/management')
+    const [bc] = await q.listEntities(ws)
+    const [x2026] = await q.listExercices(ws, bc.id)
+    const r = await m.getAnalytique(bc, x2026)
+
+    // The reference, in floats: per category, posted 2026 lines of entity 1.
+    const FXC = (fixture as unknown as { ANALYTIQUE_CATEGORIES: { key: string; accounts: string[] }[] }).ANALYTIQUE_CATEGORIES
+    for (const c of FXC) {
+      let want = 0
+      for (const t of FX.TX) {
+        if (t.entity_id !== 1 || t.status !== 'posted' || t.date < '2026-01-01') continue
+        for (const l of t.lines) if (l.account && c.accounts.includes(l.account)) want += (l.debit || 0) - (l.credit || 0)
+      }
+      const got = r.categories.find((x: { key: string }) => x.key === c.key)!
+      expect(got.amount, `bucket ${c.key}`).toBe(want.toFixed(2))
+    }
+  })
+
   ifSeeded('numbers each journal from 1 within its own exercice', async () => {
     const [bc] = await q.listEntities(ws)
     const [x2026, x2025] = await q.listExercices(ws, bc.id)

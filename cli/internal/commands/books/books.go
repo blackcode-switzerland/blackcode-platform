@@ -134,6 +134,11 @@ func nouns() []*cobra.Command {
 		newSourceCmd(),
 		newPieceCmd(),
 		newManifestCmd(),
+		// Management — see management.go.
+		newAnalytiqueCmd(),
+		newAnalyseCmd(),
+		newCategoryCmd(),
+		newTaxCmd(),
 	}
 }
 

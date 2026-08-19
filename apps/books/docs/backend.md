@@ -5,10 +5,10 @@
 model in [`docs/platform-db.md`](../../../docs/platform-db.md). Neither is
 repeated here.
 
-**Status: phase 4A, 2026-08-18.** The statutory core, recognition, the sources register, the pièces pipeline, and now the BANK DOOR: `POST /sources/{n}/import` parses camt.053 server-side, stages every booked line in the right journal, runs rules at arrival (`inferred`, never resolved), writes fx when the bank converted, and converges on the bank's own references. Posting (staged → posted, write path #4) is live behind `/entries/{n}/post`. The RI journal reads and resolves like the grand livre (`entry list/show`, `resolve --entity`), cash declares through `entry declare`, and the register takes writes (`source create/edit/record-pull/runbook-set` — the Companion's upkeep verbs, with runbooks refusing anything that is not a credential reference). Migrated 0001-0012. What each phase adds
+**Status: phase 4B, 2026-08-19.** The statutory core, recognition, the sources register, the pièces pipeline, the bank door and posting — and now the MANAGEMENT LAYER: `GET /analytique` serves the cost breakdown per category and the monthly flows (derived from posted lines at request time, exercice-scoped, both journals), `GET /tax-snapshot` serves the VAT position and the two PM tax estimates from the entity's own cited parameter record (a book without one answers `configured: false`, never someone else's rates — capital tax ships UNCONFIRMED pending the fiduciary's art. 118 answer), and `/analyses` is the agent write-back: `POST` files a question, a verdict and a `based_on` snapshot into an APPEND-ONLY table (UPDATE/DELETE revoked by 0013) — the sixth write, the second door built for an outside process. The seventh write is `POST /analytique/categories`: per-book cost buckets, refusing accounts outside the chart, non-CR accounts, and accounts another active category already counts. Migrated 0001-0013. What each phase adds
 is in [`docs/books-app-plan/`](../../../docs/books-app-plan/README.md).
 
-Migrations applied: 12 of 12, `__drizzle_migrations_books`.
+Migrations applied: 13 of 13, `__drizzle_migrations_books`.
 
 ---
 
