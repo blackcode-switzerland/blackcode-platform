@@ -21,18 +21,7 @@
 // other.
 
 import { describe, it, expect } from 'vitest'
-import {
-  axisTicks,
-  barLength,
-  breakdownTotal,
-  flowTotals,
-  hasGaps,
-  isZeroAmount,
-  maxAmount,
-  monthLabel,
-  share,
-  tickLabel,
-} from './analytique'
+import { accountsLabel, axisTicks, barLength, breakdownTotal, flowTotals, hasGaps, isZeroAmount, maxAmount, monthLabel, share, tickLabel } from './analytique'
 import type { AnalytiqueCategory, MonthlyFlow } from './types'
 
 const flow = (month: string, produits: string, charges: string): MonthlyFlow => ({
@@ -269,5 +258,30 @@ describe('hasGaps', () => {
   it('counts across a year boundary', () => {
     expect(hasGaps([flow('2025-12', '0', '0'), flow('2026-01', '0', '0')])).toBe(false)
     expect(hasGaps([flow('2025-11', '0', '0'), flow('2026-01', '0', '0')])).toBe(true)
+  })
+})
+
+describe('accountsLabel — the null a simplified book sends', () => {
+  // ── THIS EXISTS BECAUSE THE TYPE WAS THE ONLY GUARD ──────────────────────
+  // The phase-4B review loosened `AnalytiqueCategory.accounts` to `string[]` and
+  // dropped the inline check in `<CostBreakdown>`: two edits, `typecheck` green,
+  // 372/372 green, and the RI book's management view became "Application error".
+  // Nothing in the suite could see it, because the guard lived in JSX.
+  //
+  // Watched fail: `if (!accounts || …)` → `if (accounts.length === 0)` reddens
+  // the first case with a TypeError, which is the crash, reproduced without a
+  // browser.
+  it('returns null for a book that keeps no chart of accounts', () => {
+    expect(accountsLabel(null)).toBe(null)
+    expect(accountsLabel(undefined)).toBe(null)
+  })
+
+  it('returns null for a configured bucket that counts nothing yet', () => {
+    expect(accountsLabel([])).toBe(null)
+  })
+
+  it('joins the accounts a bucket counts', () => {
+    expect(accountsLabel(['6000'])).toBe('6000')
+    expect(accountsLabel(['6000', '6500', '6570'])).toBe('6000 6500 6570')
   })
 })

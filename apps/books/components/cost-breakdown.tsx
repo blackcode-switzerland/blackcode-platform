@@ -65,12 +65,21 @@ import { Money } from './money'
 import { DateText } from './date-text'
 import { en } from '@/lib/label'
 import { scopedHref } from '@/lib/nav'
-import { barLength, isZeroAmount, maxAmount, share } from '@/lib/analytique'
+import { accountsLabel, barLength, isZeroAmount, maxAmount, share } from '@/lib/analytique'
 import type { Journal } from '@/lib/journal'
 import type { AnalytiqueCategory } from '@/lib/types'
 
 /** The single hue every bar wears. See the header. */
 const BAR = 'var(--chart-2)'
+/**
+ * A net-refunded bucket, drawn on the other side of the baseline.
+ *
+ * `--destructive` rather than a fifth chart hue: a negative here is not another
+ * category, it is the same category pointing the other way, and giving it a
+ * series colour would read as one more thing on the legend. It is also rare —
+ * a reversing entry — so it should look like an exception, not a sixth slot.
+ */
+const NEGATIVE_BAR = 'var(--destructive)'
 
 export function CostBreakdown({
   categories,
@@ -90,6 +99,25 @@ export function CostBreakdown({
   const [open, setOpen] = useState<string | null>(null)
 
   if (categories.length === 0) {
+    // ── THE RECOVERY DEPENDS ON THE BOOK, AND ONE OF THEM HAS NONE ──────────
+    // This told every empty book to run `bk books category create`. That command
+    // **refuses a simplified book unconditionally** (exit 6), so a reader of the
+    // RI book was given a paragraph about ledger accounts it does not have and a
+    // command that cannot work for it — a dead end naming an exit that is not
+    // there, which is the one thing `hintFor()` and the `suggestion` convention
+    // exist to prevent.
+    //
+    // The page knows the regime; it was asking the data instead. Found by the
+    // phase-4B review, 2026-08-19.
+    if (journal === 'recettes_depenses') {
+      return (
+        <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+          A book kept under art. 957 al. 2 CO has no chart of accounts, so there are no accounts to
+          group into cost categories and no breakdown to derive. Its movements carry their own
+          category, and the journal shows them.
+        </p>
+      )
+    }
     return (
       <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
         This book has no cost categories configured, so there is no breakdown to derive. Create one
@@ -120,9 +148,14 @@ export function CostBreakdown({
                         French-only; the fallback is the label, never a blank. */}
                     {en(c.label) || c.key}
                   </span>
-                  {c.accounts && c.accounts.length > 0 && (
+                  {/* Through `accountsLabel`, not an inline guard: null here is
+                      an RI book, and the review showed that dropping the check
+                      plus loosening the type is two edits that leave every gate
+                      green and white-screen that book. A pure function is
+                      something a test can hold. */}
+                  {accountsLabel(c.accounts) && (
                     <span className="ml-2 font-mono text-[11px] text-muted-foreground">
-                      {c.accounts.join(' ')}
+                      {accountsLabel(c.accounts)}
                     </span>
                   )}
                 </div>
@@ -130,13 +163,40 @@ export function CostBreakdown({
                 {/* The bar. Order-2 on a phone so the label and the figure sit
                     on one line and the track gets the full width below. */}
                 <div className="order-last col-span-2 sm:order-none sm:col-span-1">
-                  <div className="h-2.5 w-full rounded-[3px] bg-secondary">
-                    <div
-                      className="h-full rounded-[3px]"
-                      style={{ width: `${barLength(c.amount, ceiling)}%`, backgroundColor: BAR }}
-                      aria-hidden
-                    />
-                  </div>
+                  {/* ── A NEGATIVE DRAWS FROM THE MIDDLE, LEFTWARD ──────────
+                      `barLength` is SIGNED. A negative bucket is a net refund —
+                      a reversing entry, which is how corrections work in this
+                      product — and it drew as a positive bar until 2026-08-19,
+                      identical to a small cost. The track carries a baseline and
+                      the bar grows from it in the direction of the sign, so the
+                      mark agrees with the figure printed beside it. */}
+                  {(() => {
+                    const len = barLength(c.amount, ceiling)
+                    const negative = len < 0
+                    return (
+                      <div className="relative h-2.5 w-full rounded-[3px] bg-secondary">
+                        {negative && (
+                          <span
+                            className="absolute inset-y-0 left-1/2 w-px bg-border"
+                            aria-hidden
+                          />
+                        )}
+                        <div
+                          className="absolute inset-y-0 rounded-[3px]"
+                          style={
+                            negative
+                              ? {
+                                  right: '50%',
+                                  width: `${Math.min(50, Math.abs(len) / 2)}%`,
+                                  backgroundColor: NEGATIVE_BAR,
+                                }
+                              : { left: 0, width: `${len}%`, backgroundColor: BAR }
+                          }
+                          aria-hidden
+                        />
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 <div className="shrink-0 text-right">

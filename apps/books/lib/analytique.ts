@@ -161,7 +161,26 @@ export function barLength(value: Money, ceiling: Money, minVisible = 1.5): numbe
   const v = amount(value) ?? 0
   const max = amount(ceiling) ?? 0
   if (v === 0 || max <= 0) return 0
-  return Math.max(minVisible, Math.min(100, (v / max) * 100))
+
+  // ── SIGNED, AND THE SIGN IS THE WHOLE POINT ──────────────────────────────
+  // This was `Math.max(minVisible, Math.min(100, (v / max) * 100))`, and for a
+  // negative `v` that is `Math.max(1.5, <negative>)` — **1.5**. Every negative
+  // amount drew the same small bar in the POSITIVE direction: a −5'420.00
+  // bucket and a +133.60 bucket drew identical marks, and a month whose charges
+  // were net refunded drew a column above the baseline while the table two
+  // inches below printed −2'200.00.
+  //
+  // Negatives are not an edge case here. **Reversing entries are how
+  // corrections work in this product** — a posted écriture can never be edited,
+  // so the correction is a negative beside it. A chart that draws next month's
+  // correction as though it were a cost is a chart that lies about the sign of
+  // money, on the one screen a reader looks at to see where money went.
+  //
+  // The magnitude is floored, not the value. The sign survives, and the caller
+  // decides which side of the baseline it belongs on.
+  const pct = (Math.abs(v) / max) * 100
+  const len = Math.max(minVisible, Math.min(100, pct))
+  return v < 0 ? -len : len
 }
 
 /**
@@ -176,7 +195,24 @@ export function share(value: Money, total: Money): number | null {
   const t = amount(total) ?? 0
   if (t === 0) return null
   const v = amount(value) ?? 0
-  return Math.round((v / t) * 1000) / 10
+
+  // ── A SHARE OVER 100% IS ARITHMETIC, NOT A BUG, AND IT STILL MUST NOT PRINT
+  // The total NETS negatives in. So a book with one 13'350 cost and one −2'200
+  // refund has a total of 11'150, and the cost's share of it is **119.7%** —
+  // true, and meaningless to a reader who has just been told these are the
+  // parts of a whole. The review found 121.4% on the seeded data.
+  //
+  // `null` is returned instead, the same answer as a zero total, and the caller
+  // already knows what to do with it: it renders no percentage. The figure and
+  // the bar are both still there, which is what the reader actually needs — a
+  // share is a convenience and it is the one thing here that can be wrong
+  // without being false.
+  //
+  // Not clamped to 100: a clamp would print a number that IS wrong, which is
+  // worse than printing none. Found 2026-08-19.
+  const pct = (v / t) * 100
+  if (pct < 0 || pct > 100) return null
+  return Math.round(pct * 10) / 10
 }
 
 /**
@@ -254,4 +290,29 @@ export function hasGaps(flows: MonthlyFlow[]): boolean {
   const first = index(flows[0].month)
   const last = index(flows[flows.length - 1].month)
   return last - first + 1 !== flows.length
+}
+
+/**
+ * The accounts a bucket counts, as one string — or null when there are none.
+ *
+ * ── A PURE FUNCTION BECAUSE THE TYPE WAS THE ONLY GUARD ────────────────────
+ * `AnalytiqueCategory.accounts` is `string[] | null`: null on a simplified
+ * book, which keeps no chart of accounts. The render guarded it correctly, and
+ * the phase-4B review showed what that guard rests on — loosening the type and
+ * dropping the check is **two edits, both of which leave `npm run typecheck`
+ * and all 372 tests green**, and turns the RI book's management view into a
+ * white screen.
+ *
+ * `wire-parity` cannot hold the type either: every `jsonb` column in
+ * `lib/db/schema.ts` is declared without `.$type<>()`, so `accounts` and `label`
+ * cross the wire as `unknown` and there is nothing for a shape assertion to
+ * compare. That is filed with the backend.
+ *
+ * Meanwhile this exists so the null is handled by something a TEST can reach.
+ * A guard living only in JSX is a guard only a browser can check, and the review
+ * had to open one to find it.
+ */
+export function accountsLabel(accounts: string[] | null | undefined): string | null {
+  if (!accounts || accounts.length === 0) return null
+  return accounts.join(' ')
 }

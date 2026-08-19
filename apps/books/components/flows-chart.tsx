@@ -67,6 +67,7 @@
 import { useState } from 'react'
 import { Money } from './money'
 import { axisTicks, barLength, hasGaps, monthLabel, tickLabel } from '@/lib/analytique'
+import { amount } from '@/lib/format'
 import type { MonthlyFlow } from '@/lib/types'
 
 /** The two series, in fixed order. Colour follows the SERIES, never its rank. */
@@ -94,6 +95,23 @@ export function FlowsChart({ flows }: { flows: MonthlyFlow[] }) {
   // value on both sides and no second parser exists.
   const ceiling = max.toFixed(2)
   const gapped = hasGaps(flows)
+
+  // ── WHERE ZERO SITS, AND WHY IT IS NOT ALWAYS THE FLOOR ───────────────────
+  // A month's charges can be NET NEGATIVE — a reversing entry, which is how a
+  // correction is made in a product where a posted écriture can never be
+  // edited. Bottom-anchored columns cannot draw that: `height: -18%` renders
+  // nothing, so a refunded month looked identical to a month with no activity,
+  // which is precisely the "zero versus missing" distinction the baseline
+  // comment below exists to preserve.
+  //
+  // So the zero line is placed by the data. With no negatives it is the floor
+  // and nothing about the chart changes; with negatives it rises, positives
+  // grow up from it and negatives grow down. Found by the phase-4B review.
+  const values = flows.flatMap((f) => [amount(f.produits) ?? 0, amount(f.charges) ?? 0])
+  const worstNegative = Math.min(0, ...values)
+  const span = (amount(ceiling) ?? 0) + Math.abs(worstNegative)
+  /** Distance from the BOTTOM of the plot area to the zero line, as a %. */
+  const zeroAt = span > 0 ? (Math.abs(worstNegative) / span) * 100 : 0
 
   return (
     <figure className="m-0">
@@ -175,15 +193,23 @@ export function FlowsChart({ flows }: { flows: MonthlyFlow[] }) {
                       // table that actually carries the figures. The table IS
                       // the keyboard and screen-reader path; hover is the
                       // convenience on top of it.
-                      className="flex h-full max-w-[24px] flex-1 cursor-default items-end"
+                      className="relative flex h-full max-w-[24px] flex-1 cursor-default items-end"
                       onMouseEnter={() => setHover({ month: f.month, series: i as 0 | 1 })}
                       onMouseLeave={() => setHover(null)}
                     >
                       <div
-                        className="w-full rounded-t-[4px] transition-opacity"
+                        className={
+                          'absolute w-full transition-opacity ' +
+                          (pct < 0 ? 'rounded-b-[4px]' : 'rounded-t-[4px]')
+                        }
                         style={{
-                          height: `${pct}%`,
-                          backgroundColor: s.color,
+                          // Anchored to the zero line, growing in the direction
+                          // of the sign. `pct` is signed; the share of the plot
+                          // area each side gets is what `zeroAt` splits.
+                          ...(pct < 0
+                            ? { top: `${100 - zeroAt}%`, height: `${(Math.abs(pct) / 100) * zeroAt}%` }
+                            : { bottom: `${zeroAt}%`, height: `${(pct / 100) * (100 - zeroAt)}%` }),
+                          backgroundColor: pct < 0 ? 'var(--destructive)' : s.color,
                           opacity: hover && !on ? 0.55 : 1,
                         }}
                       />
@@ -197,7 +223,11 @@ export function FlowsChart({ flows }: { flows: MonthlyFlow[] }) {
           {/* The baseline. A zero bar sits ON it and draws nothing, which is
               the difference between "this month earned nothing" and "this
               month is missing" — the second one is not on the axis at all. */}
-          <div className="absolute inset-x-0 bottom-0 border-t border-muted-foreground/40" aria-hidden />
+          <div
+            className="absolute inset-x-0 border-t border-muted-foreground/40"
+            style={{ bottom: `${zeroAt}%` }}
+            aria-hidden
+          />
         </div>
       </div>
 
