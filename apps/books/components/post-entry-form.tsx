@@ -307,30 +307,24 @@ export function PostEntryForm({
               database tests, and where to get the real sentence. See the header
               for why the sentence is missing and for the narrowness of this
               branch. */}
-          {refusal.status === 500 && (
-            <div className="mt-1.5 space-y-1 text-[11.5px] text-muted-foreground">
-              <p>
-                <span className="text-foreground">The entry was not posted and is unchanged.</span>{' '}
-                A refusal at this point rolls the whole transaction back, so it is still staged and
-                nothing about it has moved.
-              </p>
-              <p>
-                This is almost certainly the database&apos;s own guard: to be posted, an entry must
-                balance, carry at least two lines, and have every line mapped to an account. Which
-                of the three it failed{' '}
-                <span className="text-foreground">was not sent to this screen</span> — the route
-                discards the database&apos;s sentence when it arrives at COMMIT rather than at the
-                statement, and that is raised with the backend rather than guessed at here.
-              </p>
-              <p>
-                The lines above are what the guard reads. Running{' '}
-                <span className="font-mono text-foreground">
-                  bk books entry post {entry.number}
-                </span>{' '}
-                gives the same answer, so it is not this screen.
-              </p>
-            </div>
-          )}
+          {/* ── THE 500 BRANCH IS GONE, 2026-08-19 ────────────────────────
+              A block lived here explaining that the database had refused, that
+              the entry was unchanged, and that which of the three conditions it
+              failed "was not sent to this screen". All of that was true: the
+              route read `e.message`, drizzle put the database's sentence on the
+              cause chain, and every guard refusal arrived as a bare 500.
+
+              The backend fixed it in the hardening pass, and it was verified
+              here before this block was deleted rather than on the strength of
+              the commit message — an entry with two mapped, unbalanced lines
+              now answers:
+
+                400  entry does not balance: debit 77.00 <> credit 99.00
+                hint: resolve the lines, then post
+
+              So the refusal prints verbatim through the ordinary path above, and
+              a workaround that explains a missing sentence is worse than nothing
+              once the sentence arrives. */}
         </div>
       )}
     </form>

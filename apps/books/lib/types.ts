@@ -511,10 +511,30 @@ export interface RiEntry {
   explanation: Label | null
   recognition: Recognition
   evidence_tier: EvidenceTier
+  /**
+   * Which book and which year — added by the hardening pass, 2026-08-19.
+   *
+   * `seq` is workspace-wide, so a bare-number read can return a row from any
+   * book. The transaction screen was inferring the book from the URL filter and
+   * relabelling an unchanged écriture when the selector moved; the payload names
+   * it now, so the screen states it instead of guessing.
+   */
+  entity: string
+  exercice: number
   evidence_note: Label | null
   piece: Piece | null
   /** The original-currency story (0011). Same field, same rule, as `Entry`. */
   fx: Fx | null
+  /**
+   * The Devil's Advocate's flag (0014), the same field the grand livre carries.
+   *
+   * **`null` means never checked, not "clean".** A simplified book's movements
+   * go through the same compliance pass as an écriture, so a row that has been
+   * through it carries a verdict and one that has not carries null — and a
+   * screen rendering the absence as an accepted verdict would be inventing an
+   * assurance nobody gave.
+   */
+  verdict: Verdict | null
 }
 
 // ---------------------------------------------------------------------------
