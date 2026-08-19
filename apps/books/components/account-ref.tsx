@@ -22,7 +22,23 @@
 import Link from 'next/link'
 import { scopedHref } from '@/lib/nav'
 import { accountLabelEn } from '@/lib/label'
+import { journalAccepts, type Journal } from '@/lib/journal'
 import type { AccountLabel } from '@/lib/types'
+
+/**
+ * What this component needs of the scope, and the third field is the point.
+ *
+ * `journal` is REQUIRED, so every call site is a compile error until it supplies
+ * one. That is deliberate: the link this component builds was 400ing on a
+ * simplified book, and a prop with a default would have let a fifth call site
+ * be added later without anybody thinking about it.
+ */
+export interface AccountRefScope {
+  entity: string | null
+  exercice: number | null
+  /** The journal of the book the LINK TARGETS — `scope.record`'s, not the record being shown. */
+  journal: Journal | null
+}
 
 export function AccountRef({
   no,
@@ -41,7 +57,7 @@ export function AccountRef({
   label?: AccountLabel | null
   /** `/dashboard/{ws}` — the shell knows it; a page passes it down. */
   base: string
-  scope: { entity: string | null; exercice: number | null }
+  scope: AccountRefScope
   className?: string
 }) {
   // A staged entry may legitimately have no account yet (`EntryLine.account` is
@@ -52,6 +68,53 @@ export function AccountRef({
     return (
       <span className={'text-xs italic text-muted-foreground ' + className}>
         unmapped
+      </span>
+    )
+  }
+
+  const body = (
+    <>
+      <span className="font-mono text-[12.5px] tabular-nums">{no}</span>
+      {label && (
+        <span className="text-[13px] text-muted-foreground group-hover:text-primary-strong">
+          {accountLabelEn(label)}
+        </span>
+      )}
+    </>
+  )
+
+  // ── THE DRILL-DOWN IS A LINK ONLY WHERE THE TARGET CAN ANSWER IT ────────
+  // The link lands on `/ledger` filtered by this account, IN THE SCOPED BOOK.
+  // Since phase 4A a simplified book's `GET …/entries` REFUSES `?account=` and
+  // `?status=` — 400 `ri_no_such_filter` — and it refuses them rather than
+  // ignoring them, so this link was a page with an error box on it where the
+  // ledger should be. Reproduced on 2026-08-19 by opening the chart of accounts
+  // for the seeded RI book (which has all 26 accounts) and following 1020:
+  //
+  //   /ledger?entity=ri&exercice=2026&account=1020&status=posted
+  //     → "an RI journal has no posting status and no accounts to filter by"
+  //
+  // And dropping only the two filters would be worse, not better: the
+  // recettes-dépenses journal has **no chart mapping at all**, so an unfiltered
+  // ledger is not a narrower answer to the same question — it is a different
+  // document that cannot be filtered by this number. So there is nothing to
+  // link to, and the account renders as the fact it is.
+  //
+  // A null journal takes the same branch. It means the book is not in hand, and
+  // a link built then is a link whose legality is a guess.
+  if (!journalAccepts(scope.journal, 'account')) {
+    return (
+      <span
+        className={'group inline-flex items-baseline gap-1.5 ' + className}
+        data-account={no}
+        data-account-link="none"
+        title={
+          scope.journal === 'recettes_depenses'
+            ? 'This book keeps recettes and dépenses under art. 957 al. 2 CO. Its journal has no chart mapping, so there is nothing to drill into by account number.'
+            : 'Which journal this book keeps is not known yet, so this cannot be drilled into.'
+        }
+      >
+        {body}
       </span>
     )
   }
@@ -68,18 +131,22 @@ export function AccountRef({
       //
       // The ledger's own filter is still there, so a reader who wants the staged
       // rows can clear it — the default just matches where they came from.
-      href={scopedHref(base, '/ledger', scope, { account: no, status: 'posted' })}
+      //
+      // It is only reached for a `grand_livre` target — the guard above is what
+      // makes that true, and it is `journalAccepts`, not a second copy of the
+      // rule. `status` is asserted separately from `account` because the two are
+      // separate entries in that table and a journal could one day take one and
+      // not the other; asking once for both would be an assumption.
+      href={scopedHref(base, '/ledger', scope, {
+        account: no,
+        status: journalAccepts(scope.journal, 'status') ? 'posted' : undefined,
+      })}
       className={
         'group inline-flex items-baseline gap-1.5 hover:text-primary-strong ' + className
       }
       data-account={no}
     >
-      <span className="font-mono text-[12.5px] tabular-nums">{no}</span>
-      {label && (
-        <span className="text-[13px] text-muted-foreground group-hover:text-primary-strong">
-          {accountLabelEn(label)}
-        </span>
-      )}
+      {body}
     </Link>
   )
 }

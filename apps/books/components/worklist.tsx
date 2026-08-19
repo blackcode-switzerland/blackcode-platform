@@ -4,22 +4,36 @@
 // where a person changes a record.
 //
 // ===========================================================================
-// THREE KINDS OF ROW, AND ONLY ONE OF THEM HAS A BUTTON
+// THREE KINDS OF ROW, AND WHICH OF THEM HAS A BUTTON DEPENDS ON THE JOURNAL
 // ===========================================================================
 // `GET …/worklist` merges `books.entry`, `books.ri_entry` and — since phase 3 —
-// `books.piece_inbox` into one list. `POST /entries/{n}/resolve` addresses
-// `books.entry` ONLY, and all three tables keep SEPARATE `seq` counters, so a
-// row's #number from any other kind is also, usually, some journal entry's
-// #number. Resolving by it rewrites that entry and answers 200. Reproduced
-// 2026-08-18: RI #5 (TWINT *8842, 120.00) → `books.entry` #5, the January
-// payroll, in a different book. Raised on ticket #51.
+// `books.piece_inbox` into one list, and all three tables keep SEPARATE `seq`
+// counters, so a row's #number from any one kind is also, usually, some other
+// kind's #number. `POST /entries/{n}/resolve` used to address `books.entry`
+// ONLY, so resolving an RI row by its number rewrote that entry and answered
+// 200. Reproduced 2026-08-18: RI #5 (TWINT *8842, 120.00) → `books.entry` #5,
+// the January payroll, in a different book. Ticket #51.
 //
-// Until that is answered, only an `entry` row has a button. Every other kind is
-// READ-ONLY and says so ON THE ROW, with the reason. Not in a footnote and not
-// in a tooltip: the reader is looking at a row that behaves differently from the
-// one above it, and the difference is not their fault.
+// ── #51 IS ANSWERED SINCE PHASE 4A, AND THE ANSWER IS CONDITIONAL ────────
+// The route now reads `body.entity`: naming a SIMPLIFIED book resolves against
+// that book's recettes-dépenses journal. So an `ri_entry` row HAS a button here
+// now — when the scoped book is simplified, which is the condition that makes
+// the request unambiguous. Verified both ways on 2026-08-19 before this screen
+// was widened: with the book named the RI row changed and the grand-livre entry
+// did not, and **without it the January payroll was rewritten exactly as
+// before**. The commands are in `lib/resolvable.ts`'s header; the widening is
+// `resolveTargetFor`, which takes the row AND the journal and is positive on
+// both.
+//
+// A pièce still has no button, and neither does any row whose journal is not
+// known. Every one of those is READ-ONLY and says so ON THE ROW, with the
+// reason. Not in a footnote and not in a tooltip: the reader is looking at a row
+// that behaves differently from the one above it, and the difference is not
+// their fault.
 //
 // ── THE BRANCH IS POSITIVE, AND IT WAS NEGATIVE UNTIL IT BIT ──────────────
+// (And it stayed positive through the widening, which is the harder half:
+// admitting a new case is exactly when a `!==` gets written.)
 // It used to read `row.kind === 'ri_entry' ? readOnly : resolveForm`. That was
 // exhaustive while there were two kinds and correct on the day it was written.
 // **Phase 3's backend added a third**, six pièce rows landed in the else, each
@@ -66,7 +80,8 @@ import { Money } from './money'
 import { VocabChip } from './chips'
 import { HistoryTrail } from './history-trail'
 import { ResolveForm } from './resolve-form'
-import { isResolvable, type ResolvableRow } from '@/lib/resolvable'
+import { resolveTargetFor } from '@/lib/resolvable'
+import type { Journal } from '@/lib/journal'
 import { EmptyState } from './states'
 import type { RecognitionRule, ResolveResult, WorklistRow } from '@/lib/types'
 
@@ -81,6 +96,7 @@ function rowId(row: WorklistRow): string {
 export function Worklist({
   ws,
   scope,
+  journal,
   base,
   rows,
   rules,
@@ -89,6 +105,12 @@ export function Worklist({
 }: {
   ws: string | undefined
   scope: ReadScope
+  /**
+   * Which journal this book keeps. Half of the decision that lets a row write —
+   * see `resolveTargetFor`. `null` means it is not known, and every row is
+   * read-only until it is.
+   */
+  journal: Journal | null
   base: string
   rows: WorklistRow[]
   rules: RecognitionRule[] | undefined
@@ -113,6 +135,7 @@ export function Worklist({
           key={rowId(row)}
           ws={ws}
           scope={scope}
+          journal={journal}
           base={base}
           row={row}
           rules={rules}
@@ -127,6 +150,7 @@ export function Worklist({
 function Row({
   ws,
   scope,
+  journal,
   base,
   row,
   rules,
@@ -135,6 +159,7 @@ function Row({
 }: {
   ws: string | undefined
   scope: ReadScope
+  journal: Journal | null
   base: string
   row: WorklistRow
   rules: RecognitionRule[] | undefined
@@ -151,6 +176,10 @@ function Row({
   // nothing is a dead affordance — the reader learns the app is broken, not
   // that they cannot write. So the row says so where the button would be.
   const canWrite = useCanWrite()
+
+  // POSITIVE on both axes, and computed once so the affordance and the form
+  // cannot disagree about which journal the number is read in.
+  const target = resolveTargetFor(row, journal)
 
   return (
     <li className="py-3" data-kind={row.kind} data-number={row.number}>
@@ -259,12 +288,13 @@ function Row({
             </div>
           )}
 
-          {/* POSITIVE, and enumerated. `kind === 'entry'` is the only path to a
-              write; everything else explains itself. See the header for what a
-              negative test cost when a third kind arrived. */}
+          {/* POSITIVE, and enumerated on BOTH axes — the kind and the journal.
+              A row with no target explains itself; nothing else reaches a write.
+              See the header for what a negative test cost when a third kind
+              arrived, and `lib/resolvable.ts` for what the second axis is for. */}
           {!result &&
-            (!isResolvable(row) ? (
-              <ReadOnlyReason kind={row.kind} base={base} scope={scope} row={row} />
+            (target === null ? (
+              <ReadOnlyReason kind={row.kind} journal={journal} base={base} scope={scope} row={row} />
             ) : !canWrite ? (
               <p className="mt-2 text-[12px] text-muted-foreground">
                 This session cannot change records.
@@ -287,11 +317,15 @@ function Row({
                     // discards a half-typed explanation, which is why "use this"
                     // is the only thing that changes the key.
                     key={prefill ?? 'blank'}
-                    // The narrowing that makes the RI bug unreachable. `row` is
-                    // `kind: 'entry'` inside this branch and nowhere else.
+                    // The narrowing that makes #51 unreachable. `target` is
+                    // non-null inside this branch and nowhere else, and it
+                    // carries the journal WITH the row — **there is no cast
+                    // here any more.** The old `row as ResolvableRow` was what
+                    // kept the compiler quiet at the one line that mattered
+                    // while `_WorklistKeys` was red for a whole merge.
                     ws={ws}
                     scope={scope}
-                    row={row as ResolvableRow}
+                    target={target}
                     initialExplanation={prefill ?? ''}
                     onResolved={(r) => onResolved(row, r)}
                   />
@@ -310,22 +344,28 @@ function Row({
  * ── IT NAMES THE MECHANISM, NOT "NOT SUPPORTED" ───────────────────────────
  * A reader looking at rows that behave differently deserves to know it is a
  * defect being worked around and not their mistake. And an agent reading the DOM
- * gets `data-readonly` plus the ticket, which is the recovery.
+ * gets `data-readonly`, which is the recovery.
  *
- * ── THE TWO REASONS ARE DIFFERENT, SO THEY ARE TWO SENTENCES ─────────────
- * An `ri_entry` has no button because resolve would hit the WRONG TABLE
- * (ticket #51). A `piece` has no button because resolve is not what a document
- * needs at all — a pièce is matched to an entry, which is a different act with
- * a different route. Collapsing them into "read-only" would tell a reader the
- * inbox is broken when it is somewhere else on purpose.
+ * ── THE REASONS ARE DIFFERENT, SO THEY ARE DIFFERENT SENTENCES ───────────
+ * A `piece` has no button because resolve is not what a document needs at all —
+ * a pièce is matched to an entry, which is a different act with a different
+ * route. An `ri_entry` used to have none because resolve hit the WRONG TABLE
+ * (ticket #51); **that is fixed, and it now has one** whenever the scoped book
+ * is the simplified one the row came from. What is left in its place is the
+ * narrow case where the journal is not known — the books are in flight, or the
+ * regime is a value this bundle does not recognise — and that is a
+ * "not yet", not a defect. Collapsing these into "read-only" would tell a reader
+ * something is broken when two of the three are working as designed.
  */
 function ReadOnlyReason({
   kind,
+  journal,
   base,
   scope,
   row,
 }: {
   kind: WorklistRow['kind']
+  journal: Journal | null
   base: string
   scope: ReadScope
   row: WorklistRow
@@ -366,16 +406,31 @@ function ReadOnlyReason({
     )
   }
 
+  // Everything else: a kind whose journal is not known, or a pair this app has
+  // not been taught. Both are "not yet", and neither may write — the number
+  // alone does not say which journal it names, and a write taken on a guessed
+  // journal is exactly ticket #51.
   return (
     <p
-      data-readonly="ri_entry"
+      data-readonly={journal === null ? 'journal_unknown' : `${kind}_in_${journal}`}
       className="mt-2 inline-flex items-start gap-1.5 rounded-md border border-dashed border-border px-2.5 py-1.5 text-[12px] text-muted-foreground"
     >
       <Lock size={12} className="mt-0.5 shrink-0" />
       <span>
-        Read-only. This row is from the simplified book, and the resolve route addresses the
-        double-entry journal only — the two number series overlap, so resolving this row by its
-        number would rewrite an unrelated entry. Raised with the backend on ticket #51.
+        {journal === null ? (
+          <>
+            Read-only for now. Which journal this book keeps has not been established yet, and this
+            row&apos;s #number means one thing in the grand livre and another in a
+            recettes-dépenses journal. Resolving before that is settled would be a write against a
+            book chosen by a guess.
+          </>
+        ) : (
+          <>
+            Read-only. A <span className="font-mono">{kind}</span> row cannot be resolved in this
+            book&apos;s journal — the two number series overlap, so resolving it by its number
+            would address an unrelated record.
+          </>
+        )}
       </span>
     </p>
   )

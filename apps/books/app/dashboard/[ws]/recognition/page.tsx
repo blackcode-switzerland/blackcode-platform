@@ -38,7 +38,7 @@ import { ScreenFrame } from '@/components/screen-frame'
 import { ErrorState, Loading } from '@/components/states'
 import { NoExerciceNotice, isNoExerciceRefusal } from '@/components/no-exercice-notice'
 import { Worklist, type ResolvedMap } from '@/components/worklist'
-import { isResolvable } from '@/lib/resolvable'
+import { resolveTargetFor } from '@/lib/resolvable'
 import { RulesPanel } from '@/components/rules-panel'
 import type { ResolveResult, WorklistRow } from '@/lib/types'
 
@@ -89,13 +89,39 @@ export default function Page() {
   /**
    * How many of the payload's rows can actually be explained.
    *
-   * From `isResolvable`, the same predicate the rows themselves branch on, so
-   * the heading and the rows can never disagree about which kinds those are.
+   * From `resolveTargetFor`, the same function the rows themselves branch on and
+   * with the SAME JOURNAL handed to it, so the heading and the rows can never
+   * disagree about which of them have a button. The journal is half the
+   * decision now (#51's fix is conditional — see `lib/resolvable.ts`), and a
+   * count computed without it would be right about a screen nobody is looking
+   * at.
    * Counted off the PAYLOAD, not `rows`, which carries this session's resolved
    * rows too and would keep them in the count.
    */
   const explainable = useMemo(
-    () => (worklist.data?.rows ?? []).filter(isResolvable).length,
+    () =>
+      (worklist.data?.rows ?? []).filter((r) => resolveTargetFor(r, scope.journal) !== null).length,
+    [worklist.data, scope.journal]
+  )
+
+  /**
+   * How many rows are documents waiting to be matched.
+   *
+   * ── COUNTED, NOT SUBTRACTED, AND THAT IS THE CORRECTION ──────────────────
+   * This line used to read `count - explainable` under the label "awaiting a
+   * document match", on the assumption that whatever cannot be explained must be
+   * a pièce. That was already wrong before phase 4A — on a SIMPLIFIED book the
+   * `ri_entry` rows had no button either, so the label counted transactions as
+   * documents — and the widening makes it wrong in the other direction too:
+   * `journal` is null on the first frame, nothing is explainable yet, and a
+   * subtraction would announce that every row is a document waiting for a match.
+   *
+   * `kind === 'piece'` is what the sentence actually claims, so it is what is
+   * counted. Anything that is neither is simply not in either number, which is
+   * the honest answer for a row whose journal is still resolving.
+   */
+  const documents = useMemo(
+    () => (worklist.data?.rows ?? []).filter((r) => r.kind === 'piece').length,
     [worklist.data]
   )
 
@@ -173,9 +199,7 @@ export default function Page() {
         {worklist.data && worklist.data.count > 0 && (
           <p className="text-[12.5px] text-muted-foreground">
             {explainable} to explain
-            {worklist.data.count - explainable > 0 && (
-              <> · {worklist.data.count - explainable} awaiting a document match</>
-            )}
+            {documents > 0 && <> · {documents} awaiting a document match</>}
           </p>
         )}
       </div>
@@ -208,6 +232,7 @@ export default function Page() {
         <Worklist
           ws={params.ws}
           scope={scope}
+          journal={scope.journal}
           base={base}
           rows={rows}
           rules={rules.data}

@@ -76,7 +76,7 @@ export default function Page() {
           postings and no statement — a confident wrong sentence, of exactly the
           kind this note was added to remove. Caught in the browser, not by a
           test: nothing here can fail. */}
-      {bilan.data && <PostedOnlyNote ws={params.ws} scope={scope} />}
+      {bilan.data && <PostedOnlyNote ws={params.ws} scope={scope} journal={scope.journal} />}
 
       {bilan.isLoading && <Loading rows={8} label="Loading the balance sheet" />}
 

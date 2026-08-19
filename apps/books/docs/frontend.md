@@ -152,6 +152,43 @@ workspace      one account's container       in the URL as [ws]
 a workspace cannot be one. This is decision D1 in the plan, and the mockup agrees:
 it switches books with `?entity=`, a filter, on the same screens.
 
+### There are TWO journals, and the wire does not say which one you got
+
+The tree above is the DOUBLE-ENTRY book. A book kept under art. 957 al. 2 CO —
+`bookkeeping_regime: 'simplified'` — has no `entry_line` and no `entry`: its
+movements are `books.ri_entry` rows, one amount each, with a `direction` instead
+of two sides.
+
+**`GET …/entries` serves both, from one route, with no marker field on the
+payload.** The route's own header: *"The caller named the book (or accepted the
+default), so the caller knows which shape it gets — context explicit, no marker
+field."* And since phase 4A `?status=` and `?account=` are **refused** on a
+simplified book (400 `ri_no_such_filter`) rather than silently ignored.
+
+So every screen decides which journal it is looking at *before* it reads a row,
+and the decision is made in exactly one place:
+
+| | |
+|---|---|
+| [`lib/journal.ts`](../lib/journal.ts) | `journalFor(regime)` → `'grand_livre' \| 'recettes_depenses' \| null`, and `journalAccepts(journal, filter)` for the two refused filters |
+| `useScope().journal` | the derivation, run once, from the book the URL resolves to |
+| `useEntries` / `useRiEntries` | two hooks, two cache slots, each enabled only for its own journal |
+| `<AccountRef>` | takes the journal and renders the account as a FACT rather than a drill-down link where the target would refuse it |
+
+**The branch is positive and enumerated** — `=== 'simplified'`, never
+`!== 'double_entry'` — for the reason `lib/resolvable.ts` records at length: the
+worklist's negative test was exhaustive for two kinds and, when a third arrived,
+failed toward a write. `null` means "cannot tell" and a screen renders it as
+such; it is never resolved into a default.
+
+> **This was live and wrong on `spec/b-books`.** Before the branch, the ledger
+> rendered the seeded RI book's six movements through grand-livre columns: a
+> blank `N°`, a blank `Status`, "This entry has no lines." on every row, **no
+> amount and no direction anywhere** — and every label linked to `/ledger/{n}`,
+> which reads `books.entry` and opened another book's écriture under this book's
+> name in the header. Nothing threw. Third payload to change shape under a merged
+> screen; assume there is a fourth.
+
 ### The word "workspace" must never appear in the UI
 
 It is platform tenancy. It names nothing in this product. The mockup has no team,
@@ -209,12 +246,59 @@ user owns the client. Authorisation is workspace membership and the role, on the
 server. What the gate buys is that a missed affordance fails loudly instead of
 writing.
 
-**Three of the five write hooks are real** (2026-08-18): `useResolveEntry` and
-`useCreateRule` from phase 2, and `useMatchPiece` from phase 3, all in
-[`lib/mutations.ts`](../lib/mutations.ts). `usePostEntry` and
-`useApproveComplianceRule` are still commented out and arrive with the screens
-that need them. They are commented rather than stubbed, because a stub that
-returns success is a lie a component builds on.
+**Four of the five write hooks are real** (2026-08-19): `useResolveEntry` and
+`useCreateRule` from phase 2, `useMatchPiece` from phase 3, and **`usePostEntry`
+from phase 4A**, all in [`lib/mutations.ts`](../lib/mutations.ts).
+`useApproveComplianceRule` is still commented out and arrives with the screen
+that needs it. It is commented rather than stubbed, because a stub that returns
+success is a lie a component builds on.
+
+### `entry post` is the only write that leaves ring 2
+
+The other four are interpretation: they write meaning, they append the old state
+to `history`, and nothing they touch is a balance. **Posting is the transition
+into the immutable record** — migration 0004's triggers make a posted entry
+unmodifiable and undeletable by anybody, and a correction from there is a new
+reversing entry beside the old one.
+
+So [`components/post-entry-form.tsx`](../components/post-entry-form.tsx) is not
+an ordinary button:
+
+- **The target is repeated back.** The reader types the entry's #number, the way
+  `bk workspace delete <slug> --confirm <slug>` requires the slug. `useConfirm()`
+  is a dialog answered by reflex; this must not be reachable by reflex.
+- **It says what becomes immutable, and what does not.** The date, the amounts
+  and the accounts freeze. The explanation, the counterparty, the recognition
+  state and the supporting document stay open, and that split is exactly
+  migration 0004's freeze line rather than a simplification of it.
+- **`already: true` is rendered as "already posted", never as an error.** The
+  route is idempotent because the Companion retries, and a retry is not a
+  failure.
+
+It is rendered only on the entry detail page and only for a `staged` entry — a
+positive test, so a third status added server-side gets no write affordance
+rather than the wrong one.
+
+> **The 0004 guard's own words do not reach the client, and that is a live
+> backend defect** (found 2026-08-19). The route means to translate the deferred
+> constraint into `guard_refused`, but under drizzle-orm 0.45 a failure raised at
+> COMMIT arrives wrapped in a `DrizzleQueryError` whose `message` is `Failed
+> query: COMMIT` — the database's sentence is on `.cause`. So the branch has
+> never fired, and an unbalanced entry answers **500 `internal_error`** on both
+> the web form and `bk books entry post`. The form says the entry is unchanged
+> and names the three conditions the guard tests, rather than guessing which one
+> failed. `lib/wire-parity.test.ts` pins the defect so the workaround is deleted
+> when the route is fixed.
+
+### The six phase-4A verbs we do NOT build
+
+`source import`, `entry declare`, `source create`, `source edit`,
+`source record-pull` and `source runbook-set` are all ring 0 (appends from the
+world) or ring 1 (structure and provenance). **This product's web surface is for
+reading and for meaning**; those belong to the Companion and to `bk`. Recorded as
+decision D-H in `booksFrontend/DECISIONS.md`, with the ring for each and with the
+note that revisiting it is a product decision rather than a consequence of a
+route existing.
 
 > **`useMatchPiece` IS SWITCHED OFF IN THE UI, AND THIS PARAGRAPH USED TO SAY
 > WHY IT WAS SAFE. IT WAS WRONG.** What stood here was: *"the entry #number is

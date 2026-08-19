@@ -395,6 +395,86 @@ export interface Entry {
   history: EntryHistory
 }
 
+/**
+ * The direction of a simplified book's movement.
+ *
+ * ── `neutral` IS A THIRD VALUE AND IT IS NOT DECORATION ───────────────────
+ * A transfer between the owner's own accounts — bank 1 to bank 2, or a personal
+ * spend from a business account — is **logged but counts in neither recettes
+ * nor dépenses**. Andrea confirmed the rule on 2026-08-18 (DECISIONS.md); the
+ * CHECK that allowed only two values was widened by migration 0009.
+ *
+ * So anything rendering a direction must handle three, and anything TOTALLING
+ * one must not fold `neutral` into dépenses. This app totals nothing here — the
+ * overview's RI figures come from the server's `riTotals` — and that is where
+ * DECISIONS.md records the totals as provisional.
+ */
+export type RiDirection = 'recette' | 'depense' | 'neutral'
+
+/**
+ * One movement of a SIMPLIFIED book, exactly as `publicRiEntry` serves it.
+ *
+ * ===========================================================================
+ * THIS IS THE SECOND SHAPE `GET …/entries` SERVES, AND THE WIRE HAS NO MARKER
+ * ===========================================================================
+ * Which of the two arrives is decided by the book's `bookkeeping_regime` and by
+ * nothing in the payload — see `lib/journal.ts`. A screen that reads an `Entry`
+ * out of this finds `entry_no`, `status` and `lines` all `undefined`, renders a
+ * blank column where the journal number goes, a blank chip where the posting
+ * status goes, and **"This entry has no lines."** over a row whose entire
+ * content is one amount it never shows. Reproduced in a browser on 2026-08-19,
+ * on all six seeded RI rows.
+ *
+ * ── WHAT IS HERE THAT AN `Entry` HAS NOT ─────────────────────────────────
+ * `direction` and `amount`. A simplified book keeps art. 957 al. 2 CO's
+ * recettes-dépenses: one amount per movement, its sign carried by a word rather
+ * than by which side of a double entry it lands on. `category` replaces the
+ * chart mapping, and there is no chart mapping to replace it with.
+ *
+ * ── WHAT IS DELIBERATELY ABSENT, AND WHAT IS MISSING ──────────────────────
+ * ABSENT, correctly: `entry_no` (an RI journal has no statutory gapless
+ * numbering), `status` (no staging step — a cash record is a fact on arrival),
+ * `lines`, `tva`, `related_party`, `reverses_entry_id`.
+ *
+ * MISSING, and it is a defect: **`history`**. `books.ri_entry.history` is a real
+ * column, `resolveRiEntry` writes to it in the same transaction as every other
+ * resolution, and `matchPiece`'s recettes-dépenses branch writes to it too —
+ * and `publicRiEntry` does not serve it. "A resolved row still shows what it
+ * was" is this product's audit claim and phase 2's acceptance criterion, and it
+ * cannot be met for a simplified book from this payload. `matched_rule_id` is
+ * absent for the same reason and matters less. **Both are backend asks and are
+ * in the report.** They are not declared here: this file describes what the
+ * route serves, and declaring a field the wire does not carry is the failure
+ * mode `lib/wire-parity.test.ts` exists to catch.
+ */
+export interface RiEntry {
+  /** The workspace #number, in `books.ri_entry`'s OWN seq series. */
+  number: number
+  date: IsoDate
+  /** Three values. See `RiDirection` — `neutral` is real. */
+  direction: RiDirection
+  /**
+   * The one amount. A `numeric(14,2)` string like every other amount here.
+   *
+   * Its SIGN is `direction`, not a minus. Nothing may derive one from the other
+   * and nothing may negate this to make a single signed column: a `neutral` row
+   * has an amount and belongs on neither side.
+   */
+  amount: Money
+  /** What kind of movement, in place of a chart account. A `{fr, en}` pair. */
+  category: Label | null
+  /** The bank's own words. NEVER overwritten — it is the original record. */
+  raw_label: string
+  counterparty: string | null
+  explanation: Label | null
+  recognition: Recognition
+  evidence_tier: EvidenceTier
+  evidence_note: Label | null
+  piece: Piece | null
+  /** The original-currency story (0011). Same field, same rule, as `Entry`. */
+  fx: Fx | null
+}
+
 // ---------------------------------------------------------------------------
 // recognition rule — the legibility engine
 // ---------------------------------------------------------------------------

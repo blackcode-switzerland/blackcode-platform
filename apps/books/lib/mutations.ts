@@ -7,7 +7,7 @@
 //
 //   1. resolve an entry        say what a transaction means      (phase 2)
 //   2. create a rule           teach it, so the next one is automatic (phase 2)
-//   3. post a staged entry     move it into the books            (phase 1)
+//   3. post a staged entry     move it into the books            (phase 1 route, phase 4A UI)
 //   4. approve a rule          fiduciary sign-off on a check     (phase 5)
 //   5. match a pièce           say what a document proves        (phase 3)
 //
@@ -57,12 +57,18 @@
 // gate buys is that a missed affordance FAILS LOUDLY instead of writing.
 //
 // ===========================================================================
-// THREE OF THE FIVE ARE REAL. THE OTHER TWO ARE STILL COMMENTED.
+// FOUR OF THE FIVE ARE REAL. THE LAST ONE IS STILL COMMENTED.
 // ===========================================================================
 // `useResolveEntry` and `useCreateRule` landed with phase 2; `useMatchPiece`
-// with phase 3, both on 2026-08-18. Posting and compliance approval are not
-// real, and they stay COMMENTED rather than stubbed for the reason that has not
-// changed: a stub that returns success is a lie a component builds on.
+// with phase 3, both on 2026-08-18. **`usePostEntry` landed with phase 4A on
+// 2026-08-19** — the route and `bk books entry post` have both existed since
+// phase 1, so this was a capability in the CLI and not in the web UI, which is
+// a gap under START-ANYWHERE-FINISH-IN-SYNC unless it is a recorded decision.
+// It is not recorded as one; it is on the documented five. So it is built.
+//
+// Compliance approval is not real, and it stays COMMENTED rather than stubbed
+// for the reason that has not changed: a stub that returns success is a lie a
+// component builds on.
 //
 // ===========================================================================
 // A WRITE ANSWERS WITH A RESULT. IT DOES NOT ANSWER WITH `null` AND A FLAG.
@@ -251,6 +257,30 @@ function useRecordMutation<T>(
 export interface ResolveBody {
   explanation: { en: string }
   recognition?: 'known_one_off' | 'known_recurring'
+  /**
+   * **Which BOOK, and therefore which JOURNAL the #number is read in.**
+   *
+   * Added by phase 4A's backend and it is ticket #51's fix. The route looks the
+   * slug up: when it names a SIMPLIFIED book the resolution runs against that
+   * book's `books.ri_entry` rows, scoped by `(workspace_id, entity_id, seq)`.
+   * Omitted — or naming a double-entry book — the number is read in the grand
+   * livre, which is the behaviour that has always existed.
+   *
+   * ── OMITTING IT ON AN RI ROW IS STILL THE ORIGINAL BUG ───────────────────
+   * Verified against the seeded workspace on 2026-08-19, both ways, on two rows
+   * that share the number 5:
+   *
+   *     bk books resolve 5 --entity ri --explanation …  → ri_entry #5 resolved,
+   *                                                       entry #5 UNTOUCHED
+   *     bk books resolve 5 --explanation …              → entry #5 (the January
+   *                                                       payroll) REWRITTEN, exit 0
+   *
+   * So the field is not optional in the sense that it does not matter; it is
+   * optional in the sense that the grand livre is what "unqualified" means.
+   * `<ResolveForm>` sends it on the recettes-dépenses arm and only there, and
+   * `resolveTargetFor` in `lib/resolvable.ts` is what decides which arm exists.
+   */
+  entity?: string
   counterparty?: string
   /** Fills the staged line that has none. **Refused on a posted entry.** */
   account?: string
@@ -271,16 +301,20 @@ export interface ResolveBody {
  * same transaction, before anything changes. Confirmation answers the question;
  * it does not erase where the answer came from.
  *
- * ── `number` IS A `books.entry` #NUMBER AND NOTHING ELSE ──────────────────
- * The worklist serves two kinds of row and their #number series OVERLAP.
- * `resolveEntry` looks the row up as `(workspace_id, seq)` in `books.entry`
- * only — there is no RI path anywhere in `lib/db/queries/resolve.ts` — so
- * handing this hook an `ri_entry` row's number rewrites an unrelated journal
- * entry and answers 200. Reproduced on 2026-08-18: resolving RI #5 overwrote
- * the January payroll. Raised on ticket #51.
+ * ── `number` NAMES A JOURNAL ONLY TOGETHER WITH `entity` ──────────────────
+ * The worklist serves three kinds of row and their #number series OVERLAP.
+ * `resolveEntry` looks the row up as `(workspace_id, seq)` in `books.entry`;
+ * `resolveRiEntry` — added by phase 4A — looks it up as
+ * `(workspace_id, entity_id, seq)` in `books.ri_entry`, and the ROUTE chooses
+ * between them by reading `body.entity`. So the number alone is ambiguous and
+ * always was: handing this hook an `ri_entry` row's number with no `entity`
+ * rewrites an unrelated journal entry and answers 200, on 2026-08-19 exactly as
+ * on 2026-08-18. Ticket #51 is fixed, and the fix is a field the caller has to
+ * send — see `ResolveBody.entity` for the two commands that prove both halves.
  *
- * **The screen must never construct this hook from an RI row.** It is held by
- * the type: `<ResolveForm>` takes a `WorklistRow` narrowed to `kind: 'entry'`,
+ * **The screen must never construct a body this hook cannot address.** It is
+ * held by the type: `<ResolveForm>` takes a `ResolveTarget`, which is produced
+ * only by `resolveTargetFor(row, journal)` and carries the journal with the row,
  * and it is the only thing in the app that calls this.
  */
 export function useResolveEntry(ws: string | undefined, number: number) {
@@ -377,15 +411,91 @@ export interface MatchResult {
 }
 
 /**
- * Phase 1. Post a staged entry.
+ * What `POST /entries/{n}/post` answers with.
  *
- * The server checks that the lines balance, that every account maps, and that the
- * compliance pass did not return `blocked`. Posting is one-way: a posted entry is
- * immutable and a correction is a reversing entry.
+ * ── BUILT INLINE IN THE ROUTE, SO `wire-parity` CANNOT CALL A FUNCTION ────
+ * Third payload of this kind, after resolve's and match's — the route returns
+ * `postEntry`'s object directly and there is no `publicPost` to import. So
+ * `lib/wire-parity.test.ts` reads the QUERY LAYER's declared return type for
+ * this one, which is a declaration rather than a value and is weaker than
+ * calling a shaping function; that is said plainly there. F-2 is what happens
+ * without any pin at all: renaming `taught_rule` server-side left 194/194 green
+ * while the screen rendered "rule # taught" for a rule nobody taught.
+ *
+ * ── `already` IS THE FIELD THAT DECIDES WHAT THE SCREEN SAYS ──────────────
+ * `true` means the entry was ALREADY posted and this call changed nothing. It is
+ * not an error and must never be drawn as one — the route is idempotent
+ * deliberately, *"because the Companion retries and a retry is not an error"* —
+ * and a red box over it would tell a person their books are broken when what
+ * happened is that a robot pressed the same button twice.
+ *
+ * **A `boolean`, so `typeof === 'boolean'` is how a screen tests it**, never
+ * truthiness of a possibly-missing field. `undefined` is falsy and would render
+ * a re-post as a fresh post — the exact `undefined !== null` mistake F-2 was.
  */
-// export function usePostEntry(ws: string, number: number) {
-//   return useRecordMutation<Entry>('POST', `/api/workspaces/${ws}/entries/${number}/post`)
-// }
+export interface PostResult {
+  /** The entry's workspace #number. */
+  number: number
+  /** The statutory journal number, gapless within (entity, exercice). */
+  entry_no: number
+  /** `posted`. */
+  status: string
+  /** Was it already posted before this call? Not an error. See above. */
+  already: boolean
+}
+
+/**
+ * Phase 1's write, built in phase 4A. Post a staged entry.
+ *
+ * ===========================================================================
+ * THIS IS THE DEEPEST WRITE IN THE PRODUCT AND IT IS NOT ANOTHER BUTTON
+ * ===========================================================================
+ * The onion the backend sent settles it: **writes get harder as they travel
+ * inward.** Every other write this app makes lands in ring 2 — rules and
+ * meaning, the only ring that takes free rewrites, each one appending its old
+ * state to `history`. Resolve, teach a rule, match a pièce: all interpretation,
+ * all revisable, none of them touching the record.
+ *
+ * Posting is the transition INTO ring 0. From here on **nobody, human or agent,
+ * can modify or delete the line**, and a correction is a new reversing entry
+ * beside the old one rather than a change to it. Migration 0004's triggers are
+ * what make that true, and `lib/db/queries/resolve.ts` refuses to set an account
+ * on a posted entry rather than letting the trigger do it.
+ *
+ * So `<PostEntryForm>` requires the caller to REPEAT THE TARGET BACK, the way
+ * `bk workspace delete <slug> --confirm <slug>` does. `useConfirm()` is not
+ * enough for a thing that cannot be undone — CLAUDE.md: *"`Confirm()` is not a
+ * guard for agents"*, and the same reasoning applies to a human reflex on a
+ * dialog. The form says what becomes immutable, in the reader's words, before
+ * the box appears.
+ *
+ * ── THE REFUSALS, AND WHO HAS THE LAST WORD ──────────────────────────────
+ *   entry_not_found   404 — no entry #n. **Its message is destroyed at the
+ *                     boundary**: the route calls `Errors.notFound('entry',
+ *                     String(n))`, which reaches the THREE-argument overload, so
+ *                     `code` becomes `entry` and `message` becomes the bare
+ *                     number. Same defect as the match route's 404 (see
+ *                     `<MatchPieceForm>`), and it is a backend ask. This form
+ *                     cannot reach it in practice — it is rendered from an entry
+ *                     already loaded — so nothing is worked around here.
+ *   unresolved_lines  400 — "entry #n has N line(s) with no account", raised by
+ *                     `postEntry` BEFORE the update. Recoverable: resolve it.
+ *   guard_refused     400 — **migration 0004's deferred constraint, speaking at
+ *                     COMMIT**, translated out of Postgres's words by the route.
+ *                     Balanced, at least two lines, every line mapped. This is
+ *                     the database having the last word and it is shown
+ *                     VERBATIM, because a paraphrase of a constraint is a
+ *                     paraphrase of the law the constraint encodes.
+ *
+ * Read them off the `WriteResult`, never off `mutation.error` — see this file's
+ * header for the bug that rule exists because of.
+ */
+export function usePostEntry(ws: string | undefined, number: number) {
+  return useRecordMutation<PostResult>(
+    'POST',
+    `/api/workspaces/${ws}/entries/${number}/post`
+  )
+}
 
 /** Phase 5. Fiduciary sign-off on a compliance rule. */
 // export function useApproveComplianceRule(ws: string, ruleId: string) {

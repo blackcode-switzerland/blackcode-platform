@@ -64,11 +64,13 @@ import {
   publicManifestRow,
 } from './db/queries/sources'
 import { publicPiece } from './db/queries/pieces'
+import type { postEntry } from './db/queries/imports'
 import { bilanFor, crFor } from './derive'
 import type { WorklistRow as WorklistRowWire } from './db/queries/worklist'
 import type { OverviewBook as OverviewBookWire } from './db/queries/statutory'
 import type { InvitationRow } from './db/queries/invitations'
 import type { ExerciceRow } from './hooks'
+import type { PostResult } from './mutations'
 import type {
   Account,
   BilanGroupResult,
@@ -82,6 +84,7 @@ import type {
   ManifestFile,
   PatrimoineSnapshot,
   RecognitionRule,
+  RiEntry,
   OverviewBook,
   OverviewResult,
   Source,
@@ -733,6 +736,82 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     )
   })
 
+  // ── THE POST RESPONSE IS BUILT INLINE TOO, AND IT IS THE THIRD ─────────
+  // `POST /entries/{n}/post` returns `postEntry`'s object straight through, so
+  // there is no `publicPost` to call. Same weakness as resolve's and match's,
+  // and the same reason it is still worth having: a rename server-side is caught
+  // here or it is caught by a reader noticing a blank on the screen.
+  //
+  // **`already` is the field that matters most.** `<PostEntryForm>` renders
+  // "already posted" — not an error — when it is true, because the route is
+  // idempotent so that the Companion can retry. Losing the field would make
+  // every re-post read as a fresh post, which is a false statement about the one
+  // write in this product that cannot be undone.
+  //
+  // It reads the QUERY LAYER rather than the route file: the route says
+  // `NextResponse.json(r)` with no object literal for `envelopeKeys` to find, so
+  // the field list only exists at `postEntry`'s declared return type. That is
+  // asserted at compile time by `_PostKeys` below; what THIS case adds is the
+  // runtime half — that the route still hands the query layer's object over
+  // whole rather than picking fields out of it.
+  //
+  // Mutation watched (2026-08-19): changed the route's `return
+  // NextResponse.json(r)` to `NextResponse.json({ number: r.number })`. RED,
+  // naming the spread. Restored.
+  it('the post route hands the query layer\'s answer over WHOLE', () => {
+    const src = readFileSync(
+      join(APP_ROOT, 'app/api/workspaces/[ws]/entries/[number]/post/route.ts'),
+      'utf8'
+    )
+    expect(src, 'the post route is gone — this case is stale').toContain('postEntry')
+    expect(
+      /const r = await postEntry\([\s\S]*?return NextResponse\.json\(r\)/.test(src),
+      'the post route no longer answers with postEntry\'s object unchanged — ' +
+        '`already` may have been dropped, and every re-post would then read as a fresh post'
+    ).toBe(true)
+  })
+
+  // ── AND THE 0004 TRANSLATION THAT HAS NEVER FIRED ──────────────────────
+  // The same route means to turn migration 0004's deferred guard into
+  // `guard_refused`. It cannot: under drizzle-orm 0.45 a failure raised at COMMIT
+  // arrives as a `DrizzleQueryError` whose `message` is `Failed query: COMMIT`,
+  // and the guard's own sentence is on `.cause`. Verified 2026-08-19 by building
+  // an entry with two MAPPED, UNBALANCED lines and posting it: 500
+  // `internal_error` on both the web form and `bk books entry post`, while psql
+  // on the same statements answers "entry 1272 does not balance: debit 77.00 <>
+  // credit 99.00".
+  //
+  // **This asserts the DEFECT, not the fix**, because the fix is a route and
+  // routes are the backend's. What it buys is that the day the route starts
+  // reading `e.cause`, this case goes red and whoever is here next is told to
+  // delete the workaround in `<PostEntryForm>` rather than leaving a
+  // self-described stopgap in the tree forever. A stopgap nothing watches is how
+  // one becomes permanent.
+  it('the post route still reads `e.message` — so `guard_refused` cannot fire (backend ask)', () => {
+    const src = readFileSync(
+      join(APP_ROOT, 'app/api/workspaces/[ws]/entries/[number]/post/route.ts'),
+      'utf8'
+    )
+    expect(src, 'the guard translation is gone entirely — this case is stale').toContain(
+      'guard_refused'
+    )
+    // ── THE PATTERN IS `.cause`, NOT `e.cause`, AND THAT MATTERED ────────
+    // Written as `/e\.cause/` first and watched: mutating the route to
+    // `String((e as {cause?: unknown}).cause ?? e.message)` — a realistic
+    // spelling of the fix, because `unknown` needs the cast — left this GREEN.
+    // The character before `.cause` was `)`, not `e`. **The granularity of a
+    // text scan is part of what it checks**, which is CLAUDE.md finding #11 in
+    // one character. It matches the property access itself now.
+    const readsCause = /\.cause\b/.test(src)
+    expect(
+      readsCause,
+      'the post route now reads `e.cause`, so migration 0004\'s refusal may finally reach the ' +
+        'client. Try it (an entry with two mapped, unbalanced lines), and if `guard_refused` ' +
+        'now arrives as a 400, DELETE the `refusal.status === 500` block in ' +
+        'components/post-entry-form.tsx and its header section — it exists only for this defect.'
+    ).toBe(false)
+  })
+
   // The pièces list IS a list route, and that is worth pinning for the same
   // reason in reverse: `usePieces` uses `apiList`, so a route that moved OFF
   // the shared envelope would make the inbox permanently empty.
@@ -1107,6 +1186,49 @@ type _AccountKeys = Mutual<keyof AccountWire, keyof Account>
 type ExerciceWire = ReturnType<typeof publicExercice>
 type _ExerciceKeys = Mutual<keyof ExerciceWire, keyof ExerciceRow>
 type _EntryKeys = Mutual<keyof EntryWire, keyof Entry>
+
+/**
+ * The SIMPLIFIED book's journal — the second shape `GET …/entries` serves.
+ *
+ * ── IT HAD NO TYPE AT ALL UNTIL 2026-08-19 ────────────────────────────────
+ * `publicRiEntry` has had a runtime key-set case above since the RI journal
+ * existed, and `lib/types.ts` had no counterpart to be assignable to — so the
+ * half that catches a TYPE change had nothing to compare. That gap was
+ * survivable while no screen read the payload. Phase 4A made the ledger read it,
+ * and the first thing that reading found was that the app had been rendering
+ * these rows as `Entry`: `entry_no`, `status` and `lines` all `undefined`, four
+ * blank cells, "This entry has no lines." over six movements, and the amount —
+ * the only number an RI row carries — nowhere on the screen.
+ *
+ * `RiEntry` exists now and this is what holds it to the wire. Both halves
+ * matter and neither subsumes the other: the runtime case sees a field appear or
+ * vanish, this sees `amount` stop being a string.
+ *
+ * Mutation watched (2026-08-19): deleted `category` from `RiEntry`. Red at
+ * typecheck on `_RiEntryKeys`, naming it. Then changed `amount: Money` to
+ * `amount: number`. Red on `_RiScalars` below. Both restored.
+ */
+type RiEntryWire = ReturnType<typeof publicRiEntry>
+type _RiEntryKeys = Mutual<keyof RiEntryWire, keyof RiEntry>
+
+/**
+ * The POST response, pinned against the query layer's declared return type.
+ *
+ * There is no `publicPost` — the route answers with `postEntry`'s object — so
+ * the reference point is that function's signature, the same weaker-but-real
+ * arrangement `_OverviewKeys` and `_BilanKeys` use. The runtime case above
+ * proves the route still hands it over whole.
+ *
+ * **`already` is the field to watch.** `<PostEntryForm>` renders it as "already
+ * posted" rather than as a failure, because the route is idempotent so that the
+ * Companion can retry; a payload that lost it would make every re-post read as a
+ * fresh post, on the one write that cannot be undone.
+ *
+ * Mutation watched (2026-08-19): dropped `already` from `PostResult`. Red at
+ * typecheck, naming it. Restored.
+ */
+type PostWire = Awaited<ReturnType<typeof postEntry>>
+type _PostKeys = Mutual<keyof PostWire, keyof PostResult>
 type _PatrimoineKeys = Mutual<keyof PatrimoineWire, keyof PatrimoineSnapshot>
 type _VatKeys = Mutual<keyof EntityWire['vat'], keyof Entity['vat']>
 type _RuleKeys = Mutual<keyof RuleWire, keyof RecognitionRule>
@@ -1266,6 +1388,36 @@ type _Scalars = [
   Mutual<NonNullable<EntryWire['piece']>['hash'], NonNullable<Entry['piece']>['hash']>,
   Mutual<NonNullable<EntryWire['piece']>['captured'], NonNullable<Entry['piece']>['captured']>,
 
+  // ── THE SIMPLIFIED JOURNAL, ADDED 2026-08-19 WITH ITS FIRST READER ─────
+  // `amount` is the one that would bite: it is a `numeric(14,2)` and arrives as
+  // a STRING, exactly like `fte_count` and `tva.rate` above, both of which were
+  // declared as numbers and both of which are in this list because of it. It is
+  // also the ONLY number an RI movement carries, so getting it wrong is not a
+  // formatting slip — it is the whole row.
+  //
+  // `direction` is deliberately NOT here. The column is a `varchar`, so the wire
+  // type is `string`, and `RiDirection` is a narrowing WE make on top of a CHECK
+  // constraint — the same reason `recognition` and `evidence_tier` are absent.
+  // `_ExerciceKeys`'s note above says what that costs: a fourth direction added
+  // server-side would fall silently into whatever branch reads it, which is why
+  // the ledger renders the server's word rather than switching on it.
+  Mutual<RiEntryWire['number'], RiEntry['number']>,
+  Mutual<RiEntryWire['date'], RiEntry['date']>,
+  Mutual<RiEntryWire['amount'], RiEntry['amount']>,
+  Mutual<RiEntryWire['raw_label'], RiEntry['raw_label']>,
+  Mutual<RiEntryWire['counterparty'], RiEntry['counterparty']>,
+  Mutual<NonNullable<RiEntryWire['piece']>['drive_ref'], NonNullable<RiEntry['piece']>['drive_ref']>,
+  Mutual<NonNullable<RiEntryWire['piece']>['hash'], NonNullable<RiEntry['piece']>['hash']>,
+  Mutual<NonNullable<RiEntryWire['piece']>['captured'], NonNullable<RiEntry['piece']>['captured']>,
+
+  // ── THE POST RESPONSE ─────────────────────────────────────────────────
+  // `already` is a BOOLEAN and `<PostEntryForm>` tests it as one. If it ever
+  // became `boolean | undefined` the form's `already === true` would quietly
+  // start reading every re-post as a fresh post.
+  Mutual<PostWire['number'], PostResult['number']>,
+  Mutual<PostWire['entry_no'], PostResult['entry_no']>,
+  Mutual<PostWire['already'], PostResult['already']>,
+
   Mutual<PatrimoineWire['number'], PatrimoineSnapshot['number']>,
   Mutual<PatrimoineWire['as_of'], PatrimoineSnapshot['as_of']>,
   Mutual<PatrimoineWire['compiled'], PatrimoineSnapshot['compiled']>,
@@ -1379,6 +1531,8 @@ const _keys: {
   _AccountKeys: _AccountKeys
   _ExerciceKeys: _ExerciceKeys
   _EntryKeys: _EntryKeys
+  _RiEntryKeys: _RiEntryKeys
+  _PostKeys: _PostKeys
   _PatrimoineKeys: _PatrimoineKeys
   _VatKeys: _VatKeys
   _RuleKeys: _RuleKeys
@@ -1405,6 +1559,8 @@ const _keys: {
   _AccountKeys: true,
   _ExerciceKeys: true,
   _EntryKeys: true,
+  _RiEntryKeys: true,
+  _PostKeys: true,
   _PatrimoineKeys: true,
   _VatKeys: true,
   _RuleKeys: true,
@@ -1433,6 +1589,11 @@ const _scalars: _Scalars = [
   true, true, true,
   true, true, true, true, true, true, true, true, true, true, true, true,
   // the three nested `piece` fields
+  true, true, true,
+  // phase 4A: the simplified journal's five scalars and its three nested
+  // `piece` fields, then the post response's three
+  true, true, true, true, true,
+  true, true, true,
   true, true, true,
   true, true, true, true, true,
   // phase 2: five rule fields, seven worklist fields (suggested_entries is
