@@ -49,7 +49,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useScope } from '@/lib/scope'
 import { useAnalysis, useEntries, useRiEntries } from '@/lib/hooks'
 import { scopedHref } from '@/lib/nav'
-import { en } from '@/lib/label'
+import { speech } from '@/lib/label'
 import { analysisRows, bookToday, hasSnapshot, type DatedRow } from '@/lib/analysis'
 import { ScreenFrame } from '@/components/screen-frame'
 import { ErrorState, Loading } from '@/components/states'
@@ -148,10 +148,10 @@ export default function Page() {
               <span className="ml-auto font-mono">#{record.number}</span>
             </div>
 
-            <h1 className="mt-2 text-lg font-semibold text-foreground">{en(record.question)}</h1>
+            <h1 className="mt-2 text-lg font-semibold text-foreground">{speech(record.question)}</h1>
             {record.scenario_label && (
               <p className="mt-1 text-[12.5px] text-muted-foreground">
-                {en(record.scenario_label)}
+                {speech(record.scenario_label)}
               </p>
             )}
           </header>
@@ -177,7 +177,7 @@ export default function Page() {
 
           <section className="mt-4">
             <H2>The answer</H2>
-            <p className="mt-1 text-sm text-foreground">{en(record.verdict)}</p>
+            <p className="mt-1 text-sm text-foreground">{speech(record.verdict)}</p>
             {record.runway_after_months !== null && (
               <p className="mt-1.5 text-[12px] text-muted-foreground">
                 Runway under this scenario:{' '}

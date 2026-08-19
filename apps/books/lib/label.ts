@@ -37,6 +37,21 @@ export function en(label: StatementLabel | null | undefined): string {
 }
 
 /**
+ * A record's SPEECH, verbatim as filed: a bare string or a `{fr, en}` pair
+ * with either side present. The analyse door has accepted both since 4B
+ * (`speaks()`), and real agents file bare strings — analyses #3 through #6
+ * rendered as empty headlines on the journal until this reader existed,
+ * because `en()` on a string finds no `.en` and answers ''.
+ *
+ * For statement labels — configuration, always `{fr, en}` — keep `en()`.
+ */
+export function speech(v: string | { fr?: string; en?: string } | null | undefined): string {
+  if (!v) return ''
+  if (typeof v === 'string') return v
+  return v.en || v.fr || ''
+}
+
+/**
  * The statutory wording. **French, and that is not an oversight.**
  *
  * Only the balance sheet and income statement line and group names go through

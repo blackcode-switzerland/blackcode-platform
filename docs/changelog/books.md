@@ -32,6 +32,21 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-19 — The analyses journal renders bare-string questions and verdicts
+
+**Screen and wire-type only; no route or stored record changed.** Third
+sighting of the same seam in one day: the journal list and the record header
+rendered `question`, `verdict` and `scenario_label` through `en()`, which
+answers `''` for a bare string — so analyses #3–#6, filed through
+`bk books analyse record` with bare-string speech (legal at the door since
+4B), listed as headline-less metadata rows while the seeded `{fr, en}` records
+kept their titles. New reader `speech()` in `lib/label.ts` handles both shapes;
+`en()` remains for statement labels, which are configuration and always
+bilingual. `Analysis.question/verdict/scenario_label` in `lib/types.ts` now
+say `Label | string`, which is what the door has always accepted. Frontend
+rule of thumb going forward: a RECORD field renders through `speech()`, a
+CONFIGURATION field through `en()`.
+
 ## 2026-08-19 — The analyse detail reads bare-string labels, as the door always accepted
 
 **Screen-only; no route, no wire shape, no `bk` command changed.** The analyse

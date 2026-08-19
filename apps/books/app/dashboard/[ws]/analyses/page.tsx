@@ -49,7 +49,7 @@ import { ArrowRight, MessagesSquare } from 'lucide-react'
 import { useScope } from '@/lib/scope'
 import { useAnalyses } from '@/lib/hooks'
 import { scopedHref } from '@/lib/nav'
-import { en } from '@/lib/label'
+import { speech } from '@/lib/label'
 import { analysisRows } from '@/lib/analysis'
 import { ScreenFrame } from '@/components/screen-frame'
 import { EmptyState, ErrorState, Loading } from '@/components/states'
@@ -135,8 +135,8 @@ function AnalysisRow({
   base: string
   scope: { entity: string | null; exercice: number | null }
 }) {
-  const verdict = en(analysis.verdict)
-  const scenario = analysis.scenario_label ? en(analysis.scenario_label) : null
+  const verdict = speech(analysis.verdict)
+  const scenario = analysis.scenario_label ? speech(analysis.scenario_label) : null
   // The count is read through the guard, not off `.length`, so a malformed row
   // is not counted as a source the agent read. `lib/analysis.ts`.
   const basedOn = analysisRows(analysis.based_on)
@@ -161,7 +161,7 @@ function AnalysisRow({
         href={scopedHref(base, `/analyses/${analysis.number}`, scope)}
         className="mt-1 block text-[14px] font-medium text-foreground hover:text-primary-strong"
       >
-        {en(analysis.question)}
+        {speech(analysis.question)}
       </Link>
 
       {scenario && <p className="mt-0.5 text-[12px] text-muted-foreground">{scenario}</p>}
