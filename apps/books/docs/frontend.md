@@ -138,8 +138,10 @@ in `lib/wire-parity.test.ts`:**
   so no screen can state them; serving `entity` and `exercice` there is an open
   backend request. Until then the screen names no book, and says why.
 
-Everything else under `app/api/` is platform scaffold: auth, `/api/me`,
-workspaces, members, invitations.
+Everything else under `app/api/` is the platform surface, mounted from the shared
+factories: auth, `/api/me`, workspaces, members, invitations, and — since
+2026-08-19 — the whole account surface (passwords, tokens, CLI authorization).
+See **§10** for what that is and why none of it is a books write.
 
 `entities.source` is still the field to watch, and
 [`components/states.tsx`](../components/states.tsx)'s `<FixtureNotice>` renders
@@ -583,12 +585,13 @@ Two things a backend reader should know because they touch this file's contract:
   `['books', resource, { entity, exercice, …filters }]`, spelled in one module
   and enforced by `lib/query-keys.test.ts`, which scans for a `queryKey:` written
   any other way.
-- **`lib/read-only.test.ts` now permits a SECOND write module**, `lib/account.ts`
-  — for `POST /api/auth/register` and `PATCH /api/me`, neither of which touches
-  `books.*`. `lib/mutations.ts` is still the only module that writes to the
-  books. **The writes are five since 2026-08-18** — see §5 for what added the
-  fifth and why. The reasoning is in both files'
-  headers.
+- **`lib/read-only.test.ts` permits a SECOND write module**, `lib/account.ts`.
+  It held two writes when this was written (`POST /api/auth/register`, `PATCH
+  /api/me`) and holds **seven** since 2026-08-19 — the account surface in §10.
+  Not one of them touches `books.*`, which is the test for whether something
+  belongs there. `lib/mutations.ts` is still the only module that writes to the
+  books. **The books writes are five since 2026-08-18** — see §5 for what added
+  the fifth and why. The reasoning is in both files' headers.
 
 **One correction this section owes you:** §2's table and `lib/types.ts` both
 declare `entities` as an `Entity[]`. `app/api/meta/route.ts` actually serves
@@ -651,3 +654,111 @@ accounting screen makes something up.
 compte de résultat line labels, which the filed PDF has to reproduce. Those
 arrive from `lib/statements.ts` and from the API, already in French. Never
 translate them and never write French UI copy around them.
+
+---
+
+## 10. The account surface — auth, settings, tokens (2026-08-19)
+
+**None of this is b/books.** It is the blackcode account: one `platform.users`
+row, one `platform.api_tokens` list, one password, shared by every app in the
+suite. The equivalent sections are `apps/sales/docs/frontend.md` §6 and §9, and
+this app deliberately matches them rather than inventing a third arrangement —
+somebody who knows where their tokens live in b/issues must find them in the same
+place here.
+
+### 10.1 What b/books serves, and what it did not
+
+b/books took fullstack ownership on 2026-08-19 and mounted the five routes the
+other two apps already had. Before that day, three screens carried the same
+apology — the login page said to reset a password in b/issues or b/sales, and
+Settings said b/books had no password form — and all three were true. It was not
+a policy decision; it was `@blackcode/platform-email` never having been added and
+the routes never having been mounted.
+
+| Route | Factory | Front door |
+|---|---|---|
+| `POST /api/auth/password-reset/request` | `publicPasswordResetRequestRoute` | login → Forgot password? |
+| `POST /api/auth/password-reset/confirm` | `publicPasswordResetConfirmRoute` | same panel, step 2 |
+| `POST /api/me/password/request-otp` | `passwordRequestOtpRoute` | Settings → Account |
+| `POST /api/me/password/confirm` | `passwordConfirmRoute` | same panel, step 2 |
+| `GET`/`POST` `/api/tokens`, `DELETE /api/tokens/{id}` | `tokensRoute`, `tokenRoute` | Settings → API tokens |
+| `POST /api/cli/authorize` | `cliAuthorizeRoute` | the `/cli/authorize` page |
+
+**All six are session-only.** `requireSessionResolver` throws at MOUNT TIME if
+the app supplies no session resolver, and does not fall back to a bearer token: a
+token that can mint another, or change the password behind itself, is a
+credential that can lock its owner out. That is why every one of them is in
+`lib/cli-parity.test.ts`'s `EXCLUDED_PATHS` with its own reason — they are
+structurally unreachable from `bk`, not merely unimplemented there.
+
+### 10.2 `/cli/authorize` is a page, and it is why `bk login --server` works
+
+`bk login` opens `/cli/authorize` in a browser on whichever server it was pointed
+at; the PAGE posts to that server's `/api/cli/authorize`. Mounting the route
+without the page is the invisible failure: a 404 in the browser and a terminal
+waiting for a callback that never comes. `bk login --server https://books…`
+404'd until this page existed, while `bk guide` had said for months that
+`--server` may name any deployment.
+
+`parseCallbackURL` refuses anything that is not a localhost loopback, in the page
+AND again in the route. The page checks first so a bad request is refused with a
+sentence instead of a button that fails after the click.
+
+### 10.3 Settings is four tabs, the same four as the other apps
+
+`/dashboard/settings` redirects to `/profile`. The tabs are **Profile**,
+**Account**, **API tokens**, **Preferences** — same order, same labels as
+b/sales.
+
+- **Profile** — name, tagline, photo. `PATCH /api/me`. The email is rendered as
+  text, not a disabled input: changing it is changing which account you are, in
+  every app, and there is no route that does it. A disabled field would imply one
+  exists.
+- **Account** — sign-out, the password form, the ten-year note, and the address
+  book. A Google-connected account is told its credential lives at Google rather
+  than being offered a form that sends a code for a password it does not use.
+- **API tokens** — mint, copy once, revoke in two steps. The revoke confirmation
+  names the token, for the same reason the CLI's irreversible verbs make the
+  caller repeat the target back: an agent losing its credential mid-run does not
+  look like a bin icon being clicked, it looks like the API being down.
+- **Preferences** — the theme, and only the theme. b/sales' version holds
+  `ui_mode`, a per-workspace row this app does not have. The page says the choice
+  lives in the BROWSER; a settings page that does not distinguish "saved to your
+  account" from "saved on this laptop" is how somebody concludes the app lost
+  their preference.
+
+The **shell is mounted in the settings layout**, not in `[ws]/layout.tsx` —
+settings is a sibling of `[ws]`, not a child. b/sales shipped every settings page
+with no sidebar for exactly this reason and fixed it the same way. With no
+membership at all the pages still render, frameless: somebody whose workspace
+bootstrap failed is exactly the person who needs their profile and their tokens.
+
+### 10.4 Two things that will look like bugs and are not
+
+**The reset flow answers `200` locally with no Resend key**, and says "we sent a
+code". `canDeliverEmail()` is `emailEnabled() || NODE_ENV !== 'production'`, and
+outside production the code goes to the **server log** —
+`[password-reset] OTP for …` in `npm run dev`'s output. Refusing there would make
+the flow untestable without a Resend account. In production an unconfigured app
+refuses with `503 email_not_configured` and a suggestion naming the two env vars.
+Verified end to end on 2026-08-19: request → 200 → code in the log → confirm →
+back to sign-in.
+
+**`bk token list` 401s against a bearer token.** That is `requireSessionResolver`
+doing its job and it behaves identically in every app; a token cannot list or
+mint tokens. Use the browser, or `bk login`.
+
+### 10.5 Where the writes live
+
+Every one of these goes through **`lib/account.ts`**, never `apiSend` in a
+component and never `lib/mutations.ts`:
+
+- `lib/mutations.ts` — the five BOOKS writes, gated on `useCanWrite()`
+- `lib/account.ts` — the seven ACCOUNT writes, gated on nothing (the server
+  gates them; this module is transport plus a loading flag)
+
+`lib/read-only.test.ts` names exactly those two modules and goes red on anything
+else that imports `apiSend`, under any alias. The test for which file something
+belongs in is one question: **does it touch `books.*`?** These do not.
+`useAccountWriteAt` exists because revoking a token needs a path known only when
+the row is clicked, and hooks cannot be called per row.

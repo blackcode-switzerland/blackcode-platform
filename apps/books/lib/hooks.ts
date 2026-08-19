@@ -17,6 +17,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiGet, apiList, ApiRequestError } from './client'
 import { booksGlobalKey, booksKey, type Scope } from './query-keys'
+import type { TokenSummary } from './account'
 import type { Journal } from './journal'
 import type {
   Account,
@@ -162,6 +163,30 @@ export function useMe() {
     queryKey: booksGlobalKey('me'),
     queryFn: () => apiGet<MeRow>('/api/me'),
     staleTime: 60_000,
+  })
+}
+
+/**
+ * Your API tokens. `GET /api/tokens`.
+ *
+ * ── THEY ARE NOT b/books TOKENS, AND THE KEY SAYS SO ──────────────────────
+ * `platform.api_tokens` is ONE table for the whole suite: a token minted here
+ * reaches b/issues and b/sales too, and one revoked in either of them stops
+ * working here. So the key is `booksGlobalKey` — nothing about this list is
+ * scoped to a workspace or to a book, and putting a scope on it would be a claim
+ * that a second workspace has a second set of tokens. It does not.
+ *
+ * `staleTime: 0`. Every other read in this file caches for a minute, because a
+ * ledger does not move while you look at it. This one does: the person reading
+ * it is usually mid-way through `bk login` in another window, and a minute-old
+ * list that is missing the token they just minted reads as the CLI having
+ * failed.
+ */
+export function useTokens() {
+  return useQuery({
+    queryKey: booksGlobalKey('tokens'),
+    queryFn: () => apiGet<TokenSummary[]>('/api/tokens'),
+    staleTime: 0,
   })
 }
 
