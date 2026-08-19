@@ -246,7 +246,18 @@ d('the seeded database', () => {
     // content — a parity test must not turn "somebody used the product" into
     // a failure, and it must never demand a row's deletion to go green.
     const analyses = await m.listAnalyses(ws)
-    expect(analyses.length).toBeGreaterThanOrEqual(2)
+    expect(analyses.length).toBeGreaterThanOrEqual(3)
+
+    // The shape-coverage record: bare strings everywhere, the door's other
+    // legal shape (2026-08-19 — three readers choked on it in one day, all
+    // shipped green against a seed that only ever spoke {fr, en}).
+    const cover = analyses.find((a) => a.analysis.scenario_label === 'shape-coverage')
+    expect(cover, 'the seed serves one bare-string analysis, permanently').toBeTruthy()
+    const c = m.publicAnalysis(cover!)
+    expect(typeof c.question, 'a bare-string question survives the wire as a string').toBe('string')
+    expect(typeof c.verdict).toBe('string')
+    expect(typeof (c.figures as { label: unknown }[])[0].label).toBe('string')
+    expect(typeof (c.based_on as { label: unknown }[])[0].label).toBe('string')
     const first = m.publicAnalysis(analyses.find((a) => a.analysis.seq === 1)!)
     expect(first.entity).toBe('blackcode')
     expect(first.runway_after_months).toBe(6.9)
