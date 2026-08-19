@@ -1,6 +1,6 @@
 'use client'
 
-// The two writes that are NOT writes to the books.
+// The writes that are NOT writes to the books.
 //
 // ===========================================================================
 // WHY THIS IS NOT IN lib/mutations.ts
@@ -11,13 +11,33 @@
 // which gates on `useCanWrite()`, and that file's whole argument is "there are
 // four, and here they are".
 //
-// These two are a different thing wearing the same clothes:
+// These are a different thing wearing the same clothes:
 //
-//   create an account    POST /api/auth/register   no session exists yet
-//   edit your profile    PATCH /api/me             `platform.users`, one row
-//                                                  across every blackcode app
+//   create an account   POST /api/auth/register         no session exists yet
+//   edit your profile   PATCH /api/me                   `platform.users`, one
+//                                                       row across every app
+//   reset a password    POST /api/auth/password-reset/* logged out, by email
+//   change a password   POST /api/me/password/*         logged in, by session
+//   mint a token        POST /api/tokens                `platform.api_tokens`
+//   revoke a token      DELETE /api/tokens/{id}         the same rows
+//   authorize the CLI   POST /api/cli/authorize         mints the same token
 //
-// Neither touches `books.*`. Neither is a bookkeeping decision. And putting them
+// ── THE LIST GREW ON 2026-08-19, AND A WIDENED GUARD OWES ITS REASON ───────
+// It was two. b/books took fullstack ownership and gained the account surface
+// the other two apps already had — forgot-password, change-password, API tokens,
+// and the browser half of `bk login`. Every one of them is an ACCOUNT write:
+// `platform.users`, `platform.password_reset_otps`, `platform.api_tokens`. Not
+// one of them touches `books.*`.
+//
+// **The guard's claim is unchanged in strength.** `lib/read-only.test.ts` still
+// says a write comes from a named module or the suite is red, and this file is
+// still one of exactly two names. What would weaken it is putting these in
+// `lib/mutations.ts` — they would become "one of the five writes", which they
+// are not — or letting a component call `apiSend`, which deletes the guard
+// outright. If you are about to add something here, the test is the one below:
+// does it touch `books.*`? Then it belongs in the other file.
+//
+// None of them touches `books.*`. None is a bookkeeping decision. And putting them
 // behind `useCanWrite()` would be actively wrong the moment that hook becomes
 // real: phase 2 replaces it with the WORKSPACE ROLE, at which point "may this
 // person post an entry" would be deciding whether a stranger may create an
@@ -25,9 +45,7 @@
 // one answer is how a gate ends up either useless or locking people out.
 //
 // So: separate module, separate name, and `lib/read-only.test.ts` names it as
-// the second — and last — module permitted to send a write. The claim the guard
-// makes is unchanged in strength ("writes come from exactly these modules") and
-// gains a distinction it was missing.
+// the second — and last — module permitted to send a write.
 //
 // ── AND NEITHER OF THESE IS A SECURITY CONTROL EITHER ──────────────────────
 // The register route checks the platform whitelist server-side before any write,
@@ -84,17 +102,6 @@ export interface AccountWriteState<T> {
 }
 
 /**
- * The one primitive in this file, mirroring `useRecordMutation`'s shape so a
- * component written against one reads the same as a component written against
- * the other.
- *
- * It resolves to a result and rethrows anything that is not an `ApiRequestError`.
- * The server's `suggestion` survives on that error object and is folded into
- * `message` — for the register route that is the whitelist sentence, which is the
- * one a rejected person most needs to be able to act on, and inventing a shorter
- * version here would be a second copy of a policy nothing checks.
- */
-/**
  * Join the server's reason and its recovery into something a person reads.
  *
  * Routes write these as two fragments — "Email already registered" and "Sign in
@@ -109,7 +116,36 @@ function sentence(message: string, suggestion?: string): string {
   return `${message}${end} ${suggestion}`
 }
 
-function useAccountWrite<T>(method: 'POST' | 'PATCH', path: string): AccountWriteState<T> {
+/**
+ * The one primitive in this file, mirroring `useRecordMutation`'s shape so a
+ * component written against one reads the same as a component written against
+ * the other.
+ *
+ * It resolves to a result and rethrows anything that is not an `ApiRequestError`.
+ * The server's `suggestion` survives on that error object and is folded into
+ * `message` — for the register route that is the whitelist sentence, and for the
+ * password routes it is "ask an administrator to configure RESEND_API_KEY",
+ * which is the difference between a dead end and a next step.
+ */
+function useAccountWrite<T>(
+  method: 'POST' | 'PATCH' | 'DELETE',
+  path: string
+): AccountWriteState<T> {
+  return useAccountWriteAt<T>(method, () => path)
+}
+
+/**
+ * The same primitive for a path that is only known when the button is pressed.
+ *
+ * Revoking a token is `DELETE /api/tokens/{id}`, and the id is the row the
+ * reader just clicked. A hook cannot be called per row — that is the rules of
+ * hooks — so the path is a function of the argument instead, and there is still
+ * exactly one place in this app that sends a write to the account.
+ */
+function useAccountWriteAt<T>(
+  method: 'POST' | 'PATCH' | 'DELETE',
+  pathOf: (body: unknown) => string
+): AccountWriteState<T> {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<ApiRequestError | null>(null)
 
@@ -118,7 +154,7 @@ function useAccountWrite<T>(method: 'POST' | 'PATCH', path: string): AccountWrit
       setPending(true)
       setError(null)
       try {
-        return { ok: true, data: await apiSend<T>(method, path, body) }
+        return { ok: true, data: await apiSend<T>(method, pathOf(body), body) }
       } catch (e) {
         if (e instanceof ApiRequestError) {
           setError(e)
@@ -131,7 +167,7 @@ function useAccountWrite<T>(method: 'POST' | 'PATCH', path: string): AccountWrit
         setPending(false)
       }
     },
-    [method, path]
+    [method, pathOf]
   )
 
   return { run, pending, error }
@@ -170,3 +206,106 @@ export function useUpdateProfile() {
 
 // Re-exported so a component never reaches into lib/client.ts for it.
 export { ApiRequestError }
+
+/* ------------------------------------------------------------------ password */
+
+/**
+ * Ask for a 6-digit code, so a password can be set.
+ *
+ * Two routes, one shape, and which one you want depends on whether a session
+ * exists — that is the whole difference between "I forgot my password" and "I
+ * would like to change my password":
+ *
+ *   authenticated = false   `/api/auth/password-reset/request`, takes an email
+ *   authenticated = true    `/api/me/password/request-otp`, takes the session
+ *
+ * ── THE LOGGED-OUT ONE ANSWERS `{ ok: true }` FOR AN UNKNOWN ADDRESS ───────
+ * Deliberately, in the route. Whether an email has a blackcode account is
+ * precisely the fact an unauthenticated caller must not be able to probe for,
+ * and it is the same reasoning behind the login form's single "that email and
+ * password do not match an account" message.
+ *
+ * A deployment with no `RESEND_API_KEY` answers **503 `email_not_configured`**
+ * instead of a cheerful 200 — that status exists so this app never tells anybody
+ * to watch an inbox nothing was sent to. The refusal carries a `suggestion`, and
+ * `sentence()` above folds it into the message the form renders.
+ */
+export function useRequestPasswordCode(authenticated: boolean) {
+  return useAccountWrite<{ ok: true; email?: string }>(
+    'POST',
+    authenticated ? '/api/me/password/request-otp' : '/api/auth/password-reset/request'
+  )
+}
+
+/**
+ * Verify the code and set the new password.
+ *
+ * **A success signs you out of every blackcode app, including this session.**
+ * `password_changed_at` moves, and `getValidatedSessionUser` rejects any session
+ * issued before it — which is the point (a reset is how you lock out whoever had
+ * the old one) and is a surprise if nobody says it first. Both callers say it
+ * before the form opens.
+ */
+export function useConfirmPassword(authenticated: boolean) {
+  return useAccountWrite<{ ok: true }>(
+    'POST',
+    authenticated ? '/api/me/password/confirm' : '/api/auth/password-reset/confirm'
+  )
+}
+
+/* -------------------------------------------------------------------- tokens */
+
+/** A token as `GET /api/tokens` lists it. The secret is not in this shape. */
+export interface TokenSummary {
+  id: number
+  name: string
+  token_prefix: string
+  scopes: string[]
+  last_used_at: string | null
+  expires_at: string | null
+  created_at: string | null
+}
+
+/** What `POST /api/tokens` answers — the summary, plus the one look at the secret. */
+export interface MintedToken extends TokenSummary {
+  /** Returned ONCE, at creation. Nothing can show it again, including the database. */
+  plaintext: string
+}
+
+/**
+ * Mint an API token.
+ *
+ * **It is not a b/books token.** `platform.api_tokens` is one table for the whole
+ * suite, so this credential reaches every app the account can reach, and one
+ * revoked here stops working in all of them. That is the thing a reader is most
+ * likely to assume otherwise, so the page says it rather than leaving it to be
+ * discovered by a command failing somewhere else.
+ */
+export function useCreateToken() {
+  return useAccountWrite<MintedToken>('POST', '/api/tokens')
+}
+
+/**
+ * Revoke one, by id.
+ *
+ * `run({ id })` — the id is in the BODY only so this hook can read it back out
+ * for the path; the route takes it from the URL. See `useAccountWriteAt`.
+ */
+export function useRevokeToken() {
+  return useAccountWriteAt<{ deleted: true }>(
+    'DELETE',
+    (body) => `/api/tokens/${Number((body as { id: number }).id)}`
+  )
+}
+
+/**
+ * Authorize `bk login` — the browser half, posted by `/cli/authorize`.
+ *
+ * It mints the same platform-wide token as the page above and hands it to a
+ * localhost callback the SERVER re-validates. Nothing about the callback is
+ * trusted from the query string; `parseCallbackURL` refuses anything that is not
+ * a loopback address, in the page and again in the route.
+ */
+export function useAuthorizeCli() {
+  return useAccountWrite<{ redirect_url?: string }>('POST', '/api/cli/authorize')
+}

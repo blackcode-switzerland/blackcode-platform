@@ -1,0 +1,51 @@
+'use client'
+
+// The settings tabs.
+//
+// Four, and the same four b/issues and b/sales carry, in the same order and
+// under the same labels. That is the point rather than an accident: the account
+// is one `platform.users` row across every blackcode app, so a person who has
+// found their tokens in one app has found them everywhere, and an app that
+// renamed a tab would be describing a different account.
+//
+// The one label that is this app's own is **Preferences**, which holds the theme
+// and nothing else. b/sales' version holds `ui_mode`, a per-workspace setting
+// this app does not have; the tab is kept because the shape is worth keeping and
+// the page says exactly what is in it rather than borrowing sales' sentence.
+
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+
+const TABS = [
+  { seg: 'profile', label: 'Profile' },
+  { seg: 'account', label: 'Account' },
+  { seg: 'tokens', label: 'API tokens' },
+  { seg: 'preferences', label: 'Preferences' },
+]
+
+export function SettingsNav() {
+  const pathname = usePathname() ?? ''
+  return (
+    <nav className="flex gap-1 border-b border-border">
+      {TABS.map((t) => {
+        const href = `/dashboard/settings/${t.seg}`
+        const active = pathname === href
+        return (
+          <Link
+            key={t.seg}
+            href={href}
+            aria-current={active ? 'page' : undefined}
+            className={
+              '-mb-px border-b-2 px-3 py-2 text-sm transition-colors ' +
+              (active
+                ? 'border-primary font-medium text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground')
+            }
+          >
+            {t.label}
+          </Link>
+        )
+      })}
+    </nav>
+  )
+}

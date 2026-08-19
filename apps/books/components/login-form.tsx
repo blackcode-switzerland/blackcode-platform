@@ -31,16 +31,17 @@
 // the SHARED platform account, so an ungated sign-up on books is an ungated
 // sign-up on every app. This form only renders what the server refused.
 //
-// ── NO PASSWORD RESET LINK, AND THAT IS NOT AN OVERSIGHT ───────────────────
-// `apps/sales` offers "Forgot password?" over `@blackcode/platform-email` and a
-// set of `/api/auth/password-reset/*` routes. **b/books has neither the
-// dependency nor the routes** (checked 2026-08-17: `app/api/auth/` contains
-// `register` and `[...nextauth]`, nothing else). A link to a flow that 404s is
-// worse than no link, and adding the routes is the backend's side of the wall —
-// it is item 3 of the requests in this sprint's report.
+// ── THE RESET LINK EXISTS NOW, AND THE NOTE THAT SAID OTHERWISE IS GONE ────
+// This header used to explain, at length, that b/books had neither
+// `@blackcode/platform-email` nor the `/api/auth/password-reset/*` routes, that
+// a link to a flow which 404s is worse than no link, and that adding the routes
+// was the backend's side of a wall. Every word of that was true on 2026-08-17
+// and none of it is true now: b/books took fullstack ownership on 2026-08-19 and
+// mounted both routes the same day.
 //
-// The password is the shared account's, so it CAN be reset from another
-// blackcode app today. That is a true recovery and it is what the footer says.
+// The footer changed with it. It used to send people to b/issues or b/sales to
+// reset a password this app shares — a true recovery, and an odd thing to read
+// on the screen you are already standing on.
 
 import { useState } from 'react'
 import Image from 'next/image'
@@ -49,9 +50,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { GoogleMark } from '@blackcode/platform-ui/ui/google-mark'
 import { useRegisterAccount } from '@/lib/account'
+import { PasswordResetFlow } from '@/components/password-reset-flow'
 import { SiteFrame } from '@/components/site-chrome'
 
-type Mode = 'signin' | 'signup'
+type Mode = 'signin' | 'signup' | 'reset'
 
 const inputClass =
   'w-full rounded-md border border-input bg-card px-3 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/25'
@@ -67,6 +69,10 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
   // one screen where a first-time visitor has no idea what they did wrong.
   // Same spelling as issues and sales; a second spelling for the same idea is a
   // link that silently misbehaves when somebody copies it between apps.
+  // `reset` is reachable only from the link below, never from a query string:
+  // a URL that opens the reset panel is a URL somebody can be sent, and this
+  // form is the one screen where a stranger's link should not be able to choose
+  // what you are looking at.
   const [mode, setMode] = useState<Mode>(params?.get('tab') === 'signup' ? 'signup' : 'signin')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -207,7 +213,15 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
           <p className="mt-1 text-sm text-muted-foreground">Swiss statutory bookkeeping</p>
         </div>
 
-        <div className="mb-5 grid grid-cols-2 gap-1 rounded-md bg-secondary p-1">
+        {/* The tab strip is hidden on the reset panel: it is a THIRD mode with
+            only two tabs, so leaving it up would show "Sign in" unselected while
+            the reader is halfway through resetting a password, which reads as
+            having lost their place. The panel carries its own Cancel. */}
+        <div
+          className={`mb-5 grid grid-cols-2 gap-1 rounded-md bg-secondary p-1 ${
+            mode === 'reset' ? 'hidden' : ''
+          }`}
+        >
           {(['signin', 'signup'] as const).map((m) => (
             <button
               key={m}
@@ -224,6 +238,27 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
           ))}
         </div>
 
+        {mode === 'reset' ? (
+          <div>
+            <h2 className="mb-3 text-sm font-medium text-foreground">Reset your password</h2>
+            <PasswordResetFlow
+              authenticated={false}
+              presetEmail={email}
+              onCancel={() => switchTo('signin')}
+              // Straight back to the sign-in panel with the reason carried, not
+              // a toast that disappears: the password they just set is the one
+              // they are about to type, and the reset also ended every session
+              // this account had anywhere.
+              onDone={() =>
+                switchTo(
+                  'signin',
+                  'Password updated. Sign in with your new password — every other blackcode app was signed out too.'
+                )
+              }
+            />
+          </div>
+        ) : (
+        <>
         {googleButton}
 
         <form onSubmit={mode === 'signin' ? onSignIn : onSignUp} className="space-y-3">
@@ -261,12 +296,23 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
           </div>
 
           <div>
-            <label
-              htmlFor="password"
-              className="mb-1.5 block text-xs font-medium text-muted-foreground"
-            >
-              Password
-            </label>
+            <div className="mb-1.5 flex items-baseline justify-between gap-3">
+              <label htmlFor="password" className="block text-xs font-medium text-muted-foreground">
+                Password
+              </label>
+              {/* Only on the sign-in panel. On "create account" there is no
+                  password to have forgotten, and offering to reset one would be
+                  offering a recovery for an account that does not exist yet. */}
+              {mode === 'signin' && (
+                <button
+                  type="button"
+                  onClick={() => switchTo('reset')}
+                  className="text-xs text-primary-strong transition-opacity hover:underline"
+                >
+                  Forgot password?
+                </button>
+              )}
+            </div>
             <input
               id="password"
               type="password"
@@ -294,6 +340,8 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
             {mode === 'signin' ? 'Sign in' : 'Create account'}
           </button>
         </form>
+        </>
+        )}
 
         {/*
           Two facts, both true today and both a surprise otherwise: the account
@@ -301,11 +349,16 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
           Nothing about grants — `platform.app_access` was dropped in the
           multi-app refactor's Phase 5 and membership is the whole gate — and
           nothing about invitations, which is the sentence sales got wrong once.
+
+          The third sentence used to send people to b/issues or b/sales to reset
+          a password. It is reset HERE now, from the link above, and the note
+          that remains is the one that is still surprising: doing it signs the
+          account out of every app, because there is only one password.
         */}
         <p className="mt-8 text-center text-xs leading-relaxed text-muted-foreground">
           Your blackcode account is the same one across every blackcode app. New addresses have to
-          be approved by a super admin before they can sign up. Forgotten your password? Reset it
-          from b/issues or b/sales — it is the same password.
+          be approved by a super admin before they can sign up, and a password reset here is a
+          password reset everywhere.
         </p>
       </div>
     </SiteFrame>

@@ -799,6 +799,38 @@ created. So an app with no browser session does not mount `/api/tokens` — that
 a decision, not an omission, and it belongs in `UNSERVED_OPERATIONS` or simply
 unmounted.
 
+> ### `cliAuthorizeRoute` NEEDS A PAGE, AND THE ROUTE ALONE IS AN INVISIBLE 404
+>
+> Added 2026-08-19, after `apps/books` mounted it and found the gap.
+>
+> `bk login --server <your host>` does **not** call `POST /api/cli/authorize`.
+> It opens **`/cli/authorize`** in a browser on that host, and the PAGE posts to
+> the route. So mounting the factory and stopping there produces the worst shape
+> this flow has: a 404 in the browser, and a terminal sitting on a loopback
+> listener waiting for a callback that is never coming. Neither end prints an
+> error.
+>
+> Copy **both** — `app/api/cli/authorize/route.ts` and `app/cli/authorize/page.tsx`
+> with its client form. The page must:
+>
+> - call `parseCallbackURL` from `@blackcode/platform-auth/cli-callback` (the
+>   `/cli-callback` SUBPATH — the barrel pulls bcryptjs and Drizzle in behind a
+>   page that ships a client component) and refuse anything that is not a
+>   loopback, *before* rendering an Authorize button. The route checks again;
+>   the page checks first so a bad request is refused with a sentence rather
+>   than with a click that fails;
+> - resolve the session with your app's **validated** session helper, so a
+>   session issued before the account's last password reset is sent to sign in
+>   rather than walked into a permanent credential;
+> - sit **outside** any read-only/`ui_mode` gate. It mints a credential, but it
+>   touches none of your app's tables — a display preference that could stop
+>   somebody signing a terminal in has become a permission.
+>
+> It is excluded from CLI parity in every app that mounts it, with the same
+> reason: the binary never calls this route, and a `bk` command for it would be
+> a command that signs a browser in — which is `bk login`, and that goes
+> elsewhere.
+
 > ### `/api/me/footprint` IS NOT OPTIONAL — MOUNT BOTH METHODS
 >
 > Added 2026-08-11 (Phase 9). This is the one factory on this page that you must
@@ -1131,7 +1163,9 @@ cheaper than pretending otherwise.
 8. **Email is a package — `packages/platform-email`.** ~~Open.~~ **Closed
    2026-08-11** (multiAppFinalRefactor Phase 10), when `apps/sales` became the
    second sender. It is left here rather than deleted because the shape it
-   settled is what a third app needs to know.
+   settled is what a third app needs to know — and `apps/books` became that
+   third app on 2026-08-19, copying the binding below unchanged except for its
+   four identity fields.
 
    The app supplies an **identity** at one binding site,
    `apps/<app>/lib/email/send.ts`, and everything else in the app imports from

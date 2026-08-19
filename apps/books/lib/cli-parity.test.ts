@@ -63,6 +63,43 @@ const EXCLUDED_PATHS = new Map<string, string>([
       'deployment. The property that matters on this route is the whitelist gate, ' +
       'and it is asserted by lib/auth/register-gate.test.ts rather than by this file',
   ],
+  // ── THE ACCOUNT SURFACE, MOUNTED 2026-08-19 ───────────────────────────────
+  // b/books took fullstack ownership and gained the four password routes and the
+  // CLI-authorize route that b/issues and b/sales already had. Every entry below
+  // is the same entry, for the same reason, that those two apps carry — copy
+  // them with the routes if you copy this app.
+  //
+  // **These are session-only, and that is what makes them unreachable from `bk`
+  // rather than merely unimplemented there.** `requireSessionResolver` refuses a
+  // bearer token at mount time. It is not a gap somebody could close by writing
+  // a command.
+  [
+    '/api/auth/password-reset/request',
+    'browser password recovery. The logged-out flow proves ownership of an EMAIL ' +
+      'INBOX, which is not a thing a binary holding a `bk_live_…` token can do — and a ' +
+      '`bk` command that reset a password would be a command that could lock its owner ' +
+      'out of every blackcode app at once',
+  ],
+  [
+    '/api/auth/password-reset/confirm',
+    'browser password recovery — see the request route above. It verifies a code that ' +
+      'only arrived in an inbox',
+  ],
+  [
+    '/api/me/password/request-otp',
+    'in-app password change; session-only by design. A bearer token that could change ' +
+      'the password behind itself is a credential that can lock out the person holding it',
+  ],
+  ['/api/me/password/confirm', 'in-app password change; session-only by design — see above'],
+  [
+    '/api/cli/authorize',
+    'the browser half of `bk login` — the binary OPENS /cli/authorize in a browser and ' +
+      'the PAGE posts here; it never calls this route itself. A `bk` command for it would ' +
+      'be a command that signs a browser in, which is `bk login`, and that goes elsewhere. ' +
+      'Mounted rather than skipped because `bk login --server https://books…` is a ' +
+      'legitimate command and a 404 there is an invisible failure: the terminal waits for ' +
+      'a callback that never comes',
+  ],
 ])
 
 /**

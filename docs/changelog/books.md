@@ -32,6 +32,33 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-19 — "You have no books yet" names the command instead of telling you to ask somebody
+
+**Not breaking. Copy only — no route, payload or command changed.**
+
+The empty-state screen told a reader with no books that opening one is a setup
+step this app does not do from a form, and to **"ask whoever set up your
+account"**. That was correct on 2026-08-17: `books.entity` did not exist,
+`/api/meta` served the seeded books out of a fixture, and there was no create
+route on any surface. Naming a command that would fail is worse than naming none.
+
+The table landed, `POST /api/workspaces/{ws}/entities` landed, and
+`bk books entity create` landed with them — and the screen kept apologising. The
+first person to sign up for their own account read "ask whoever set up your
+account", having just set it up themselves, and reasonably concluded the product
+would not let them add a book.
+
+The screen now shows the actual command, with the three flags it requires, what
+SA and RI each imply for the bookkeeping regime, and the fact that a book still
+needs `bk books exercice create` before anything can be posted to it.
+
+**There is still no button, and that part is a decision**: the legal form fixes
+the regime for the life of the entity and the registered seat decides the
+cantonal and communal tax parameters every later figure is computed with, and
+`books.entity` has no delete. It is a CLI act on purpose, and now it says so.
+
+**What to do:** nothing.
+
 ## 2026-08-19 — The analyse detail reads bare-string labels, as the door always accepted
 
 **Screen-only; no route, no wire shape, no `bk` command changed.** The analyse

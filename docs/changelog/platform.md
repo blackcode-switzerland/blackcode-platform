@@ -7,6 +7,64 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-19 — b/books serves the account surface: forgot-password, change-password, API tokens, `bk login --server`
+
+**Not breaking. b/books gains five routes it did not serve; nothing changed for
+b/issues or b/sales, and no shape on the wire changed anywhere.**
+
+**The problem.** `platform.api_tokens`, `platform.users` and
+`platform.password_reset_otps` are one row-set for the whole suite, and the guide
+has said so for months — *"one login covers every app; `--server` may name ANY
+deployment"*. b/books did not serve the routes behind that sentence, so:
+
+- **`bk login --server <books>` could not work.** The binary opens
+  `/cli/authorize` on the server it was pointed at and waits for a localhost
+  callback. b/books had neither the page nor `POST /api/cli/authorize`, so the
+  browser got a 404 and the terminal waited for a callback that was never coming
+  — a failure with no error message at either end.
+- **There was no way to see or revoke a token from b/books**, though the tokens
+  in question already worked against it.
+- **A password could not be reset or changed from the app you were standing in.**
+  The login page said to go to b/issues or b/sales; Settings said the same. Both
+  were true — it is one password — and both asked somebody already authenticated
+  to go and operate their credential in a different product.
+
+None of that was a policy decision. It was `@blackcode/platform-email` never
+having been added to that app, and the routes never having been mounted.
+
+**Now mounted in `apps/books`**, all five from the existing shared factories:
+
+| Route | Factory |
+|---|---|
+| `POST /api/auth/password-reset/request` | `publicPasswordResetRequestRoute` |
+| `POST /api/auth/password-reset/confirm` | `publicPasswordResetConfirmRoute` |
+| `POST /api/me/password/request-otp` | `passwordRequestOtpRoute` |
+| `POST /api/me/password/confirm` | `passwordConfirmRoute` |
+| `GET`/`POST` `/api/tokens`, `DELETE /api/tokens/{id}` | `tokensRoute`, `tokenRoute` |
+| `POST /api/cli/authorize` + the `/cli/authorize` page | `cliAuthorizeRoute` |
+
+All are **session-only** — `requireSessionResolver` refuses a bearer token at
+mount time, because a token that can mint or reset behind itself is a credential
+that can lock its owner out. They are in that app's `EXCLUDED_PATHS` for exactly
+that reason, each with the reason written down.
+
+**Settings is four tabs now** — Profile, Account, API tokens, Preferences — the
+same four, in the same order, under the same labels as the other two apps. It
+was one scrolling page. The account is one row shared by every app, so somebody
+who knows where their tokens live in b/issues now finds them in the same place in
+b/books.
+
+**What to do:** nothing. No existing command, route or payload changed. `bk login
+--server https://books…` now works where it previously 404'd, and a token minted
+in b/books is the same `bk_live_…` credential it always was — one list, revocable
+from any app.
+
+**One thing worth knowing if you test this locally:** the reset routes answer
+`200` and print the code to the **server log** (`[password-reset] OTP for …`)
+when `NODE_ENV !== 'production'`. That is `canDeliverEmail()`'s deliberate dev
+carve-out, not a deployment quietly failing to send — in production, an app with
+no `RESEND_API_KEY` refuses with `503 email_not_configured` and a suggestion.
+
 ## 2026-08-14 — two apps on localhost no longer share one session
 
 **Local development only. Nothing changes on a deployed host.**
