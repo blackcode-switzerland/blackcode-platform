@@ -11,11 +11,15 @@ and where the proof is. Unexplained money is a worklist, never a buried column.
 
 Related commands: `bk books entity list`, `bk books entity create`, `bk books
 exercice list`, `bk books exercice create`, `bk books account list`, `bk books
-entry list`, `bk books entry show`, `bk books bilan`, `bk books cr`, `bk books
-patrimoine`, `bk books overview`, `bk books worklist`, `bk books rule list`,
-`bk books rule create`, `bk books resolve`, `bk books source list`, `bk books
-source show`, `bk books manifest`, `bk books piece list`, `bk books piece
-ingest`, `bk books piece match`, `bk books workspace use`.
+entry list`, `bk books entry show`, `bk books entry declare`, `bk books entry
+post`, `bk books bilan`, `bk books cr`, `bk books patrimoine`, `bk books
+overview`, `bk books worklist`, `bk books rule list`, `bk books rule create`,
+`bk books resolve`, `bk books source list`, `bk books source show`, `bk books
+source create`, `bk books source import`, `bk books manifest`, `bk books piece
+list`, `bk books piece ingest`, `bk books piece match`, `bk books analytique`,
+`bk books analyse list`, `bk books analyse record`, `bk books category list`,
+`bk books category create`, `bk books tax`, `bk books compliance list`,
+`bk books compliance review`, `bk books verdict`, `bk books workspace use`.
 
 ## This app holds no intelligence, and that is the design
 
@@ -27,14 +31,11 @@ automatically.
 So there is no chat here, no in-app assistant, and no scenario buttons. You read
 the data through these commands, reason outside, and write the conclusion back.
 
-## Status: phase 3
+## Status: phase 5 — feature-complete for the MVP
 
-The statutory core, recognition, the sources register and the pièces pipeline
-are here. What lands next:
-
-| Phase | Commands |
-|---|---|
-| 4 | `analyse`, `tax` — the management view and agent write-back |
+The statutory core, recognition, the sources register, the pièces pipeline,
+the bank door and posting, the management layer, and the compliance layer are
+all here. What remains is deployment, not commands.
 
 ## Sources and pièces
 
@@ -56,6 +57,56 @@ never dropped — a refund looks identical to a re-scan. Unmatched pieces sit on
 the same worklist as unrecognized money, with candidate entries suggested by
 amount and date; matching writes the entry's pièce reference and deliberately
 leaves the evidence tier to you.
+
+## The bank door, and money no feed delivers
+
+```bash
+bk books source import 2 --file releve.xml   # camt.053, parsed server-side
+bk books entry declare --entity acme --date 2026-08-19 --amount 20.00 \
+  --label "cash coffee" --account 6570 --contra 1020 \
+  --explanation "team coffee, paid cash"     # the declared write path
+bk books entry post 12                       # staged -> posted, after review
+```
+
+A statement lands whole or not at all: the file must reconcile to the rappen
+(opening + lines = closing) or the import refuses naming every problem. Every
+imported line converges on the bank's own reference, so overlapping statements
+never double the book. Rules run AT ARRIVAL and mark matches `inferred` — the
+machine suggests, a person resolves.
+
+## The management view, and the agent write-back
+
+```bash
+bk books analytique                 # cost buckets + monthly flows, derived live
+bk books category create --entity acme --key marketing \
+  --label-en Marketing --accounts 6600     # custom buckets, one franc one bar
+bk books tax                        # VAT position + PM tax estimates, cited
+bk books analyse record --entity acme --asked-by You --agent claude-code \
+  --question "..." --verdict "..." \
+  --based-on '[{"label":"...","value":"..."}]'   # file an answer, permanently
+```
+
+An analysis is append-only: no edit, no delete, by grant. Its `based_on`
+snapshot records what the agent READ at answer time and is never recomputed —
+a drifted answer is re-asked into a new record and both stand. The tax
+snapshot serves the book's own cited parameters or an honest "not configured";
+it never borrows another book's rates.
+
+## Compliance: rules, review, verdicts
+
+```bash
+bk books compliance list            # all 19 rules; DRAFT until reviewed
+bk books compliance show vat-008    # trigger, logic, consequence, citation
+bk books compliance review vat-008 --approve        # the fiduciary's sign-off
+bk books verdict 12 --verdict blocked --rules dt-001 \
+  --resolves "attach the missing piece"   # the Devil's Advocate's door
+```
+
+The app computes no compliance judgment: an external agent pass reads the
+rules and files structured verdicts, and the server enforces exactly one
+consequence — a `blocked` entry refuses to post until a fresh verdict clears
+it. Reviews are permanent (there is no path back to draft) and rules are never
+deleted: a verdict may cite one forever.
 
 ## The recognition loop
 

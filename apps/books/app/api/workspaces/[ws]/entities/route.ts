@@ -46,6 +46,14 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   // (art. 957 al. 1 ch. 2); an RI defaults to simplified and may elect otherwise.
   const capital = ['SA', 'SARL', 'SÀRL', 'AG', 'GMBH'].includes(legal_form.toUpperCase())
   const regime = str('bookkeeping_regime') || (capital ? 'double_entry' : 'simplified')
+  if (capital && regime !== 'double_entry') {
+    // Invariant 1 (bk-001). createEntity refuses too; this is the worded 400.
+    throw Errors.badRequest(
+      'sa_needs_double_entry',
+      `a ${legal_form} keeps double-entry books, always (art. 957 al. 1 ch. 2 CO)`,
+      'drop --bookkeeping-regime: it follows from the legal form'
+    )
+  }
 
   const row = await createEntity(ctx.workspace.id, {
     slug,

@@ -110,6 +110,17 @@ export async function createEntity(
     seat?: string | null
   }
 ): Promise<BooksEntity> {
+  // Invariant 1 (DATA-MODEL §17, compliance rule bk-001, art. 957 al. 1 ch. 2
+  // CO): a capital company has NO simplified-bookkeeping option at any
+  // turnover. Enforced here — the door every caller passes — so a code path
+  // to an SA with single-entry books does not exist, rather than being
+  // merely unused.
+  const capital = ['SA', 'SARL', 'SÀRL', 'AG', 'GMBH'].includes(data.legal_form.toUpperCase())
+  if (capital && data.bookkeeping_regime !== 'double_entry') {
+    throw new Error(
+      `a ${data.legal_form} keeps double-entry books, always (art. 957 al. 1 ch. 2 CO, rule bk-001): "${data.bookkeeping_regime}" is not a valid statutory regime for it`
+    )
+  }
   return getDb().transaction(async (tx) => {
     const seq = await allocateSeq(tx, workspaceId, 'entity')
     const [row] = await tx
@@ -616,6 +627,8 @@ export function publicEntry({ entry: e, lines }: EntryWithLines) {
       : null,
     /** The original-currency story (0011): {original, rate, source}. Display-only. */
     fx: e.fx,
+    /** The Devil's Advocate's flag (0014): {verdict, rules, worst_case, resolves, at, by}. NULL = never checked. */
+    verdict: e.verdict,
     reverses_entry_id: e.reverses_entry_id,
     history: e.history,
   }
@@ -639,6 +652,8 @@ export function publicRiEntry(r: typeof booksRiEntry.$inferSelect) {
       : null,
     /** The original-currency story (0011): {original, rate, source}. Display-only. */
     fx: r.fx,
+    /** The Devil's Advocate's flag (0014): {verdict, rules, worst_case, resolves, at, by}. NULL = never checked. */
+    verdict: r.verdict,
   }
 }
 

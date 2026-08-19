@@ -1,7 +1,7 @@
 -- Rollback for apps/books migration 0013 — remove the management tables.
 --
--- Rollbacks run in REVERSE: this file FIRST, then 0012, 0011 … down to 0001.
--- Each file's header names its place.
+-- Rollbacks run in REVERSE: 0014's file first, THEN this one, then 0012,
+-- 0011 … down to 0001. Each file's header names its place.
 --
 -- ---------------------------------------------------------------------------
 -- WHAT THIS DESTROYS
@@ -23,6 +23,12 @@ BEGIN;
 DO $do$
 DECLARE n integer;
 BEGIN
+  -- Order guard: 0014's objects must already be gone, or the reverse walk
+  -- is being run out of order.
+  IF to_regclass('books.compliance_rule') IS NOT NULL THEN
+    RAISE EXCEPTION 'REFUSING: books.compliance_rule still exists. Run books-0014-rollback.sql first — rollbacks run in reverse.';
+  END IF;
+
   SELECT count(*) FROM books.analysis INTO n;
   IF n > 0 THEN
     RAISE EXCEPTION

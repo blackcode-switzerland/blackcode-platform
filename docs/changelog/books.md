@@ -32,6 +32,56 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-19 — Phase 5: compliance, retention, and the app that refuses
+
+The last in-app phase. Three routes, one enforcement, one platform answer.
+
+**The 19 compliance rules are served** (`GET /api/compliance-rules`, `bk books
+compliance list/show`) — statutory rules researched against Fedlex, each with
+its citation, trigger, check logic, consequence, severity (blocker / warning /
+info) and `source_confidence`. **Every rule is DRAFT until the fiduciary signs
+off**, and the payload says so; render the state. `PATCH
+/api/compliance-rules/{rule}` (`bk books compliance review`) records the
+sign-off — approve, edit (corrected wording lands in `edited_logic`, the
+original stays), or reject — with who and when. No path back to draft, no
+delete, ever: a verdict may cite a rule forever.
+
+**Verdicts are the Devil's Advocate's door** — the eighth write, the third for
+an outside process. `POST /entries/{n}/verdict` (`bk books verdict`, `--entity`
+for an RI number) files a STRUCTURED verdict: `accepted`,
+`accepted_with_warning`, or `blocked`, with the `rules` that triggered (each
+must exist), `worst_case` and `resolves`. History-first: a replaced verdict
+stays in the entry's trail. The rule from #53 applies from birth: an `entity`
+that does not own the number refuses with `entry_other_book`.
+
+**One enforcement, server side:** a `blocked` entry refuses to post
+(`verdict_blocked`, carrying the agent's own `resolves` text as the way out).
+Warned entries post and stay visible. Nothing else is enforced — flags are
+facts, and the app computes no compliance judgment of its own.
+
+**Wire change, additive:** `entry` and `ri_entry` payloads gain `verdict`
+(null until an agent pass writes one) — pin it as `Verdict | null`.
+`/api/meta` gains `verdict_states`, `rule_review_states`, `rule_confidence`.
+
+**The footprint now answers honestly, and the answer is a refusal.** The
+scaffold's copy would have hard-deleted solely-owned workspaces — statutory
+records included — and counted a table 0007 dropped. Now: a workspace whose
+books hold records (écritures, RI entries, pièces, pulls, analyses) reports as
+`blocked_by`, and `purge` refuses naming **art. 958f CO** — ten-year
+retention. The account may close; the books stay. Only a workspace whose books
+recorded nothing purges. **Platform side, take note:** the whole-account close
+flow meets its first refusing app.
+
+**Invariants:** DATA-MODEL §17 is now an audited checklist —
+`lib/invariants.test.ts` tests what was untested (an SA/Sàrl with simplified
+books is refused at `createEntity` itself and at the route,
+`sa_needs_double_entry`; « consolidé » is grepped out of everywhere but the
+personal overview's disclaimer; the 958f purge refusal) and names the file
+pinning each of the other thirteen.
+
+Also: `bk guide books` rewritten for phases 4-5 (statuses and vocabularies
+still come from `bk meta`, never from the guide).
+
 ## 2026-08-19 — Phase 4B: the management layer, and the agent write-back
 
 Five routes, two of them writes. Everything derived is computed at request

@@ -107,6 +107,7 @@ import { booksSourcePull, booksRunbook, booksAnalysis, booksAnalytiqueCategory, 
 import { ingestPiece } from './queries/pieces'
 import type { Extraction } from '../validate/extraction'
 import fixture from '../../fixtures/mockup.json'
+import complianceRules from '../../fixtures/compliance-rules.json'
 
 /** Fixed-2 string, which is what `numeric(14,2)` wants. Never a float. */
 const money = (n: number | null | undefined): string => (n ?? 0).toFixed(2)
@@ -180,6 +181,13 @@ const F = fixture as unknown as {
 }
 
 export const SEED_SLUG = 'blackcode'
+
+interface FxComplianceRule {
+  rule_id: string; citation: string; applies_to: string; trigger_condition: string
+  check_logic: string; severity: string; consequence_if_violated: string
+  summary?: Json; source_confidence: string
+}
+const COMPLIANCE_RULES = (complianceRules as unknown as { rules: FxComplianceRule[] }).rules
 
 // ---------------------------------------------------------------------------
 // The reprise: closing one year to open the next
@@ -813,6 +821,24 @@ export async function seed(ownerUserId: number): Promise<{ workspaceId: number }
       figures: a.figures,
       based_on: a.based_on,
     })
+  }
+
+  // ---- compliance rules: GLOBAL, and reviews survive a reseed --------------
+  // The 19 rules are law-derived and workspace-less. ON CONFLICT DO NOTHING
+  // on purpose: a reseed replaces the demo WORKSPACE, but a fiduciary's
+  // approve/edit/reject on a rule is real work this table is the only record
+  // of, and `npm run db:seed` must never quietly reset it to draft.
+  for (const r of COMPLIANCE_RULES) {
+    await db.execute(sql`
+      INSERT INTO books.compliance_rule
+        (rule_id, citation, applies_to, trigger_condition, check_logic, severity,
+         consequence, summary, source_confidence)
+      VALUES
+        (${r.rule_id}, ${r.citation}, ${r.applies_to}, ${r.trigger_condition},
+         ${r.check_logic}, ${r.severity}, ${r.consequence_if_violated},
+         ${r.summary ? JSON.stringify(r.summary) : null}::jsonb, ${r.source_confidence})
+      ON CONFLICT (rule_id) DO NOTHING
+    `)
   }
 
   // ---- counters ----------------------------------------------------------

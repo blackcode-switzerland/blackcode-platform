@@ -116,3 +116,29 @@ export const MANIFEST_STATES: Term[] = [
  * rate exists.
  */
 export const TVA_RATES: number[] = [8.1, 2.6, 3.8, 0]
+
+/**
+ * The Devil's Advocate's verdict vocabulary (0014). `blocked` is the only one
+ * the server acts on: it refuses to post. Warned entries post and stay
+ * visible; nothing is silently accepted (compliance/DEVILS-ADVOCATE-AGENT.md).
+ */
+export const VERDICT_STATES: Term[] = [
+  { value: 'accepted', label: 'Accepted', color: '#3fb27f' },
+  { value: 'accepted_with_warning', label: 'Accepted with warning', color: '#f0b66b' },
+  { value: 'blocked', label: 'Blocked', color: '#ef6f6f' },
+]
+
+/** A rule's review lifecycle. Rules are BORN draft; review never goes back. */
+export const RULE_REVIEW_STATES: Term[] = [
+  { value: 'draft', label: 'Draft — not fiduciary-reviewed', color: '#f0b66b' },
+  { value: 'approved', label: 'Approved', color: '#3fb27f' },
+  { value: 'edited', label: 'Edited — corrected wording applies', color: '#3fb27f' },
+  { value: 'rejected', label: 'Rejected', color: '#ef6f6f' },
+]
+
+/** Where a rule's legal claim comes from, and how far to trust it unreviewed. */
+export const RULE_CONFIDENCE: Term[] = [
+  { value: 'verified_fedlex', label: 'Verified against Fedlex', color: '#3fb27f' },
+  { value: 'doctrine_inferred', label: 'Inferred from doctrine', color: '#f0b66b' },
+  { value: 'needs_fiduciary_check', label: 'Needs a fiduciary check', color: '#ef6f6f' },
+]

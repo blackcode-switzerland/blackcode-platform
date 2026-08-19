@@ -369,6 +369,19 @@ export async function postEntry(
       return { number: entry.seq, entry_no: entry.entry_no, status: 'posted', already: true }
     }
 
+    // Phase 5's ONE enforcement: a blocked verdict refuses to post, server
+    // side. The Devil's Advocate wrote the flag; a fresh verdict (or a
+    // correction of what it flagged) is the way through — never a force flag.
+    const v = entry.verdict as { verdict?: string; rules?: string[]; resolves?: unknown } | null
+    if (v?.verdict === 'blocked') {
+      const resolves = typeof v.resolves === 'string' ? v.resolves : null
+      throw new PostRefused(
+        'verdict_blocked',
+        `entry #${entrySeq} is blocked by compliance verdict (${(v.rules ?? []).join(', ')})`,
+        resolves ?? 'resolve what the verdict flagged, then have the reviewer re-run; blocked entries do not post'
+      )
+    }
+
     const lines = await tx.select().from(booksEntryLine).where(eq(booksEntryLine.entry_id, entry.id))
     const unmapped = lines.filter((l) => l.account_no === null).length
     if (unmapped > 0) {

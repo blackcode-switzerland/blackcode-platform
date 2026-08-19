@@ -5,10 +5,10 @@
 model in [`docs/platform-db.md`](../../../docs/platform-db.md). Neither is
 repeated here.
 
-**Status: phase 4B, 2026-08-19.** The statutory core, recognition, the sources register, the pièces pipeline, the bank door and posting — and now the MANAGEMENT LAYER: `GET /analytique` serves the cost breakdown per category and the monthly flows (derived from posted lines at request time, exercice-scoped, both journals), `GET /tax-snapshot` serves the VAT position and the two PM tax estimates from the entity's own cited parameter record (a book without one answers `configured: false`, never someone else's rates — capital tax ships UNCONFIRMED pending the fiduciary's art. 118 answer), and `/analyses` is the agent write-back: `POST` files a question, a verdict and a `based_on` snapshot into an APPEND-ONLY table (UPDATE/DELETE revoked by 0013) — the sixth write, the second door built for an outside process. The seventh write is `POST /analytique/categories`: per-book cost buckets, refusing accounts outside the chart, non-CR accounts, and accounts another active category already counts. Migrated 0001-0013. What each phase adds
+**Status: phase 5, 2026-08-19 — feature-complete for the MVP.** Everything through the management layer, plus COMPLIANCE: the 19 Fedlex-researched rules served globally with citations and `review_state` (all DRAFT until the fiduciary signs off — `PATCH /compliance-rules/{rule}` records approve/edit/reject, permanently), the Devil's Advocate's verdict door (`POST /entries/{n}/verdict`, structured {verdict, rules, worst_case, resolves}, history-first, both journals), and exactly ONE enforcement: a `blocked` entry refuses to post. The footprint answers the account-close flow honestly — a workspace whose books hold records is `blocked_by` and purge refuses citing art. 958f CO; the account may close, the books stay. DATA-MODEL §17 is an audited checklist in `lib/invariants.test.ts`. Migrated 0001-0014. Remaining: deploy (steps 7-10 of adding-an-app) and the statutory PDF export, which is a print-stylesheet task over the already-bilingual statements. What each phase adds
 is in [`docs/books-app-plan/`](../../../docs/books-app-plan/README.md).
 
-Migrations applied: 13 of 13, `__drizzle_migrations_books`.
+Migrations applied: 14 of 14, `__drizzle_migrations_books`.
 
 ---
 
