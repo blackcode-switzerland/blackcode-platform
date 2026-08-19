@@ -17,7 +17,7 @@
 
 import { eq, sql } from 'drizzle-orm'
 import { getDb } from '../client'
-import { booksEntity, booksEntry, booksEntryLine, booksExercice, booksRiEntry } from '../schema'
+import { booksEntity, booksEntry, booksEntryLine, booksExercice, booksRiEntry, type StoredSpeech } from '../schema'
 import { nextSeq } from './imports'
 
 export class DeclareRefused extends Error {
@@ -35,7 +35,7 @@ export interface DeclareData {
   date: string
   amount: string
   label: string
-  explanation: Record<string, unknown>
+  explanation: StoredSpeech
   counterparty?: string | null
   /** RI books: which side of the book. */
   direction?: 'recette' | 'depense' | 'neutral'

@@ -29,6 +29,9 @@ import {
   booksEntry,
   booksRiEntry,
   type BooksComplianceRule,
+  type StoredHistory,
+  type StoredHistoryEvent,
+  type StoredSpeech,
 } from '../schema'
 
 export class ComplianceRefused extends Error {
@@ -120,8 +123,13 @@ export interface VerdictData {
 }
 
 /** History is append-only; a pre-existing narrative object becomes the first element — resolve.ts's rule. */
-function appendHistory(prior: unknown, event: Record<string, unknown>): unknown[] {
-  return Array.isArray(prior) ? [...prior, event] : prior ? [prior, event] : [event]
+function appendHistory(prior: unknown, event: StoredHistoryEvent): StoredHistory {
+  const was = Array.isArray(prior)
+    ? (prior as (StoredHistoryEvent | StoredSpeech)[])
+    : prior
+      ? [prior as StoredSpeech]
+      : []
+  return [...was, event]
 }
 
 /**

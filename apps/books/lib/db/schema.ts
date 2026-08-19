@@ -47,6 +47,69 @@ export const booksSchema = pgSchema('books')
 // and agent 4 credited it as the reason a 35-call-site move stayed readable.
 export * from '@blackcode/platform-db/schema'
 
+// ═══════════════════════════════════════════════════════════════════════════
+// STORAGE SHAPES FOR jsonb COLUMNS
+// ═══════════════════════════════════════════════════════════════════════════
+// `.$type<T>()` is compile-time only: nothing here changes what Postgres
+// stores. It exists so a jsonb column crosses into TypeScript as its real
+// shape instead of `unknown` — with `unknown`, the wire types in lib/types.ts
+// were the ONLY guard, and the parity tests structurally could not hold
+// `accounts` or `label` (found on the frontend side, 2026-08-19). Wire shapes
+// stay in lib/types.ts; these are the STORAGE shapes, which differ where
+// storage keeps records verbatim and only configuration is normalized.
+
+/** Both languages, always. Configuration and statutory text. */
+export type StoredBiText = { fr: string; en: string }
+/**
+ * A record's speech, verbatim as filed: a bare string, or an object carrying
+ * `fr`, `en`, or both — `speaks()` requires one language, not two. Records are
+ * NEVER normalized; only configuration is.
+ */
+export type StoredSpeech = string | { fr?: string; en?: string }
+/** Account labels keep the mockup's storage shape; the wire normalizes to {fr, en}. */
+export type StoredAccountLabel = { fr: string; en?: string; enSuffix?: string }
+/** 0011: all three fields or the column is NULL — never a partial fx story. */
+export type StoredFx = { original: string; rate: string; source: string }
+/** 0014: the Devil's Advocate's flag. NULL = never checked. */
+export type StoredVerdict = {
+  verdict: 'accepted' | 'accepted_with_warning' | 'blocked'
+  rules: string[]
+  worst_case?: unknown
+  resolves?: unknown
+  at: string
+  by: string
+}
+/** Append-only trail. Payloads vary by event; every event is stamped `at`. */
+export type StoredHistoryEvent = { at: string } & Record<string, unknown>
+/**
+ * The history COLUMN: the event array — or, on rows born from the mockup, the
+ * original narrative text. appendHistory folds a narrative into element 0 on
+ * the first write (resolve.ts's array-or-first-element rule).
+ */
+export type StoredHistory = (StoredHistoryEvent | StoredSpeech)[] | StoredSpeech
+/** art. 959a al. 4: the related-party story on an entry. */
+export type StoredRelatedParty = {
+  counterpart?: string
+  kind?: string
+  justification?: StoredSpeech | null
+  mirror_entry_id?: number | null
+} & Record<string, unknown>
+/** A recognition rule's matcher. */
+export type StoredRulePattern = {
+  counterparty?: string | null
+  amount_chf?: number | null
+  tolerance_chf?: number | null
+  interval?: string | null
+}
+/** What an analysis read or showed. Values verbatim as filed. */
+export type StoredBasedOn = { label: StoredSpeech; value: unknown; href?: string }
+export type StoredFigure = { label: StoredSpeech; value: unknown }
+/** The ingest door's verdict on a piece's arithmetic. `problems` always an array. */
+export type StoredValidation = { passed: boolean; problems: string[] }
+/** One patrimoine line. */
+export type StoredPatrimoineItem = { label: StoredBiText; amount: number }
+
+
 /**
  * THIS APP'S WORKSPACES (Phase 7, 2026-08-11).
  *
@@ -187,12 +250,12 @@ export const booksEntity = booksSchema.table(
     bookkeeping_regime: varchar('bookkeeping_regime', { length: 20 }).notNull(),
     /** The art. 957 al. 2 election, recorded rather than assumed. */
     regime_election: varchar('regime_election', { length: 40 }),
-    regime_note: jsonb('regime_note'),
+    regime_note: jsonb('regime_note').$type<StoredSpeech>(),
     fiscal_year: varchar('fiscal_year', { length: 20 }).default('calendar').notNull(),
     vat_registered: boolean('vat_registered').default(false).notNull(),
     vat_method: varchar('vat_method', { length: 20 }),
     vat_filing: varchar('vat_filing', { length: 20 }),
-    vat_note: jsonb('vat_note'),
+    vat_note: jsonb('vat_note').$type<StoredSpeech>(),
     audit_status: varchar('audit_status', { length: 20 }),
     fte_count: numeric('fte_count', { precision: 6, scale: 2 }),
     accent: varchar('accent', { length: 16 }),
@@ -254,7 +317,7 @@ export const booksAccount = booksSchema.table(
       .references(() => booksEntity.id, { onDelete: 'cascade' }),
     no: varchar('no', { length: 10 }).notNull(),
     class: smallint('class').notNull(),
-    label: jsonb('label').notNull(),
+    label: jsonb('label').$type<StoredAccountLabel>().notNull(),
     statement: varchar('statement', { length: 10 }).notNull(),
     /** NOT NULL FK. An unmapped account is a load error, never an "autre" bucket. */
     statement_position: varchar('statement_position', { length: 40 })
@@ -331,7 +394,7 @@ export const booksSource = booksSchema.table(
     expected: varchar('expected', { length: 20 }),
     last_import: date('last_import'),
     retired: boolean('retired').default(false).notNull(),
-    notes_freeform: jsonb('notes_freeform'),
+    notes_freeform: jsonb('notes_freeform').$type<StoredSpeech>(),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -365,8 +428,8 @@ export const booksRule = booksSchema.table(
     active: boolean('active').default(true).notNull(),
     learned_from: varchar('learned_from', { length: 40 }),
     /** `{ counterparty, amount_chf, tolerance_chf, interval }`. */
-    pattern: jsonb('pattern').notNull(),
-    explanation: jsonb('explanation'),
+    pattern: jsonb('pattern').$type<StoredRulePattern>().notNull(),
+    explanation: jsonb('explanation').$type<StoredSpeech>(),
     account_no: varchar('account_no', { length: 10 }),
     /**
      * The entry that taught this rule. **Deliberately not a foreign key**:
@@ -375,7 +438,7 @@ export const booksRule = booksSchema.table(
      */
     created_from_entry_id: integer('created_from_entry_id'),
     created_on: date('created_on'),
-    note: jsonb('note'),
+    note: jsonb('note').$type<StoredSpeech>(),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -422,32 +485,32 @@ export const booksEntry = booksSchema.table(
     /** The bank's own text. Frozen at EVERY status, not only once posted. */
     raw_label: text('raw_label').notNull(),
     counterparty: varchar('counterparty', { length: 200 }),
-    explanation: jsonb('explanation'),
+    explanation: jsonb('explanation').$type<StoredSpeech>(),
     recognition: varchar('recognition', { length: 30 }).default('unrecognized').notNull(),
     matched_rule_id: integer('matched_rule_id').references(() => booksRule.id, {
       onDelete: 'set null',
     }),
     evidence_tier: varchar('evidence_tier', { length: 10 }).default('bare').notNull(),
-    evidence_note: jsonb('evidence_note'),
+    evidence_note: jsonb('evidence_note').$type<StoredSpeech>(),
     tva_rate: numeric('tva_rate', { precision: 5, scale: 2 }),
     tva_amount: numeric('tva_amount', { precision: 14, scale: 2 }),
     /** NEVER derived from `evidence_tier`. A CHECK requires `full` to claim. */
     tva_input_claimed: boolean('tva_input_claimed').default(false).notNull(),
-    tva_note: jsonb('tva_note'),
+    tva_note: jsonb('tva_note').$type<StoredSpeech>(),
     /** art. 959a al. 4. Holds `mirror_entry_id`, which points into another book. */
-    related_party: jsonb('related_party'),
+    related_party: jsonb('related_party').$type<StoredRelatedParty>(),
     piece_drive_ref: text('piece_drive_ref'),
     piece_hash: varchar('piece_hash', { length: 80 }),
     piece_captured: date('piece_captured'),
     /** 0011: the original-currency story, display-only. Nothing computes with it. */
-    fx: jsonb('fx'),
+    fx: jsonb('fx').$type<StoredFx>(),
     /** 0012: the bank's own reference — the import door's idempotency key. */
     bank_ref: varchar('bank_ref', { length: 64 }),
     /** 0014: the Devil's Advocate's flag {verdict, rules, worst_case, resolves, at, by}. NULL = never checked. */
-    verdict: jsonb('verdict'),
+    verdict: jsonb('verdict').$type<StoredVerdict>(),
     /** The only correction path. */
     reverses_entry_id: integer('reverses_entry_id'),
-    history: jsonb('history'),
+    history: jsonb('history').$type<StoredHistory>(),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     deleted_at: timestamp('deleted_at', { withTimezone: true }),
@@ -508,21 +571,21 @@ export const booksRiEntry = booksSchema.table(
     /** `recette` | `depense`. */
     direction: varchar('direction', { length: 10 }).notNull(),
     amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
-    category: jsonb('category'),
+    category: jsonb('category').$type<StoredSpeech>(),
     raw_label: text('raw_label').notNull(),
     counterparty: varchar('counterparty', { length: 200 }),
-    explanation: jsonb('explanation'),
+    explanation: jsonb('explanation').$type<StoredSpeech>(),
     recognition: varchar('recognition', { length: 30 }).default('unrecognized').notNull(),
     matched_rule_id: integer('matched_rule_id').references(() => booksRule.id, {
       onDelete: 'set null',
     }),
     evidence_tier: varchar('evidence_tier', { length: 10 }).default('bare').notNull(),
-    evidence_note: jsonb('evidence_note'),
+    evidence_note: jsonb('evidence_note').$type<StoredSpeech>(),
     piece_drive_ref: text('piece_drive_ref'),
     piece_hash: varchar('piece_hash', { length: 80 }),
     piece_captured: date('piece_captured'),
     /** 0011: the original-currency story, display-only. Nothing computes with it. */
-    fx: jsonb('fx'),
+    fx: jsonb('fx').$type<StoredFx>(),
     /** 0012: the bank's own reference — the import door's idempotency key. */
     bank_ref: varchar('bank_ref', { length: 64 }),
     /** 0012: which register source delivered this line. NULL for pre-import rows. */
@@ -530,8 +593,8 @@ export const booksRiEntry = booksSchema.table(
       onDelete: 'set null',
     }),
     /** 0014: the Devil's Advocate's flag {verdict, rules, worst_case, resolves, at, by}. NULL = never checked. */
-    verdict: jsonb('verdict'),
-    history: jsonb('history'),
+    verdict: jsonb('verdict').$type<StoredVerdict>(),
+    history: jsonb('history').$type<StoredHistory>(),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     deleted_at: timestamp('deleted_at', { withTimezone: true }),
@@ -565,8 +628,8 @@ export const booksPatrimoine = booksSchema.table(
     as_of: date('as_of').notNull(),
     compiled: date('compiled'),
     /** `[{ label, amount }]`. Not a chart of accounts, and must not become one. */
-    items: jsonb('items').default([]).notNull(),
-    note: jsonb('note'),
+    items: jsonb('items').$type<StoredPatrimoineItem[]>().default([]).notNull(),
+    note: jsonb('note').$type<StoredSpeech>(),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -623,7 +686,7 @@ export const booksRunbook = booksSchema.table('runbook', {
   updated: date('updated'),
   login_url: text('login_url'),
   credential_ref: text('credential_ref'),
-  steps: jsonb('steps').notNull().default([]),
+  steps: jsonb('steps').$type<unknown[]>().notNull().default([]),
   output: varchar('output', { length: 80 }),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -659,8 +722,8 @@ export const booksPieceInbox = booksSchema.table(
     sha256: varchar('sha256', { length: 64 }),
     drive_created_time: timestamp('drive_created_time', { withTimezone: true }),
     web_view_link: text('web_view_link'),
-    extraction: jsonb('extraction').notNull(),
-    validation: jsonb('validation').notNull(),
+    extraction: jsonb('extraction').$type<Record<string, unknown>>().notNull(),
+    validation: jsonb('validation').$type<StoredValidation>().notNull(),
     needs_review: boolean('needs_review').notNull().default(false),
     duplicate_of_id: integer('duplicate_of_id'),
     matched_entry_id: integer('matched_entry_id').references(() => booksEntry.id, {
@@ -671,7 +734,7 @@ export const booksPieceInbox = booksSchema.table(
       onDelete: 'set null',
     }),
     matched_at: timestamp('matched_at', { withTimezone: true }),
-    note: jsonb('note'),
+    note: jsonb('note').$type<StoredSpeech>(),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -733,14 +796,14 @@ export const booksAnalysis = booksSchema.table(
     asked: timestamp('asked', { withTimezone: true }).defaultNow().notNull(),
     asked_by: varchar('asked_by', { length: 120 }).notNull(),
     agent: varchar('agent', { length: 120 }).notNull(),
-    scenario_label: jsonb('scenario_label'),
+    scenario_label: jsonb('scenario_label').$type<StoredSpeech>(),
     /** Numeric restatement of the verdict's runway, so charts need no prose parsing. */
     runway_after_months: numeric('runway_after_months', { precision: 8, scale: 2 }),
-    question: jsonb('question').notNull(),
-    verdict: jsonb('verdict').notNull(),
-    figures: jsonb('figures').notNull(),
+    question: jsonb('question').$type<StoredSpeech>().notNull(),
+    verdict: jsonb('verdict').$type<StoredSpeech>().notNull(),
+    figures: jsonb('figures').$type<StoredFigure[]>().notNull(),
     /** What the agent read: [{label, value, href}]. Permanent. NEVER recomputed. */
-    based_on: jsonb('based_on').notNull(),
+    based_on: jsonb('based_on').$type<StoredBasedOn[]>().notNull(),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
@@ -767,9 +830,9 @@ export const booksAnalytiqueCategory = booksSchema.table(
       .references(() => booksEntity.id, { onDelete: 'cascade' }),
     seq: integer('seq').notNull(),
     key: varchar('key', { length: 40 }).notNull(),
-    label: jsonb('label').notNull(),
+    label: jsonb('label').$type<StoredBiText>().notNull(),
     /** Account numbers as a jsonb string array, validated against the chart at write time. */
-    accounts: jsonb('accounts').notNull(),
+    accounts: jsonb('accounts').$type<string[]>().notNull(),
     retired: boolean('retired').notNull().default(false),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -801,7 +864,7 @@ export const booksComplianceRule = booksSchema.table('compliance_rule', {
   severity: varchar('severity', { length: 10 }).notNull(),
   consequence: text('consequence').notNull(),
   /** The human-sized {fr, en} one-liner, from the mockup's card. */
-  summary: jsonb('summary'),
+  summary: jsonb('summary').$type<StoredBiText>(),
   source_confidence: varchar('source_confidence', { length: 30 }).notNull(),
   review_state: varchar('review_state', { length: 10 }).default('draft').notNull(),
   /** The fiduciary's corrected wording when review_state = 'edited'. The original stays. */
@@ -824,7 +887,7 @@ export const booksTaxParams = booksSchema.table('tax_params', {
     .references(() => booksEntity.id, { onDelete: 'cascade' }),
   canton: varchar('canton', { length: 2 }).notNull(),
   commune: varchar('commune', { length: 80 }).notNull(),
-  params: jsonb('params').notNull(),
+  params: jsonb('params').$type<Record<string, unknown>>().notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
