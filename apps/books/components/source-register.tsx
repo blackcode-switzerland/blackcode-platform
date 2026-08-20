@@ -42,11 +42,14 @@
 // from the layer would be a guess. `lib/wire-parity.test.ts` pins the absence,
 // so the day it is served this component is what grows the chain.
 
+'use client'
+
 import { useMemo } from 'react'
 import Link from 'next/link'
 import { AlertTriangle } from 'lucide-react'
 import { scopedHref } from '@/lib/nav'
-import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useT } from '@/lib/i18n'
 import { findTerm, useMeta } from '@/lib/hooks'
 import { DataTable, type Column } from './data-table'
 import { DateText } from './date-text'
@@ -77,6 +80,8 @@ export function SourceRegister({
   scope: { entity: string | null; exercice: number | null }
 }) {
   const { data: meta } = useMeta()
+  const t = useT()
+  const label = useLabel()
 
   const problems = useMemo(
     () => (sources ?? []).filter((s) => NEEDS_ATTENTION.includes(s.status)),
@@ -87,7 +92,7 @@ export function SourceRegister({
     () => [
       {
         key: 'name',
-        header: 'Source',
+        header: t('sources.colSource'),
         cell: (s) => (
           <span className={'block min-w-0 ' + (s.retired ? 'opacity-60' : '')}>
             <Link
@@ -107,7 +112,7 @@ export function SourceRegister({
       },
       {
         key: 'type',
-        header: 'Type',
+        header: t('sources.colType'),
         cell: (s) => (
           <span className="inline-flex flex-wrap items-center gap-1">
             <TermChip term={findTerm(meta, 'source_types', s.type)} value={s.type} />
@@ -121,7 +126,7 @@ export function SourceRegister({
       },
       {
         key: 'entity',
-        header: 'Book',
+        header: t('sources.colBook'),
         cell: (s) =>
           s.entity ? (
             <span className="font-mono text-[12px] text-foreground">{s.entity}</span>
@@ -130,35 +135,39 @@ export function SourceRegister({
             // consequence — nothing it carries is on any book's statements —
             // and it must read as a fact, not as a blank cell.
             <span className="text-[12px] italic text-muted-foreground" data-entity="none">
-              not attributed
+              {t('sources.notAttributed')}
             </span>
           ),
         sortValue: (s) => s.entity ?? '',
       },
       {
         key: 'method',
-        header: 'Import method',
+        header: t('sources.colMethod'),
         cell: (s) =>
           s.method ? (
             <span className="text-[12px] text-muted-foreground">{s.method}</span>
           ) : (
-            <span className="text-[12px] italic text-muted-foreground">not recorded</span>
+            <span className="text-[12px] italic text-muted-foreground">
+              {t('sources.notRecorded')}
+            </span>
           ),
         sortValue: (s) => s.method ?? '',
       },
       {
         key: 'last_import',
-        header: 'Last import',
+        header: t('sources.colLastImport'),
         cell: (s) => (
           <span className="block">
             {s.last_import ? (
               <DateText value={s.last_import} className="text-[12px]" />
             ) : (
-              <span className="text-[12px] italic text-muted-foreground">never</span>
+              <span className="text-[12px] italic text-muted-foreground">
+                {t('sources.never')}
+              </span>
             )}
             {s.expected && s.expected !== 'none' && (
               <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                expected {s.expected}
+                {t('sources.expected', { cadence: s.expected })}
               </span>
             )}
           </span>
@@ -167,7 +176,7 @@ export function SourceRegister({
       },
       {
         key: 'status',
-        header: 'Status',
+        header: t('sources.colStatus'),
         cell: (s) => (
           <span
             className="inline-flex flex-col items-start gap-0.5"
@@ -178,7 +187,10 @@ export function SourceRegister({
             <TermChip term={findTerm(meta, 'source_status', s.status)} value={s.status} />
             {s.expected && s.expected !== 'none' && !s.retired && (
               <span className="text-[10.5px] text-muted-foreground">
-                stale &gt; {s.windows.stale_after_days}d · gap &gt; {s.windows.gap_after_days}d
+                {t('sources.windows', {
+                  stale: s.windows.stale_after_days,
+                  gap: s.windows.gap_after_days,
+                })}
               </span>
             )}
           </span>
@@ -186,7 +198,7 @@ export function SourceRegister({
         sortValue: (s) => s.status,
       },
     ],
-    [meta, base, scope]
+    [meta, base, scope, t]
   )
 
   return (
@@ -205,10 +217,11 @@ export function SourceRegister({
           <AlertTriangle size={14} className="mt-0.5 shrink-0 text-primary-strong" />
           <p className="text-[12.5px] text-foreground">
             <span className="font-medium">
-              {problems.length} {problems.length === 1 ? 'source needs' : 'sources need'} attention
+              {t(problems.length === 1 ? 'sources.attentionOne' : 'sources.attentionMany', {
+                n: problems.length,
+              })}
             </span>{' '}
-            — {problems.map((s) => s.name).join(' · ')}. Money may be moving through a channel
-            nothing has imported.
+            {t('sources.attentionBody', { names: problems.map((s) => s.name).join(' · ') })}
           </p>
         </div>
       )}
@@ -220,7 +233,7 @@ export function SourceRegister({
         isLoading={isLoading}
         error={error}
         initialSort={{ key: 'name', direction: 'asc' }}
-        empty="No sources are provisioned in this account. Sources are provisioned rather than authored — there is no route that creates one, and no button here that pretends otherwise."
+        empty={t('sources.registerEmpty')}
       />
 
       {/* Freeform notes are the reason each source has its own page. Shown as a
@@ -228,9 +241,9 @@ export function SourceRegister({
           index unreadable. */}
       {sources && sources.some((s) => s.notes_freeform) && (
         <p className="mt-2 text-[11.5px] text-muted-foreground">
-          {sources.filter((s) => en(s.notes_freeform)).length} of these carry freeform notes —
-          quirks, treatment rules and contacts a statement never tells you. Open a source to read
-          them.
+          {t('sources.freeformNote', {
+            n: sources.filter((s) => label(s.notes_freeform)).length,
+          })}
         </p>
       )}
     </>

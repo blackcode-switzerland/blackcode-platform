@@ -55,7 +55,8 @@ import { ArrowLeft } from 'lucide-react'
 import { useScope } from '@/lib/scope'
 import { useComplianceRules } from '@/lib/hooks'
 import { scopedHref } from '@/lib/nav'
-import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useT } from '@/lib/i18n'
 import {
   appliesToText,
   countByState,
@@ -79,6 +80,7 @@ export default function Page() {
   const scope = useScope()
   const base = `/dashboard/${params.ws}`
   const rules = useComplianceRules()
+  const t = useT()
   // What a verdict deep-links to: `?rule=vat-008`. Highlighted, never filtered
   // to — the register is the point, and a reader arriving from a verdict still
   // needs the rules around it.
@@ -91,13 +93,13 @@ export default function Page() {
   const drafts = counts.draft ?? 0
 
   return (
-    <ScreenFrame title="Compliance rules">
+    <ScreenFrame title={t('compliance.uiName')}>
       <Link
         href={scopedHref(base, '', scope)}
         className="inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft size={13} />
-        Overview
+        {t('tax.back')}
       </Link>
 
       {/* ── NOT `<StatementHeading>`, AND THAT WAS FOUND BY OPENING IT ────
@@ -109,24 +111,24 @@ export default function Page() {
           browser, not in review. */}
       <div className="mt-3 mb-4">
         <h1 className="text-lg font-semibold text-foreground">
-          Règles de conformité
-          <span className="ml-2 text-sm font-normal text-muted-foreground">Compliance rules</span>
+          {t('compliance.uiName')}
+          {t('compliance.legalName') !== t('compliance.uiName') && (
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              {t('compliance.legalName')}
+            </span>
+          )}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Every book · art. 957 ff. CO and the tax and VAT statutes each rule cites
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{t('compliance.subheading')}</p>
       </div>
 
       <p className="mb-4 text-[12.5px] text-muted-foreground">
-        The statutory checks this product knows about, researched against Fedlex with the article
-        each one rests on.{' '}
-        <span className="text-foreground">They are the same for every book</span>, so the selectors
-        above do not filter this page — and nothing here is evaluated against your records. A
-        compliance pass is an external agent run; this is the register it cites.
+        {t('compliance.leadA')}{' '}
+        <span className="text-foreground">{t('compliance.leadB')}</span>
+        {t('compliance.leadC')}
       </p>
 
-      {rules.isLoading && <Loading rows={8} label="Loading the compliance rules" />}
-      {rules.error && <ErrorState error={rules.error} title="The rules could not be loaded" />}
+      {rules.isLoading && <Loading rows={8} label={t('compliance.loading')} />}
+      {rules.error && <ErrorState error={rules.error} title={t('compliance.failed')} />}
 
       {rules.data && (
         <>
@@ -137,19 +139,23 @@ export default function Page() {
             role="note"
           >
             <span className="font-medium text-foreground">
-              {drafts} of {rules.data.length} {drafts === 1 ? 'rule is' : 'rules are'} still draft.
+              {t(drafts === 1 ? 'compliance.draftsOne' : 'compliance.draftsMany', {
+                n: drafts,
+                total: rules.data.length,
+              })}
             </span>{' '}
-            That is where every rule starts and it is not a problem with any of them: an agent read
-            the article, and reading an article is not a fiduciary&apos;s sign-off. Signing one off
-            is recorded against your name and cannot be taken back.
+            {t('compliance.draftsBody')}
             {Object.entries(counts)
               .filter(([state]) => state !== 'draft')
-              .map(([state, n]) => (
-                <span key={state}>
-                  {' '}
-                  {n} {reviewStateFace(state)?.label.toLowerCase() ?? state}.
-                </span>
-              ))}
+              .map(([state, n]) => {
+                const face = reviewStateFace(state)
+                return (
+                  <span key={state}>
+                    {' '}
+                    {n} {face ? t(face.labelKey).toLowerCase() : state}.
+                  </span>
+                )
+              })}
           </div>
 
           <div className="border-t border-border">
@@ -164,6 +170,8 @@ export default function Page() {
 }
 
 function RuleCard({ rule, highlighted }: { rule: ComplianceRule; highlighted: boolean }) {
+  const t = useT()
+  const label = useLabel()
   // The row the SERVER returned after a review in this session — kept so the
   // screen reports what landed rather than what was asked for. The list refetches
   // too; this is what survives the tick in between.
@@ -193,22 +201,26 @@ function RuleCard({ rule, highlighted }: { rule: ComplianceRule; highlighted: bo
             note, rather than into `draft`'s calm treatment (which would hide a
             rejection) or `blocker`'s (which would invent one). */}
         {severity ? (
-          <TonePill tone={severity.tone} value={shown.severity} title={severity.meaning}>
-            {severity.label}
+          <TonePill tone={severity.tone} value={shown.severity} title={t(severity.meaningKey)}>
+            {t(severity.labelKey)}
           </TonePill>
         ) : (
-          <TonePill tone="warn" value={shown.severity} title="This build does not know this severity.">
-            {shown.severity} (unknown)
+          <TonePill
+            tone="warn"
+            value={shown.severity}
+            title={t('compliance.unknownSeverity')}
+          >
+            {t('compliance.unknownSuffix', { value: shown.severity })}
           </TonePill>
         )}
 
         {state ? (
-          <TonePill tone={state.tone} value={shown.review_state} title={state.meaning}>
-            {state.label}
+          <TonePill tone={state.tone} value={shown.review_state} title={t(state.meaningKey)}>
+            {t(state.labelKey)}
           </TonePill>
         ) : (
-          <TonePill tone="warn" value={shown.review_state} title="This build does not know this state.">
-            {shown.review_state} (unknown)
+          <TonePill tone="warn" value={shown.review_state} title={t('compliance.unknownState')}>
+            {t('compliance.unknownSuffix', { value: shown.review_state })}
           </TonePill>
         )}
 
@@ -222,7 +234,7 @@ function RuleCard({ rule, highlighted }: { rule: ComplianceRule; highlighted: bo
             `summary` is nullable jsonb and `en()` returns '' for anything that
             is not a `{fr, en}` pair — so the fallback is a positive test on the
             rendered string, never on the field's truthiness. */}
-        {en(shown.summary) || shown.trigger_condition}
+        {label(shown.summary) || shown.trigger_condition}
       </p>
 
       <p className="mt-1 text-[11.5px] text-muted-foreground">
@@ -230,28 +242,33 @@ function RuleCard({ rule, highlighted }: { rule: ComplianceRule; highlighted: bo
         {provenance ? (
           <>
             {' · '}
-            <span title={provenance.meaning}>{provenance.label}</span>
+            <span title={t(provenance.meaningKey)}>{t(provenance.labelKey)}</span>
           </>
         ) : (
           <>
             {' · '}
-            <span className="font-mono">{shown.source_confidence}</span> (a provenance this build
-            does not know)
+            {t('compliance.unknownProvenance', { value: shown.source_confidence })}
           </>
         )}
       </p>
 
       {provenance && (
-        <p className="mt-1 text-[11.5px] text-muted-foreground">{provenance.meaning}</p>
+        <p className="mt-1 text-[11.5px] text-muted-foreground">{t(provenance.meaningKey)}</p>
       )}
 
       <details className="mt-2">
         <summary className="cursor-pointer text-[11.5px] text-muted-foreground hover:text-foreground">
-          The check, and what it costs
+          {t('compliance.checkSummary')}
         </summary>
         <div className="mt-1.5 space-y-2 text-[12px]">
-          <Field label="Triggers when">{shown.trigger_condition}</Field>
-          <Field label={logic.corrected ? 'Check logic — as corrected' : 'Check logic'}>
+          <Field label={t('compliance.triggersWhen')}>{shown.trigger_condition}</Field>
+          <Field
+            label={
+              logic.corrected
+                ? t('compliance.checkLogicCorrected')
+                : t('compliance.checkLogic')
+            }
+          >
             <span className="font-mono text-[11.5px]">{logic.text}</span>
           </Field>
           {/* ── THE ORIGINAL SURVIVES A CORRECTION, AND IS SHOWN ─────────
@@ -259,26 +276,26 @@ function RuleCard({ rule, highlighted }: { rule: ComplianceRule; highlighted: bo
               not lost. A screen showing only the correction would lose the
               record OF the correction. */}
           {logic.original !== null && (
-            <Field label="Check logic — as researched, superseded">
+            <Field label={t('compliance.checkLogicOriginal')}>
               <span className="font-mono text-[11.5px] text-muted-foreground">
                 {logic.original}
               </span>
             </Field>
           )}
-          <Field label="If it is violated">{shown.consequence}</Field>
+          <Field label={t('compliance.consequence')}>{shown.consequence}</Field>
         </div>
       </details>
 
       {isReviewed(shown.review_state) && (
         <p className="mt-2 text-[11.5px] text-muted-foreground">
-          {state?.meaning}{' '}
+          {state ? t(state.meaningKey) : null}{' '}
           {shown.reviewed_by && (
             <>
-              Signed off by <span className="text-foreground">{shown.reviewed_by}</span>
+              {t('compliance.signedOffBy', { name: shown.reviewed_by })}
               {shown.reviewed_at && (
                 <>
                   {' '}
-                  on <DateText value={shown.reviewed_at} />
+                  {t('compliance.signedOffOn')} <DateText value={shown.reviewed_at} />
                 </>
               )}
               .

@@ -27,7 +27,10 @@
 // destructive tint rather than an em dash. It is a fact, not an error — hence
 // tinted text and not a badge, the same rule `<Money>` follows for negatives.
 
+'use client'
+
 import { ExternalLink } from 'lucide-react'
+import { useT } from '@/lib/i18n'
 import { DateText } from './date-text'
 import type { Piece } from '@/lib/types'
 
@@ -41,10 +44,11 @@ export function DriveLink({
   withCaptured?: boolean
   className?: string
 }) {
+  const t = useT()
   if (!piece) {
     return (
       <span className={'text-xs text-destructive ' + className} data-piece="none">
-        no document
+        {t('piece.noDocument')}
       </span>
     )
   }
@@ -62,7 +66,7 @@ export function DriveLink({
         className="inline-flex items-center gap-1 text-[13px] hover:text-primary-strong"
       >
         <ExternalLink size={12} className="shrink-0" />
-        Document
+        {t('piece.document')}
       </a>
       {/* ── A NULL HASH IS A FINDING, AND IT USED TO BE A WHITE SCREEN ────
           `books.entry.piece_hash` is nullable and `lib/types.ts` declared it a
@@ -87,7 +91,7 @@ export function DriveLink({
         </span>
       ) : (
         <span className="text-[11px] text-destructive" data-hash="none">
-          no checksum
+          {t('piece.noChecksum')}
         </span>
       )}
       {withCaptured && (

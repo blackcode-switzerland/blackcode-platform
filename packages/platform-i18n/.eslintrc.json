@@ -1,0 +1,49 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "plugins": [
+    "@typescript-eslint"
+  ],
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "jsx": true
+    }
+  },
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": [
+              "**/apps/**",
+              "../../../apps/*",
+              "@/*"
+            ],
+            "message": "A platform package may never import from an app. The dependency runs one way: apps depend on packages. If you need something from apps/, it does not belong in this package \u2014 leave it in the app until a second app genuinely needs it unchanged. See docs/platform-architecture.md \u00a77.6."
+          }
+        ]
+      }
+    ],
+    "@typescript-eslint/no-explicit-any": "error",
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ],
+    "eqeqeq": [
+      "error",
+      "always",
+      {
+        "null": "ignore"
+      }
+    ],
+    "no-var": "error",
+    "prefer-const": "error",
+    "no-throw-literal": "error"
+  }
+}

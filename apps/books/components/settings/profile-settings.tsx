@@ -16,12 +16,14 @@ import { toast } from 'sonner'
 import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 import { useMe } from '@/lib/hooks'
 import { useUpdateProfile } from '@/lib/account'
+import { useT } from '@/lib/i18n'
 import { ErrorState, Loading } from '@/components/states'
 import { Section, inputClass } from './section'
 
 export function ProfileSettings() {
   const me = useMe()
   const update = useUpdateProfile()
+  const t = useT()
 
   // Seeded from the query and then owned by the form. Re-seeded when the query
   // resolves — without the effect, the inputs mount empty on the first render
@@ -37,8 +39,8 @@ export function ProfileSettings() {
     setAvatar(me.data.avatar_url ?? '')
   }, [me.data])
 
-  if (me.isLoading) return <Loading rows={4} label="Loading your account" />
-  if (me.error) return <ErrorState error={me.error} title="Your account could not be loaded" />
+  if (me.isLoading) return <Loading rows={4} label={t('settings.profile.loading')} />
+  if (me.error) return <ErrorState error={me.error} title={t('settings.profile.loadError')} />
   if (!me.data) return null
 
   async function onSubmit(e: React.FormEvent) {
@@ -65,13 +67,13 @@ export function ProfileSettings() {
     // is shared with every other blackcode app and the server is the only thing
     // that knows what it now says.
     await me.refetch()
-    toast.success('Profile saved.')
+    toast.success(t('settings.profile.saved'))
   }
 
   return (
     <Section
-      title="Your blackcode profile"
-      note="This is your account, not a b/books one. The name here is the name every blackcode app shows."
+      title={t('settings.profile.title')}
+      note={t('settings.profile.note')}
     >
       <form onSubmit={onSubmit} className="space-y-3.5">
         <div className="flex items-center gap-3">
@@ -86,7 +88,7 @@ export function ProfileSettings() {
               htmlFor="avatar"
               className="mb-1.5 block text-xs font-medium text-muted-foreground"
             >
-              Photo URL
+              {t('settings.profile.photoUrl')}
             </label>
             <input
               id="avatar"
@@ -99,7 +101,7 @@ export function ProfileSettings() {
             />
             {!me.data.avatar_editable && (
               <p className="mt-1 text-xs text-muted-foreground">
-                Your photo comes from Google and re-syncs each time you sign in with it.
+                {t('settings.profile.photoFromGoogle')}
               </p>
             )}
           </div>
@@ -107,7 +109,7 @@ export function ProfileSettings() {
 
         <div>
           <label htmlFor="email" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Email
+            {t('settings.profile.email')}
           </label>
           {/* Not an input. The address IS the account — changing it is changing
               which account you are, in every app at once — and there is no route
@@ -117,14 +119,14 @@ export function ProfileSettings() {
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {me.data.connected_google
-              ? 'Signed in with Google. Your photo is synced from there.'
-              : 'Signed in with an email and password.'}
+              ? t('settings.profile.viaGoogle')
+              : t('settings.profile.viaPassword')}
           </p>
         </div>
 
         <div>
           <label htmlFor="name" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Name
+            {t('settings.profile.name')}
           </label>
           <input
             id="name"
@@ -132,7 +134,7 @@ export function ProfileSettings() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             className={inputClass}
-            placeholder="Your name"
+            placeholder={t('settings.profile.namePlaceholder')}
           />
         </div>
 
@@ -141,7 +143,7 @@ export function ProfileSettings() {
             htmlFor="tagline"
             className="mb-1.5 block text-xs font-medium text-muted-foreground"
           >
-            Tagline
+            {t('settings.profile.tagline')}
           </label>
           <input
             id="tagline"
@@ -149,7 +151,7 @@ export function ProfileSettings() {
             value={tagline}
             onChange={(e) => setTagline(e.target.value)}
             className={inputClass}
-            placeholder="What you do here"
+            placeholder={t('settings.profile.taglinePlaceholder')}
           />
         </div>
 
@@ -159,7 +161,7 @@ export function ProfileSettings() {
             disabled={update.pending}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
           >
-            {update.pending ? 'Saving…' : 'Save'}
+            {update.pending ? t('settings.profile.saving') : t('settings.profile.save')}
           </button>
         </div>
       </form>

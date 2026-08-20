@@ -48,6 +48,14 @@
 // accents and vocabulary colours are user data and API data respectively, and
 // neither belongs on a page that renders before anybody has signed in.
 
+'use client'
+
+// (Marked `'use client'` on 2026-08-20. It renders no state and never did — it
+// is here because it calls `useT()`, and the alternative was `serverT()` plus
+// threading a translator through six nested section components. A static page in
+// the client bundle costs a few KB; a prop drilled through six components costs
+// the next person who adds a seventh.)
+
 import Link from 'next/link'
 import {
   ArrowRight,
@@ -59,6 +67,7 @@ import {
   Terminal,
 } from 'lucide-react'
 import { SiteFrame } from '@/components/site-chrome'
+import { useT } from '@/lib/i18n'
 
 export function LandingPage() {
   return (
@@ -72,19 +81,20 @@ export function LandingPage() {
 }
 
 function HeaderNav() {
+  const t = useT()
   return (
     <>
       <Link
         href="/login"
         className="rounded-md px-3 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        Sign in
+        {t('site.signIn')}
       </Link>
       <Link
         href="/login?tab=signup"
         className="rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
       >
-        Create an account
+        {t('site.createAccount')}
       </Link>
     </>
   )
@@ -93,33 +103,31 @@ function HeaderNav() {
 /* -------------------------------------------------------------- sections -- */
 
 function Hero() {
+  const t = useT()
   return (
     <section className="mx-auto max-w-5xl px-5 pb-16 pt-20 sm:px-6 sm:pt-28">
       <p className="text-xs font-medium uppercase tracking-wider text-primary-strong">
-        Statutory bookkeeping
+        {t('landing.eyebrow')}
       </p>
       <h1 className="mt-4 max-w-3xl text-balance text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">
-        Books you can defend, line by line.
+        {t('landing.headline')}
       </h1>
       <p className="mt-5 max-w-2xl text-balance text-lg text-muted-foreground">
-        b/books keeps double-entry accounts for as many books as you have. Every
-        entry says what it means, what evidence stands behind it, and where that
-        evidence lives — because in ten years&rsquo; time that is the only thing
-        anybody will ask.
+        {t('landing.lede')}
       </p>
       <div className="mt-9 flex flex-col gap-3 sm:flex-row">
         <Link
           href="/login?tab=signup"
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
         >
-          Create an account
+          {t('site.createAccount')}
           <ArrowRight size={16} />
         </Link>
         <Link
           href="/login"
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-5 py-3 text-sm font-medium transition-colors hover:bg-accent"
         >
-          Sign in
+          {t('site.signIn')}
         </Link>
       </div>
       {/* No screenshot. `apps/issues` ships hero-light.png / hero-dark.png; this
@@ -131,58 +139,33 @@ function Hero() {
 }
 
 function WhatItIsFor() {
+  const t = useT()
   const items = [
-    {
-      icon: BookOpen,
-      title: 'One book, or several',
-      copy:
-        'A company, a second company, a self-employment activity — each is its own set of books with its own chart, its own year and its own balance. Switching between them is one control, not one login.',
-    },
-    {
-      icon: ScanSearch,
-      title: 'Every entry is explained',
-      copy:
-        'The bank text a transaction arrived with is never overwritten. What the entry MEANS is recorded beside it, along with whether that was recognised automatically or decided by a person.',
-    },
-    {
-      icon: FileCheck2,
-      title: 'Evidence is a first-class field',
-      copy:
-        'What document stands behind an entry, and what that document is good for, are recorded per entry — and the two legal consequences, profit tax and input VAT, are tracked separately because they are separate.',
-    },
-    {
-      icon: Scale,
-      title: 'The statements are the statute',
-      copy:
-        'Balance sheet and income statement in the order art. 959a and 959b CO give, with the wording they give. Lines that are zero this year still appear, because the list is the law and not a view of the data.',
-    },
-    {
-      icon: Landmark,
-      title: 'Where the money actually comes from',
-      copy:
-        'A register of every bank, card, processor and document feed, and whether each one is current. A gap in a feed is a gap in the books, and it is shown as one.',
-    },
-    {
-      icon: Terminal,
-      title: 'Driven by the agents you run',
-      copy:
-        'Ingest, matching and reconciliation happen outside this app. What you get here is the ledger, the reasoning behind it, and the small number of decisions that need a person.',
-    },
-  ]
+    { icon: BookOpen, n: '1' },
+    { icon: ScanSearch, n: '2' },
+    { icon: FileCheck2, n: '3' },
+    { icon: Scale, n: '4' },
+    { icon: Landmark, n: '5' },
+    { icon: Terminal, n: '6' },
+  ] as const
   return (
     <section className="border-t border-border bg-muted/40">
       <div className="mx-auto max-w-5xl px-5 py-16 sm:px-6 sm:py-20">
         <h2 className="max-w-2xl text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
-          What it does.
+          {t('landing.whatItDoes')}
         </h2>
         <div className="mt-10 grid gap-x-8 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((it) => (
-            <div key={it.title}>
+            <div key={it.n}>
               <span className="inline-flex size-9 items-center justify-center rounded-lg bg-primary/15 text-primary-strong">
                 <it.icon size={18} />
               </span>
-              <h3 className="mt-3.5 text-[15px] font-semibold">{it.title}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{it.copy}</p>
+              <h3 className="mt-3.5 text-[15px] font-semibold">
+                {t(`landing.f${it.n}.title`)}
+              </h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                {t(`landing.f${it.n}.copy`)}
+              </p>
             </div>
           ))}
         </div>
@@ -192,65 +175,44 @@ function WhatItIsFor() {
 }
 
 function ForAgents() {
+  const t = useT()
   return (
     <section className="border-t border-border">
       <div className="mx-auto max-w-5xl px-5 py-16 sm:px-6 sm:py-20">
         <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-primary-strong">
-              Agent-first
+              {t('landing.agentEyebrow')}
             </p>
             <h2 className="mt-4 text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
-              The work happens outside. This is where you check it.
+              {t('landing.agentHeadline')}
             </h2>
+            {/* The three command names are interpolated into the sentence rather
+                than wrapped in `<span className="font-mono">` around it. French
+                reorders both clauses; splitting the paragraph into fragments in
+                JSX would fix English word order into the French. The monospace
+                treatment of `bk`, `bk guide` and `bk meta` is what that costs,
+                and it is the same trade the token page makes. */}
             <p className="mt-4 text-muted-foreground">
-              b/books is operated by people in this web app and by agents through{' '}
-              <span className="font-mono text-foreground">bk</span>, one Go binary
-              on npm. There is no HTTP API to learn and no reference to keep in
-              sync: <span className="font-mono text-foreground">bk guide</span>{' '}
-              ships inside the binary, so it describes exactly the version you are
-              running, offline.
+              {t('landing.agentP1', { bk: 'bk', guide: 'bk guide' })}
             </p>
-            <p className="mt-4 text-muted-foreground">
-              Anything that changes without a release — the vocabularies, the VAT
-              rates, which books you have — comes from{' '}
-              <span className="font-mono text-foreground">bk meta</span>, live.
-              That is why none of it is printed on this page.
-            </p>
-            <p className="mt-4 text-muted-foreground">
-              There is no chat box here and no assistant in the corner. Judgement
-              belongs to the agent that does the ingest, or to you; this app&rsquo;s
-              job is to show you what was decided and let you change it.
-            </p>
+            <p className="mt-4 text-muted-foreground">{t('landing.agentP2', { meta: 'bk meta' })}</p>
+            <p className="mt-4 text-muted-foreground">{t('landing.agentP3')}</p>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-6">
-            <h3 className="text-[15px] font-semibold">What the law asks of a set of books</h3>
+            <h3 className="text-[15px] font-semibold">{t('landing.lawTitle')}</h3>
             <dl className="mt-4 space-y-3.5 text-sm">
-              <div>
-                <dt className="font-medium text-foreground">art. 957 CO — who must keep them</dt>
-                <dd className="mt-0.5 text-muted-foreground">
-                  A company keeps full double-entry accounts. There is no turnover
-                  threshold that lets one out.
-                </dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">art. 958f CO — for how long</dt>
-                <dd className="mt-0.5 text-muted-foreground">
-                  Ten years, and a digital copy counts only if its integrity can be
-                  shown. That is why documents are referenced with a hash taken at
-                  capture rather than uploaded.
-                </dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">
-                  art. 959a / 959b CO — what they must look like
-                </dt>
-                <dd className="mt-0.5 text-muted-foreground">
-                  A fixed structure, in a fixed order. The balance sheet and income
-                  statement here are that structure, not a report built on top of it.
-                </dd>
-              </div>
+              {(['1', '2', '3'] as const).map((n) => (
+                <div key={n}>
+                  <dt className="font-medium text-foreground">
+                    {t(`landing.law${n}.term`)}
+                  </dt>
+                  <dd className="mt-0.5 text-muted-foreground">
+                    {t(`landing.law${n}.def`)}
+                  </dd>
+                </div>
+              ))}
             </dl>
           </div>
         </div>
@@ -260,29 +222,27 @@ function ForAgents() {
 }
 
 function FinalCTA() {
+  const t = useT()
   return (
     <section className="border-t border-border bg-muted/40">
       <div className="mx-auto max-w-5xl px-5 py-16 text-center sm:px-6 sm:py-20">
         <h2 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
-          Open the books.
+          {t('landing.ctaHeadline')}
         </h2>
-        <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-          Sign in with your blackcode account — the same one the other blackcode
-          apps use.
-        </p>
+        <p className="mx-auto mt-3 max-w-xl text-muted-foreground">{t('landing.ctaBody')}</p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
             href="/login?tab=signup"
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
-            Create an account
+            {t('site.createAccount')}
             <ArrowRight size={16} />
           </Link>
           <Link
             href="/login"
             className="inline-flex items-center justify-center rounded-lg border border-border px-5 py-3 text-sm font-medium transition-colors hover:bg-accent"
           >
-            Sign in
+            {t('site.signIn')}
           </Link>
         </div>
       </div>

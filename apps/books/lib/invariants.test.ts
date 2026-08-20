@@ -40,8 +40,19 @@ config({ path: join(APP_ROOT, '.env') })
 // for controlled groups, and three books of one owner are not one. The word
 // is allowed exactly where the disclaimer explains this, and nowhere else.
 describe('invariant 7: never say consolidated', () => {
+  // ── THIS LIST GAINED AN ENTRY ON 2026-08-20, AND WHY MATTERS ────────────
+  // The disclaimer used to be JSX inside the overview page. The language switch
+  // moved it into `lib/dictionary/overview.ts` — where both languages of it now
+  // live — and this guard went red on the same commit, which is exactly what it
+  // is for: it is the rule that the word may not travel without its explanation,
+  // and the explanation travelled.
+  //
+  // **The page is still allowed**, because `overview.rollupLead` is rendered
+  // there and the key names it. What is NOT allowed is a third file: the word
+  // has one home in each language and this list is what says so.
   const ALLOWED = new Set([
     'app/dashboard/[ws]/page.tsx', // the personal overview, disclaimer included
+    'lib/dictionary/overview.ts', // that disclaimer's two languages, and only there
     'lib/rollup.ts', // computes the aggregation; its comments state the rule
     'lib/rollup.test.ts',
     'lib/invariants.test.ts', // this file

@@ -19,18 +19,29 @@
 //   - **There is no "personal view" item.** It was merged into the overview,
 //     which carries both the book index and the cross-book rollup.
 //
-// ── THE URL SEGMENTS ARE ENGLISH (D-A) ─────────────────────────────────────
+// ── THE URL SEGMENTS STAY ENGLISH; THE LABELS ARE TRANSLATED ───────────────
 // The mockup's files are `app-bilan.html`, `app-compte-resultat.html`,
 // `app-analytique.html`. Those are French because the mockup was French
-// throughout; the interface here is English, so the segments are too. The one
-// place French survives is the statutory line labels inside the balance sheet
-// and income statement — see `lib/label.ts`.
+// throughout.
+//
+// **The segment is the address; the label is what the reader reads.** Since
+// 2026-08-20 (D-A, rewritten) this app has a language switch, and the labels
+// below are therefore dictionary KEYS rather than words — resolved by `t()` in
+// the component that renders them, because this module is imported by server
+// and client code alike and a hook cannot be called here.
+//
+// The segments deliberately did NOT move with them. A localised path would mean
+// two URLs for one screen, a shared link whose meaning changes with the
+// recipient's preference, and a `scopedHref` that has to know the locale before
+// it can build an href.
 //
 // ── `scoped` IS WHAT THE BOOK SWITCHER READS ───────────────────────────────
 // An entity-scoped page's numbers change when you switch book; an unscoped one's
 // do not. The switcher is hidden on unscoped pages rather than shown and
 // ignored, because a control that appears to do nothing is worse than an absent
 // one — the reader assumes they used it wrong.
+
+import type { BooksKey } from './dictionary'
 
 /** The lucide icon names the shell must supply a component for. */
 export type NavIconName =
@@ -47,15 +58,22 @@ export type NavIconName =
 export interface NavItem {
   /** The path under `/dashboard/{ws}`. `''` is the overview. */
   seg: string
-  label: string
+  /**
+   * A `BooksKey`, not a word.
+   *
+   * `lib/dictionary/nav.ts` holds both languages. Typed as `BooksKey` so a nav
+   * entry naming a key that does not exist is a compile error rather than an
+   * item whose label renders as `nav.whatever`.
+   */
+  labelKey: BooksKey
   icon: NavIconName
   /** Does switching book change what this page shows? */
   scoped: boolean
 }
 
 export const NAV: readonly NavItem[] = [
-  { seg: '', label: 'Overview', icon: 'layout-dashboard', scoped: false },
-  { seg: '/recognition', label: 'Recognition', icon: 'scan-search', scoped: true },
+  { seg: '', labelKey: 'nav.overview', icon: 'layout-dashboard', scoped: false },
+  { seg: '/recognition', labelKey: 'nav.recognition', icon: 'scan-search', scoped: true },
   // `scoped: false` since 2026-08-18, when the pièces inbox was built here.
   // `books.piece_inbox.entity_id` is NULLABLE — a scanned receipt does not
   // always say whose it is — so the screen serves the WHOLE inbox and carries
@@ -63,8 +81,8 @@ export const NAV: readonly NavItem[] = [
   // control this file's header warns about: the reader assumes they used it
   // wrong. The register on `/sources` has the same shape and keeps `true` only
   // because the chart of accounts above it really is per book.
-  { seg: '/documents', label: 'Supporting documents', icon: 'paperclip', scoped: false },
-  { seg: '/ledger', label: 'General ledger', icon: 'book-open', scoped: true },
+  { seg: '/documents', labelKey: 'nav.documents', icon: 'paperclip', scoped: false },
+  { seg: '/ledger', labelKey: 'nav.ledger', icon: 'book-open', scoped: true },
   // `scoped: true` since 2026-08-18, when the CHART half of this screen was
   // built. It was `false` on the reasoning that a source is a channel money
   // arrives through and one channel feeds several books — true of sources, and
@@ -72,11 +90,11 @@ export const NAV: readonly NavItem[] = [
   // The flag is what hides the book switcher, so leaving it would have shipped a
   // page whose content changes per book with no control to change it. Phase 3
   // puts the sources on the same screen and makes this a real question again.
-  { seg: '/sources', label: 'Accounts & sources', icon: 'landmark', scoped: true },
-  { seg: '/balance-sheet', label: 'Balance sheet', icon: 'scale', scoped: true },
-  { seg: '/income-statement', label: 'Income statement', icon: 'trending-up', scoped: true },
-  { seg: '/management', label: 'Management view', icon: 'calculator', scoped: true },
-  { seg: '/analyses', label: 'Analyses', icon: 'messages-square', scoped: true },
+  { seg: '/sources', labelKey: 'nav.sources', icon: 'landmark', scoped: true },
+  { seg: '/balance-sheet', labelKey: 'nav.balanceSheet', icon: 'scale', scoped: true },
+  { seg: '/income-statement', labelKey: 'nav.incomeStatement', icon: 'trending-up', scoped: true },
+  { seg: '/management', labelKey: 'nav.management', icon: 'calculator', scoped: true },
+  { seg: '/analyses', labelKey: 'nav.analyses', icon: 'messages-square', scoped: true },
 ]
 
 /**
@@ -85,7 +103,7 @@ export const NAV: readonly NavItem[] = [
  * follows the overview's cross-link.
  */
 export const OFF_NAV: readonly NavItem[] = [
-  { seg: '/taxes', label: 'Taxes', icon: 'calculator', scoped: true },
+  { seg: '/taxes', labelKey: 'nav.taxes', icon: 'calculator', scoped: true },
   /**
    * Patrimoine — art. 957 al. 2's other half, and a screen the mockup never had.
    *
@@ -98,7 +116,7 @@ export const OFF_NAV: readonly NavItem[] = [
    *
    * `scoped: true`: it is entirely a property of one book.
    */
-  { seg: '/patrimoine', label: 'Patrimoine', icon: 'scale', scoped: true },
+  { seg: '/patrimoine', labelKey: 'nav.patrimoine', icon: 'scale', scoped: true },
   /**
    * The compliance register — nineteen statutory rules and their sign-off.
    *
@@ -113,7 +131,7 @@ export const OFF_NAV: readonly NavItem[] = [
    * and ignored — this file's own rule about a control that appears to do
    * nothing.
    */
-  { seg: '/compliance', label: 'Compliance rules', icon: 'scale', scoped: false },
+  { seg: '/compliance', labelKey: 'nav.compliance', icon: 'scale', scoped: false },
 ]
 
 export const ALL_NAV: readonly NavItem[] = [...NAV, ...OFF_NAV]

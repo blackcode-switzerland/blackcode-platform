@@ -24,6 +24,7 @@
 
 import { AlertTriangle, Inbox, type LucideIcon } from 'lucide-react'
 import { ApiRequestError } from '@/lib/client'
+import { useT } from '@/lib/i18n'
 
 /**
  * The loading pattern: shaped grey bars, not a spinner.
@@ -32,9 +33,14 @@ import { ApiRequestError } from '@/lib/client'
  * when it arrives, and — the reason it matters here — it is visibly NOT a table
  * with no rows in it.
  */
-export function Loading({ rows = 6, label = 'Loading' }: { rows?: number; label?: string }) {
+export function Loading({ rows = 6, label }: { rows?: number; label?: string }) {
+  const t = useT()
+  // A default that is a WORD rather than a prop default, because the default has
+  // to be translated and a parameter default is evaluated before any hook can
+  // run. Callers that pass a label pass an already-translated one.
+  const text = label ?? t('state.loading')
   return (
-    <div className="space-y-2" role="status" aria-busy="true" aria-label={label}>
+    <div className="space-y-2" role="status" aria-busy="true" aria-label={text}>
       {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}
@@ -44,7 +50,7 @@ export function Loading({ rows = 6, label = 'Loading' }: { rows?: number; label?
           style={{ opacity: 1 - i * 0.1 }}
         />
       ))}
-      <span className="sr-only">{label}…</span>
+      <span className="sr-only">{text}…</span>
     </div>
   )
 }
@@ -57,10 +63,12 @@ export function Loading({ rows = 6, label = 'Loading' }: { rows?: number; label?
  * because a network failure is not an `ApiRequestError` and rendering "unknown
  * error" for the commonest failure of all would be its own bug.
  */
-export function ErrorState({ error, title = 'This could not be loaded' }: { error: unknown; title?: string }) {
+export function ErrorState({ error, title }: { error: unknown; title?: string }) {
+  const t = useT()
   const api = error instanceof ApiRequestError ? error : null
   const message =
-    api?.message ?? (error instanceof Error ? error.message : 'The request did not complete.')
+    api?.message ?? (error instanceof Error ? error.message : t('state.errorFallback'))
+  const heading = title ?? t('state.errorTitle')
 
   return (
     <div
@@ -70,7 +78,7 @@ export function ErrorState({ error, title = 'This could not be loaded' }: { erro
       <div className="flex items-start gap-2.5">
         <AlertTriangle size={16} className="mt-0.5 shrink-0 text-destructive" />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">{title}</p>
+          <p className="text-sm font-medium text-foreground">{heading}</p>
           <p className="mt-0.5 text-sm text-muted-foreground">{message}</p>
           {api?.suggestion && (
             <p className="mt-1.5 text-sm text-foreground">{api.suggestion}</p>
@@ -128,11 +136,12 @@ export function EmptyState({
  * which is the only version of this banner that will not be left behind.
  */
 export function FixtureNotice({ source }: { source: 'fixture' | 'database' | null }) {
+  const t = useT()
   if (source !== 'fixture') return null
   return (
     <p className="mb-4 rounded-md border border-border bg-secondary px-3 py-2 text-xs text-muted-foreground">
-      <span className="font-semibold text-foreground">Seeded data.</span> These books come from the
-      mockup fixture, not from the database. Amounts, dates and documents are examples.
+      <span className="font-semibold text-foreground">{t('state.seededLead')}</span>{' '}
+      {t('state.seededBody')}
     </p>
   )
 }
@@ -172,13 +181,19 @@ export function NotBuiltYet({
   /** What this screen is waiting for, in one sentence. Required — see above. */
   blocker: string
 }) {
+  const t = useT()
   return (
     <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
-      <p className="text-sm font-medium text-foreground">{screen} is not built yet.</p>
+      <p className="text-sm font-medium text-foreground">{t('state.notBuilt', { screen })}</p>
       <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">{blocker}</p>
-      <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
-        Its layout is specified by{' '}
-        <span className="font-mono text-[12.5px]">{mockup}</span> in the mockup.
+      {/* The filename is interpolated into ONE sentence rather than assembled
+          from two fragments around a `<span>`. French puts "dans le mockup"
+          where English puts "in the mockup" and the noun phrase moves with it —
+          word order is most of what translating a sentence is, so the whole
+          sentence has to be one entry. The monospace styling is lost by doing
+          it this way, and that is the trade. */}
+      <p className="mx-auto mt-2 max-w-lg font-mono text-[12.5px] text-muted-foreground">
+        {t('state.notBuiltLayout', { mockup })}
       </p>
       {/* **No `bk` command is named here, and that is checked rather than
           assumed.** The obvious sentence to write was "until then, read it from

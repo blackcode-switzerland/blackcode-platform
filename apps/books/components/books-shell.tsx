@@ -47,7 +47,7 @@
 // height below and the row padding in `<DataTable>` are the carriers.
 
 import * as React from 'react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -56,7 +56,6 @@ import { useTheme } from 'next-themes'
 import {
   BookOpen,
   Calculator,
-  ChevronDown,
   Landmark,
   LayoutDashboard,
   LogOut,
@@ -72,6 +71,11 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
+import { PropertySelect, type PropertyOption } from '@blackcode/platform-ui/ui/property-select'
+import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
+import type { Locale } from '@blackcode/platform-i18n'
+import { useLocale, useT } from '@/lib/i18n'
+import { useSetLocale } from '@/lib/account'
 import { ALL_NAV, NAV, isActive, scopedHref, type NavIconName, type NavItem } from '@/lib/nav'
 import { useScope, WorkspaceSlugProvider } from '@/lib/scope'
 import { useMe } from '@/lib/hooks'
@@ -209,6 +213,7 @@ function ShellBody({
     return () => document.removeEventListener('keydown', onKey)
   }, [mobileOpen, closeDrawer])
 
+  const t = useT()
   const current = ALL_NAV.find((e) => isActive(pathname, base, e.seg))
 
   const sidebar = (
@@ -260,10 +265,10 @@ function ShellBody({
           className="fixed inset-0 z-40 lg:hidden"
           role="dialog"
           aria-modal="true"
-          aria-label="Menu"
+          aria-label={t('chrome.menu')}
         >
           <button
-            aria-label="Close menu"
+            aria-label={t('chrome.closeMenu')}
             className="absolute inset-0 bg-black/50"
             onClick={closeDrawer}
           />
@@ -283,7 +288,7 @@ function ShellBody({
             ref={triggerRef}
             onClick={() => setMobileOpen(true)}
             className="-ml-1 rounded-md p-1.5 text-muted-foreground hover:bg-accent lg:hidden"
-            aria-label="Open menu"
+            aria-label={t('chrome.openMenu')}
             aria-expanded={mobileOpen}
           >
             <Menu size={17} />
@@ -296,7 +301,7 @@ function ShellBody({
               controls, is what gives way: the book and the year are the two
               facts that say which document is on screen. */}
           <h1 className="min-w-0 truncate text-sm font-medium text-foreground">
-            {title ?? current?.label ?? 'b/books'}
+            {title ?? (current ? t(current.labelKey) : t('chrome.appName'))}
           </h1>
           <div className="ml-auto flex min-w-0 shrink items-center gap-2">
             {/* Only on pages whose numbers actually change with the book. A
@@ -308,7 +313,6 @@ function ShellBody({
                 <ExerciceSwitcher scope={scope} />
               </>
             )}
-            <ThemeToggle />
           </div>
         </header>
 
@@ -329,6 +333,7 @@ function NavLink({
   pathname: string
   scope: ReturnType<typeof useScope>
 }) {
+  const t = useT()
   const active = isActive(pathname, base, entry.seg)
   const Icon = ICONS[entry.icon]
   return (
@@ -346,7 +351,7 @@ function NavLink({
       }
     >
       <Icon size={15} className={active ? 'text-sidebar-primary' : ''} />
-      {entry.label}
+      {t(entry.labelKey)}
     </Link>
   )
 }
@@ -369,6 +374,22 @@ function NavLink({
  */
 function EntitySwitcher({ scope }: { scope: ReturnType<typeof useScope> }) {
   const { entities, entity, record, setEntity } = scope
+  const t = useT()
+
+  const options = useMemo<PropertyOption[]>(() => {
+    const list: PropertyOption[] = entities.map((e) => ({
+      value: e.slug,
+      label: e.name,
+      icon: <Dot color={e.accent} />,
+    }))
+    // An unknown slug from the URL is kept as an option so the control shows
+    // what was asked for rather than silently snapping to another book. The
+    // page beside it says there is no such book.
+    if (record === null && entity) {
+      list.unshift({ value: entity, label: t('chrome.noSuchBook', { slug: entity }) })
+    }
+    return list
+  }, [entities, entity, record, t])
 
   if (entities.length === 0) return null
 
@@ -382,26 +403,23 @@ function EntitySwitcher({ scope }: { scope: ReturnType<typeof useScope> }) {
   }
 
   return (
-    <label className="relative flex min-w-0 shrink items-center">
-      <span className="sr-only">Book</span>
-      <Dot color={record?.accent} className="pointer-events-none absolute left-2.5" />
-      <select
+    <div className="min-w-0 shrink">
+      <PropertySelect
         value={entity ?? ''}
-        onChange={(e) => setEntity(e.target.value)}
-        className="max-w-[6.5rem] appearance-none truncate sm:max-w-[12rem] rounded-md border border-border bg-card py-1 pl-6 pr-7 text-[13px] text-foreground outline-none hover:bg-accent focus:border-ring"
-      >
-        {/* An unknown slug from the URL is kept as an option so the control
-            shows what was asked for rather than silently snapping to another
-            book. The page beside it says there is no such book. */}
-        {record === null && entity && <option value={entity}>{entity} — no such book</option>}
-        {entities.map((e) => (
-          <option key={e.slug} value={e.slug}>
-            {e.name}
-          </option>
-        ))}
-      </select>
-      <ChevronDown size={13} className="pointer-events-none absolute right-2 text-muted-foreground" />
-    </label>
+        options={options}
+        onChange={setEntity}
+        // What the picker CHANGES, for assistive technology. The native
+        // `<select>` carried `<span className="sr-only">Book</span>` doing
+        // exactly this job, and it is the thing a component swap loses silently:
+        // without it a screen reader announces only the company name, which says
+        // what the answer is and never what the question was.
+        label={t('chrome.book')}
+        searchPlaceholder={t('chrome.book')}
+        chevron
+        align="right"
+        buttonClassName="flex w-full max-w-[6.5rem] sm:max-w-[12rem] items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-left text-[13px] text-foreground transition-colors hover:bg-accent"
+      />
+    </div>
   )
 }
 
@@ -456,6 +474,20 @@ function EntitySwitcher({ scope }: { scope: ReturnType<typeof useScope> }) {
  */
 function ExerciceSwitcher({ scope }: { scope: ReturnType<typeof useScope> }) {
   const { exerciceOptions, exercice, exerciceStatus, setExercice } = scope
+  const t = useT()
+
+  const options = useMemo<PropertyOption[]>(
+    () =>
+      exerciceOptions.map((o) => ({
+        value: String(o.year),
+        // An option row cannot hold the chip, so a closed year says so in WORDS
+        // inside the list. The chip beside the control then repeats it for the
+        // selected year — the list is only visible while it is open, and the
+        // fact has to survive it closing.
+        label: o.status === 'closed' ? t('chrome.yearClosed', { year: o.year }) : String(o.year),
+      })),
+    [exerciceOptions, t]
+  )
 
   if (exercice === null) return null
 
@@ -470,25 +502,37 @@ function ExerciceSwitcher({ scope }: { scope: ReturnType<typeof useScope> }) {
 
   return (
     <span className="flex min-w-0 shrink items-center gap-1.5">
-      <label className="relative flex min-w-0 shrink items-center">
-        <span className="sr-only">Fiscal year</span>
-        <select
-          value={exercice}
-          onChange={(e) => setExercice(Number(e.target.value))}
-          className="appearance-none rounded-md border border-border bg-card py-1 pl-2.5 pr-7 text-[13px] tabular-nums text-foreground outline-none hover:bg-accent focus:border-ring"
-        >
-          {/* An `<option>` cannot hold the chip, so a closed year says so in
-              WORDS inside the list. The chip beside the control then repeats it
-              for the selected year — the list is only visible while it is open,
-              and the fact has to survive it closing. */}
-          {exerciceOptions.map((o) => (
-            <option key={o.year} value={o.year}>
-              {o.status === 'closed' ? `${o.year} — closed` : o.year}
-            </option>
-          ))}
-        </select>
-        <ChevronDown size={13} className="pointer-events-none absolute right-2 text-muted-foreground" />
-      </label>
+      {/* ── `min-w-0` ON THE WRAPPER, AND IT WAS MEASURED ─────────────────
+          `<PropertySelect>` renders its own `<div className="relative">`, which
+          becomes a flex item here — and a flex item's default `min-width: auto`
+          refuses to shrink below its content. The native `<select>` this
+          replaced carried `min-w-0` itself, so the swap quietly took it away:
+          at 390×844, with a closed year selected and two books, **the whole PAGE
+          scrolled sideways by 23px in English and 1px in French** (the two
+          differ because "closed" and "clôturé" are different widths). A page
+          that scrolls horizontally on a phone is the platform's one hard layout
+          rule — docs/frontend.md.
+          Measured before and after, at 390: 413 → 390 in English, 391 → 390 in
+          French. */}
+      <span className="min-w-0 shrink">
+        <PropertySelect
+          value={String(exercice)}
+          options={options}
+          onChange={(v) => setExercice(Number(v))}
+          label={t('chrome.fiscalYear')}
+        // No search box. There are at most a handful of fiscal years and a
+        // filter over four numbers is a field nobody types in — and `noSearch`
+        // is the mode in which the LIST takes focus on open, which is what makes
+        // the control operable with the keyboard alone. Read the component's
+        // header: that half was missing until `apps/sales` needed it, and a
+        // `noSearch` picker without it can be opened from the keyboard and then
+        // not used from the keyboard.
+          noSearch
+          chevron
+          align="right"
+          buttonClassName="flex w-full items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-left text-[13px] tabular-nums text-foreground transition-colors hover:bg-accent"
+        />
+      </span>
       {exerciceStatus === 'closed' && <ClosedYearChip />}
     </span>
   )
@@ -506,12 +550,13 @@ function ExerciceSwitcher({ scope }: { scope: ReturnType<typeof useScope> }) {
  * it cannot be undone.
  */
 function ClosedYearChip() {
+  const t = useT()
   return (
     <span
       className="rounded border border-border px-1 py-px text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground"
-      title="This fiscal year has been closed. Nothing can be posted into it, and there is no reopen."
+      title={t('chrome.closedTitle')}
     >
-      closed
+      {t('chrome.closed')}
     </span>
   )
 }
@@ -534,9 +579,32 @@ function Dot({ color, className = '' }: { color?: string | null; className?: str
   )
 }
 
+/**
+ * The signed-in person, and the three controls that belong to them.
+ *
+ * ── THE ARRANGEMENT IS ISSUES', THE TOKENS AND SPACING ARE OURS ────────────
+ * `apps/issues/components/dashboard-layout.tsx` puts theme · settings · sign
+ * out in one right-aligned row of icon buttons under the avatar/name/email
+ * block, and b/books now does the same. The theme toggle used to sit top-right
+ * in the page header, which is a fourth place for a preference to live on a
+ * platform that already had a settled answer.
+ *
+ * **Not imported from issues** — apps never import each other and
+ * `lib/app-isolation.test.ts` is what enforces it. Copied arrangement, this
+ * app's own spacing (`p-2`, `size={15}`, `text-[13px]`) and this app's own
+ * sidebar tokens.
+ *
+ * ── SIGNING OUT ASKS FIRST, AS IT DOES IN ISSUES ───────────────────────────
+ * One click used to end the session. `useConfirm()` is the only confirmation
+ * mechanism this repo allows, `ConfirmProvider` has been mounted since the
+ * first sprint waiting for exactly this, and two apps disagreeing about whether
+ * sign-out asks is a difference nobody decided.
+ */
 function AccountFooter() {
   const { data: session } = useSession()
   const me = useMe()
+  const { confirm } = useConfirm()
+  const t = useT()
   // The live row wins; the session is the fallback for the moment before it
   // arrives. The session's copy is minted at sign-in and never refreshed, so
   // drawing from it alone shows a photo — or an initial — that can be weeks old,
@@ -551,41 +619,109 @@ function AccountFooter() {
       <div className="flex items-center gap-2.5 rounded-md px-2.5 py-2">
         <MemberAvatar name={user.name} email={user.email} avatarUrl={user.image} size={26} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium">{user.name ?? 'Signed in'}</span>
+          <span className="block truncate text-[13px] font-medium">
+            {user.name ?? t('chrome.signedIn')}
+          </span>
           <span className="block truncate text-[11px] text-muted-foreground">{user.email}</span>
         </span>
       </div>
-      <Link
-        href="/dashboard/settings"
-        className="mt-1 flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-      >
-        <SettingsIcon size={14} />
-        Settings
-      </Link>
-      <button
-        onClick={() => signOut({ callbackUrl: '/login' })}
-        className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-      >
-        <LogOut size={14} />
-        Sign out
-      </button>
+      <div className="flex items-center justify-end gap-1">
+        <LocaleToggle />
+        <ThemeToggle />
+        <Link
+          href="/dashboard/settings"
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+          title={t('chrome.settings')}
+          aria-label={t('chrome.settings')}
+        >
+          <SettingsIcon size={15} />
+        </Link>
+        <button
+          onClick={async () => {
+            if (
+              !(await confirm({
+                title: t('chrome.signOutTitle'),
+                description: t('chrome.signOutBody'),
+                confirmLabel: t('chrome.signOut'),
+                // ── `cancelLabel` IS PASSED, AND IT WAS FOUND IN THE BROWSER ──
+                // `@blackcode/platform-ui`'s dialog defaults it to the literal
+                // 'Cancel'. Opening this on a French page printed
+                // "Se déconnecter ? … Cancel Se déconnecter" — one English word
+                // in the middle of a French confirmation, on the control that
+                // ends the session.
+                //
+                // The package is English-only and translating it is a PLATFORM
+                // change this phase is not making (it has three consumers and
+                // no locale of its own). Every option it takes is overridable,
+                // so a caller can be correct today; that is what this line is.
+                // The finding is in the phase-7 report — the next app to
+                // translate will hit the same default, and the fix is for the
+                // dialog to take its two defaults from `useTranslate` behind a
+                // provider it does not yet have.
+                cancelLabel: t('chrome.cancel'),
+              }))
+            )
+              return
+            signOut({ callbackUrl: '/login' })
+          }}
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          title={t('chrome.signOut')}
+          aria-label={t('chrome.signOut')}
+        >
+          <LogOut size={15} />
+        </button>
+      </div>
     </div>
+  )
+}
+
+/**
+ * EN / FR, in the sidebar, beside the theme.
+ *
+ * ── QUIET ON PURPOSE ───────────────────────────────────────────────────────
+ * A preference, not navigation. Two letters and no chevron: the reader is
+ * choosing between exactly two things and a dropdown for a binary is a control
+ * that costs a click to say what a label already said.
+ *
+ * ── IT IS THE SAME HOOK THE SETTINGS PAGE USES ─────────────────────────────
+ * `useSetLocale` — one write, one optimistic update, one invalidation. Two
+ * switches with two code paths is how they end up disagreeing about what the
+ * stored value is, and the sidebar is visible on the settings page itself, so
+ * a disagreement would be on screen at the same time.
+ */
+function LocaleToggle() {
+  const locale = useLocale()
+  const setLocale = useSetLocale()
+  const t = useT()
+  const next: Locale = locale === 'fr' ? 'en' : 'fr'
+  return (
+    <button
+      onClick={() => void setLocale.run(next)}
+      disabled={setLocale.pending}
+      className="rounded-md px-1.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground disabled:opacity-50"
+      title={t('chrome.languageSwitchTo')}
+      aria-label={t('chrome.languageSwitchTo')}
+    >
+      {next}
+    </button>
   )
 }
 
 function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme()
+  const t = useT()
   // `next-themes` cannot know the resolved theme until it has read the DOM, so
   // rendering the icon before mount produces a server/client mismatch and a
-  // hydration warning. A same-sized blank keeps the header from shifting.
+  // hydration warning. A same-sized blank keeps the row from shifting.
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
   return (
     <button
       onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      aria-label="Toggle theme"
+      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+      title={t('chrome.toggleTheme')}
+      aria-label={t('chrome.toggleTheme')}
     >
       {mounted ? (
         resolvedTheme === 'dark' ? <Sun size={15} /> : <Moon size={15} />

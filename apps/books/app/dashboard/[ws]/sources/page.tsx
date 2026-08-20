@@ -55,7 +55,8 @@ import { useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { useScope } from '@/lib/scope'
 import { useAccounts, useSources } from '@/lib/hooks'
-import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useLocale, useT } from '@/lib/i18n'
 import { ScreenFrame } from '@/components/screen-frame'
 import { DataTable, type Column } from '@/components/data-table'
 import { AccountRef } from '@/components/account-ref'
@@ -70,73 +71,83 @@ export default function Page() {
   // Deliberately unscoped. See the header: filtering the register by book hides
   // the unattributed source, which is the one it exists to surface.
   const sources = useSources(params.ws)
+  const t = useT()
+  const locale = useLocale()
+  const label = useLabel()
 
   const columns = useMemo<Column<Account>[]>(
     () => [
       {
         key: 'no',
-        header: 'N°',
+        header: t('sources.colNo'),
         cell: (a) => <AccountRef no={a.no} base={base} scope={scope} />,
         sortValue: (a) => a.no,
       },
       {
         key: 'label',
-        header: 'Account',
+        header: t('sources.colAccount'),
+        // The account's French name, with the English gloss for an English
+        // reader — the same rule and the same test as `<StatementTable>`: a
+        // French reader glossed with the French would read it twice.
         cell: (a) => (
           <span>
             <span className="text-foreground">{a.label.fr}</span>
-            <span className="ml-2 text-[12px] text-muted-foreground">
-              {en(a.label)}
-            </span>
+            {locale === 'en' && (
+              <span className="ml-2 text-[12px] text-muted-foreground">{label(a.label)}</span>
+            )}
           </span>
         ),
         sortValue: (a) => a.label.fr,
       },
       {
         key: 'class',
-        header: 'Class',
+        header: t('sources.colClass'),
         numeric: true,
         cell: (a) => a.class,
         sortValue: (a) => a.class,
       },
       {
         key: 'statement',
-        header: 'Statement',
+        header: t('sources.colStatement'),
         cell: (a) => (
           <span className="text-[12px] uppercase tracking-wider text-muted-foreground">
-            {a.statement === 'bilan' ? 'Bilan' : 'Compte de résultat'}
+            {a.statement === 'bilan'
+              ? t('statements.bilanLegal')
+              : t('statements.crLegal')}
           </span>
         ),
         sortValue: (a) => a.statement,
       },
       {
         key: 'statement_position',
-        header: 'Legal line',
+        header: t('sources.colLegalLine'),
         cell: (a) => <span className="font-mono text-[12px]">{a.statement_position}</span>,
         sortValue: (a) => a.statement_position,
       },
     ],
-    [base, scope]
+    [base, scope, t, locale, label]
   )
 
   return (
-    <ScreenFrame title="Accounts & sources">
+    <ScreenFrame title={t('nav.sources')}>
       <div className="mb-4">
         <h1 className="text-lg font-semibold text-foreground">
-          Plan comptable{' '}
-          <span className="ml-2 text-sm font-normal text-muted-foreground">Chart of accounts</span>
+          {t('sources.uiName')}
+          {t('sources.legalName') !== t('sources.uiName') && (
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              {t('sources.legalName')}
+            </span>
+          )}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {scope.record?.name ?? '—'} · Swiss PME chart
+          {t('sources.subheading', { book: scope.record?.name ?? '—' })}
         </p>
       </div>
 
       <p className="mb-3 text-[12.5px] text-muted-foreground">
-        This book&apos;s own accounts — copied when it was created, so editing one book&apos;s chart
-        cannot touch another&apos;s. <span className="font-medium text-foreground">Legal line</span>{' '}
-        is the art. 959a / 959b position each account&apos;s balance lands on, and it is the only
-        mapping anybody may change. If a figure on a statement looks wrong, the entry&apos;s account
-        or this mapping is wrong — never the legal category.
+        {t('sources.chartLeadA')}{' '}
+        <span className="font-medium text-foreground">{t('sources.chartLeadB')}</span>{' '}
+        {t('sources.chartLeadC')}
       </p>
 
       <DataTable
@@ -146,13 +157,13 @@ export default function Page() {
         isLoading={accounts.isLoading}
         error={accounts.error}
         initialSort={{ key: 'no', direction: 'asc' }}
-        empty="This book has no accounts, which should not be possible — a chart is installed in the same transaction that creates a book."
+        empty={t('sources.noAccounts')}
       />
 
       <section className="mt-8">
         <div className="mb-3">
           <h2 className="text-[15px] font-semibold text-foreground">
-            Sources
+            {t('sources.title')}
             {sources.data && (
               <span className="ml-2 text-[13px] font-normal text-muted-foreground">
                 {sources.data.length}
@@ -160,19 +171,15 @@ export default function Page() {
             )}
           </h2>
           <p className="mt-1 max-w-2xl text-[12.5px] text-muted-foreground">
-            Every channel money moves through: banks hold it, cards draw on banks, processors and
-            SaaS spend sit on top. The risk this register exists for is a source that silently
-            stops being imported — so{' '}
-            <span className="font-medium text-foreground">
-              status is computed from cadence against the last import
-            </span>
-            , never ticked by a person. There is nothing on this table to set, and that is what
-            makes the green ones mean anything.
+            {t('sources.leadA')}{' '}
+            <span className="font-medium text-foreground">{t('sources.leadB')}</span>
+            {t('sources.leadC')}
           </p>
           <p className="mt-1.5 max-w-2xl text-[12.5px] text-muted-foreground">
-            <span className="font-medium text-foreground">This register is not filtered by book</span>{' '}
-            — the chart above is. A source can feed more than one, and one of them belongs to no
-            book at all, which is the row a filter would hide.
+            <span className="font-medium text-foreground">
+              {t('sources.notFilteredLead')}
+            </span>{' '}
+            {t('sources.notFilteredBody')}
           </p>
         </div>
 
@@ -185,9 +192,7 @@ export default function Page() {
         />
 
         <p className="mt-2 text-[11.5px] text-muted-foreground">
-          Sources are provisioned, not authored — no route creates one, and retirement is the only
-          lifecycle fact a person sets. Open a source for its freeform notes, the raw files pulled
-          from it, its runbook and the worker&apos;s file manifest.
+          {t('sources.provisioned')}
         </p>
       </section>
 

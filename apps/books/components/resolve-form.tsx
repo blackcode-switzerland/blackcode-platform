@@ -67,6 +67,8 @@
 // suggestion, which is the correct authority and the correct sentence — a second
 // copy of that rule in this file would be a second thing to keep in sync.
 
+'use client'
+
 import { useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ResolvableRow, ResolveTarget } from '@/lib/resolvable'
@@ -75,7 +77,8 @@ import { useCanWrite, useResolveEntry, type ResolveBody } from '@/lib/mutations'
 import { booksCacheFilter } from '@/lib/query-keys'
 import type { ReadScope } from '@/lib/hooks'
 import type { ResolveResult, WorklistRow } from '@/lib/types'
-import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useT } from '@/lib/i18n'
 
 /**
  * Re-exported from `lib/resolvable.ts`, which owns both the types and the
@@ -132,6 +135,8 @@ export function ResolveForm({
   onResolved: (result: ResolveResult) => void
 }) {
   const canWrite = useCanWrite()
+  const t = useT()
+  const label = useLabel()
   const queryClient = useQueryClient()
   const row = target.row
   // The recettes-dépenses journal, positively. Never `!== 'grand_livre'`.
@@ -189,9 +194,7 @@ export function ResolveForm({
 
   if (!canWrite) {
     return (
-      <p className="mt-2 text-[12px] text-muted-foreground">
-        This session cannot change records.
-      </p>
+      <p className="mt-2 text-[12px] text-muted-foreground">{t('rec.cannotWrite')}</p>
     )
   }
 
@@ -219,9 +222,20 @@ export function ResolveForm({
     setRefusal(null)
 
     const body: ResolveBody = {
+      // ── STILL FILED UNDER `en`, WHATEVER LANGUAGE THE READER IS IN ────────
       // The route refuses a non-object, and `bk books resolve` sends
-      // `{"en": text}`. English chrome (D-A) — a French side here would be a
-      // translation nobody wrote.
+      // `{"en": text}`. This is a `{fr, en}` pair on the wire and a French
+      // reader typing French prose puts it in the `en` half — which is wrong,
+      // and is deliberately NOT fixed here.
+      //
+      // Guessing is worse than the known wrongness: writing the reader's UI
+      // language into `fr` would file an explanation under a language the person
+      // may not have been writing in (nothing stops an English reader typing
+      // French), and it would make the SAME record read differently to two
+      // people. Which side an explanation belongs on is a question about the
+      // record, not about the chrome, and it is the backend's — raised as a
+      // tracker finding in phase 7's report. Until it is answered, one
+      // consistent side beats a guess per session.
       explanation: { en: explanation.trim() },
       recognition,
     }
@@ -287,17 +301,12 @@ export function ResolveForm({
           className="text-[11.5px] text-muted-foreground"
           data-journal="recettes_depenses"
         >
-          This movement is resolved in{' '}
-          <span className="text-foreground">
-            {scope.entity ?? 'this book'}&apos;s recettes-dépenses journal
-          </span>
-          , named in the request — the grand livre numbers itself separately and is not reachable
-          from here.
+          {t('resolve.riJournalNote', { book: scope.entity ?? t('rec.thisBook') })}
         </p>
       )}
       <div>
         <label className={LABEL} htmlFor={`expl-${row.number}`}>
-          What was this money?
+          {t('resolve.whatWasThis')}
         </label>
         <textarea
           id={`expl-${row.number}`}
@@ -305,22 +314,22 @@ export function ResolveForm({
           onChange={(e) => setExplanation(e.target.value)}
           rows={2}
           className={FIELD + ' mt-1'}
-          placeholder="e.g. team lunch after the March release — business meal"
+          placeholder={t('resolve.explanationPlaceholder')}
         />
         <p className="mt-1 text-[11.5px] text-muted-foreground">
-          This is the product. It is kept forever, and the row keeps what it said before.
+          {t('resolve.explanationNote')}
         </p>
       </div>
 
       <fieldset>
-        <legend className={LABEL}>Conclusion</legend>
+        <legend className={LABEL}>{t('resolve.conclusion')}</legend>
         <div className="mt-1 flex flex-wrap gap-3">
           {(
             [
-              ['known_one_off', 'One-off'],
-              ['known_recurring', 'Recurring'],
+              ['known_one_off', 'resolve.oneOff'],
+              ['known_recurring', 'resolve.recurring'],
             ] as const
-          ).map(([value, label]) => (
+          ).map(([value, labelKey]) => (
             <label key={value} className="inline-flex items-center gap-1.5 text-[12.5px] text-foreground">
               <input
                 type="radio"
@@ -330,7 +339,7 @@ export function ResolveForm({
                 onChange={() => setRecognition(value)}
                 className="accent-[var(--primary)]"
               />
-              {label}
+              {t(labelKey)}
             </label>
           ))}
         </div>
@@ -339,20 +348,26 @@ export function ResolveForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className={LABEL} htmlFor={`cp-${row.number}`}>
-            Counterparty <span className="font-normal normal-case tracking-normal">(optional)</span>
+            {t('resolve.counterparty')}{' '}
+            <span className="font-normal normal-case tracking-normal">
+              {t('resolve.optional')}
+            </span>
           </label>
           <input
             id={`cp-${row.number}`}
             value={counterparty}
             onChange={(e) => setCounterparty(e.target.value)}
             className={FIELD + ' mt-1'}
-            placeholder={row.counterparty ?? 'Who was on the other side'}
+            placeholder={row.counterparty ?? t('resolve.counterpartyPlaceholder')}
           />
         </div>
 
         <div>
           <label className={LABEL} htmlFor={`acct-${row.number}`}>
-            Account <span className="font-normal normal-case tracking-normal">(optional)</span>
+            {t('resolve.account')}{' '}
+            <span className="font-normal normal-case tracking-normal">
+              {t('resolve.optional')}
+            </span>
           </label>
           {ri ? (
             // NOT a disabled select and NOT a hidden field. A simplified book
@@ -364,9 +379,7 @@ export function ResolveForm({
               className="mt-1 rounded-md border border-dashed border-border px-2.5 py-1.5 text-[12px] text-muted-foreground"
               data-frozen="ri_no_lines"
             >
-              This book keeps recettes and dépenses under art. 957 al. 2 CO. Its movements have no
-              lines and no accounts, so there is nothing to map. Everything else on this form
-              applies.
+              {t('resolve.riNoAccount')}
             </p>
           ) : posted ? (
             // NOT a disabled input. A greyed field invites somebody to wonder
@@ -376,9 +389,7 @@ export function ResolveForm({
               className="mt-1 rounded-md border border-dashed border-border px-2.5 py-1.5 text-[12px] text-muted-foreground"
               data-frozen="posted"
             >
-              This entry is posted: its lines are accounting facts and the account cannot be
-              changed. A correction is a reversing entry. Everything else on this form still
-              applies.
+              {t('resolve.postedNoAccount')}
             </p>
           ) : (
             <>
@@ -388,15 +399,15 @@ export function ResolveForm({
                 onChange={(e) => setAccount(e.target.value)}
                 className={FIELD + ' mt-1'}
               >
-                <option value="">Leave unassigned</option>
+                <option value="">{t('resolve.leaveUnassigned')}</option>
                 {(accounts.data ?? []).map((a) => (
                   <option key={a.no} value={a.no}>
-                    {a.no} · {en(a.label)}
+                    {a.no} · {label(a.label)}
                   </option>
                 ))}
               </select>
               <p className="mt-1 text-[11.5px] text-muted-foreground">
-                Fills the staged line that has none.
+                {t('resolve.fillsStagedLine')}
               </p>
             </>
           )}
@@ -405,14 +416,15 @@ export function ResolveForm({
 
       <div>
         <label className={LABEL} htmlFor={`ev-${row.number}`}>
-          Evidence note <span className="font-normal normal-case tracking-normal">(optional)</span>
+          {t('resolve.evidenceNote')}{' '}
+          <span className="font-normal normal-case tracking-normal">{t('resolve.optional')}</span>
         </label>
         <input
           id={`ev-${row.number}`}
           value={evidenceNote}
           onChange={(e) => setEvidenceNote(e.target.value)}
           className={FIELD + ' mt-1'}
-          placeholder="What document backs this, or why there is none"
+          placeholder={t('resolve.evidencePlaceholder')}
         />
       </div>
 
@@ -425,11 +437,9 @@ export function ResolveForm({
             className="mt-0.5 accent-[var(--primary)]"
           />
           <span>
-            Teach a rule from this
+            {t('resolve.teachRule')}
             <span className="block text-[11.5px] font-normal text-muted-foreground">
-              Future payments matching it will explain themselves. The rule is keyed to the PAIR
-              (this entry’s source, the fragment below) — the same merchant on another card is a new
-              fact and comes back here.
+              {t('resolve.teachRuleNote')}
             </span>
           </span>
         </label>
@@ -438,7 +448,7 @@ export function ResolveForm({
           <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label className={LABEL} htmlFor={`rc-${row.number}`}>
-                Fragment matched against future labels
+                {t('resolve.fragment')}
               </label>
               <input
                 id={`rc-${row.number}`}
@@ -449,7 +459,7 @@ export function ResolveForm({
             </div>
             <div>
               <label className={LABEL} htmlFor={`ra-${row.number}`}>
-                Expected amount
+                {t('resolve.expectedAmount')}
               </label>
               <input
                 id={`ra-${row.number}`}
@@ -457,12 +467,12 @@ export function ResolveForm({
                 onChange={(e) => setRuleAmountChf(e.target.value)}
                 inputMode="decimal"
                 className={FIELD + ' mt-1'}
-                placeholder="blank = any amount"
+                placeholder={t('resolve.anyAmount')}
               />
             </div>
             <div>
               <label className={LABEL} htmlFor={`rt-${row.number}`}>
-                Tolerance
+                {t('resolve.tolerance')}
               </label>
               <input
                 id={`rt-${row.number}`}
@@ -470,27 +480,27 @@ export function ResolveForm({
                 onChange={(e) => setRuleToleranceChf(e.target.value)}
                 inputMode="decimal"
                 className={FIELD + ' mt-1'}
-                placeholder="blank = exact"
+                placeholder={t('resolve.exact')}
               />
             </div>
             <div>
               <label className={LABEL} htmlFor={`ri-${row.number}`}>
-                Cadence
+                {t('resolve.cadence')}
               </label>
               <input
                 id={`ri-${row.number}`}
                 value={ruleInterval}
                 onChange={(e) => setRuleInterval(e.target.value)}
                 className={FIELD + ' mt-1'}
-                placeholder="monthly, quarterly, weekly"
+                placeholder={t('resolve.cadencePlaceholder')}
               />
               <p className="mt-1 text-[11.5px] text-muted-foreground">
-                Documentation only — the matcher does not read it.
+                {t('resolve.cadenceNote')}
               </p>
             </div>
             <div>
               <label className={LABEL} htmlFor={`rl-${row.number}`}>
-                Learned from
+                {t('resolve.learnedFrom')}
               </label>
               <select
                 id={`rl-${row.number}`}
@@ -528,19 +538,21 @@ export function ResolveForm({
           disabled={resolve.pending || explanation.trim() === ''}
           className="rounded-md bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
+          {/* `manual` / `contract` / `subscription` in the select above are the
+              values the route stores in `books.rule.learned_from`, verbatim.
+              They are data, not chrome — translating an option label would file
+              a French word into a column `bk books rule list` prints raw. */}
           {resolve.pending
-            ? 'Saving…'
+            ? t('resolve.saving')
             : teachRule
-              ? 'Resolve and teach a rule'
-              : 'Resolve'}
+              ? t('resolve.resolveAndTeach')
+              : t('resolve.resolve')}
         </button>
         {explanation.trim() === '' && (
           // Not an error and not a fallback: nothing has failed, and the button
           // says why it is not available rather than the reader finding out by
           // pressing it.
-          <span className="text-[11.5px] text-muted-foreground">
-            Write the explanation first — that is what is being saved.
-          </span>
+          <span className="text-[11.5px] text-muted-foreground">{t('resolve.writeFirst')}</span>
         )}
       </div>
     </form>

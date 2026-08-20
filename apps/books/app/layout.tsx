@@ -8,6 +8,8 @@
 // found" and "CSS is correct" must not look the same.
 import type { Metadata } from 'next'
 import { Toaster } from 'sonner'
+import { getLocale } from '@blackcode/platform-i18n/server'
+import { getValidatedSessionUser } from '@/lib/auth/session'
 import { Providers } from './providers'
 import './globals.css'
 
@@ -25,9 +27,38 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, googleBot: { index: false, follow: false } },
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+/**
+ * ── THE LOCALE IS RESOLVED HERE, AND THAT IS WHAT PREVENTS THE FLASH ───────
+ *
+ * `platform.users.locale` is on the session row, so the server knows the
+ * language before it renders a byte — which makes this strictly easier than the
+ * theme, where `localStorage` is unreachable from the server and a blocking
+ * script is the only answer. **There is no `useEffect` that swaps the language
+ * after mount, and there must never be one.**
+ *
+ * The ROOT layout rather than `/dashboard`'s, because the login screen, the
+ * password-reset flow and the marketing page all need it too — and those are
+ * precisely the pages where there is no session, which is why the resolution
+ * order continues into the cookie and `Accept-Language`
+ * (`@blackcode/platform-i18n`).
+ *
+ * `getValidatedSessionUser`, the same reader every protected layout uses, and
+ * not a looser one: a session whose password stamp is stale is about to be sent
+ * to `/login`, and the language it should be greeted in is the one on its
+ * COOKIE rather than one read off a row it no longer proves it owns. With no
+ * cookie at all `getServerSession` answers null without touching the database,
+ * so the marketing page pays nothing for this.
+ *
+ * `<html lang>` follows it. A French page announcing `lang="en"` is read out by
+ * a screen reader in an English voice, which is the version of "half
+ * translated" that a sighted reviewer cannot see.
+ */
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const user = await getValidatedSessionUser()
+  const locale = await getLocale(user?.locale ?? null)
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <head>
         {/*
           Google Sans is served by Google's CSS API but is not listed in the
@@ -44,7 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="font-sans antialiased">
-        <Providers>
+        <Providers locale={locale}>
           {children}
           {/* Toasts are token-driven through the `--toast-*` bridge in
               globals.css, so this app's cream palette reaches them without a

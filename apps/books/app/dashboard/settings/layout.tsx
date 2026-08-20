@@ -38,6 +38,7 @@ import { getValidatedSessionUser } from '@/lib/auth/session'
 import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
 import { BooksShell } from '@/components/books-shell'
 import { SettingsNav } from '@/components/settings/settings-nav'
+import { serverT } from '@/lib/i18n-server'
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
   const user = await getValidatedSessionUser()
@@ -45,12 +46,19 @@ export default async function SettingsLayout({ children }: { children: React.Rea
 
   const memberships = await listWorkspacesForUser(user.id)
   const ws = memberships[0]?.slug ?? null
+  // A SERVER translator, not `useT()`. This is the one heading in the app a
+  // layout has to name for itself — `/dashboard/settings/*` is a sibling of
+  // `[ws]`, so no nav entry matches its pathname — and a layout cannot call a
+  // hook. See `lib/i18n-server.ts`.
+  const t = await serverT()
 
   const body = (
     <div className="mx-auto max-w-3xl">
       {/* The heading only when there is no frame. With the shell mounted, its
           sticky header already says "Settings" and a second one is noise. */}
-      {ws === null && <h1 className="mb-5 text-xl font-semibold text-foreground">Settings</h1>}
+      {ws === null && (
+        <h1 className="mb-5 text-xl font-semibold text-foreground">{t('settings.title')}</h1>
+      )}
       <SettingsNav />
       <div className="mt-6">{children}</div>
     </div>
@@ -59,7 +67,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   if (ws === null) return <div className="px-6 py-8">{body}</div>
 
   return (
-    <BooksShell ws={ws} title="Settings">
+    <BooksShell ws={ws} title={t('settings.title')}>
       {body}
     </BooksShell>
   )

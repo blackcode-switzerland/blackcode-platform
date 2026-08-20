@@ -35,11 +35,19 @@ A **monorepo** (npm workspaces + Turborepo) holding Blackcode's internal apps.
 
 What the migration bought:
 
-- `packages/platform-{db,api,ui,auth,agent,storage,testing,email}` — eight shared
-  libraries. **`platform-email` landed 2026-08-11** (multiAppFinalRefactor Phase
-  10): an app supplies a four-field identity and its own db handle, and
+- `packages/platform-{db,api,ui,auth,agent,storage,testing,email,i18n}` — nine
+  shared libraries. **`platform-email` landed 2026-08-11** (multiAppFinalRefactor
+  Phase 10): an app supplies a four-field identity and its own db handle, and
   `apps/sales` stopped sending people to `apps/issues` to change a password both
-  apps share. Apps import these; apps never import each other.
+  apps share. **`platform-i18n` landed 2026-08-20** for b/books' EN/FR switch: it
+  holds the locale vocabulary, the one resolution order
+  (`user record → cookie → Accept-Language → default`) and the typed dictionary
+  lookup — and **no product copy**, ever. Each app supplies its own dictionary;
+  a `Dictionary<K>` is `Record<Locale, Record<K, string>>`, so a key present in
+  English and missing in French is a `tsc` error rather than a blank on screen.
+  The preference is `platform.users.locale`, **nullable — null means "never
+  chosen", not "chose English"**, which is what keeps `Accept-Language`
+  reachable. Apps import these; apps never import each other.
   **`apps/issues/lib/auth.ts` (next-auth `authOptions`) deliberately did NOT
   move** — the reason is in `packages/platform-auth/src/index.ts`.
 - The database is **`platform.*` + `issues.*` + `sales.*`** (and `scaffold.*`,

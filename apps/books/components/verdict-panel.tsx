@@ -33,12 +33,15 @@
 // actually attempted. Two renderings of one string, deliberately: a reader must
 // see the way out before they press, not only after.
 
+'use client'
+
 import Link from 'next/link'
 import { blocksPosting, citedRules, resolutionText, verdictFace, worstCaseText } from '@/lib/verdict'
 import { TonePill } from './tone-pill'
 import { DateText } from './date-text'
 import { scopedHref } from '@/lib/nav'
 import type { Verdict } from '@/lib/types'
+import { useT } from '@/lib/i18n'
 
 export function VerdictPanel({
   verdict,
@@ -49,6 +52,7 @@ export function VerdictPanel({
   base: string
   scope: { entity: string | null; exercice: number | null }
 }) {
+  const t = useT()
   const face = verdictFace(verdict)
   const rules = citedRules(verdict)
   const resolves = resolutionText(verdict)
@@ -58,7 +62,7 @@ export function VerdictPanel({
     <div data-verdict={face.state}>
       <div className="flex flex-wrap items-center gap-2">
         <TonePill tone={face.tone} value={verdict?.verdict ?? 'null'}>
-          {face.label}
+          {t(face.labelKey)}
         </TonePill>
         {verdict && (
           <span className="text-[11.5px] text-muted-foreground">
@@ -67,13 +71,11 @@ export function VerdictPanel({
         )}
       </div>
 
-      <p className="mt-1.5 text-[12.5px] text-muted-foreground">{face.meaning}</p>
+      <p className="mt-1.5 text-[12.5px] text-muted-foreground">{t(face.meaningKey)}</p>
 
       {face.state === 'never_checked' && (
         <p className="mt-1 text-[11.5px] text-muted-foreground">
-          A compliance pass runs outside this app and files its answer back through{' '}
-          <span className="font-mono">bk books verdict</span>. There is no button here that would
-          produce one: this app computes no compliance judgment of its own, deliberately.
+          {t('verdict.neverCheckedNote', { command: 'bk books verdict' })}
         </p>
       )}
 
@@ -84,14 +86,13 @@ export function VerdictPanel({
           a verdict with no basis as though it had one. */}
       {verdict && rules.length === 0 && (
         <p role="alert" className="mt-1.5 text-[11.5px] text-destructive">
-          This verdict names no rule. Every verdict filed through the route must name at least one,
-          so nothing here says what it was based on.
+          {t('verdict.noRules')}
         </p>
       )}
 
       {rules.length > 0 && (
         <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-          Triggered:{' '}
+          {t('verdict.triggered')}{' '}
           {rules.map((id, i) => (
             <span key={id}>
               {i > 0 && ', '}
@@ -111,7 +112,7 @@ export function VerdictPanel({
 
       {worst && (
         <p className="mt-1.5 text-[12px] text-muted-foreground">
-          <span className="font-medium text-foreground">Worst case:</span> {worst}
+          <span className="font-medium text-foreground">{t('verdict.worstCase')}</span> {worst}
         </p>
       )}
 
@@ -123,26 +124,18 @@ export function VerdictPanel({
           instruction. */}
       {blocksPosting(verdict) && (
         <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-2">
-          <p className="text-[12.5px] font-medium text-foreground">
-            This entry will not post while the verdict stands.
-          </p>
+          <p className="text-[12.5px] font-medium text-foreground">{t('verdict.willNotPost')}</p>
           <p className="mt-1 text-[12px] text-muted-foreground">
             {resolves ? (
               <>
-                <span className="text-foreground">The way out, as the pass filed it:</span>{' '}
-                {resolves}
+                <span className="text-foreground">{t('verdict.wayOut')}</span> {resolves}
               </>
             ) : (
-              <>
-                The pass did not file a resolution in a form this screen can print, so there is no
-                sentence to quote. <span className="font-mono">bk books entry show</span> prints the
-                verdict as stored.
-              </>
+              t('verdict.noResolution', { command: 'bk books entry show' })
             )}
           </p>
           <p className="mt-1 text-[11.5px] text-muted-foreground">
-            There is no override and there is no force flag. What clears it is a fresh verdict from
-            a pass that no longer finds the problem — or a correction to what it found.
+            {t('verdict.noOverride')}
           </p>
         </div>
       )}

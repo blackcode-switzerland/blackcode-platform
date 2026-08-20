@@ -44,18 +44,23 @@ import { Money } from '@/components/money'
 import { StatementHeading } from '@/components/statement-heading'
 import { PostedOnlyNote } from '@/components/posted-only-note'
 import { BalanceCheck } from '@/components/balance-check'
+import { useT } from '@/lib/i18n'
 
 export default function Page() {
   const params = useParams<{ ws: string }>()
   const scope = useScope()
+  const t = useT()
   const base = `/dashboard/${params.ws}`
   const bilan = useBilan(params.ws, scope)
 
   return (
-    <ScreenFrame title="Balance sheet">
+    <ScreenFrame title={t('statements.bilanUi')}>
       <StatementHeading
-        fr="Bilan"
-        en="Balance sheet"
+        // `fr` is the LEGAL name and is French in both languages; `en` is the
+        // name in the reader's language. See `<StatementHeading>`'s header for
+        // the decision and for why the props kept their names.
+        fr={t('statements.bilanLegal')}
+        en={t('statements.bilanUi')}
         // Not cited when the book has no such statement: heading a page
         // "art. 959a CO" and then explaining this book has no art. 959a
         // balance sheet contradicts itself in two lines. F4.
@@ -63,7 +68,7 @@ export default function Page() {
         // "art. 959a CO" above an explanation that this book has no such
         // statement contradicts itself in two lines — true for a simplified
         // book (F4) and equally for one whose exercice is not open yet.
-        article={bilan.data ? 'art. 959a CO' : undefined}
+        article={bilan.data ? t('statements.bilanArticle') : undefined}
         bookName={scope.record?.name}
         exercice={scope.exercice}
         exerciceStatus={scope.exerciceStatus}
@@ -79,7 +84,7 @@ export default function Page() {
           test: nothing here can fail. */}
       {bilan.data && <PostedOnlyNote ws={params.ws} scope={scope} journal={scope.journal} />}
 
-      {bilan.isLoading && <Loading rows={8} label="Loading the balance sheet" />}
+      {bilan.isLoading && <Loading rows={8} label={t('statements.loadingBilan')} />}
 
       {/* The refusal is checked BEFORE the generic error, because it is not one.
           Ordering these the other way round would put a red box on a book whose
@@ -87,8 +92,8 @@ export default function Page() {
       {isSimplifiedRefusal(bilan.error) && (
         <SimplifiedBookNotice
           error={bilan.error}
-          statement="balance sheet"
-          because="there are no balances to arrange into the art. 959a groups"
+          statement={t('statements.bilanUi').toLowerCase()}
+          because={t('statements.simplifiedBecauseBilan')}
           base={base}
           scope={scope}
           bookName={scope.record?.name}
@@ -100,13 +105,13 @@ export default function Page() {
       {isNoExerciceRefusal(bilan.error) && (
         <NoExerciceNotice
           error={bilan.error}
-          statement="balance sheet"
+          statement={t('statements.bilanUi').toLowerCase()}
           bookName={scope.record?.name}
         />
       )}
 
       {bilan.error && !isSimplifiedRefusal(bilan.error) && !isNoExerciceRefusal(bilan.error) && (
-        <ErrorState error={bilan.error} title="The balance sheet could not be derived" />
+        <ErrorState error={bilan.error} title={t('statements.bilanFailed')} />
       )}
 
       {bilan.data && (
@@ -130,17 +135,20 @@ export default function Page() {
               this screen needs. */}
           <dl className="mt-4 border-t border-border pt-3 text-[13px]">
             <div className="flex items-baseline justify-between py-0.5">
-              <dt className="font-medium text-foreground">Total actif</dt>
+              <dt className="font-medium text-foreground">{t('statements.totalActif')}</dt>
               <dd className="num-total"><Money value={bilan.data.totalActif} /></dd>
             </div>
             <div className="flex items-baseline justify-between py-0.5">
-              <dt className="font-medium text-foreground">Total passif</dt>
+              <dt className="font-medium text-foreground">{t('statements.totalPassif')}</dt>
               <dd className="num-total"><Money value={bilan.data.totalPassif} /></dd>
             </div>
             <div className="flex items-baseline justify-between border-t border-border/60 py-0.5 pt-2">
               <dt className="text-muted-foreground">
-                Résultat de l&apos;exercice
-                <span className="ml-2 text-[11.5px]">injected into equity from the income statement</span>
+                {/* The LEGAL name of the line, French in both languages — it is
+                    an art. 959a position, not chrome. The note beside it is
+                    ours and is translated. */}
+                {t('statements.resultat')}
+                <span className="ml-2 text-[11.5px]">{t('statements.resultatNote')}</span>
               </dt>
               <dd className="num"><Money value={bilan.data.resultat} /></dd>
             </div>

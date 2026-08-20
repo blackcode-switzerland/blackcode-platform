@@ -28,7 +28,10 @@
 // correct rendering of a promise nobody has kept yet — a tick would be a claim
 // about a ten-year retention obligation that nothing behind this screen fulfils.
 
+'use client'
+
 import { DateText } from './date-text'
+import { useT } from '@/lib/i18n'
 import { TermChip } from './chips'
 import { DataTable, type Column } from './data-table'
 import { EmptyState } from './states'
@@ -53,6 +56,7 @@ export function ManifestTable({
   scope: { entity: string | null; exercice: number | null }
 }) {
   const { data: meta } = useMeta()
+  const t = useT()
 
   // The vocabulary is looked up ONCE for the whole table rather than per row —
   // `<TermChip>` exists for exactly this, and a hundred `useMeta()`
@@ -61,13 +65,15 @@ export function ManifestTable({
     () => [
       {
         key: 'name',
-        header: 'File',
+        header: t('manifest.colFile'),
         cell: (f) => (
           <span className="block min-w-0">
             <span className="block font-mono text-[12px] text-foreground">
               {/* A file the worker recorded with no name is a real state and it
                   must not render as an empty cell. */}
-              {f.name ?? <span className="italic text-muted-foreground">unnamed</span>}
+              {f.name ?? (
+                <span className="italic text-muted-foreground">{t('manifest.unnamed')}</span>
+              )}
             </span>
             <span className="block break-all font-mono text-[10.5px] text-muted-foreground">
               {f.file_id}
@@ -78,7 +84,7 @@ export function ManifestTable({
       },
       {
         key: 'created',
-        header: 'Created',
+        header: t('manifest.colCreated'),
         // A Drive timestamp, not a Postgres `date` — `<DateText>` slices and
         // never parses, so it is right for both. See `ManifestFile`.
         cell: (f) => <DateText value={f.created_time} className="text-[12px]" />,
@@ -86,18 +92,20 @@ export function ManifestTable({
       },
       {
         key: 'fetched',
-        header: 'Fetched',
+        header: t('manifest.colFetched'),
         cell: (f) =>
           f.fetched ? (
             <DateText value={f.fetched} className="text-[12px]" />
           ) : (
-            <span className="text-[12px] italic text-muted-foreground">not yet</span>
+            <span className="text-[12px] italic text-muted-foreground">
+              {t('manifest.notYet')}
+            </span>
           ),
         sortValue: (f) => f.fetched ?? '',
       },
       {
         key: 'piece',
-        header: 'Pièce',
+        header: t('manifest.colPiece'),
         cell: (f) =>
           f.piece === null ? (
             <span className="text-[12px] text-muted-foreground">—</span>
@@ -113,7 +121,7 @@ export function ManifestTable({
       },
       {
         key: 'state',
-        header: 'State',
+        header: t('manifest.colState'),
         cell: (f) => (
           <TermChip term={findTerm(meta, 'manifest_states', f.state)} value={f.state} />
         ),
@@ -121,19 +129,21 @@ export function ManifestTable({
       },
       {
         key: 'archived',
-        header: 'Archived',
+        header: t('manifest.colArchived'),
         cell: (f) =>
           f.archived ? (
             <span className="text-[12px] text-foreground" title={f.archive_ref ?? undefined}>
-              yes
+              {t('manifest.yes')}
             </span>
           ) : (
-            <span className="text-[12px] italic text-muted-foreground">not yet</span>
+            <span className="text-[12px] italic text-muted-foreground">
+              {t('manifest.notYet')}
+            </span>
           ),
         sortValue: (f) => (f.archived ? 1 : 0),
       },
     ],
-    [meta, base, scope]
+    [meta, base, scope, t]
   )
 
   const summary = useMemo(() => {
@@ -151,12 +161,8 @@ export function ManifestTable({
   // fetch looks like, and this is not one.
   if (!isLoading && !error && files && files.length === 0) {
     return (
-      <EmptyState title="No files on record for this source." icon={FolderOpen}>
-        <p>
-          That is an answer, not a failure. A manifest is kept by the Drive worker, and only a
-          source it polls has one — a bank pulled by hand into an archive folder has files on our
-          side without a worker tracking them, and they are in the pulls table above.
-        </p>
+      <EmptyState title={t('manifest.empty')} icon={FolderOpen}>
+        <p>{t('manifest.emptyBody')}</p>
       </EmptyState>
     )
   }
@@ -165,8 +171,13 @@ export function ManifestTable({
     <>
       {summary && summary.total > 0 && (
         <p className="mb-2 text-[12px] text-muted-foreground">
-          {summary.total} files · {summary.fetched} fetched · {summary.extracted} extracted ·{' '}
-          {summary.review} in review · {summary.archived} archived
+          {t('manifest.summary', {
+            total: summary.total,
+            fetched: summary.fetched,
+            extracted: summary.extracted,
+            review: summary.review,
+            archived: summary.archived,
+          })}
         </p>
       )}
       <DataTable

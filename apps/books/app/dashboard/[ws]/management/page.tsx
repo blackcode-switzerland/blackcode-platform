@@ -55,7 +55,8 @@ import { useParams } from 'next/navigation'
 import { useScope } from '@/lib/scope'
 import { useAnalytique, useAnalytiqueCategories } from '@/lib/hooks'
 import { breakdownTotal, flowTotals } from '@/lib/analytique'
-import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useT } from '@/lib/i18n'
 import { ScreenFrame } from '@/components/screen-frame'
 import { ErrorState, Loading } from '@/components/states'
 import { StatementHeading } from '@/components/statement-heading'
@@ -70,6 +71,8 @@ export default function Page() {
   const base = `/dashboard/${params.ws}`
   const analytique = useAnalytique(params.ws, scope)
   const config = useAnalytiqueCategories(params.ws, scope.entity)
+  const t = useT()
+  const label = useLabel()
 
   const data = analytique.data
   const totals = data ? flowTotals(data.monthly_flows) : null
@@ -80,10 +83,10 @@ export default function Page() {
   const retired = (config.data ?? []).filter((c) => c.retired)
 
   return (
-    <ScreenFrame title="Management view">
+    <ScreenFrame title={t('mgmt.uiName')}>
       <StatementHeading
-        fr="Compta analytique"
-        en="Management view"
+        fr={t('mgmt.legalName')}
+        en={t('mgmt.uiName')}
         // No article. This document is not fixed by the Code des obligations
         // and citing one would be a false claim about what the reader is
         // looking at — the same rule the two statutory screens follow in
@@ -97,11 +100,8 @@ export default function Page() {
         role="note"
       >
         <div className="min-w-0 text-[12.5px] text-muted-foreground">
-          <span className="font-medium text-foreground">
-            Management accounting — informational, not statutory.
-          </span>{' '}
-          Arithmetic over this book&apos;s own movements. Nothing on this page is filed and
-          nothing on it is stored: every figure is derived when the page is opened.
+          <span className="font-medium text-foreground">{t('mgmt.noticeLead')}</span>{' '}
+          {t('mgmt.noticeBody')}
           {/* ── THE EXCLUSIONS ARE PER REGIME AND THE WRONG ONE IS A FALSE
               STATEMENT ────────────────────────────────────────────────────
               A grand livre has staged entries and they are excluded here, the
@@ -113,24 +113,15 @@ export default function Page() {
               direction (`monthlyFlowsRi`, `costBreakdownRi`), which is a real
               omission from these totals and is therefore disclosed. */}
           {scope.journal === 'grand_livre' && (
-            <>
-              {' '}
-              Staged entries are excluded everywhere on this page, exactly as they are from the
-              balance sheet and the income statement, so an unexplained backlog is invisible
-              here.
-            </>
+            <> {t('mgmt.noticeStaged')}</>
           )}
           {scope.journal === 'recettes_depenses' && (
-            <>
-              {' '}
-              A transfer between your own accounts is logged in the book and counts in neither
-              direction, so it is in none of these figures.
-            </>
+            <> {t('mgmt.noticeNeutral')}</>
           )}
         </div>
       </div>
 
-      {analytique.isLoading && <Loading rows={8} label="Loading the management view" />}
+      {analytique.isLoading && <Loading rows={8} label={t('mgmt.loading')} />}
 
       {/* A book with no fiscal year is not a failure. Same treatment as the
           statutory screens, and the same code — `resolveScope` raises
@@ -138,13 +129,13 @@ export default function Page() {
       {isNoExerciceRefusal(analytique.error) && (
         <NoExerciceNotice
           error={analytique.error}
-          statement="management view"
+          statement={t('mgmt.uiName').toLowerCase()}
           bookName={scope.record?.name}
         />
       )}
 
       {analytique.error && !isNoExerciceRefusal(analytique.error) && (
-        <ErrorState error={analytique.error} title="The management view could not be derived" />
+        <ErrorState error={analytique.error} title={t('mgmt.failed')} />
       )}
 
       {data && totals && categoryTotal !== null && (
@@ -152,38 +143,26 @@ export default function Page() {
           <RunFigures totals={totals} journal={scope.journal} />
 
           <section>
-            <h2 className="mb-1 text-sm font-medium text-foreground">
-              Revenue against charges, per month
-            </h2>
+            <h2 className="mb-1 text-sm font-medium text-foreground">{t('mgmt.flowsTitle')}</h2>
+            {/* Two whole sentences rather than one with its first clause swapped
+                in: the difference between them is the SUBJECT of the sentence,
+                and French does not put the qualifier where English does. */}
             <p className="mb-3 text-[12px] text-muted-foreground">
-              {scope.journal === 'grand_livre' ? 'Posted écritures only, and only' : 'Only'} the
-              months that carry a movement. Months with nothing in them are absent from the
-              series rather than drawn at zero — this is what the books hold, not a
-              twelve-month shape with holes filled in.
+              {scope.journal === 'grand_livre'
+                ? t('mgmt.flowsLeadPosted')
+                : t('mgmt.flowsLeadAll')}
             </p>
             <FlowsChart flows={data.monthly_flows} />
           </section>
 
           <section>
             <h2 className="mb-1 text-sm font-medium text-foreground">
-              Where the money goes — charges by category
+              {t('mgmt.breakdownTitle')}
             </h2>
             <p className="mb-3 text-[12px] text-muted-foreground">
-              {data.categories.length > 0 && data.categories[0].accounts === null ? (
-                <>
-                  This book keeps recettes-dépenses, so a bucket is the category carried by each
-                  dépense rather than a mapping from ledger accounts. An uncategorised movement
-                  lands in its own named bucket instead of vanishing — the total is still the
-                  total.
-                </>
-              ) : (
-                <>
-                  An inspectable mapping from ledger accounts to a cost bucket, and never a
-                  statutory line. A bucket with no postings this year is still on the screen: the
-                  set of buckets is configuration, so an absent one would say the bucket does not
-                  exist.
-                </>
-              )}
+              {data.categories.length > 0 && data.categories[0].accounts === null
+                ? t('mgmt.breakdownLeadRi')
+                : t('mgmt.breakdownLeadChart')}
             </p>
             <CostBreakdown
               categories={data.categories}
@@ -200,26 +179,23 @@ export default function Page() {
                 not in the first, and the gap is the reader's to close. */}
             {categoryTotal !== totals.charges && (
               <p className="mt-2 text-[12px] text-muted-foreground">
-                <span className="font-medium text-foreground">
-                  This total is smaller than the charges above.
-                </span>{' '}
-                The breakdown counts only the accounts a category claims; the monthly series
-                counts every charge account in the book. The difference is charges sitting in no
-                active category.
+                <span className="font-medium text-foreground">{t('mgmt.gapLead')}</span>{' '}
+                {t('mgmt.gapBody')}
               </p>
             )}
 
             {retired.length > 0 && (
               <div className="mt-3 rounded-md border border-border bg-secondary px-3 py-2 text-[12px] text-muted-foreground">
                 <span className="font-medium text-foreground">
-                  {retired.length} retired {retired.length === 1 ? 'category' : 'categories'}.
+                  {t(retired.length === 1 ? 'mgmt.retiredOne' : 'mgmt.retiredMany', {
+                    n: retired.length,
+                  })}
                 </span>{' '}
-                A retired bucket is not deleted — a past analysis may cite a breakdown that used
-                it — and its accounts are counted in no bar above:{' '}
+                {t('mgmt.retiredBody')}{' '}
                 {retired.map((c, i) => (
                   <span key={c.key}>
                     {i > 0 && ', '}
-                    <span className="text-foreground">{en(c.label) || c.key}</span>{' '}
+                    <span className="text-foreground">{label(c.label) || c.key}</span>{' '}
                     <span className="font-mono text-[11px]">{c.accounts.join(' ')}</span>
                   </span>
                 ))}
@@ -229,9 +205,7 @@ export default function Page() {
           </section>
 
           <p className="border-t border-border pt-3 text-[12px] text-muted-foreground">
-            Runway, the recorded analyses and the tax position are not on this page. The first two
-            arrive with the Analyses screen; the tax snapshot has its own screen and its own
-            derivation, and a second copy of it here would be the one that went stale.
+            {t('mgmt.footnote')}
           </p>
         </div>
       )}

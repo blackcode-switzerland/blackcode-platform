@@ -26,8 +26,11 @@
 // spends `lib/format.ts` avoiding, on the one number whose whole job is to be
 // exact.
 
+'use client'
+
 import { AlertTriangle, Check } from 'lucide-react'
-import { Money } from './money'
+import { money } from '@/lib/format'
+import { useT } from '@/lib/i18n'
 import type { Money as MoneyString } from '@/lib/types'
 
 export function BalanceCheck({
@@ -41,6 +44,7 @@ export function BalanceCheck({
   actif: MoneyString
   passif: MoneyString
 }) {
+  const t = useT()
   if (balanced) {
     return (
       <p
@@ -48,15 +52,20 @@ export function BalanceCheck({
         data-balanced="true"
       >
         <Check size={13} className="shrink-0" />
-        {/* No line break between the amount and the comma: JSX turns one into a
-            text node beginning with a space, and `CHF 107'483.03 , so` is the
-            kind of small wrongness a reader reads as a rendering fault on a
-            page whose whole claim is that the figures are exact. */}
-        <span>
-          Actif = passif. Both sides come to{' '}
-          <Money value={actif} bare className="font-medium" />, so the balance sheet balances to
-          the rappen.
-        </span>
+        {/* ── THE AMOUNT IS INTERPOLATED AS TEXT, NOT AS `<Money>` ───────────
+            The comment that stood here warned that a line break before the comma
+            turns into a text node beginning with a space and prints
+            `CHF 107'483.03 , so`. Splitting a sentence into three JSX fragments
+            is what made that possible, and it also fixes English clause order
+            into a sentence French orders differently. One entry, one
+            interpolation, no fragments.
+
+            `money()` is `lib/format.ts`'s formatter and it still never
+            constructs a Number — that file's standing rule is intact, and the
+            ASCII apostrophe for thousands (D-B) comes with it in both languages.
+            What is lost is `<Money>`'s tabular figures inside a paragraph of
+            prose, where they were doing no work. */}
+        <span>{t('statements.balanced', { amount: money(actif) })}</span>
       </p>
     )
   }
@@ -71,13 +80,14 @@ export function BalanceCheck({
         <AlertTriangle size={16} className="mt-0.5 shrink-0 text-destructive" />
         <div>
           <p className="text-sm font-medium text-foreground">
-            This balance sheet does not balance.
+            {t('statements.unbalancedTitle')}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Actif <Money value={actif} bare /> against passif <Money value={passif} bare />, an
-            écart of <Money value={ecart} bare className="font-medium" />. A posting is missing
-            from one side. Do not file this, and do not fix it by moving a line — the entry&apos;s
-            account is what is wrong.
+            {t('statements.unbalancedBody', {
+              actif: money(actif),
+              passif: money(passif),
+              ecart: money(ecart),
+            })}
           </p>
         </div>
       </div>

@@ -52,6 +52,7 @@ import { ScreenFrame } from '@/components/screen-frame'
 import { ErrorState, Loading } from '@/components/states'
 import { PiecesInbox } from '@/components/pieces-inbox'
 import { useScope } from '@/lib/scope'
+import { useT } from '@/lib/i18n'
 
 export default function Page() {
   const params = useParams<{ ws: string }>()
@@ -62,6 +63,7 @@ export default function Page() {
   // The whole inbox. See the header: filtering by book hides the documents that
   // have none, which are the ones a person is here to attribute.
   const pieces = usePieces(params.ws)
+  const t = useT()
 
   // `?piece=5` — where a manifest row links in. A #number that is not in the
   // list simply opens nothing, which is the right behaviour for a bookmark that
@@ -84,24 +86,20 @@ export default function Page() {
   const toHandle = rows.filter((p) => p.needs_review || p.matched_entry === null).length
 
   return (
-    <ScreenFrame title="Supporting documents">
+    <ScreenFrame title={t('docs.uiName')}>
       <div className="mb-4">
         <h1 className="text-lg font-semibold text-foreground">
-          Pièces justificatives{' '}
-          <span className="ml-2 text-sm font-normal text-muted-foreground">
-            Supporting documents
-          </span>
+          {t('docs.uiName')}
+          {t('docs.legalName') !== t('docs.uiName') && (
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              {t('docs.legalName')}
+            </span>
+          )}
         </h1>
-        <p className="mt-1 max-w-2xl text-[12.5px] text-muted-foreground">
-          Every entry needs its document (art. 957a al. 3 CO), kept ten years (art. 958f). Google
-          Drive is the inbox and the human view; the legal archive is a separate immutable copy.
-          b/books keeps references, hashes and capture dates — never the file itself.
-        </p>
+        <p className="mt-1 max-w-2xl text-[12.5px] text-muted-foreground">{t('docs.lead')}</p>
         <p className="mt-1.5 max-w-2xl text-[12.5px] text-muted-foreground">
-          <span className="font-medium text-foreground">Nothing here changes a balance.</span> A
-          document is not an écriture: it lands staged, it never posts, and no statement reads this
-          table. This list is the whole inbox and is not filtered by book — a scanned receipt does
-          not always say whose it is, and saying so is one of the judgments this screen is for.
+          <span className="font-medium text-foreground">{t('docs.noBalanceLead')}</span>{' '}
+          {t('docs.noBalanceBody')}
         </p>
         {/* ── THE WRITE THAT WAS WITHHELD, AND IS NOT ANY MORE ────────────────
             This screen carried a paragraph telling the reader that attaching a
@@ -127,17 +125,17 @@ export default function Page() {
 
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-[15px] font-semibold text-foreground">
-          Inbox
+          {t('docs.inbox')}
           {pieces.data && (
             <span className="ml-2 text-[13px] font-normal text-muted-foreground">
-              {toHandle} to handle · {rows.length} in all
+              {t('docs.counts', { toHandle, total: rows.length })}
             </span>
           )}
         </h2>
       </div>
 
-      {pieces.isLoading && <Loading rows={4} label="Loading the inbox" />}
-      {pieces.error && <ErrorState error={pieces.error} title="The inbox could not be loaded" />}
+      {pieces.isLoading && <Loading rows={4} label={t('docs.loading')} />}
+      {pieces.error && <ErrorState error={pieces.error} title={t('docs.failed')} />}
       {pieces.data && (
         <PiecesInbox
           ws={params.ws}
@@ -150,24 +148,14 @@ export default function Page() {
       )}
 
       <section className="mt-6 rounded-lg border border-dashed border-border px-4 py-3.5">
-        <h2 className="text-sm font-medium text-foreground">How documents get here</h2>
+        <h2 className="text-sm font-medium text-foreground">{t('docs.howTitle')}</h2>
         <p className="mt-1.5 text-[12.5px] text-muted-foreground">
-          Paper receipts are scanned with the stock Google Drive app into an inbox folder. A
-          stateless worker polls it, a vision model extracts the fields against a fixed schema, and
-          deterministic checks — the sum, the Swiss VAT rates, the date — run{' '}
-          <span className="font-medium text-foreground">outside the model, on the server</span>. The
-          worker&apos;s own verdict is stored as evidence of what it claimed and is read by nothing.
+          {t('docs.how1a')}{' '}
+          <span className="font-medium text-foreground">{t('docs.how1b')}</span>
+          {t('docs.how1c')}
         </p>
-        <p className="mt-1.5 text-[12.5px] text-muted-foreground">
-          Everything lands staged. A document that fails validation lands anyway, flagged, because a
-          bad sum is exactly the document a human must see — refusing it at the door would hide it
-          in the worker&apos;s retry queue. Two documents with the same content are both kept, for
-          the same reason: a refund and a re-scan look identical and mean different money.
-        </p>
-        <p className="mt-1.5 text-[12.5px] text-muted-foreground">
-          There is no upload control on this screen and there is not meant to be one — documents are
-          Drive references, and the ingest route is a door an external worker posts to with a token.
-        </p>
+        <p className="mt-1.5 text-[12.5px] text-muted-foreground">{t('docs.how2')}</p>
+        <p className="mt-1.5 text-[12.5px] text-muted-foreground">{t('docs.how3')}</p>
       </section>
     </ScreenFrame>
   )

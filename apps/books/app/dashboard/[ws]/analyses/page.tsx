@@ -56,18 +56,20 @@ import { EmptyState, ErrorState, Loading } from '@/components/states'
 import { StatementHeading } from '@/components/statement-heading'
 import { DateText } from '@/components/date-text'
 import type { Analysis } from '@/lib/types'
+import { useT } from '@/lib/i18n'
 
 export default function Page() {
   const params = useParams<{ ws: string }>()
   const scope = useScope()
   const base = `/dashboard/${params.ws}`
   const analyses = useAnalyses(params.ws, scope.entity)
+  const t = useT()
 
   return (
-    <ScreenFrame title="Analyses">
+    <ScreenFrame title={t('nav.analyses')}>
       <StatementHeading
-        fr="Analyses"
-        en="What your agents were asked"
+        fr={t('analyses.legalName')}
+        en={t('analyses.uiName')}
         // No article. This is a journal of questions, not a document the Code
         // des obligations fixes the shape of — the same rule the management
         // view follows, in reverse of the two statutory screens.
@@ -76,34 +78,24 @@ export default function Page() {
       />
 
       <p className="mb-4 text-[12.5px] text-muted-foreground">
-        Every what-if an agent answered for this book, as it filed it. The asking happens outside
-        this app: you put the question to Companion or to Claude Code, the agent reads this
-        book&apos;s data and files its answer here.{' '}
-        <span className="text-foreground">
-          Nothing on this screen is recalculated and nothing on it can be edited
-        </span>{' '}
-        — a drifted answer is answered again, and both records stand.
+        {t('analyses.leadA')}{' '}
+        <span className="text-foreground">{t('analyses.leadB')}</span>{' '}
+        {t('analyses.leadC')}
       </p>
 
       <p className="mb-4 text-[11.5px] text-muted-foreground">
-        The year selector above does not filter this list. An analysis belongs to a book and not to
-        a fiscal year, so this is every answer filed for{' '}
-        {scope.record?.name ?? 'this book'}, newest first.
+        {t('analyses.notFiltered', { book: scope.record?.name ?? t('rec.thisBook') })}
       </p>
 
-      {analyses.isLoading && <Loading rows={4} label="Loading the analyses" />}
+      {analyses.isLoading && <Loading rows={4} label={t('analyses.loading')} />}
 
       {analyses.error && (
-        <ErrorState error={analyses.error} title="The analyses could not be loaded" />
+        <ErrorState error={analyses.error} title={t('analyses.failed')} />
       )}
 
       {analyses.data && analyses.data.length === 0 && (
-        <EmptyState title="No analysis has been filed for this book." icon={MessagesSquare}>
-          <p>
-            Ask your agent — Companion, or Claude Code, outside this app — and its answer lands here
-            as a record. There is no way to write one from this screen, deliberately: the answer and
-            the figures it rested on are filed together by whoever produced them.
-          </p>
+        <EmptyState title={t('analyses.empty')} icon={MessagesSquare}>
+          <p>{t('analyses.emptyBody')}</p>
         </EmptyState>
       )}
 
@@ -135,6 +127,7 @@ function AnalysisRow({
   base: string
   scope: { entity: string | null; exercice: number | null }
 }) {
+  const t = useT()
   const verdict = speech(analysis.verdict)
   const scenario = analysis.scenario_label ? speech(analysis.scenario_label) : null
   // The count is read through the guard, not off `.length`, so a malformed row
@@ -153,7 +146,7 @@ function AnalysisRow({
         <span>·</span>
         <DateText value={analysis.asked} />
         <span>·</span>
-        <span>asked by {analysis.asked_by}</span>
+        <span>{t('analyses.askedBy', { who: analysis.asked_by })}</span>
         <span className="ml-auto font-mono">#{analysis.number}</span>
       </div>
 
@@ -172,19 +165,18 @@ function AnalysisRow({
         {/* `!== null` and not truthiness: a runway of 0 months is a real and
             very interesting answer, and `0 && …` would hide it. */}
         {analysis.runway_after_months !== null && (
-          <span>
-            runway after:{' '}
-            <span className="font-mono text-foreground">{analysis.runway_after_months}</span> months
-          </span>
+          <span>{t('analyses.runwayAfter', { n: analysis.runway_after_months })}</span>
         )}
         <span>
-          {basedOn.rows.length} recorded {basedOn.rows.length === 1 ? 'input' : 'inputs'}
+          {t(basedOn.rows.length === 1 ? 'analyses.inputsOne' : 'analyses.inputsMany', {
+            n: basedOn.rows.length,
+          })}
         </span>
         <Link
           href={scopedHref(base, `/analyses/${analysis.number}`, scope)}
           className="ml-auto inline-flex items-center gap-1 text-primary-strong hover:underline"
         >
-          Open the record
+          {t('analyses.openRecord')}
           <ArrowRight size={12} />
         </Link>
       </div>

@@ -1,18 +1,66 @@
-// `<StatementHeading>` — the French title, the English gloss, and the three
-// facts that say WHICH document this is.
+'use client'
+
+// `<StatementHeading>` — the document's name in the reader's language, its LEGAL
+// name beneath, and the three facts that say WHICH document this is.
 //
 // A balance sheet without its entity and its exercice is not a balance sheet; it
 // is a column of numbers. Both statement screens and the patrimoine screen carry
 // the same three, so they are written once — a heading assembled per screen is
 // three chances for one of them to omit the year.
 //
-// The French is the statutory title (D-A: French survives in the statutory
-// layer and nowhere else), the English sits beside it as the interface gloss,
-// and the article is cited because a reader checking a filing needs to know
-// which structure they are looking at.
+// ===========================================================================
+// THE STATUTORY-NAME DECISION, IMPLEMENTED (Bala, 2026-08-20 — D-A rewritten)
+// ===========================================================================
+// Art. 959a and 959b name these documents, and a statement filed in Switzerland
+// is filed in a national language. The position this app has held is that the
+// French is not decoration — it is what the document IS.
+//
+// So the switch changes the heading, **and the legal name stays visible as a
+// subtitle**:
+//
+//   English reader:  Income statement   *compte de résultat*
+//   French reader:   Compte de résultat
+//
+// Nobody loses the legal identity of the document, and nobody has to read a
+// language they did not choose.
+//
+// **The order is inverted from what shipped before.** Until today the FRENCH was
+// the h1 and the English was the small gloss, for every reader — which was
+// correct while the product was English-only with a statutory exception, and is
+// wrong the moment a reader can say "I read French": it made the English gloss
+// the thing an English reader had to squint at on the one screen they are most
+// likely to be checking against a filing.
+//
+// ── FOR A FRENCH READER THE SUBTITLE IS NOT RENDERED, AND IT IS NOT SKIPPED ─
+// It is not rendered *because it is the same string*. `ui` and `legal` are two
+// dictionary entries whose French sides are identical by design
+// (`lib/dictionary/statements.ts` says so), and printing "Bilan Bilan" is a
+// rendering fault, not bilingualism. The test is on the VALUES, so a document
+// whose French UI name ever genuinely differs from its legal name — none does
+// today — would show both without anybody changing this file.
+//
+// **What is on screen is not what would be filed.** Nothing exported or filed
+// consults the locale: `legal()` in `lib/label.ts` carries that rule, and the
+// export that does not exist yet is where it has to be honoured.
+
+import { useT } from '@/lib/i18n'
 
 export function StatementHeading({
+  /**
+   * The document's LEGAL name — French, in both languages.
+   *
+   * `t('statements.bilanLegal')`. Named `fr` since the day this component was
+   * written and kept: it says what the value is.
+   */
   fr,
+  /**
+   * The document's name IN THE READER'S LANGUAGE — `t('statements.bilanUi')`.
+   *
+   * Still named `en` for the same reason `fr` is named `fr`: renaming a prop
+   * that three callers pass, in the same change that inverts what it is used
+   * for, is two edits to review as one. What it MEANS changed and this comment
+   * is the record of it.
+   */
   en,
   article,
   bookName,
@@ -51,11 +99,16 @@ export function StatementHeading({
   exerciceStatus?: 'open' | 'closed' | null
   children?: React.ReactNode
 }) {
+  const t = useT()
   return (
     <div className="mb-4">
       <h1 className="text-lg font-semibold text-foreground">
-        {fr}
-        <span className="ml-2 text-sm font-normal text-muted-foreground">{en}</span>
+        {en}
+        {/* Identical strings mean the reader's language IS the legal one. See
+            the header — the test is on the values, not on the locale. */}
+        {fr !== en && (
+          <span className="ml-2 text-sm font-normal text-muted-foreground">{fr}</span>
+        )}
       </h1>
       <p className="mt-1 text-sm text-muted-foreground">
         {/* `bookName` is undefined only while the book list is in flight, and
@@ -66,16 +119,16 @@ export function StatementHeading({
             missing. */}
         {bookName ?? '—'}
         {' · '}
-        exercice {exercice ?? '—'}
+        {t('statements.exercice', { year: exercice ?? '—' })}
         {/* `=== 'closed'`, never `!== 'open'`. `null` is "cannot be told" and
             marking an unknown year as filed is the wrong half of the mistake to
             make on a document somebody files. */}
         {exerciceStatus === 'closed' && (
           <span
             className="ml-1.5 rounded border border-border px-1 py-px text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground"
-            title="This fiscal year has been closed. Nothing can be posted into it, and there is no reopen."
+            title={t('chrome.closedTitle')}
           >
-            closed
+            {t('chrome.closed')}
           </span>
         )}
         {article && (

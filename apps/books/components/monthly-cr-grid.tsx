@@ -29,7 +29,10 @@
 // a `reduce`, not a `+`, not a `Number()` on any amount. `<Money>`'s prop type
 // is `string | null` with no numeric overload, which is what stops one arriving.
 
+'use client'
+
 import { Money } from './money'
+import { useLocale, useT } from '@/lib/i18n'
 import { monthlyCrView } from '@/lib/monthly-cr'
 import type { MetaPayload } from '@/lib/hooks'
 import type { CrResult, MonthlyCrResult } from '@/lib/types'
@@ -49,6 +52,8 @@ export function MonthlyCrGrid({
   cr: CrResult & { months: MonthlyCrResult[] }
   meta: MetaPayload | undefined
 }) {
+  const t = useT()
+  const locale = useLocale()
   const view = monthlyCrView(cr, meta)
 
   return (
@@ -93,7 +98,7 @@ export function MonthlyCrGrid({
                 scope="col"
                 className="sticky left-0 z-10 border-b border-border bg-background py-1.5 pr-4 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-strong"
               >
-                Compte de résultat
+                {t('statements.monthlyHeader')}
               </th>
               {view.columns.map((c) => (
                 <th
@@ -153,8 +158,14 @@ export function MonthlyCrGrid({
                   // words is worse than a taller row.
                   className="sticky left-0 z-10 max-w-[10rem] bg-background py-1.5 pr-4 text-left font-normal sm:max-w-[22rem]"
                 >
+                  {/* The statutory wording, then its English gloss — the same
+                      rule and the same locale test as `<StatementTable>`: the
+                      line is the law in both languages, and a French reader
+                      glossed with the French would read the same words twice. */}
                   <span className="text-foreground">{row.fr}</span>
-                  <span className="ml-2 text-[11.5px] text-muted-foreground">{row.en}</span>
+                  {locale === 'en' && (
+                    <span className="ml-2 text-[11.5px] text-muted-foreground">{row.en}</span>
+                  )}
                 </th>
                 {row.cells.map((amount, i) => (
                   <td key={view.columns[i].month} className="num py-1.5 pl-4">
@@ -174,8 +185,12 @@ export function MonthlyCrGrid({
                 scope="row"
                 className="sticky left-0 z-10 bg-background pt-3 pr-4 text-left text-[13px] font-semibold"
               >
-                Résultat
-                <span className="ml-2 text-[11.5px] font-normal text-muted-foreground">Result</span>
+                {t('statements.monthlyResult')}
+                {locale === 'en' && (
+                  <span className="ml-2 text-[11.5px] font-normal text-muted-foreground">
+                    {t('statements.monthlyResultGloss')}
+                  </span>
+                )}
               </th>
               {view.resultat.cells.map((amount, i) => (
                 <td key={view.columns[i].month} className="num-total pt-3 pl-4 text-[13px]">
@@ -207,18 +222,17 @@ export function MonthlyCrGrid({
  * exactly (`lib/wire-parity.test.ts` asserts that, in centimes).
  */
 export function MonthlyReadingOnlyNotice() {
+  const t = useT()
   return (
     <p
       className="rounded-lg border border-border bg-secondary px-3 py-2 text-[12px] text-muted-foreground"
       aria-live="polite"
     >
-      <span className="font-medium text-foreground">
-        A monthly view is for reading, not for filing.
-      </span>{' '}
-      Art. 959b CO defines the compte de résultat as an <em>annual</em> statement. A month is not a
-      legal reporting period and no column below is a document you can file. The figures are not
-      approximations: every month is derived exactly as the year is, and the twelve sum to the year
-      in the last column.
+      <span className="font-medium text-foreground">{t('statements.monthlyNoticeLead')}</span>{' '}
+      {/* The `<em>` around "annual" is gone. Emphasis inside a sentence means
+          splitting it into fragments, which fixes English word order — French
+          puts «annuel» after the noun. The whole sentence is one entry. */}
+      {t('statements.monthlyNoticeBody')}
     </p>
   )
 }

@@ -27,39 +27,50 @@
 // `postEntry` refuses a `blocked` entry with `verdict_blocked`, carrying the
 // agent's own `resolves` text as the suggestion.
 
+import type { BooksKey } from './dictionary'
 import type { Verdict } from './types'
 
 export type VerdictState = 'never_checked' | 'accepted' | 'accepted_with_warning' | 'blocked' | 'unknown'
 
 export interface VerdictFace {
   state: VerdictState
-  label: string
+  /**
+   * DICTIONARY KEYS, not words — since 2026-08-20.
+   *
+   * This module is a pure function library: it is called from `useMemo`, from
+   * tests and (in principle) from a server component, so it cannot call a hook.
+   * Returning keys keeps the whole table translatable without any of that, and
+   * a face naming a key that does not exist is a compile error.
+   *
+   * `lib/verdict.test.ts` asserts through `DICTIONARY.en[...]`, so what it
+   * checks is unchanged and it now also checks the French exists.
+   */
+  labelKey: BooksKey
   /** What the reader is entitled to conclude. The whole reason this file exists. */
-  meaning: string
+  meaningKey: BooksKey
   tone: 'calm' | 'good' | 'warn' | 'bad'
 }
 
 const FACES: Record<Exclude<VerdictState, 'never_checked' | 'unknown'>, VerdictFace> = {
   accepted: {
     state: 'accepted',
-    label: 'Accepted',
+    labelKey: 'face.verdictAccepted',
     tone: 'good',
-    meaning: 'A compliance pass read this entry against the rules and raised nothing.',
+    meaningKey: 'face.verdictAcceptedMeaning',
   },
   accepted_with_warning: {
     state: 'accepted_with_warning',
-    label: 'Accepted with a warning',
+    labelKey: 'face.verdictWarning',
     tone: 'warn',
-    meaning:
-      'A compliance pass raised something that does not stop the entry. It still posts; the warning stands on the record.',
+    meaningKey: 'face.verdictWarningMeaning',
   },
   blocked: {
     state: 'blocked',
-    label: 'Blocked',
+    labelKey: 'face.verdictBlocked',
     tone: 'bad',
     // Enforced server-side in `postEntry`, not here. Saying so is what stops a
     // reader treating this as advice they may click past.
-    meaning: 'This entry refuses to post until what the verdict flagged is resolved.',
+    meaningKey: 'face.verdictBlockedMeaning',
   },
 }
 
@@ -83,20 +94,18 @@ export function verdictFace(verdict: Verdict | null | undefined): VerdictFace {
   if (verdict === null || verdict === undefined) {
     return {
       state: 'never_checked',
-      label: 'Never checked',
+      labelKey: 'face.verdictNeverChecked',
       tone: 'calm',
-      meaning:
-        'No compliance pass has looked at this entry. That is not the same as a clean one — nothing has been asserted about it either way.',
+      meaningKey: 'face.verdictNeverCheckedMeaning',
     }
   }
   const face = FACES[verdict.verdict as keyof typeof FACES]
   if (face) return face
   return {
     state: 'unknown',
-    label: 'Unrecognised verdict',
+    labelKey: 'face.verdictUnknown',
     tone: 'warn',
-    meaning:
-      'A compliance pass filed a verdict this build does not know. It is shown as filed rather than read as a pass or a refusal.',
+    meaningKey: 'face.verdictUnknownMeaning',
   }
 }
 

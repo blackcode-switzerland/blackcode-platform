@@ -48,6 +48,15 @@ export const users = platformSchema.table('users', {
   name: varchar('name', { length: 255 }),
   tagline: varchar('tagline', { length: 140 }),
   avatar_url: text('avatar_url'),
+  // The interface language for every blackcode app. **NULLABLE ON PURPOSE**:
+  // NULL means "never chosen", which is a different fact from "chose English"
+  // and is the true one for every row that predates migration 0048. The
+  // resolution order in `@blackcode/platform-i18n` is
+  // user record → cookie → Accept-Language → default, and a NOT NULL backfill
+  // would have answered step 1 for everybody, making the other two unreachable.
+  // The vocabulary (`'en' | 'fr'`) lives in that package and deliberately not in
+  // a CHECK constraint here — see the migration's header.
+  locale: varchar('locale', { length: 5 }),
   password_hash: varchar('password_hash', { length: 255 }),
   // active_workspace_id is a soft FK — we don't enforce it via Drizzle's
   // .references() to avoid a circular declaration with workspaces. The

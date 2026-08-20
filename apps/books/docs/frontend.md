@@ -723,12 +723,102 @@ ahead of its route is a screen built against a shape nobody has served, and a
 wire shape that changes does not fail to compile — it renders `undefined` and an
 accounting screen makes something up.
 
-## 9. Language
+## 9. Language — EN / FR since 2026-08-20
 
-**English chrome.** French only where the law fixes the wording: the bilan and
-compte de résultat line labels, which the filed PDF has to reproduce. Those
-arrive from `lib/statements.ts` and from the API, already in French. Never
-translate them and never write French UI copy around them.
+**b/books is bilingual.** The switch is on the blackcode account
+(`platform.users.locale`), the mechanism is the shared
+`@blackcode/platform-i18n`, and **every string in `app/` and `components/` comes
+from `lib/dictionary/`**.
+
+D-A was rewritten on the day this shipped. The old rule — "English chrome, no
+i18n system, no toggle" — survives in exactly one clause, and it is the clause
+that mattered.
+
+### The three kinds of text, and the function each goes through
+
+| Kind | Function | Locale-aware? |
+|---|---|---|
+| **Our copy** | `t('nav.overview')`, `lib/i18n.tsx` | Yes |
+| **A served `{fr, en}` pair** — account names, explanations, notes | `useLabel()` → `pick()` | Yes |
+| **A statutory LINE label** | `legal()` in `lib/label.ts` | **NO — French in both** |
+| **The English side, specifically** | `en()` | No, and that is its meaning |
+
+`en()` deliberately did **not** become locale-aware. It has one caller left —
+`<StatementTable>`'s gloss beside a French statutory line, rendered only for an
+English reader, because glossing French with French shows the same words twice —
+and `lib/analysis.test.ts` asserts on it. Redefining a function under an
+assertion that keeps passing is CLAUDE.md finding #10. `pick()` is new; `en()` is
+untouched.
+
+### What the switch does not reach
+
+1. **A statutory line label.** Art. 959a / 959b fix that wording.
+2. **Anything exported or filed.** No export exists yet; when one does it is
+   French whatever the reader chose. `lib/label.ts`'s header carries the rule
+   where an export would import it.
+3. **A served vocabulary.** `/api/meta`'s recognition states, evidence tiers and
+   source statuses carry their own labels. A second language is a backend ask.
+4. **`bk`.** English, and staying English.
+
+### The document heading follows the reader
+
+`<StatementHeading fr={…} en={…}>` — `fr` is the LEGAL name (French in both
+languages), `en` is the name in the reader's language. The h1 is `en`, and `fr`
+is rendered under it **only when the two strings differ**, which is the test that
+gives a French reader one heading rather than the same word twice. The prop names
+did not change with their meaning; the component's header records why.
+
+### Where the strings live, and the two guards
+
+`lib/dictionary/`, one file per area, each owing **both** languages:
+
+```ts
+export const en = { 'nav.overview': 'Overview' } as const
+export const fr: Record<keyof typeof en, string> = { 'nav.overview': 'Vue d’ensemble' }
+```
+
+- **The type is the strong guard.** `Dictionary<BooksKey>` is
+  `Record<Locale, Record<K, string>>`, so an English string added without its
+  French fails `tsc` — at the call site *and* in the French table. It cannot be
+  worded wrongly and cannot go inert. It even covers a computed key:
+  ``t(`landing.f${n}.title`)`` narrows against `BooksKey` with no cast.
+- **`lib/hardcoded-strings.test.ts` is the weak one.** A text scan for a
+  sentence that never reached the dictionary at all. Its own header names the six
+  things it cannot see, and it was watched to fail six ways before being
+  believed.
+
+**A `lib/` module that holds copy holds KEYS, not words.** `lib/nav.ts`
+(`labelKey`), `lib/compliance.ts` and `lib/verdict.ts` (`labelKey` /
+`meaningKey`) are the three, converted on 2026-08-20 — a pure function cannot
+call a hook, and a face table full of English is invisible to every scan.
+
+### No flash, and `<html lang>` follows
+
+`app/layout.tsx` resolves the locale on the SERVER from the session row and
+passes it to `<Providers locale>`. The first paint is already correct — this is
+strictly easier than the theme, which needs a blocking script because
+`localStorage` is unreachable from the server. **There is no `useEffect` that
+swaps the language after mount, and there must never be one.**
+
+The one effect in the whole arrangement lives in the package and writes
+`document.documentElement.lang` when the value changes, so a reader who switches
+without navigating does not leave the document announcing the wrong language to a
+screen reader. That was measured, not assumed: every visible string changed and
+`lang` did not.
+
+### Writing it
+
+`useSetLocale()` in `lib/account.ts` — an ACCOUNT write, not a books one, which
+is why it is in that file and named by `lib/read-only.test.ts`. It moves three
+things: the column (`PATCH /api/me`), the React context (so the switch is
+immediate) and the `bk_locale` cookie (so the SERVER is right on the next request
+and `/login` is right with no session at all). Both switches — Settings →
+Preferences and the sidebar — call it, because two code paths is how they end up
+disagreeing, and in this app the sidebar is on the settings page.
+
+**`null` is a real argument.** It clears the preference and hands the reader back
+to `Accept-Language`; the settings page spells it "Follow my browser". Without it
+a choice made once could be changed but never undone.
 
 ---
 
@@ -829,8 +919,11 @@ Every one of these goes through **`lib/account.ts`**, never `apiSend` in a
 component and never `lib/mutations.ts`:
 
 - `lib/mutations.ts` — the five BOOKS writes, gated on `useCanWrite()`
-- `lib/account.ts` — the seven ACCOUNT writes, gated on nothing (the server
-  gates them; this module is transport plus a loading flag)
+- `lib/account.ts` — the **eight** ACCOUNT writes, gated on nothing (the server
+  gates them; this module is transport plus a loading flag). The eighth is
+  `useSetLocale`, added 2026-08-20: it writes `platform.users.locale` through
+  `PATCH /api/me`, and it is here rather than in `lib/mutations.ts` for this
+  file's one test — it touches no `books.*` table
 
 `lib/read-only.test.ts` names exactly those two modules and goes red on anything
 else that imports `apiSend`, under any alias. The test for which file something

@@ -27,13 +27,16 @@ data flows. **Source of truth is the code** — this describes it as it is today
 - [The chart kit](#the-chart-kit--blackcodeplatform-uicharts)
 - [Routes](#routes)
 - [App shell & providers](#app-shell--providers)
+- [Interface language](#interface-language--blackcodeplatform-i18n)
 - [Components](#components)
 - [Shared design primitives](#shared-design-primitives)
 - [State & data fetching](#state--data-fetching)
 - [Conventions](#conventions)
 
 **App docs:** [`apps/issues/docs/frontend.md`](../apps/issues/docs/frontend.md) ·
-[`apps/issues/docs/backend.md`](../apps/issues/docs/backend.md)
+[`apps/issues/docs/backend.md`](../apps/issues/docs/backend.md) ·
+[`apps/books/docs/frontend.md`](../apps/books/docs/frontend.md) §9 — the worked
+example of the language switch
 
 ## Stack
 
@@ -249,6 +252,89 @@ onboarding screen — which quietly "works" (they would become owner of a brand-
 workspace) while hiding the real problem and leaving them a second workspace
 nobody asked for. Phase 4's failure mode is a screen that looks fine, so this is
 the one place the UI has to be explicit about which empty it is.
+
+## Interface language — `@blackcode/platform-i18n`
+
+**Added 2026-08-20 for `apps/books`. `apps/issues` and `apps/sales` are
+English-only today and inherit both the column and the mechanism whenever they
+want them.**
+
+The preference is **`platform.users.locale`** — one column on the shared identity
+row — so a person who chooses French in one app has chosen it in all of them.
+The package holds the **mechanism**; each app holds its **strings**. That split
+is not negotiable: books' vocabulary is not sales', and a shared dictionary is
+where two products' words collide. It is the same line `platform-email` draws
+between an app's identity and the shared templates.
+
+### The resolution order, written once
+
+```
+user record  →  cookie (bk_locale)  →  Accept-Language  →  default ('en')
+```
+
+In the package, so two apps cannot disagree about it.
+`packages/platform-testing/test/locale-resolution.test.ts` pins every step
+separately.
+
+**`platform.users.locale` is NULLABLE, and null means "never chosen" — not
+"chose English".** That is what keeps the third step reachable: a
+`NOT NULL DEFAULT 'en'` backfill would answer step one for every account that
+already exists. An unrecognised stored value (`'de'`) **falls through** to the
+cookie rather than defaulting, which is why the column carries no CHECK
+constraint. Migration `apps/issues/lib/db/migrations/0048_users_locale.sql`
+argues all of it.
+
+### The two guards, and which one to reach for
+
+- **The type is the strong one.** `Dictionary<K>` is
+  `Record<Locale, Record<K, string>>`, so a key present in English and missing in
+  French is a `tsc` error — at the call site *and* in the other language's table.
+  It cannot be worded wrongly and cannot go inert. Prefer it wherever it reaches;
+  it even covers computed keys (`` t(`f${n}.title`) `` narrows with no cast).
+- **A text scan is the weak one**, for a string that never reached the dictionary
+  at all. It belongs in the app, not here — `apps/books/lib/hardcoded-strings.test.ts`
+  is the pattern, and its header names the six things it cannot see.
+
+**A `lib/` module that holds copy holds KEYS, not words.** A pure function
+cannot call a hook, so a table of English prose in `lib/` is invisible to every
+scan. `apps/books/lib/{nav,compliance,verdict}.ts` were converted for exactly
+this reason.
+
+### No flash — and never a `useEffect`
+
+The locale is on the session row, so a **server component resolves it and the
+first paint is already correct**. This is strictly easier than the theme, which
+needs a blocking script because `localStorage` is unreachable from the server.
+
+```tsx
+const locale = await getLocale(user?.locale ?? null)   // app/layout.tsx
+return <html lang={locale}>…<Providers locale={locale}>…</Providers></html>
+```
+
+**A page that renders English and flips to French after mount is worse than one
+that never offered the choice** — it looks broken, it moves layout under the
+reader's eyes, and it announces the wrong language to a screen reader first.
+
+`<html lang>` must follow a switch made *without* navigating, too. The package
+carries the one effect that does it; everything else is server-resolved state.
+
+Import the readers by their own subpaths — `@blackcode/platform-i18n/server`
+(it pulls `next/headers`, which throws in a client component) and
+`/client` (it carries `'use client'`). **The barrel is pure and must stay that
+way.**
+
+### `@blackcode/platform-ui` is still English-only
+
+`ConfirmProvider` hardcodes `'Cancel'`, `'Delete'` and `'Confirm'` as defaults.
+On a French page the sign-out confirmation read *"Se déconnecter ? … **Cancel**
+Se déconnecter"* until `apps/books` started passing `cancelLabel` explicitly.
+
+**Every option is overridable, so a caller can be correct today** — pass
+`cancelLabel` and `confirmLabel` whenever your app has a locale. The package
+itself is unfixed: whether a UI package may depend on `platform-i18n` is a
+decision nobody has taken, and the next app to translate hits the same defaults.
+
+---
 
 ## Components
 

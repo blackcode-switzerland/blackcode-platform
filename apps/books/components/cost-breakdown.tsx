@@ -58,12 +58,15 @@
 // plus the entry screen's heading, and it belongs to that screen rather than
 // to this one; it is in the phase-4B report.
 
+'use client'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Money } from './money'
 import { DateText } from './date-text'
-import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useT } from '@/lib/i18n'
 import { scopedHref } from '@/lib/nav'
 import { accountsLabel, barLength, isZeroAmount, maxAmount, share } from '@/lib/analytique'
 import type { Journal } from '@/lib/journal'
@@ -96,6 +99,8 @@ export function CostBreakdown({
   /** The book's journal. Decides whether a line's #number is an address. */
   journal: Journal | null
 }) {
+  const t = useT()
+  const label = useLabel()
   const [open, setOpen] = useState<string | null>(null)
 
   if (categories.length === 0) {
@@ -112,16 +117,13 @@ export function CostBreakdown({
     if (journal === 'recettes_depenses') {
       return (
         <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-          A book kept under art. 957 al. 2 CO has no chart of accounts, so there are no accounts to
-          group into cost categories and no breakdown to derive. Its movements carry their own
-          category, and the journal shows them.
+          {t('cost.emptyRi')}
         </p>
       )
     }
     return (
       <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-        This book has no cost categories configured, so there is no breakdown to derive. Create one
-        from the terminal with <span className="font-mono text-[12px]">bk books category create</span>.
+        {t('cost.emptyChart', { command: 'bk books category create' })}
       </p>
     )
   }
@@ -146,7 +148,7 @@ export function CostBreakdown({
                         English half. A simplified book's bucket label is the
                         movement's own `category` jsonb and may genuinely be
                         French-only; the fallback is the label, never a blank. */}
-                    {en(c.label) || c.key}
+                    {label(c.label) || c.key}
                   </span>
                   {/* Through `accountsLabel`, not an inline guard: null here is
                       an RI book, and the review showed that dropping the check
@@ -212,8 +214,10 @@ export function CostBreakdown({
               <div className="mt-1 flex items-center gap-2">
                 <span className="text-[11px] text-muted-foreground">
                   {c.lines.length === 0
-                    ? 'no postings'
-                    : `${c.lines.length} ${c.lines.length === 1 ? 'line' : 'lines'}`}
+                    ? t('cost.noPostings')
+                    : t(c.lines.length === 1 ? 'cost.linesOne' : 'cost.linesMany', {
+                        n: c.lines.length,
+                      })}
                 </span>
                 {c.lines.length > 0 && (
                   <button
@@ -223,7 +227,7 @@ export function CostBreakdown({
                     className="inline-flex items-center gap-0.5 rounded text-[11px] text-primary-strong hover:underline"
                   >
                     {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                    {isOpen ? 'Hide' : 'Detail'}
+                    {isOpen ? t('cost.hide') : t('cost.detail')}
                   </button>
                 )}
               </div>
@@ -270,7 +274,7 @@ export function CostBreakdown({
       </ul>
 
       <div className="mt-2 flex items-baseline justify-between border-t border-border pt-2">
-        <span className="text-[12.5px] font-medium text-foreground">Total, categorised charges</span>
+        <span className="text-[12.5px] font-medium text-foreground">{t('cost.total')}</span>
         <Money value={total} className="text-[12.5px] font-semibold" />
       </div>
     </div>

@@ -15,6 +15,7 @@
 // key that quietly omits which BOOK it is about.
 
 import { useQuery } from '@tanstack/react-query'
+import type { Locale } from '@blackcode/platform-i18n'
 import { apiGet, apiList, ApiRequestError } from './client'
 import { booksGlobalKey, booksKey, type Scope } from './query-keys'
 import type { TokenSummary } from './account'
@@ -156,6 +157,15 @@ export interface MeRow {
   connected_google: boolean
   avatar_editable: boolean
   is_super_admin: boolean
+  /**
+   * The chosen interface language — **or `null`, meaning never chosen**.
+   *
+   * Not the RESOLVED locale. The route serves the column, so this field can say
+   * "no preference" and the settings page can render "Follow my browser" as the
+   * state it is actually in. What is on screen right now is `useLocale()`, which
+   * is the resolution of this plus the cookie plus `Accept-Language`.
+   */
+  locale: Locale | null
 }
 
 export function useMe() {

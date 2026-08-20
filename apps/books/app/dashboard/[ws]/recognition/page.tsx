@@ -41,6 +41,7 @@ import { Worklist, type ResolvedMap } from '@/components/worklist'
 import { resolveTargetFor } from '@/lib/resolvable'
 import { RulesPanel } from '@/components/rules-panel'
 import type { ResolveResult, WorklistRow } from '@/lib/types'
+import { useT } from '@/lib/i18n'
 
 export default function Page() {
   const params = useParams<{ ws: string }>()
@@ -49,6 +50,7 @@ export default function Page() {
 
   const worklist = useWorklist(params.ws, scope)
   const rules = useRules(params.ws, scope)
+  const t = useT()
 
   /**
    * Rows resolved in this session, keyed `kind:number`.
@@ -138,9 +140,9 @@ export default function Page() {
       : scope.record?.name) ?? '—'
 
   return (
-    <ScreenFrame title="Recognition">
+    <ScreenFrame title={t('rec.title')}>
       <div className="mb-4">
-        <h1 className="text-lg font-semibold text-foreground">Recognition</h1>
+        <h1 className="text-lg font-semibold text-foreground">{t('rec.title')}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {/* ── THE BOOK THE SERVER ANSWERED FOR, RESOLVED TO ITS NAME ───────
               Reading `worklist.data.entity` rather than the URL is right and is
@@ -163,13 +165,12 @@ export default function Page() {
               notices. The raw slug is kept when it resolves to nothing — a book
               the list does not have is worth showing exactly as it arrived
               rather than replaced by an em dash. */}
-          {answeredBook} · exercice {worklist.data?.exercice ?? scope.exercice ?? '—'}
+          {t('rec.subheading', {
+            book: answeredBook,
+            year: worklist.data?.exercice ?? scope.exercice ?? '—',
+          })}
         </p>
-        <p className="mt-2 max-w-2xl text-[12.5px] text-muted-foreground">
-          Money that moved without an agreed meaning waits here. Explaining a row is the whole
-          product — and every explanation can teach a rule, so the next payment like it explains
-          itself.
-        </p>
+        <p className="mt-2 max-w-2xl text-[12.5px] text-muted-foreground">{t('rec.lead')}</p>
       </div>
 
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
@@ -189,7 +190,7 @@ export default function Page() {
               The split is rendered rather than the total alone, because "nine
               things need you" and "three to explain, six to match" are different
               instructions. Cleanup review, 2026-08-18. */}
-          Needs a human
+          {t('rec.needsAHuman')}
           {worklist.data && (
             <span className="ml-2 text-[13px] font-normal text-muted-foreground">
               {worklist.data.count}
@@ -198,13 +199,13 @@ export default function Page() {
         </h2>
         {worklist.data && worklist.data.count > 0 && (
           <p className="text-[12.5px] text-muted-foreground">
-            {explainable} to explain
-            {documents > 0 && <> · {documents} awaiting a document match</>}
+            {t('rec.toExplain', { n: explainable })}
+            {documents > 0 && <> · {t('rec.awaitingMatch', { n: documents })}</>}
           </p>
         )}
       </div>
 
-      {worklist.isLoading && <Loading rows={4} label="Loading the worklist" />}
+      {worklist.isLoading && <Loading rows={4} label={t('rec.loading')} />}
 
       {/* ── A BOOK WITH NO FISCAL YEAR IS NOT A FAILED WORKLIST ────────────
           `<NoExerciceNotice>`'s own header says the statement screens were the
@@ -223,10 +224,14 @@ export default function Page() {
           gives: ordering these the other way round puts a red box on a book
           whose books are in perfect order. */}
       {isNoExerciceRefusal(worklist.error) && (
-        <NoExerciceNotice error={worklist.error} statement="worklist" bookName={answeredBook} />
+        <NoExerciceNotice
+          error={worklist.error}
+          statement={t('rec.worklist')}
+          bookName={answeredBook}
+        />
       )}
       {worklist.error && !isNoExerciceRefusal(worklist.error) && (
-        <ErrorState error={worklist.error} title="The worklist could not be loaded" />
+        <ErrorState error={worklist.error} title={t('rec.failed')} />
       )}
       {worklist.data && (
         <Worklist
@@ -241,10 +246,7 @@ export default function Page() {
         />
       )}
 
-      <p className="mt-2 text-[11.5px] text-muted-foreground">
-        An unrecognized entry does not post blind. An inferred one carries something’s best guess
-        and is waiting for a person to agree with it.
-      </p>
+      <p className="mt-2 text-[11.5px] text-muted-foreground">{t('rec.footnote')}</p>
 
       {/* The rules panel is suppressed under the same refusal rather than shown
           with its own red box: a book with no fiscal year has no rules to list

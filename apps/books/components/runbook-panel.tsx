@@ -28,7 +28,10 @@
 // drift the day somebody changes a threshold — with the screen quietly
 // explaining a status by a rule the server no longer uses.
 
+'use client'
+
 import { DateText } from './date-text'
+import { useT } from '@/lib/i18n'
 import type { Source, SourceRunbook } from '@/lib/types'
 
 export function RunbookPanel({
@@ -38,56 +41,58 @@ export function RunbookPanel({
   runbook: SourceRunbook
   source: Source
 }) {
-  const cadence = !source.expected || source.expected === 'none' ? 'manual' : source.expected
+  const t = useT()
+  const cadence =
+    !source.expected || source.expected === 'none' ? t('runbook.manual') : source.expected
 
   return (
     <section className="rounded-lg border border-border">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border px-4 py-2.5">
-        <h2 className="text-sm font-medium text-foreground">Pull runbook</h2>
+        <h2 className="text-sm font-medium text-foreground">{t('runbook.title')}</h2>
         <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
           v{runbook.version}
         </span>
         <span className="text-[11.5px] text-muted-foreground">
-          updated <DateText value={runbook.updated} />
+          {t('runbook.updated')} <DateText value={runbook.updated} />
         </span>
       </div>
 
       <dl className="divide-y divide-border">
-        <Field label="Login">
+        <Field label={t('runbook.login')}>
           {runbook.login_url ? (
             <span className="font-mono text-[12px] break-all">{runbook.login_url}</span>
           ) : (
-            <NotRecorded what="No login URL recorded" />
+            <NotRecorded what={t('runbook.noLogin')} />
           )}
         </Field>
-        <Field label="Credentials">
+        <Field label={t('runbook.credentials')}>
           {runbook.credential_ref ? (
             <span className="font-mono text-[12px] break-all" data-credential-ref={runbook.credential_ref}>
               {runbook.credential_ref}
             </span>
           ) : (
-            <NotRecorded what="No credential reference recorded" />
+            <NotRecorded what={t('runbook.noCredentials')} />
           )}
         </Field>
-        <Field label="Expected output">
+        <Field label={t('runbook.output')}>
           {runbook.output ? (
             <span className="font-mono text-[12px]">{runbook.output}</span>
           ) : (
-            <NotRecorded what="No expected output recorded" />
+            <NotRecorded what={t('runbook.noOutput')} />
           )}
         </Field>
-        <Field label="Cadence">
+        <Field label={t('runbook.cadence')}>
           <span>
             {cadence}
             {source.expected && source.expected !== 'none' ? (
               <span className="ml-2 text-muted-foreground">
-                stale after {source.windows.stale_after_days} days, gap after{' '}
-                {source.windows.gap_after_days}
+                {t('runbook.windows', {
+                  stale: source.windows.stale_after_days,
+                  gap: source.windows.gap_after_days,
+                })}
               </span>
             ) : (
-              <span className="ml-2 text-muted-foreground">
-                no cadence — nothing is expected, so nothing can be late
-              </span>
+              <span className="ml-2 text-muted-foreground">{t('runbook.noCadence')}</span>
             )}
           </span>
         </Field>
@@ -95,10 +100,10 @@ export function RunbookPanel({
 
       <div className="border-t border-border px-4 py-3">
         <h3 className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground">
-          Steps
+          {t('runbook.steps')}
         </h3>
         {runbook.steps.length === 0 ? (
-          <NotRecorded what="No steps recorded — this runbook cannot be followed" />
+          <NotRecorded what={t('runbook.noSteps')} />
         ) : (
           <ol className="mt-1.5 list-decimal space-y-1 pl-5 text-[12.5px] text-foreground">
             {runbook.steps.map((step, i) => (
@@ -109,11 +114,8 @@ export function RunbookPanel({
       </div>
 
       <p className="border-t border-border px-4 py-2.5 text-[11.5px] text-muted-foreground">
-        <span className="font-medium text-foreground">Credentials are a vault reference</span>, never
-        the secret. If a real secret ever appears in this field the bug is upstream, in whoever
-        wrote the runbook, and the fix is to rotate it — nothing this screen can draw would make it
-        safe. A runbook documents buttons a browser presses with credentials the business legally
-        holds.
+        <span className="font-medium text-foreground">{t('runbook.vaultLead')}</span>
+        {t('runbook.vaultBody')}
       </p>
     </section>
   )

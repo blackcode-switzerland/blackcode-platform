@@ -37,7 +37,11 @@
 // for exactly that, so a caller which needs to distinguish "no history" from
 // "history we could not draw" can, and neither is ever guessed at here.
 
+'use client'
+
 import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useT } from '@/lib/i18n'
 import { date as formatDate } from '@/lib/format'
 import { TermChip } from './chips'
 import { findTerm, useMeta } from '@/lib/hooks'
@@ -55,6 +59,12 @@ function isEventList(h: EntryHistory): h is HistoryEvent[] {
  * without reimplementing the union. An EMPTY array counts as no history: it is
  * what a row looks like after somebody cleared the column by hand, and drawing a
  * heading over nothing reads as a rendering failure.
+ *
+ * It uses `en()` and not `pick()` — deliberately. This is a PRESENCE test, not a
+ * render: "does this row carry provenance at all" must answer the same thing to
+ * a French reader and an English one, and `pick()` would make it locale-aware
+ * for no reason and turn a `{fr: 'x', en: ''}` history into "no history" for
+ * exactly one of the two.
  */
 export function hasHistory(history: EntryHistory): boolean {
   if (history === null || history === undefined) return false
@@ -79,6 +89,8 @@ function instant(at: string | null | undefined): string {
 
 export function HistoryTrail({ history }: { history: EntryHistory }) {
   const { data: meta } = useMeta()
+  const label = useLabel()
+  const t = useT()
 
   if (!hasHistory(history)) return null
 
@@ -87,7 +99,7 @@ export function HistoryTrail({ history }: { history: EntryHistory }) {
   if (!isEventList(history)) {
     return (
       <div className="mt-2 border-l-2 border-border pl-3">
-        <p className="text-[12px] text-muted-foreground">{en(history)}</p>
+        <p className="text-[12px] text-muted-foreground">{label(history)}</p>
       </div>
     )
   }
@@ -101,7 +113,7 @@ export function HistoryTrail({ history }: { history: EntryHistory }) {
         // take the whole screen down with it.
         const structured = event && typeof event === 'object' && 'was' in event && event.was
         if (!structured) {
-          const prose = en(event as unknown as { fr: string; en: string })
+          const prose = label(event as unknown as { fr: string; en: string })
           return prose ? (
             <li key={i} className="text-[12px] text-muted-foreground">
               {prose}
@@ -134,7 +146,7 @@ export function HistoryTrail({ history }: { history: EntryHistory }) {
           return (
             <li key={i} className="text-[12px]">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-muted-foreground">was</span>
+                <span className="text-muted-foreground">{t('rec.was')}</span>
                 {previous?.verdict ? (
                   <TermChip
                     term={findTerm(meta, 'verdict_states', previous.verdict)}
@@ -143,7 +155,9 @@ export function HistoryTrail({ history }: { history: EntryHistory }) {
                 ) : (
                   // Never checked is not "clean", and it is the commonest prior
                   // state — every entry starts here.
-                  <span className="text-muted-foreground italic">never checked</span>
+                  <span className="text-muted-foreground italic">
+                    {t('history.neverChecked')}
+                  </span>
                 )}
                 <span className="text-muted-foreground">
                   · {event.event} {instant(event.at)}
@@ -156,7 +170,7 @@ export function HistoryTrail({ history }: { history: EntryHistory }) {
         return (
           <li key={i} className="text-[12px]">
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-muted-foreground">was</span>
+              <span className="text-muted-foreground">{t('rec.was')}</span>
               <TermChip
                 term={findTerm(meta, 'recognition', was.recognition)}
                 value={was.recognition}
@@ -169,11 +183,13 @@ export function HistoryTrail({ history }: { history: EntryHistory }) {
                 what somebody used to believe this money was. A row whose old
                 explanation was null shows nothing here rather than an em dash —
                 "it had no explanation" is why it was on the worklist. */}
-            {en(was.explanation) && (
-              <p className="mt-0.5 text-muted-foreground">“{en(was.explanation)}”</p>
+            {label(was.explanation) && (
+              <p className="mt-0.5 text-muted-foreground">“{label(was.explanation)}”</p>
             )}
             {was.counterparty && (
-              <p className="mt-0.5 text-muted-foreground">counterparty: {was.counterparty}</p>
+              <p className="mt-0.5 text-muted-foreground">
+                {t('history.counterparty', { name: was.counterparty })}
+              </p>
             )}
           </li>
         )

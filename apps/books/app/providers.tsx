@@ -57,8 +57,31 @@ import { ThemeProvider } from 'next-themes'
 import { useState } from 'react'
 import { ConfirmProvider } from '@blackcode/platform-ui/ui/confirm-dialog'
 import { ApiRequestError } from '@/lib/client'
+import { BooksLocaleProvider } from '@/lib/i18n'
+import type { Locale } from '@blackcode/platform-i18n'
 
-export function Providers({ children }: { children: React.ReactNode }) {
+/**
+ * `locale` is RESOLVED ON THE SERVER and handed down — see `app/layout.tsx`.
+ *
+ * It is a prop and not something this component works out, because everything
+ * that could work it out lives in the browser and would therefore run after the
+ * first paint. A page that renders English and flips to French is worse than
+ * one that never offered the choice, so the value has to be correct before any
+ * of this mounts. `<BooksLocaleProvider>` seeds its state from it and owns it
+ * afterwards, which is what makes the sidebar switch immediate without a
+ * reload.
+ *
+ * It goes OUTSIDE `<ConfirmProvider>` and inside `<ThemeProvider>`: the confirm
+ * dialog's copy is translated, so the provider that supplies `t()` has to be
+ * above it.
+ */
+export function Providers({
+  locale,
+  children,
+}: {
+  locale: Locale
+  children: React.ReactNode
+}) {
   // Created inside state, not at module scope. A module-scope client is shared
   // across every request in a server process, which leaks one user's cache into
   // another's response.
@@ -85,7 +108,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          <ConfirmProvider>{children}</ConfirmProvider>
+          <BooksLocaleProvider locale={locale}>
+            <ConfirmProvider>{children}</ConfirmProvider>
+          </BooksLocaleProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </SessionProvider>

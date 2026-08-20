@@ -18,6 +18,7 @@
 // A screen wraps its body in this and can then assume `record` is a real book.
 
 import { useScope } from '@/lib/scope'
+import { useT } from '@/lib/i18n'
 import { ErrorState, FixtureNotice, Loading } from './states'
 import { NoBooks } from './no-books'
 
@@ -29,21 +30,19 @@ export function ScreenFrame({
   children: React.ReactNode
 }) {
   const { isLoading, error, entities, entity, record, source } = useScope()
+  const t = useT()
 
-  if (isLoading) return <Loading rows={5} label={`Loading ${title}`} />
-  if (error) return <ErrorState error={error} title={`${title} could not be loaded`} />
+  if (isLoading) return <Loading rows={5} label={t('state.loadingThing', { thing: title })} />
+  if (error) return <ErrorState error={error} title={t('state.errorTitleThing', { thing: title })} />
   if (entities.length === 0) return <NoBooks />
 
   if (record === null) {
     return (
       <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3.5" role="alert">
         <p className="text-sm font-medium text-foreground">
-          There is no book called <span className="font-mono">{entity}</span>.
+          {t('frame.noSuchBookTitle', { slug: entity ?? '' })}
         </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          The address bar is asking for a book this account does not have. Pick one from the control
-          in the top bar.
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{t('frame.noSuchBookBody')}</p>
       </div>
     )
   }

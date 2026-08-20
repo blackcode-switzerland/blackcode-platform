@@ -52,6 +52,7 @@ import { GoogleMark } from '@blackcode/platform-ui/ui/google-mark'
 import { useRegisterAccount } from '@/lib/account'
 import { PasswordResetFlow } from '@/components/password-reset-flow'
 import { SiteFrame } from '@/components/site-chrome'
+import { useT } from '@/lib/i18n'
 
 type Mode = 'signin' | 'signup' | 'reset'
 
@@ -61,6 +62,7 @@ const inputClass =
 export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
   const router = useRouter()
   const params = useSearchParams()
+  const t = useT()
   const callbackUrl = params?.get('callbackUrl') ?? '/dashboard'
 
   // `?tab=signup` opens on the create-account panel. The marketing page's
@@ -118,7 +120,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
     if (!ok) {
       // Deliberately one message for "no such user" and "wrong password". Which
       // one it was is exactly the fact an attacker is probing for.
-      setError('That email and password do not match an account.')
+      setError(t('login.badCredentials'))
     }
   }
 
@@ -153,7 +155,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
       // already minted the workspace, so there is somewhere to land.
       const ok = await signInWith(email, password)
       if (!ok) {
-        setError('Account created. Please sign in.')
+        setError(t('login.accountCreated'))
         switchTo('signin')
       }
     } finally {
@@ -182,11 +184,13 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
         className="flex w-full items-center justify-center gap-2.5 rounded-md border border-border bg-card px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
       >
         <GoogleMark size={16} />
-        Continue with Google
+        {t('login.google')}
       </button>
       <div className="my-5 flex items-center gap-3">
         <span className="h-px flex-1 bg-border" />
-        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">or</span>
+        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+          {t('login.or')}
+        </span>
         <span className="h-px flex-1 bg-border" />
       </div>
     </>
@@ -210,7 +214,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
             className="mx-auto mb-4 rounded-[14%]"
           />
           <h1 className="text-xl font-semibold tracking-tight text-foreground">b/books</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Swiss statutory bookkeeping</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t('login.tagline')}</p>
         </div>
 
         {/* The tab strip is hidden on the reset panel: it is a THIRD mode with
@@ -233,14 +237,14 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {m === 'signin' ? 'Sign in' : 'Create account'}
+              {m === 'signin' ? t('login.tabSignIn') : t('login.tabSignUp')}
             </button>
           ))}
         </div>
 
         {mode === 'reset' ? (
           <div>
-            <h2 className="mb-3 text-sm font-medium text-foreground">Reset your password</h2>
+            <h2 className="mb-3 text-sm font-medium text-foreground">{t('reset.title')}</h2>
             <PasswordResetFlow
               authenticated={false}
               presetEmail={email}
@@ -250,10 +254,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
               // they are about to type, and the reset also ended every session
               // this account had anywhere.
               onDone={() =>
-                switchTo(
-                  'signin',
-                  'Password updated. Sign in with your new password — every other blackcode app was signed out too.'
-                )
+                switchTo('signin', t('login.passwordUpdated'))
               }
             />
           </div>
@@ -265,7 +266,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
           {mode === 'signup' && (
             <div>
               <label htmlFor="name" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                Name
+                {t('login.name')}
               </label>
               <input
                 id="name"
@@ -274,14 +275,14 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className={inputClass}
-                placeholder="Your name"
+                placeholder={t('login.namePlaceholder')}
               />
             </div>
           )}
 
           <div>
             <label htmlFor="email" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Email
+              {t('login.email')}
             </label>
             <input
               id="email"
@@ -291,14 +292,14 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={inputClass}
-              placeholder="you@blackcode.ch"
+              placeholder={t('login.emailPlaceholder')}
             />
           </div>
 
           <div>
             <div className="mb-1.5 flex items-baseline justify-between gap-3">
               <label htmlFor="password" className="block text-xs font-medium text-muted-foreground">
-                Password
+                {t('login.password')}
               </label>
               {/* Only on the sign-in panel. On "create account" there is no
                   password to have forgotten, and offering to reset one would be
@@ -309,7 +310,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
                   onClick={() => switchTo('reset')}
                   className="text-xs text-primary-strong transition-opacity hover:underline"
                 >
-                  Forgot password?
+                  {t('login.forgot')}
                 </button>
               )}
             </div>
@@ -321,7 +322,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className={inputClass}
-              placeholder={mode === 'signup' ? 'At least 8 characters' : undefined}
+              placeholder={mode === 'signup' ? t('login.passwordHint') : undefined}
             />
           </div>
 
@@ -337,7 +338,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
             className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {busy && <Loader2 size={15} className="animate-spin" />}
-            {mode === 'signin' ? 'Sign in' : 'Create account'}
+            {mode === 'signin' ? t('login.tabSignIn') : t('login.tabSignUp')}
           </button>
         </form>
         </>
@@ -356,9 +357,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
           account out of every app, because there is only one password.
         */}
         <p className="mt-8 text-center text-xs leading-relaxed text-muted-foreground">
-          Your blackcode account is the same one across every blackcode app. New addresses have to
-          be approved by a super admin before they can sign up, and a password reset here is a
-          password reset everywhere.
+          {t('login.shared')}
         </p>
       </div>
     </SiteFrame>

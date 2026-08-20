@@ -64,28 +64,39 @@
 // means "you are in books" (D-B), and a chart mark wearing it would collide
 // with the chrome the reader uses to know which app they are in.
 
+'use client'
+
 import { useState } from 'react'
 import { Money } from './money'
 import { axisTicks, barLength, hasGaps, monthLabel, tickLabel } from '@/lib/analytique'
 import { amount } from '@/lib/format'
 import type { MonthlyFlow } from '@/lib/types'
+import { useT } from '@/lib/i18n'
+import type { BooksKey } from '@/lib/dictionary'
 
-/** The two series, in fixed order. Colour follows the SERIES, never its rank. */
-const SERIES = [
-  { key: 'produits' as const, label: 'Revenue', color: 'var(--chart-1)' },
-  { key: 'charges' as const, label: 'Charges', color: 'var(--chart-2)' },
+/**
+ * The two series, in fixed order. Colour follows the SERIES, never its rank.
+ *
+ * The label is a KEY: this is module scope and no hook can run here. The two are
+ * `run.revenue` / `run.charges`, shared with `<RunFigures>` rather than a second
+ * pair — the same two words on the same screen, twice, is where a disagreement
+ * would appear.
+ */
+const SERIES: ReadonlyArray<{ key: 'produits' | 'charges'; labelKey: BooksKey; color: string }> = [
+  { key: 'produits', labelKey: 'run.revenue', color: 'var(--chart-1)' },
+  { key: 'charges', labelKey: 'run.charges', color: 'var(--chart-2)' },
 ]
 
 const PLOT_HEIGHT = 176
 
 export function FlowsChart({ flows }: { flows: MonthlyFlow[] }) {
+  const t = useT()
   const [hover, setHover] = useState<{ month: string; series: 0 | 1 } | null>(null)
 
   if (flows.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-        No month of this exercice carries a movement, so there is no series to draw. This is an
-        empty year, not a failure.
+        {t('chart.empty')}
       </p>
     )
   }
@@ -125,7 +136,7 @@ export function FlowsChart({ flows }: { flows: MonthlyFlow[] }) {
               style={{ backgroundColor: s.color }}
               aria-hidden
             />
-            {s.label}
+            {t(s.labelKey)}
           </span>
         ))}
       </div>
@@ -136,7 +147,9 @@ export function FlowsChart({ flows }: { flows: MonthlyFlow[] }) {
       <div
         className="relative flex pt-3"
         role="img"
-        aria-label={`Revenue against charges for ${flows.length} month${flows.length === 1 ? '' : 's'}. The figures are in the table below.`}
+        aria-label={t(flows.length === 1 ? 'chart.altOne' : 'chart.altMany', {
+          n: flows.length,
+        })}
       >
         {/* The tick gutter. `tabular-nums` here and nowhere else on this
             component: these are a column of numbers that must line up. */}
@@ -256,27 +269,30 @@ export function FlowsChart({ flows }: { flows: MonthlyFlow[] }) {
               return row ? (
                 <>
                   <span className="font-medium text-foreground">{monthLabel(row.month)}</span> ·{' '}
-                  {s.label} <Money value={row[s.key]} className="text-foreground" />
+                  {t(s.labelKey)} <Money value={row[s.key]} className="text-foreground" />
                 </>
               ) : null
             })()
-          : 'Hover a column for its exact figure — every one of them is in the table below. Ticks are scale marks in CHF, not amounts.'}
+          : t('chart.hint')}
       </p>
 
-      <figcaption className="sr-only">
-        Revenue and charges per month, for the months this book holds a movement in. The same
-        figures are in the table that follows.
-      </figcaption>
+      <figcaption className="sr-only">{t('chart.caption')}</figcaption>
 
       {/* The table view — the WCAG-clean twin, and where every figure on this
           component actually comes from. */}
       <table className="mt-4 w-full text-[12.5px]">
-        <caption className="sr-only">Revenue and charges per month</caption>
+        <caption className="sr-only">{t('chart.tableCaption')}</caption>
         <thead>
           <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-            <th scope="col" className="py-1.5 font-medium">Month</th>
-            <th scope="col" className="py-1.5 text-right font-medium">Revenue</th>
-            <th scope="col" className="py-1.5 text-right font-medium">Charges</th>
+            <th scope="col" className="py-1.5 font-medium">
+              {t('chart.month')}
+            </th>
+            <th scope="col" className="py-1.5 text-right font-medium">
+              {t('run.revenue')}
+            </th>
+            <th scope="col" className="py-1.5 text-right font-medium">
+              {t('run.charges')}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -295,14 +311,12 @@ export function FlowsChart({ flows }: { flows: MonthlyFlow[] }) {
           ))}
         </tbody>
       </table>
-      <p className="mt-1 text-[11px] text-muted-foreground">Amounts in CHF.</p>
+      <p className="mt-1 text-[11px] text-muted-foreground">{t('chart.amountsInChf')}</p>
 
       {gapped && (
         <p className="mt-2 text-[12px] text-muted-foreground">
-          <span className="font-medium text-foreground">A month is missing between these.</span> The
-          series carries only months that hold a movement, and the columns are evenly spaced — so
-          two neighbouring columns here are not always two consecutive months. Nothing has been
-          drawn across the gap.
+          <span className="font-medium text-foreground">{t('chart.gapLead')}</span>{' '}
+          {t('chart.gapBody')}
         </p>
       )}
     </figure>

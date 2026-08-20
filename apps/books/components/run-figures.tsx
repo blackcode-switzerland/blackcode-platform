@@ -36,7 +36,11 @@
 // `-10'993.60` for a year has been misled by an omission rather than by a
 // number. `months` comes from `flowTotals`, counted, never assumed.
 
+'use client'
+
 import { Money } from './money'
+import { useT } from '@/lib/i18n'
+import type { BooksKey } from '@/lib/dictionary'
 import type { FlowTotals } from '@/lib/analytique'
 import type { Journal } from '@/lib/journal'
 
@@ -53,34 +57,39 @@ import type { Journal } from '@/lib/journal'
  * `null` is "cannot tell", never a default: the copy then says only what is
  * true of both, rather than picking the commoner book. `lib/journal.ts` records
  * why that value is carried rather than resolved.
+ *
+ * It returns KEYS rather than words since 2026-08-20, so a hook does not have to
+ * be called from a plain function — and so a hint naming a key that does not
+ * exist is a compile error.
  */
-function hints(journal: Journal | null): [string, string, string] {
+function hintKeys(journal: Journal | null): [BooksKey, BooksKey, BooksKey] {
   if (journal === 'recettes_depenses') {
-    return ['recettes, cash basis', 'dépenses, cash basis', 'recettes − dépenses']
+    return ['run.hintRiIn', 'run.hintRiOut', 'run.hintRiNet']
   }
   if (journal === 'grand_livre') {
-    return ['class 3 accounts, posted', 'every other CR class, posted', 'revenue − charges']
+    return ['run.hintGlIn', 'run.hintGlOut', 'run.hintGlNet']
   }
-  return ['money in', 'money out', 'in − out']
+  return ['run.hintUnknownIn', 'run.hintUnknownOut', 'run.hintUnknownNet']
 }
 
 export function RunFigures({ totals, journal }: { totals: FlowTotals; journal: Journal | null }) {
-  const [inHint, outHint, netHint] = hints(journal)
-  const figures: { label: string; value: string; hint: string }[] = [
-    // The LABELS stay English and stay the same for both regimes (D-A: English
-    // chrome). The regime nuance rides in the hint, where it belongs — the
-    // reader wants to know what the number counts, not what the journal is
-    // called in French.
-    { label: 'Revenue', value: totals.produits, hint: inHint },
-    { label: 'Charges', value: totals.charges, hint: outHint },
-    { label: 'Net', value: totals.net, hint: netHint },
+  const t = useT()
+  const [inHint, outHint, netHint] = hintKeys(journal)
+  const figures: { key: string; label: string; value: string; hint: string }[] = [
+    // The labels are the same for both regimes; the regime nuance rides in the
+    // HINT, where it belongs — the reader wants to know what the number counts.
+    { key: 'in', label: t('run.revenue'), value: totals.produits, hint: t(inHint) },
+    { key: 'out', label: t('run.charges'), value: totals.charges, hint: t(outHint) },
+    { key: 'net', label: t('run.net'), value: totals.net, hint: t(netHint) },
   ]
 
   return (
-    <section aria-label="Exercice totals">
+    <section aria-label={t('run.exerciceTotals')}>
       <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3">
+        {/* Keyed on a STABLE id, not on the translated label: a React key that
+            changes with the language remounts the tile on a switch. */}
         {figures.map((f) => (
-          <div key={f.label} className="bg-card px-4 py-3">
+          <div key={f.key} className="bg-card px-4 py-3">
             <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               {f.label}
             </dt>
@@ -96,25 +105,11 @@ export function RunFigures({ totals, journal }: { totals: FlowTotals; journal: J
 
       <p className="mt-2 text-[12px] text-muted-foreground">
         {totals.months === 0 ? (
-          <>
-            No month of this exercice carries a movement yet, so these totals are zero rather
-            than unknown.
-          </>
+          t('run.emptyYear')
         ) : (
           <>
-            Summed over the{' '}
-            <span className="font-medium text-foreground">
-              {totals.months} {totals.months === 1 ? 'month' : 'months'}
-            </span>{' '}
-            of this exercice that carry a movement — not over the whole year. A month with
-            nothing in it is absent from the series entirely.
-            {journal === 'grand_livre' && (
-              <>
-                {' '}
-                An unexplained backlog of staged entries understates the charges here; that is
-                what the recognition worklist is for.
-              </>
-            )}
+            {t(totals.months === 1 ? 'run.summedOne' : 'run.summedMany', { n: totals.months })}
+            {journal === 'grand_livre' && <> {t('run.backlog')}</>}
           </>
         )}
       </p>

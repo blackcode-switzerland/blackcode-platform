@@ -67,11 +67,14 @@
 // on screen from the resolve RESULT (which carries `history`) until the reader
 // reloads. The mockup does the same thing and for the same reason.
 
+'use client'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { FileText, Lock } from 'lucide-react'
 import { scopedHref } from '@/lib/nav'
-import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useT } from '@/lib/i18n'
 import { ruleAmount } from '@/lib/format'
 import { suggestionsFor, type ReadScope } from '@/lib/hooks'
 import { useCanWrite } from '@/lib/mutations'
@@ -117,12 +120,15 @@ export function Worklist({
   resolved: ResolvedMap
   onResolved: (row: WorklistRow, result: ResolveResult) => void
 }) {
+  const t = useT()
   if (rows.length === 0) {
     return (
-      <EmptyState title="Everything is explained.">
+      <EmptyState title={t('rec.allExplained')}>
         <p>
-          Nothing in {scope.entity ?? 'this book'} for {scope.exercice ?? 'this year'} is waiting
-          for a human. That is the goal state, not an empty screen.
+          {t('rec.allExplainedBody', {
+            book: scope.entity ?? t('rec.thisBook'),
+            year: scope.exercice ?? t('rec.thisYear'),
+          })}
         </p>
       </EmptyState>
     )
@@ -166,6 +172,8 @@ function Row({
   result: ResolveResult | null
   onResolved: (row: WorklistRow, result: ResolveResult) => void
 }) {
+  const t = useT()
+  const label = useLabel()
   const [open, setOpen] = useState(false)
   const suggestions = suggestionsFor(row, rules)
   const [prefill, setPrefill] = useState<string | null>(null)
@@ -194,7 +202,7 @@ function Row({
           <span className="inline-flex flex-wrap items-center gap-1.5">
             <VocabChip vocabulary="recognition" value={result.recognition} />
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              was
+              {t('rec.was')}
             </span>
             <VocabChip vocabulary="recognition" value={row.recognition} />
           </span>
@@ -248,14 +256,14 @@ function Row({
               row says where the guess is. The report asks for the field. */}
           {row.recognition === 'inferred' && row.kind === 'entry' && (
             <p className="mt-1 text-[12px] text-muted-foreground">
-              Something already proposed a meaning for this.{' '}
+              {t('rec.inferredLead')}{' '}
               <Link
                 href={scopedHref(base, `/ledger/${row.number}`, scope)}
                 className="text-primary-strong hover:underline"
               >
-                Read it on the entry
+                {t('rec.inferredLink')}
               </Link>{' '}
-              before confirming — the worklist does not carry it.
+              {t('rec.inferredAfter')}
             </p>
           )}
 
@@ -266,7 +274,7 @@ function Row({
           {result && (
             <div className="mt-1.5">
               <p className="text-[12.5px] text-foreground">
-                {en(result.explanation) || '—'}
+                {label(result.explanation) || '—'}
                 {/* `typeof === 'number'`, not `!== null`. The resolve response is
                     built inline in the route and no shaping function pins it, so
                     `wire-parity` structurally cannot see it — renaming the field
@@ -277,13 +285,13 @@ function Row({
                     whole claim is that it is defensible. F-2 of the review. */}
                 {typeof result.taught_rule === 'number' && (
                   <span className="ml-1.5 font-semibold text-primary-strong">
-                    rule #{result.taught_rule} taught
+                    {t('rec.ruleTaught', { n: result.taught_rule })}
                   </span>
                 )}
               </p>
               <HistoryTrail history={result.history} />
               <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-                It has left the worklist. It stays here, showing what it was, until you reload.
+                {t('rec.leftWorklist')}
               </p>
             </div>
           )}
@@ -296,9 +304,7 @@ function Row({
             (target === null ? (
               <ReadOnlyReason kind={row.kind} journal={journal} base={base} scope={scope} row={row} />
             ) : !canWrite ? (
-              <p className="mt-2 text-[12px] text-muted-foreground">
-                This session cannot change records.
-              </p>
+              <p className="mt-2 text-[12px] text-muted-foreground">{t('rec.cannotWrite')}</p>
             ) : (
               <>
                 {!open && (
@@ -307,7 +313,7 @@ function Row({
                     onClick={() => setOpen(true)}
                     className="mt-2 rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-foreground hover:border-primary"
                   >
-                    Explain this
+                    {t('rec.explainThis')}
                   </button>
                 )}
                 {open && (
@@ -370,6 +376,7 @@ function ReadOnlyReason({
   scope: ReadScope
   row: WorklistRow
 }) {
+  const t = useT()
   if (kind === 'piece') {
     return (
       <p
@@ -378,27 +385,20 @@ function ReadOnlyReason({
       >
         <FileText size={12} className="mt-0.5 shrink-0" />
         <span>
-          This is a document, not a transaction. Explaining is not what it needs — a pièce is
-          attached to the entry it proves, and{' '}
-          {row.suggested_entries.length > 0 ? (
-            <>
-              this one could document{' '}
-              {/* The candidates, as facts. Nothing here applies one, and the
-                  #numbers name whichever journal the pièce's own book keeps —
-                  `journalOf`, on the server. */}
-              <span className="font-mono text-foreground">
-                {row.suggested_entries.map((n) => `#${n}`).join(', ')}
-              </span>
-              .{' '}
-            </>
-          ) : (
-            <>nothing in the books matches its amount and date yet. </>
-          )}
+          {t('rec.pieceLead')}{' '}
+          {/* The candidates, as facts. Nothing here applies one, and the
+              #numbers name whichever journal the pièce's own book keeps —
+              `journalOf`, on the server. */}
+          {row.suggested_entries.length > 0
+            ? t('rec.pieceCould', {
+                numbers: row.suggested_entries.map((n) => `#${n}`).join(', '),
+              })
+            : t('rec.pieceNoMatch')}{' '}
           <Link
             href={scopedHref(base, '/documents', scope)}
             className="text-primary-strong hover:underline"
           >
-            Open it in supporting documents
+            {t('rec.pieceLink')}
           </Link>
           .
         </span>
@@ -417,20 +417,9 @@ function ReadOnlyReason({
     >
       <Lock size={12} className="mt-0.5 shrink-0" />
       <span>
-        {journal === null ? (
-          <>
-            Read-only for now. Which journal this book keeps has not been established yet, and this
-            row&apos;s #number means one thing in the grand livre and another in a
-            recettes-dépenses journal. Resolving before that is settled would be a write against a
-            book chosen by a guess.
-          </>
-        ) : (
-          <>
-            Read-only. A <span className="font-mono">{kind}</span> row cannot be resolved in this
-            book&apos;s journal — the two number series overlap, so resolving it by its number
-            would address an unrelated record.
-          </>
-        )}
+        {journal === null
+          ? t('rec.readOnlyUnknownJournal')
+          : t('rec.readOnlyWrongJournal', { kind })}
       </span>
     </p>
   )
@@ -449,23 +438,25 @@ function Suggestions({
   suggestions: RecognitionRule[]
   onUse: (text: string) => void
 }) {
+  const t = useT()
+  const label = useLabel()
   return (
     <div className="mt-1.5 space-y-1">
       <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        A rule would explain this — nothing has applied it
+        {t('rec.suggestionsHeading')}
       </p>
       {suggestions.map((rule) => (
         <div key={rule.number} className="text-[12px] text-muted-foreground">
           <span className="font-mono">#{rule.number}</span> {rule.pattern.counterparty} ·{' '}
           {ruleAmount(rule.pattern.amount_chf, rule.pattern.tolerance_chf)}
-          {en(rule.explanation) && <span> — {en(rule.explanation)}</span>}
-          {en(rule.explanation) && (
+          {label(rule.explanation) && <span> — {label(rule.explanation)}</span>}
+          {label(rule.explanation) && (
             <button
               type="button"
-              onClick={() => onUse(en(rule.explanation))}
+              onClick={() => onUse(label(rule.explanation))}
               className="ml-1.5 text-primary-strong hover:underline"
             >
-              use this explanation
+              {t('rec.useThisExplanation')}
             </button>
           )}
         </div>
