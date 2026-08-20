@@ -19,6 +19,10 @@ All access goes through the `bk` CLI. There is no supported HTTP API.
 
 ## Rules
 
+- **Never reach around this CLI to touch platform data** — not with Desktop
+  Commander, not with any tool that runs commands or edits files. If a `bk`
+  verb exists, use it; the doors are where the rules are checked, and several
+  apps keep records that cannot be taken back. `bk guide platform/overview`.
 - Verbs that name an app go behind it: `bk <app> <verb>`. Verbs that do not,
   do not. `bk guide platform/apps` explains which is which and why.
 - Add `--json` to every read command.
