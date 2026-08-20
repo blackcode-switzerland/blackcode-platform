@@ -31,14 +31,24 @@
 // that this build does not recognise it.
 
 /** How loudly a state is drawn. NOT a severity — see `severityTone`. */
+import type { BooksKey } from './dictionary'
+
 export type Tone = 'calm' | 'good' | 'warn' | 'bad'
 
 export interface StateFace {
-  /** What the reader is told the state means, in one phrase. */
-  label: string
+  /**
+   * DICTIONARY KEYS, not words — since 2026-08-20.
+   *
+   * This module is a pure function library called from `useMemo` and from
+   * tests, so it cannot call a hook. Returning keys makes the whole table
+   * translatable without one, and a face naming a key that does not exist is a
+   * compile error. `lib/compliance.test.ts` asserts through `DICTIONARY.en[…]`,
+   * so what it checks is unchanged and it now checks the French exists too.
+   */
+  labelKey: BooksKey
   tone: Tone
   /** One sentence of what it implies. Rendered under a filter or in a legend. */
-  meaning: string
+  meaningKey: BooksKey
 }
 
 /**
@@ -56,26 +66,24 @@ export interface StateFace {
  */
 const REVIEW_STATE_FACES: Record<string, StateFace> = {
   draft: {
-    label: 'Draft',
+    labelKey: 'face.reviewDraft',
     tone: 'calm',
-    meaning:
-      'Researched against Fedlex and waiting for a human. This is where every rule starts; it is not a problem with the rule.',
+    meaningKey: 'face.reviewDraftMeaning',
   },
   approved: {
-    label: 'Approved',
+    labelKey: 'face.reviewApproved',
     tone: 'good',
-    meaning: 'Signed off as written. The check logic below is the wording that stands.',
+    meaningKey: 'face.reviewApprovedMeaning',
   },
   edited: {
-    label: 'Edited',
+    labelKey: 'face.reviewEdited',
     tone: 'good',
-    meaning:
-      'Signed off with corrected wording. The original is kept beside it — a review replaces nothing.',
+    meaningKey: 'face.reviewEditedMeaning',
   },
   rejected: {
-    label: 'Rejected',
+    labelKey: 'face.reviewRejected',
     tone: 'bad',
-    meaning: 'Signed off as wrong. The rule is kept, because a verdict may cite it forever.',
+    meaningKey: 'face.reviewRejectedMeaning',
   },
 }
 
@@ -98,19 +106,19 @@ export function isReviewed(state: string): boolean {
  */
 const SEVERITY_FACES: Record<string, StateFace> = {
   blocker: {
-    label: 'Blocker',
+    labelKey: 'face.severityBlocker',
     tone: 'bad',
-    meaning: 'Violating it makes the books or a filing wrong, not merely untidy.',
+    meaningKey: 'face.severityBlockerMeaning',
   },
   warning: {
-    label: 'Warning',
+    labelKey: 'face.severityWarning',
     tone: 'warn',
-    meaning: 'Violating it creates exposure that has to be explained.',
+    meaningKey: 'face.severityWarningMeaning',
   },
   info: {
-    label: 'Info',
+    labelKey: 'face.severityInfo',
     tone: 'calm',
-    meaning: 'A permission or a threshold worth knowing. Nothing is violated by it.',
+    meaningKey: 'face.severityInfoMeaning',
   },
 }
 
@@ -136,24 +144,23 @@ export function severityRank(severity: string): number {
  * disclosure look like a defect and teach a reader to stop reading the column.
  */
 export interface Provenance {
-  label: string
-  meaning: string
+  /** Dictionary keys, not words. See `StateFace` — same reason, same tests. */
+  labelKey: BooksKey
+  meaningKey: BooksKey
 }
 
 const PROVENANCE: Record<string, Provenance> = {
   verified_fedlex: {
-    label: 'Verified in Fedlex',
-    meaning: 'The agent read the cited article in the federal law collection.',
+    labelKey: 'face.provenanceFedlex',
+    meaningKey: 'face.provenanceFedlexMeaning',
   },
   doctrine_inferred: {
-    label: 'Inferred from doctrine',
-    meaning:
-      'A reading of the cited article rather than a quotation of it. The article says less than the rule does.',
+    labelKey: 'face.provenanceDoctrine',
+    meaningKey: 'face.provenanceDoctrineMeaning',
   },
   needs_fiduciary_check: {
-    label: 'Needs a fiduciary',
-    meaning:
-      'The source itself is not settled. A fiduciary has to confirm how the article applies before this rule is relied on.',
+    labelKey: 'face.provenanceFiduciary',
+    meaningKey: 'face.provenanceFiduciaryMeaning',
   },
 }
 

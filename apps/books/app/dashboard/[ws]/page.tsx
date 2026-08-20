@@ -42,6 +42,8 @@ import { NoBooks } from '@/components/no-books'
 import { Money } from '@/components/money'
 import { BookFacts } from '@/components/book-facts'
 import type { Entity } from '@/lib/types'
+import { useT } from '@/lib/i18n'
+import type { BooksKey } from '@/lib/dictionary'
 
 export default function OverviewPage() {
   const { data: session } = useSession()
@@ -50,9 +52,10 @@ export default function OverviewPage() {
   const scope = useScope()
   const { entities, isLoading, error, source } = scope
   const overview = useOverview(params.ws)
+  const t = useT()
 
-  if (isLoading) return <Loading rows={4} label="Loading your books" />
-  if (error) return <ErrorState error={error} title="Your books could not be loaded" />
+  if (isLoading) return <Loading rows={4} label={t('overview.loading')} />
+  if (error) return <ErrorState error={error} title={t('overview.loadError')} />
   if (entities.length === 0) return <NoBooks email={session?.user?.email} />
 
   const single = entities.length === 1
@@ -67,17 +70,15 @@ export default function OverviewPage() {
       <FixtureNotice source={source} />
 
       <h1 className="text-lg font-semibold text-foreground">
-        {single ? 'Your book' : 'Your books'}
+        {single ? t('overview.titleOne') : t('overview.titleMany')}
       </h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        {single
-          ? 'One set of accounts. Everything else in the app is scoped to it.'
-          : 'Each one is a separate set of accounts. The control in the top bar chooses which one every other screen is about.'}
+        {single ? t('overview.leadOne') : t('overview.leadMany')}
       </p>
 
       {overview.error && (
         <div className="mt-4">
-          <ErrorState error={overview.error} title="The figures could not be loaded" />
+          <ErrorState error={overview.error} title={t('overview.figuresFailed')} />
         </div>
       )}
 
@@ -106,14 +107,14 @@ export default function OverviewPage() {
           href={scopedHref(base, '/taxes', scope)}
           className="inline-flex items-center gap-1.5 text-primary-strong hover:underline"
         >
-          Statutory tax snapshot
+          {t('overview.taxLink')}
           <ArrowRight size={14} />
         </Link>
         <Link
           href={scopedHref(base, '/compliance', scope)}
           className="inline-flex items-center gap-1.5 text-primary-strong hover:underline"
         >
-          Compliance rules
+          {t('nav.compliance')}
           <ArrowRight size={14} />
         </Link>
       </div>
@@ -139,13 +140,16 @@ function BookCard({
   loading: boolean
   base: string
 }) {
+  const t = useT()
   const scope = { entity: entity.slug, exercice: row?.exercice ?? null }
 
   return (
     <div className="rounded-lg border border-border bg-card px-4 py-3.5" data-book={entity.slug}>
       <div className="flex flex-wrap items-center gap-2.5">
         <EntityChip entity={entity} />
-        <span className="text-[13px] text-muted-foreground">{entity.seat ?? 'No registered seat'}</span>
+        <span className="text-[13px] text-muted-foreground">
+          {entity.seat ?? t('overview.noSeat')}
+        </span>
         <span className="ml-auto text-[12px] uppercase tracking-wider text-muted-foreground">
           #{entity.number}
         </span>
@@ -154,33 +158,35 @@ function BookCard({
       <BookFacts entity={entity} />
 
       <div className="mt-3 border-t border-border/60 pt-3">
-        {loading && <p className="text-[12.5px] text-muted-foreground">Loading its figures…</p>}
+        {loading && (
+          <p className="text-[12.5px] text-muted-foreground">{t('overview.loadingFigures')}</p>
+        )}
 
         {!loading && row === null && (
           // The overview answered, and this book was not in the answer. That is
           // not "zero" — it is a book the figures route did not describe, and
           // saying so beats printing a dash that reads as "nothing happened".
           <p className="text-[12.5px] text-muted-foreground">
-            No figures were served for this book.
+            {t('overview.noFiguresServed')}
           </p>
         )}
 
         {!loading && row && row.exercice === null && (
-          <p className="text-[12.5px] text-muted-foreground">
-            No fiscal year is open yet, so there is nothing to derive. A book gets its accounts when
-            it is created; the exercice is a second step.
-          </p>
+          <p className="text-[12.5px] text-muted-foreground">{t('overview.noExercice')}</p>
         )}
 
         {!loading && row?.bilan && (
           <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-4">
-            <Figure label="Total actif" amount={row.bilan.actif} />
-            <Figure label="Total passif" amount={row.bilan.passif} />
-            <Figure label={`Résultat ${row.exercice}`} amount={row.bilan.resultat} />
+            <Figure label={t('statements.totalActif')} amount={row.bilan.actif} />
+            <Figure label={t('statements.totalPassif')} amount={row.bilan.passif} />
+            <Figure
+              label={t('overview.resultatYear', { year: row.exercice ?? '—' })}
+              amount={row.bilan.resultat}
+            />
             <div>
-              <Dt>Balance</Dt>
+              <Dt>{t('overview.balance')}</Dt>
               <dd className={row.bilan.balanced ? 'text-foreground' : 'font-medium text-destructive'}>
-                {row.bilan.balanced ? 'Actif = passif' : 'Does not balance'}
+                {row.bilan.balanced ? t('overview.balances') : t('overview.doesNotBalance')}
               </dd>
             </div>
           </dl>
@@ -189,19 +195,20 @@ function BookCard({
         {!loading && row?.ri && (
           <>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3">
-              <Figure label="Recettes" amount={row.ri.recettes} />
-              <Figure label="Dépenses" amount={row.ri.depenses} />
-              <Figure label={`Résultat ${row.exercice}`} amount={row.ri.resultat} />
+              <Figure label={t('overview.recettes')} amount={row.ri.recettes} />
+              <Figure label={t('overview.depenses')} amount={row.ri.depenses} />
+              <Figure
+                label={t('overview.resultatYear', { year: row.exercice ?? '—' })}
+                amount={row.ri.resultat}
+              />
             </dl>
             <p className="mt-2 text-[11.5px] text-muted-foreground">
-              Simplified bookkeeping, art. 957 al. 2 CO. That result is CASH in minus cash out — not
-              a profit: there are no accruals and no depreciation behind it. This book has no
-              balance sheet;{' '}
+              {t('overview.riNote')}{' '}
               <Link
                 href={scopedHref(base, '/patrimoine', scope)}
                 className="text-primary-strong hover:underline"
               >
-                its net worth is the patrimoine statement
+                {t('overview.riNoteLink')}
               </Link>
               .
             </p>
@@ -217,9 +224,9 @@ function BookCard({
           // the smaller one here made the page disagree with the CLI and with
           // the screen it links to. Seeded blackcode: 2 against 3.
           <p className="mt-2 flex flex-wrap gap-x-4 text-[11.5px] text-muted-foreground">
-            <span>{row.entries} entries</span>
-            <span>{row.worklist} to resolve</span>
-            <span>{row.staged} staged</span>
+            <span>{t('overview.entriesCount', { n: row.entries })}</span>
+            <span>{t('overview.toResolveCount', { n: row.worklist })}</span>
+            <span>{t('overview.stagedCount', { n: row.staged })}</span>
           </p>
         )}
       </div>
@@ -234,29 +241,31 @@ function BookCard({
  * stops at the figures must have already read what they are.
  */
 function RollupPanel({ totals }: { totals: ReturnType<typeof rollup> }) {
+  const t = useT()
   return (
     <section className="mt-8 rounded-lg border border-border bg-card px-4 py-4">
-      <h2 className="text-sm font-semibold text-foreground">Across all your books</h2>
+      <h2 className="text-sm font-semibold text-foreground">{t('overview.rollupTitle')}</h2>
+      {/* The `<span className="font-medium">` around "never a consolidation" is
+          gone: emphasis inside a sentence means splitting it into fragments,
+          which fixes English clause order into the French. The disclaimer is one
+          entry, and it stays ABOVE the numbers — a reader who stops at the
+          figures must already have read what they are. */}
       <p className="mt-1 text-[12.5px] text-muted-foreground">
-        An informational aggregation over {totals.books} books, and{' '}
-        <span className="font-medium text-foreground">never a consolidation</span> under art. 963
-        CO. Nothing is eliminated: a loan between two of your books is counted on both sides,
-        because the question this answers is what you hold, not what a group balance sheet would
-        say. It has no standing in any filing.
+        {t('overview.rollupLead', { books: totals.books })}
       </p>
 
       <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-[12.5px] sm:grid-cols-4">
-        <Figure label="Total actif" amount={totals.totalActif} />
-        <Figure label="Combined result" amount={totals.resultat} />
+        <Figure label={t('statements.totalActif')} amount={totals.totalActif} />
+        <Figure label={t('overview.combinedResult')} amount={totals.resultat} />
         <div>
-          <Dt>Entries</Dt>
+          <Dt>{t('overview.entries')}</Dt>
           <dd className="num text-foreground">{totals.entries}</dd>
         </div>
         <div>
           {/* `worklist`, not `unrecognized` — see `lib/rollup.ts`. This label is
               a claim about work outstanding, and the field that answers it
               includes the inferred rows a rule guessed at. */}
-          <Dt>Need a human</Dt>
+          <Dt>{t('overview.needAHuman')}</Dt>
           <dd className="num text-foreground">{totals.worklist}</dd>
         </div>
       </dl>
@@ -264,38 +273,28 @@ function RollupPanel({ totals }: { totals: ReturnType<typeof rollup> }) {
       <ul className="mt-3 space-y-1 border-t border-border/60 pt-2 text-[11.5px] text-muted-foreground">
         {/* Which books each total actually covers. A total that silently omits a
             book is the most reassuring wrong answer this panel can give. */}
-        <li>
-          Total actif covers the {totals.bilanBooks} double-entry{' '}
-          {totals.bilanBooks === 1 ? 'book' : 'books'}
-          {totals.riBooks > 0 && (
-            <>
-              {' '}— the {totals.riBooks} simplified{' '}
-              {totals.riBooks === 1 ? 'book has no balance sheet and contributes' : 'books have no balance sheet and contribute'}{' '}
-              nothing to it
-            </>
-          )}
-          .
-        </li>
-        {totals.riBooks > 0 && (
-          <li>
-            The combined result adds accrual profits to a cash result, which are different kinds of
-            number. It is an order of magnitude, not a figure to file.
-          </li>
-        )}
+        {/* Four whole sentences rather than one assembled from fragments. Two
+            counts each agree independently, and French moves the agreement into
+            places English does not have — the ternaries that worked here are
+            exactly what a translation cannot carry. */}
+        <li>{t(coverKey(totals), { n: totals.bilanBooks, ri: totals.riBooks })}</li>
+        {totals.riBooks > 0 && <li>{t('overview.mixedResult')}</li>}
         {totals.withoutExercice > 0 && (
           <li>
-            {/* Both verbs agree with the count, not just the first one. "1 book
-                has … and contribute nothing" read as a typo on a page whose
-                whole job is looking precise about numbers. */}
-            {totals.withoutExercice} {totals.withoutExercice === 1 ? 'book has' : 'books have'} no
-            fiscal year open and {totals.withoutExercice === 1 ? 'contributes' : 'contribute'}{' '}
-            nothing to any total above.
+            {t(
+              totals.withoutExercice === 1
+                ? 'overview.withoutExerciceOne'
+                : 'overview.withoutExerciceMany',
+              { n: totals.withoutExercice }
+            )}
           </li>
         )}
         {totals.staged > 0 && (
           <li>
-            {totals.staged} staged {totals.staged === 1 ? 'entry is' : 'entries are'} excluded from
-            every figure above — staged money has no agreed meaning and never touches a statement.
+            {t(
+              totals.staged === 1 ? 'overview.stagedExcludedOne' : 'overview.stagedExcludedMany',
+              { n: totals.staged }
+            )}
           </li>
         )}
       </ul>
@@ -320,4 +319,20 @@ function Figure({ label, amount }: { label: string; amount: string }) {
       </dd>
     </div>
   )
+}
+
+/**
+ * Which of the four "Total actif covers…" sentences this rollup needs.
+ *
+ * Four, because two counts agree independently and French moves the agreement
+ * into the article, the noun, the verb AND the participle. Picking the key here
+ * rather than assembling fragments in JSX is what makes the sentence something
+ * a translator can write; it is also what makes the compile-time key check
+ * cover all four, since each is a literal.
+ */
+function coverKey(totals: ReturnType<typeof rollup>): BooksKey {
+  if (totals.riBooks === 0) {
+    return totals.bilanBooks === 1 ? 'overview.coverOne' : 'overview.coverMany'
+  }
+  return totals.riBooks === 1 ? 'overview.coverRiOne' : 'overview.coverRiMany'
 }

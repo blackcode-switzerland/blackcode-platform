@@ -15,24 +15,30 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useT } from '@/lib/i18n'
+import type { BooksKey } from '@/lib/dictionary'
 
-const TABS = [
-  { seg: 'profile', label: 'Profile' },
-  { seg: 'account', label: 'Account' },
-  { seg: 'tokens', label: 'API tokens' },
-  { seg: 'preferences', label: 'Preferences' },
+// Keys, not words — same arrangement as `lib/nav.ts`, and typed the same way so
+// a tab naming a key that does not exist is a compile error rather than a tab
+// labelled `settings.tab.whatever`.
+const TABS: ReadonlyArray<{ seg: string; labelKey: BooksKey }> = [
+  { seg: 'profile', labelKey: 'settings.tab.profile' },
+  { seg: 'account', labelKey: 'settings.tab.account' },
+  { seg: 'tokens', labelKey: 'settings.tab.tokens' },
+  { seg: 'preferences', labelKey: 'settings.tab.preferences' },
 ]
 
 export function SettingsNav() {
   const pathname = usePathname() ?? ''
+  const t = useT()
   return (
     <nav className="flex gap-1 border-b border-border">
-      {TABS.map((t) => {
-        const href = `/dashboard/settings/${t.seg}`
+      {TABS.map((tab) => {
+        const href = `/dashboard/settings/${tab.seg}`
         const active = pathname === href
         return (
           <Link
-            key={t.seg}
+            key={tab.seg}
             href={href}
             aria-current={active ? 'page' : undefined}
             className={
@@ -42,7 +48,7 @@ export function SettingsNav() {
                 : 'border-transparent text-muted-foreground hover:text-foreground')
             }
           >
-            {t.label}
+            {t(tab.labelKey)}
           </Link>
         )
       })}

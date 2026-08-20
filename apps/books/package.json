@@ -1,7 +1,7 @@
 {
   "name": "books",
   "version": "0.1.0",
-  "description": "b/books — Swiss statutory bookkeeping. Any number of books, double-entry, audit-defensible. See docs/books-app-plan/.",
+  "description": "b/books \u2014 Swiss statutory bookkeeping. Any number of books, double-entry, audit-defensible. See docs/books-app-plan/.",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3200",
@@ -20,6 +20,7 @@
     "@blackcode/platform-auth": "*",
     "@blackcode/platform-db": "*",
     "@blackcode/platform-email": "*",
+    "@blackcode/platform-i18n": "*",
     "@blackcode/platform-storage": "*",
     "@blackcode/platform-ui": "*",
     "@tanstack/react-query": "^5.56.2",

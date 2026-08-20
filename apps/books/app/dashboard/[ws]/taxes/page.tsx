@@ -77,27 +77,30 @@ import { NoExerciceNotice, isNoExerciceRefusal } from '@/components/no-exercice-
 import { CitedFigure } from '@/components/cited-figure'
 import { Money } from '@/components/money'
 import type { TaxSnapshotResult } from '@/lib/types'
+import { useT } from '@/lib/i18n'
+import { money } from '@/lib/format'
 
 export default function Page() {
   const params = useParams<{ ws: string }>()
   const scope = useScope()
   const base = `/dashboard/${params.ws}`
   const snapshot = useTaxSnapshot(params.ws, scope)
+  const t = useT()
 
   return (
-    <ScreenFrame title="Taxes">
+    <ScreenFrame title={t('nav.taxes')}>
       <Link
         href={scopedHref(base, '', scope)}
         className="inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft size={13} />
-        Overview
+        {t('tax.back')}
       </Link>
 
       <div className="mt-3">
         <StatementHeading
-          fr="Impôts"
-          en="Statutory tax position"
+          fr={t('tax.legalName')}
+          en={t('tax.uiName')}
           // No article on the heading. The document is not fixed by the Code des
           // obligations; the individual figures each carry their own citation,
           // which is where the authority actually lives.
@@ -110,16 +113,11 @@ export default function Page() {
         className="mb-4 rounded-lg border border-border bg-secondary px-3.5 py-2.5 text-[12.5px] text-muted-foreground"
         role="note"
       >
-        <span className="font-medium text-foreground">
-          A snapshot, derived when this page was opened, and stored nowhere.
-        </span>{' '}
-        It is not a tax return and it is not a position tracked over time. The two tax figures are
-        ESTIMATES computed from this book&apos;s own parameters; every one of them names the article
-        it rests on, and a figure whose parameter a fiduciary has not confirmed says so beside
-        itself.
+        <span className="font-medium text-foreground">{t('tax.noticeLead')}</span>{' '}
+        {t('tax.noticeBody')}
       </div>
 
-      {snapshot.isLoading && <Loading rows={8} label="Deriving the tax position" />}
+      {snapshot.isLoading && <Loading rows={8} label={t('tax.loading')} />}
 
       {/* A simplified book is REFUSED here, by code, and the refusal is the
           answer rather than a failure — same treatment as the bilan's. A sole
@@ -128,7 +126,7 @@ export default function Page() {
       {isNoTaxSnapshotRefusal(snapshot.error) && (
         <div className="rounded-lg border border-border bg-secondary px-4 py-3.5" role="note">
           <p className="text-sm font-medium text-foreground">
-            {scope.record?.name ?? 'This book'} has no company tax position.
+            {t('tax.noneTitle', { book: scope.record?.name ?? t('noExercice.thisBook') })}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">{snapshot.error.message}</p>
           {snapshot.error.suggestion && (
@@ -138,7 +136,7 @@ export default function Page() {
             href={scopedHref(base, '/patrimoine', scope)}
             className="mt-3 inline-block text-sm font-medium text-primary-strong hover:underline"
           >
-            Patrimoine — the personal picture this book does keep
+            {t('tax.patrimoineLink')}
           </Link>
         </div>
       )}
@@ -146,7 +144,7 @@ export default function Page() {
       {isNoExerciceRefusal(snapshot.error) && (
         <NoExerciceNotice
           error={snapshot.error}
-          statement="tax position"
+          statement={t('tax.uiName').toLowerCase()}
           bookName={scope.record?.name}
         />
       )}
@@ -154,7 +152,7 @@ export default function Page() {
       {snapshot.error &&
         !isNoTaxSnapshotRefusal(snapshot.error) &&
         !isNoExerciceRefusal(snapshot.error) && (
-          <ErrorState error={snapshot.error} title="The tax position could not be derived" />
+          <ErrorState error={snapshot.error} title={t('tax.failed')} />
         )}
 
       {snapshot.data && <Snapshot data={snapshot.data} />}
@@ -163,6 +161,7 @@ export default function Page() {
 }
 
 function Snapshot({ data }: { data: TaxSnapshotResult }) {
+  const t = useT()
   const params = data.tax?.params ?? {}
   // Asked before the reader has read a figure, for `openQuestion`'s reason: a
   // caveat below the number is a caveat that did not happen.
@@ -176,39 +175,37 @@ function Snapshot({ data }: { data: TaxSnapshotResult }) {
           art. 959a/959b, which those two screens carry. Citing them here would
           claim they were derived by this page. */}
       <section>
-        <H2>The book</H2>
+        <H2>{t('tax.theBook')}</H2>
         <div className="mt-1.5 grid grid-cols-1 gap-x-6 sm:grid-cols-2">
-          <Fact label="Résultat de l'exercice" value={data.profit} />
-          <Fact label="Capitaux propres" value={data.equity} />
+          <Fact label={t('tax.resultat')} value={data.profit} />
+          <Fact label={t('tax.equity')} value={data.equity} />
         </div>
         <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-          Both come straight from this book&apos;s statements — the income statement&apos;s result
-          and the balance sheet&apos;s equity, posted entries only. They are figures, not estimates,
-          and everything below is computed from them.
+          {t('tax.bookNote')}
         </p>
       </section>
 
       {/* ── VAT: NULL IS "NOT REGISTERED", WHICH IS NOT ZERO ────────────── */}
       <section>
-        <H2>TVA</H2>
+        <H2>{t('tax.tva')}</H2>
         {data.vat === null ? (
           <p className="mt-1.5 text-[12.5px] text-muted-foreground">
-            This book is not registered for VAT, so there is no position to state. That is not a
-            zero: a zero would say it is registered and owes nothing.
+            {t('tax.notRegistered')}
           </p>
         ) : (
           <>
             <div className="mt-1.5 border-t border-border">
-              <Line label="Opening balance due" value={data.vat.opening_due} />
-              <Line label="Output VAT this year" value={data.vat.output_ytd} sign="+" />
-              <Line label="Input VAT claimed this year" value={data.vat.input_claimed_ytd} sign="−" />
-              <Line label="Net due" value={data.vat.net_due} strong />
+              <Line label={t('tax.vatOpening')} value={data.vat.opening_due} />
+              <Line label={t('tax.vatOutput')} value={data.vat.output_ytd} sign="+" />
+              <Line
+                label={t('tax.vatInput')}
+                value={data.vat.input_claimed_ytd}
+                sign="−"
+              />
+              <Line label={t('tax.vatNet')} value={data.vat.net_due} strong />
             </div>
             <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-              Posted entries only. <span className="text-foreground">Claimed</span> is the operative
-              word on the third line: input VAT counts here when the entry says it was claimed, and
-              that column is tied to full evidence by the database — a bank record supports a
-              profit-tax deduction and can never support an input VAT claim (art. 26 LTVA).
+              {t('tax.vatNote')}
             </p>
           </>
         )}
@@ -217,14 +214,10 @@ function Snapshot({ data }: { data: TaxSnapshotResult }) {
       {/* ── THE TWO ESTIMATES, OR THE HONEST ABSENCE OF THEM ────────────── */}
       {data.tax === null ? (
         <section>
-          <H2>Company taxes</H2>
+          <H2>{t('tax.companyTaxes')}</H2>
           <p className="mt-1.5 rounded-md border border-border bg-secondary px-3 py-2 text-[12.5px] text-muted-foreground">
-            <span className="font-medium text-foreground">
-              This book has no tax parameters on record.
-            </span>{' '}
-            The canton, the commune, the rates and the articles they rest on are properties of the
-            book and this one carries none — so there is no estimate to make. Nothing is defaulted
-            here: a rate taken from another book would be an invented tax bill.
+            <span className="font-medium text-foreground">{t('tax.noParamsLead')}</span>{' '}
+            {t('tax.noParamsBody')}
           </p>
         </section>
       ) : (
@@ -234,23 +227,24 @@ function Snapshot({ data }: { data: TaxSnapshotResult }) {
               className="rounded-md border border-border bg-secondary px-3 py-2 text-[12.5px] text-foreground"
               role="note"
             >
-              <span className="font-medium">
-                At least one parameter below has not been confirmed by a fiduciary.
-              </span>{' '}
-              Each figure says which, and why, where it stands.
+              <span className="font-medium">{t('tax.unsettledLead')}</span>{' '}
+              {t('tax.unsettledBody')}
             </p>
           )}
 
           <section>
             <H2>
-              Impôt sur le bénéfice — {data.tax.canton} / {data.tax.commune}
+              {t('tax.profitTaxHeading', {
+                canton: data.tax.canton,
+                commune: data.tax.commune,
+              })}
             </H2>
             <p className="mt-1 text-[11.5px] text-muted-foreground">
-              The canton and the commune are properties of this book, not of this app.
+              {t('tax.cantonCommuneNote')}
             </p>
             <div className="mt-1.5">
               <CitedFigure
-                label="Impôt cantonal"
+                label={t('tax.cantonal')}
                 value={data.tax.profit_tax.cantonal}
                 citation={blockCitation(params.cantonal)}
                 confirmed={isConfirmed(params.cantonal)}
@@ -258,7 +252,7 @@ function Snapshot({ data }: { data: TaxSnapshotResult }) {
                 openQuestion={openQuestion(params.cantonal)}
               />
               <CitedFigure
-                label="Impôt communal"
+                label={t('tax.communal')}
                 value={data.tax.profit_tax.communal}
                 citation={blockCitation(params.communal)}
                 confirmed={isConfirmed(params.communal)}
@@ -266,7 +260,7 @@ function Snapshot({ data }: { data: TaxSnapshotResult }) {
                 openQuestion={openQuestion(params.communal)}
               />
               <CitedFigure
-                label="Impôt fédéral direct"
+                label={t('tax.ifd')}
                 value={data.tax.profit_tax.ifd}
                 citation={blockCitation(params.ifd)}
                 confirmed={isConfirmed(params.ifd)}
@@ -274,7 +268,7 @@ function Snapshot({ data }: { data: TaxSnapshotResult }) {
                 openQuestion={openQuestion(params.ifd)}
               />
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-border py-3">
-                <span className="text-[13px] font-medium text-foreground">Total</span>
+                <span className="text-[13px] font-medium text-foreground">{t('tax.total')}</span>
                 <Money value={data.tax.profit_tax.total} className="text-[14px] font-semibold" />
               </div>
             </div>
@@ -284,18 +278,17 @@ function Snapshot({ data }: { data: TaxSnapshotResult }) {
                 rounds to one decimal and rendered these as `16.2%` and `14.0%`
                 against `bk`'s `16.23%` and `13.97%`. See its header. Nothing
                 here divides anything; the arithmetic was the server's. */}
+            {/* `ratePercent` and NOT `percent()` from `lib/format.ts`, which
+                rounds to one decimal and rendered these as `16.2%` and `14.0%`
+                against `bk`'s `16.23%` and `13.97%`. Nothing here divides
+                anything; the arithmetic was the server's. The two rates are
+                interpolated into the sentence rather than wrapped in `<span
+                className="font-mono">`, because French reorders the clause. */}
             <p className="mt-2 text-[12px] text-muted-foreground">
-              Statutory rate{' '}
-              <span className="font-mono text-foreground">
-                {ratePercent(data.tax.profit_tax.statutory_pct)}
-              </span>
-              , effective rate{' '}
-              <span className="font-mono text-foreground">
-                {ratePercent(data.tax.profit_tax.effective_pct)}
-              </span>
-              . They differ because the taxes are themselves deductible, so the rate applied to a
-              pre-tax result is lower than the rate the law names. A figure computed at one and read
-              at the other is wrong by the difference.
+              {t('tax.rates', {
+                statutory: ratePercent(data.tax.profit_tax.statutory_pct),
+                effective: ratePercent(data.tax.profit_tax.effective_pct),
+              })}
             </p>
             {/* A loss year computes as zero rather than as a refund — the
                 server's rule (`pmProfitTax` floors the profit at 0), stated
@@ -303,17 +296,16 @@ function Snapshot({ data }: { data: TaxSnapshotResult }) {
                 broken derivation. */}
             {data.profit.trimStart().startsWith('-') && (
               <p className="mt-1.5 text-[12px] text-muted-foreground">
-                The result for this exercice is negative, so the profit tax computes as zero. A loss
-                is not a refund — it is zero tax on no profit.
+                {t('tax.lossYear')}
               </p>
             )}
           </section>
 
           <section>
-            <H2>Impôt sur le capital</H2>
+            <H2>{t('tax.capitalTax')}</H2>
             <div className="mt-1.5">
               <CitedFigure
-                label="Net due"
+                label={t('tax.vatNet')}
                 value={data.tax.capital_tax.net_due}
                 citation={blockCitation(params.capital_tax)}
                 confirmed={isConfirmed(params.capital_tax)}
@@ -323,26 +315,22 @@ function Snapshot({ data }: { data: TaxSnapshotResult }) {
                 {/* The imputation shown rather than hidden: the whole reason all
                     three figures are served. */}
                 <span>
-                  Gross <Money value={data.tax.capital_tax.gross} /> on this book&apos;s equity,
-                  less <Money value={data.tax.capital_tax.credited} /> credited against the
-                  cantonal and communal profit tax.
+                  {t('tax.capitalWorking', {
+                    gross: money(data.tax.capital_tax.gross),
+                    credited: money(data.tax.capital_tax.credited),
+                  })}
                 </span>
               </CitedFigure>
             </div>
             <p className="mt-2 text-[12px] text-muted-foreground">
-              The credit only bites in a loss or low-profit year: where there is profit tax to
-              absorb it, the capital tax is largely imputed away. That is why the gross and the
-              credit are both on the page — whether the imputation applies exactly this way is the
-              open question above, and the two figures are what let a reader apply either reading.
+              {t('tax.capitalNote')}
             </p>
           </section>
         </>
       )}
 
       <p className="border-t border-border pt-3 text-[11.5px] text-muted-foreground">
-        Every figure here is derived when the page is opened and none of it is stored.{' '}
-        <span className="font-mono">bk books tax --entity {data.entity}</span> prints the same
-        snapshot.
+        {t('tax.footnote', { command: `bk books tax --entity ${data.entity}` })}
       </p>
     </div>
   )

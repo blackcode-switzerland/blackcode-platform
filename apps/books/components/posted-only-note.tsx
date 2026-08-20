@@ -23,7 +23,10 @@
 // Found by the phase-1 review, 2026-08-18 (F1). The overview already said this
 // in its own words; the two screens a fiduciary actually reads did not.
 
+'use client'
+
 import { useEntries } from '@/lib/hooks'
+import { useT } from '@/lib/i18n'
 import type { ReadScope } from '@/lib/hooks'
 import type { Journal } from '@/lib/journal'
 
@@ -50,24 +53,23 @@ export function PostedOnlyNote({
   // Counted rather than asserted. "Posted entries only" is always true and is
   // said unconditionally; the COUNT is what turns a policy note into something
   // the reader can act on, and a number nobody has fetched would be a guess.
+  const t = useT()
   const { data: staged } = useEntries(ws, scope, journal, { status: 'staged' })
   const n = staged?.length ?? 0
 
   return (
     <p className="mt-1.5 text-[12.5px] text-muted-foreground">
-      <span className="font-medium text-foreground">Posted entries only.</span>{' '}
-      {n > 0 ? (
-        <>
-          {n} staged {n === 1 ? 'entry is' : 'entries are'} excluded from every figure
-          here — staged money has no agreed meaning and never touches a statement.
-          The ledger shows them, so a drill-down may list more than a line counted.
-        </>
-      ) : (
-        <>
-          Staged entries never touch a statement. There are none in this book and
-          exercice, so every posting below is counted.
-        </>
-      )}
+      <span className="font-medium text-foreground">{t('statements.postedOnlyLead')}</span>{' '}
+      {/* Singular and plural are TWO DICTIONARY ENTRIES, not one string with
+          `entry`/`entries` chosen in JSX. That trick works in English and does
+          not survive translation: French agreement reaches the verb and the
+          participle as well as the noun, and it differs per sentence. Two whole
+          sentences is the only shape a translator can work with. */}
+      {n === 0
+        ? t('statements.postedOnlyNone')
+        : n === 1
+          ? t('statements.postedOnlyStagedOne', { n })
+          : t('statements.postedOnlyStaged', { n })}
     </p>
   )
 }

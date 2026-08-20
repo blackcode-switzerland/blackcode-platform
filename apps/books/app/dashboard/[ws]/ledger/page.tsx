@@ -79,7 +79,8 @@ import { useScope, type ScopeState } from '@/lib/scope'
 import { useEntries, useRiEntries } from '@/lib/hooks'
 import { journalAccepts, JOURNAL_NAME, type Journal } from '@/lib/journal'
 import { scopedHref } from '@/lib/nav'
-import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useLocale, useT } from '@/lib/i18n'
 import { ScreenFrame } from '@/components/screen-frame'
 import { usePageTitle } from '@/components/books-shell'
 import { DataTable, type Column } from '@/components/data-table'
@@ -89,12 +90,28 @@ import { Money } from '@/components/money'
 import { VocabChip } from '@/components/chips'
 import { EntryLines } from '@/components/entry-lines'
 import type { Entry, RiEntry } from '@/lib/types'
+import type { BooksKey } from '@/lib/dictionary'
+
+/**
+ * The reader-facing name of each filter, for the "this was dropped" sentence.
+ *
+ * The URL keys stay `account` / `status` / `recognition` — they are the route's
+ * parameter names and the `data-ignored-filters` attribute a test reads. This
+ * table is only what the sentence says out loud.
+ */
+const FILTER_NAME: Record<'account' | 'status' | 'recognition', BooksKey> = {
+  account: 'ledger.colAccountName',
+  status: 'ledger.colStatus',
+  recognition: 'ledger.colRecognition',
+}
 
 export default function Page() {
   const params = useParams<{ ws: string }>()
   const search = useSearchParams()
   const router = useRouter()
   const scope = useScope()
+  const t = useT()
+  const locale = useLocale()
   const base = `/dashboard/${params.ws}`
 
   // Every filter comes from the URL, so a filtered ledger is a shareable page
@@ -116,12 +133,11 @@ export default function Page() {
    * `null` while the journal is unknown, so the nav label stands rather than
    * this screen guessing which document the reader is looking at.
    */
+  // The reader's side of `JOURNAL_NAME`, which already carries both. `'Journal'`
+  // is the same word in both languages and is the fallback while the journal is
+  // being resolved — not a dictionary entry, because it is not chrome we chose.
   const heading =
-    journal === 'recettes_depenses'
-      ? 'Receipts and expenses'
-      : journal === 'grand_livre'
-        ? 'General ledger'
-        : 'Journal'
+    journal === null ? 'Journal' : locale === 'fr' ? JOURNAL_NAME[journal].fr : JOURNAL_NAME[journal].en
   usePageTitle(journal === null ? null : heading)
 
   // ── THE FILTERS ARE SPLIT BY WHAT THIS JOURNAL WILL ACCEPT ──────────────
@@ -170,26 +186,35 @@ export default function Page() {
               — the same exception D-A carves out for the bilan's line labels.
               It is read from the journal, never from the book's name: two books
               of the same regime keep the same document. */}
-          {name ? name.fr : '—'}
+          {/* The document's name in the reader's language, with the LEGAL
+              French beneath — the same arrangement `<StatementHeading>` uses,
+              and the same test: identical strings mean the two are one, so only
+              one is rendered. `JOURNAL_NAME` carries both. */}
+          {name ? heading : '—'}
           <span className="ml-2 text-sm font-normal text-muted-foreground">
-            {name ? name.en : 'Resolving which journal this book keeps'}
+            {name
+              ? name.fr !== heading
+                ? name.fr
+                : null
+              : t('ledger.resolvingJournal')}
           </span>
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {scope.record?.name ?? '—'} · exercice {scope.exercice ?? '—'}
+          {t('ledger.subheading', {
+            book: scope.record?.name ?? '—',
+            year: scope.exercice ?? '—',
+          })}
         </p>
         {journal === 'recettes_depenses' && (
           <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-            This book is kept under art. 957 al. 2 CO — recettes and dépenses, with no double entry
-            behind them. There are no accounts and no posting step: a movement is a fact on
-            arrival. Its net worth is on{' '}
+            {t('ledger.riNoteBefore')}{' '}
             <Link
               href={scopedHref(base, '/patrimoine', scope)}
               className="text-primary-strong hover:underline"
             >
-              the patrimoine statement
+              {t('ledger.riNoteLink')}
             </Link>
-            , which is the other half of what that article requires.
+            {t('ledger.riNoteAfter')}
           </p>
         )}
       </div>
@@ -197,24 +222,29 @@ export default function Page() {
       {(applied.account || applied.status || applied.recognition) && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Filtered
+            {t('ledger.filtered')}
           </span>
           {applied.account && (
-            <FilterPill label={`account ${applied.account}`} onClear={() => clearFilter('account')} />
+            <FilterPill
+              label={t('ledger.filterAccount', { value: applied.account })}
+              onClear={() => clearFilter('account')}
+            />
           )}
           {applied.status && (
-            <FilterPill label={`status ${applied.status}`} onClear={() => clearFilter('status')} />
+            <FilterPill
+              label={t('ledger.filterStatus', { value: applied.status })}
+              onClear={() => clearFilter('status')}
+            />
           )}
           {applied.recognition && (
             <FilterPill
-              label={`recognition ${applied.recognition}`}
+              label={t('ledger.filterRecognition', { value: applied.recognition })}
               onClear={() => clearFilter('recognition')}
             />
           )}
           {applied.account && (
             <span className="text-[11.5px] text-muted-foreground">
-              Whole entries that touch this account — both sides are shown, not just the matching
-              line.
+              {t('ledger.accountFilterNote')}
             </span>
           )}
         </div>
@@ -232,20 +262,12 @@ export default function Page() {
           data-ignored-filters={ignored.join(',')}
           className="mb-3 rounded-md border border-dashed border-border px-2.5 py-1.5 text-[11.5px] text-muted-foreground"
         >
-          The address asked to filter by{' '}
-          <span className="font-mono text-foreground">{ignored.join(' and ')}</span>, and{' '}
-          {journal === 'recettes_depenses' ? (
-            <>
-              this journal has neither a posting status nor accounts to filter by. The list below is
-              the whole journal, unfiltered — the drill-down you followed was built for a
-              double-entry book.
-            </>
-          ) : (
-            <>
-              which journal this book keeps is not known yet, so no filter has been applied. The
-              list below is unfiltered.
-            </>
-          )}
+          {t('ledger.ignoredLead', {
+            fields: ignored.map((k) => t(FILTER_NAME[k])).join(` ${t('ledger.and')} `),
+          })}{' '}
+          {journal === 'recettes_depenses'
+            ? t('ledger.ignoredRi')
+            : t('ledger.ignoredUnknown')}
         </p>
       )}
 
@@ -298,11 +320,12 @@ function GrandLivre({
   scope: ScopeState
   filtered: boolean
 }) {
+  const t = useT()
   const columns = useMemo<Column<Entry>[]>(
     () => [
       {
         key: 'entry_no',
-        header: 'N°',
+        header: t('ledger.colNo'),
         cell: (e) => (
           <span className="font-mono text-[12px] text-muted-foreground">{e.entry_no}</span>
         ),
@@ -310,7 +333,7 @@ function GrandLivre({
       },
       {
         key: 'date',
-        header: 'Date',
+        header: t('ledger.colDate'),
         cell: (e) => <DateText value={e.date} />,
         // The ISO string sorts correctly as text and needs no Date. See
         // `components/date-text.tsx` for why that matters here specifically.
@@ -318,7 +341,7 @@ function GrandLivre({
       },
       {
         key: 'label',
-        header: 'Entry',
+        header: t('ledger.colEntry'),
         cell: (e) => (
           <div className="min-w-0">
             <Link
@@ -339,31 +362,35 @@ function GrandLivre({
       },
       {
         key: 'recognition',
-        header: 'Recognition',
+        header: t('ledger.colRecognition'),
         cell: (e) => <VocabChip vocabulary="recognition" value={e.recognition} />,
         sortValue: (e) => e.recognition,
       },
       {
         key: 'evidence',
-        header: 'Evidence',
+        header: t('ledger.colEvidence'),
         cell: (e) => <VocabChip vocabulary="evidence_tiers" value={e.evidence_tier} withNote />,
         sortValue: (e) => e.evidence_tier,
       },
       {
         key: 'status',
-        header: 'Status',
+        header: t('ledger.colStatus'),
         cell: (e) => <VocabChip vocabulary="entry_status" value={e.status} />,
         sortValue: (e) => e.status,
       },
       {
         key: 'number',
-        header: '#',
+        header: t('ledger.colNumber'),
         numeric: true,
         cell: (e) => <span className="font-mono text-[12px] text-muted-foreground">{e.number}</span>,
         sortValue: (e) => e.number,
       },
     ],
-    [base, scope]
+    // `t` is in the dependency list, so the headers are rebuilt when the reader
+    // switches language. Without it the table would keep the headers it was
+    // first rendered with — the one place a memoised value can go stale in a
+    // way nothing else on the page would show.
+    [base, scope, t]
   )
 
   return (
@@ -376,14 +403,16 @@ function GrandLivre({
       initialSort={{ key: 'date', direction: 'asc' }}
       empty={
         filtered ? (
-          <EmptyState title="No entry matches these filters.">
-            <p>The book has entries; none of them satisfy every filter above at once.</p>
+          <EmptyState title={t('ledger.emptyFiltered')}>
+            <p>{t('ledger.emptyFilteredBody')}</p>
           </EmptyState>
         ) : (
-          <EmptyState title="No entries in this exercice.">
+          <EmptyState title={t('ledger.empty')}>
             <p>
-              Nothing has been posted or staged for {scope.record?.name ?? 'this book'} in{' '}
-              {scope.exercice ?? 'this year'}.
+              {t('ledger.emptyBody', {
+                book: scope.record?.name ?? t('rec.thisBook'),
+                year: scope.exercice ?? t('rec.thisYear'),
+              })}
             </p>
           </EmptyState>
         )
@@ -442,17 +471,19 @@ function RecettesDepenses({
   scope: ScopeState
   filtered: boolean
 }) {
+  const t = useT()
+  const label = useLabel()
   const columns = useMemo<Column<RiEntry>[]>(
     () => [
       {
         key: 'date',
-        header: 'Date',
+        header: t('ledger.colDate'),
         cell: (r) => <DateText value={r.date} />,
         sortValue: (r) => r.date,
       },
       {
         key: 'label',
-        header: 'Movement',
+        header: t('ledger.colMovement'),
         cell: (r) => (
           <div className="min-w-0">
             {/* The bank's own words, never overwritten, and NOT a link. */}
@@ -461,7 +492,7 @@ function RecettesDepenses({
               <span className="ml-2 text-[12px] text-muted-foreground">{r.counterparty}</span>
             )}
             {r.explanation && (
-              <p className="mt-0.5 text-[12px] text-muted-foreground">{en(r.explanation)}</p>
+              <p className="mt-0.5 text-[12px] text-muted-foreground">{label(r.explanation)}</p>
             )}
           </div>
         ),
@@ -469,20 +500,20 @@ function RecettesDepenses({
       },
       {
         key: 'category',
-        header: 'Category',
+        header: t('ledger.colCategory'),
         // What kind of movement, in place of a chart account. `{fr, en}` from the
         // server; the English side, per D-A. Null is a real value — it renders as
         // nothing rather than as an em dash, because there is no missing account
         // here for an em dash to stand in for.
         cell: (r) =>
           r.category ? (
-            <span className="text-[12.5px] text-muted-foreground">{en(r.category)}</span>
+            <span className="text-[12.5px] text-muted-foreground">{label(r.category)}</span>
           ) : null,
-        sortValue: (r) => (r.category ? en(r.category) : ''),
+        sortValue: (r) => (r.category ? label(r.category) : ''),
       },
       {
         key: 'direction',
-        header: 'Direction',
+        header: t('ledger.colDirection'),
         // The server's own word. No colour and no translation — see the header.
         cell: (r) => (
           <span
@@ -496,7 +527,7 @@ function RecettesDepenses({
       },
       {
         key: 'amount',
-        header: 'Amount',
+        header: t('ledger.colAmount'),
         numeric: true,
         // Unsigned, always. The sign is the Direction column beside it.
         cell: (r) => <Money value={r.amount} bare />,
@@ -511,25 +542,25 @@ function RecettesDepenses({
       },
       {
         key: 'recognition',
-        header: 'Recognition',
+        header: t('ledger.colRecognition'),
         cell: (r) => <VocabChip vocabulary="recognition" value={r.recognition} />,
         sortValue: (r) => r.recognition,
       },
       {
         key: 'evidence',
-        header: 'Evidence',
+        header: t('ledger.colEvidence'),
         cell: (r) => <VocabChip vocabulary="evidence_tiers" value={r.evidence_tier} withNote />,
         sortValue: (r) => r.evidence_tier,
       },
       {
         key: 'number',
-        header: '#',
+        header: t('ledger.colNumber'),
         numeric: true,
         cell: (r) => <span className="font-mono text-[12px] text-muted-foreground">{r.number}</span>,
         sortValue: (r) => r.number,
       },
     ],
-    []
+    [t, label]
   )
 
   return (
@@ -543,14 +574,16 @@ function RecettesDepenses({
         initialSort={{ key: 'date', direction: 'asc' }}
         empty={
           filtered ? (
-            <EmptyState title="No movement matches that filter.">
-              <p>The journal has movements; none of them are in that recognition state.</p>
+            <EmptyState title={t('ledger.riEmptyFiltered')}>
+              <p>{t('ledger.riEmptyFilteredBody')}</p>
             </EmptyState>
           ) : (
-            <EmptyState title="No movements in this exercice.">
+            <EmptyState title={t('ledger.riEmpty')}>
               <p>
-                Nothing has been recorded for {scope.record?.name ?? 'this book'} in{' '}
-                {scope.exercice ?? 'this year'}.
+                {t('ledger.riEmptyBody', {
+                  book: scope.record?.name ?? t('rec.thisBook'),
+                  year: scope.exercice ?? t('rec.thisYear'),
+                })}
               </p>
             </EmptyState>
           )
@@ -558,10 +591,7 @@ function RecettesDepenses({
       />
       {rows && rows.length > 0 && (
         <p className="mt-2.5 text-[11.5px] text-muted-foreground">
-          A movement is shown unsigned and its direction is a column: a{' '}
-          <span className="font-mono">neutral</span> transfer between your own accounts is recorded
-          here and counts in neither recettes nor dépenses. These rows have no detail page — the
-          two journals number themselves separately, so this #number is not an écriture&apos;s.
+          {t('ledger.riFootnote', { neutral: 'neutral' })}
         </p>
       )}
     </>
@@ -577,17 +607,15 @@ function RecettesDepenses({
  * a default journal — a default is a document somebody else chose.
  */
 function UnknownJournal({ scope }: { scope: ScopeState }) {
+  const t = useT()
   if (scope.isLoading || (scope.entity !== null && scope.record === null && scope.entities.length === 0)) {
-    return <Loading rows={6} label="Loading the journal" />
+    return <Loading rows={6} label={t('ledger.loadingJournal')} />
   }
 
   if (scope.record === null) {
     return (
-      <EmptyState title="No book by that name.">
-        <p>
-          The address asks for <span className="font-mono">{scope.entity ?? '—'}</span>, and this
-          account has no book with that name. Choose one from the switcher above.
-        </p>
+      <EmptyState title={t('ledger.noSuchBook')}>
+        <p>{t('ledger.noSuchBookBody', { slug: scope.entity ?? '—' })}</p>
       </EmptyState>
     )
   }
@@ -596,29 +624,37 @@ function UnknownJournal({ scope }: { scope: ScopeState }) {
   // list is not requested, because which shape the route would answer with is
   // exactly what is unknown.
   return (
-    <EmptyState title="This book keeps a journal this version does not know.">
+    <EmptyState title={t('ledger.unknownJournal')}>
       <p>
-        {scope.record.name} records its bookkeeping regime as{' '}
-        <span className="font-mono text-foreground">{scope.record.bookkeeping_regime}</span>, and
-        this app knows how to read a journal for a double-entry book and for a simplified one.
+        {t('ledger.unknownJournalBody', {
+          book: scope.record.name,
+          regime: scope.record.bookkeeping_regime,
+        })}
       </p>
       <p className="mt-2">
-        Nothing has been requested, because the shape of the answer is what is unknown — showing you
-        one of the two would be a guess. <span className="font-mono">bk books entry list</span>{' '}
-        reads it either way.
+        {t('ledger.unknownJournalBody2', { command: 'bk books entry list' })}
       </p>
     </EmptyState>
   )
 }
 
-function FilterPill({ label, onClear }: { label: string; onClear: () => void }) {
+function FilterPill({
+  label,
+  onClear,
+}: {
+  /** Already translated by the caller — it interpolates the filter's VALUE. */
+  label: string
+  onClear: () => void
+}) {
+  const t = useT()
+  const removeLabel = t('ledger.removeFilter', { label })
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary px-2 py-[1px] text-[11px] text-foreground">
       <span className="font-mono">{label}</span>
       <button
         type="button"
         onClick={onClear}
-        aria-label={`Remove the ${label} filter`}
+        aria-label={removeLabel}
         className="text-muted-foreground hover:text-foreground"
       >
         <X size={11} />

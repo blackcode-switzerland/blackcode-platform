@@ -33,6 +33,7 @@
 import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { EmptyState, ErrorState, Loading } from './states'
+import { useT } from '@/lib/i18n'
 
 export interface Column<T> {
   /** Stable identity for the column. Used as the sort key and the React key. */
@@ -57,7 +58,11 @@ export interface DataTableProps<T> {
   rowKey: (row: T) => string | number
   isLoading?: boolean
   error?: unknown
-  /** What an empty list says. A string, or a full `<EmptyState>` for more. */
+  /**
+   * What an empty list says. A string — ALREADY TRANSLATED by the caller — or a
+   * full `<EmptyState>` for more. The default is this component's own and comes
+   * from the dictionary.
+   */
   empty?: React.ReactNode
   /** Column key to sort by on first render. */
   initialSort?: { key: string; direction: 'asc' | 'desc' }
@@ -70,10 +75,11 @@ export function DataTable<T>({
   rowKey,
   isLoading,
   error,
-  empty = 'Nothing here yet.',
+  empty,
   initialSort,
   onRowClick,
 }: DataTableProps<T>) {
+  const t = useT()
   const [sort, setSort] = useState(initialSort ?? null)
 
   const sorted = useMemo(() => {
@@ -100,6 +106,10 @@ export function DataTable<T>({
   if (isLoading) return <Loading rows={6} />
   if (error) return <ErrorState error={error} />
   if (!sorted || sorted.length === 0) {
+    // A prop DEFAULT would be evaluated before any hook can run, so the fallback
+    // is chosen here instead. `undefined` means "the caller said nothing"; a
+    // caller that genuinely wants no empty state passes an element.
+    if (empty === undefined) return <EmptyState title={t('table.nothingHere')} />
     return typeof empty === 'string' ? <EmptyState title={empty} /> : <>{empty}</>
   }
 

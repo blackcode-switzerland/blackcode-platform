@@ -41,7 +41,8 @@ import { useParams } from 'next/navigation'
 import { useScope } from '@/lib/scope'
 import { usePatrimoine, type PatrimoineView } from '@/lib/hooks'
 import { scopedHref } from '@/lib/nav'
-import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useT } from '@/lib/i18n'
 import { ScreenFrame } from '@/components/screen-frame'
 import { ErrorState, Loading, EmptyState } from '@/components/states'
 import { StatementHeading } from '@/components/statement-heading'
@@ -53,12 +54,13 @@ export default function Page() {
   const scope = useScope()
   const base = `/dashboard/${params.ws}`
   const patrimoine = usePatrimoine(params.ws, scope)
+  const t = useT()
 
   const simplified = scope.record?.bookkeeping_regime === 'simplified'
   const snapshots = patrimoine.data ?? []
 
   return (
-    <ScreenFrame title="Patrimoine">
+    <ScreenFrame title={t('statements.patrimoineUi')}>
       {/* The article is cited only for the books it governs. Art. 957 al. 2 is
           the SIMPLIFIED regime; printing it over a double-entry book's page
           states that that book is kept under it, which is false and is exactly
@@ -66,43 +68,43 @@ export default function Page() {
           A company may still compile one of these — it is just not what the
           article asks of it. */}
       <StatementHeading
-        fr="État du patrimoine"
-        en="Statement of net worth"
-        article={simplified ? 'art. 957 al. 2 CO' : undefined}
+        fr={t('statements.patrimoineLegal')}
+        en={t('statements.patrimoineUi')}
+        article={simplified ? t('statements.patrimoineArticle') : undefined}
         bookName={scope.record?.name}
         exercice={scope.exercice}
         exerciceStatus={scope.exerciceStatus}
       />
 
       <p className="mb-4 text-[12.5px] text-muted-foreground">
-        {simplified
-          ? 'Simplified bookkeeping is income and expenditure plus this. It is a compiled snapshot of what the activity holds and owes on one date — not a balance sheet, and not derived from postings.'
-          : 'A compiled snapshot of what a book holds and owes on one date. It is required of simplified books (art. 957 al. 2 CO) and optional for this one, which states its net worth on the equity side of its balance sheet instead.'}
+        {simplified ? t('patrimoine.leadSimplified') : t('patrimoine.leadDouble')}
       </p>
 
-      {patrimoine.isLoading && <Loading rows={5} label="Loading the patrimoine statement" />}
+      {patrimoine.isLoading && <Loading rows={5} label={t('patrimoine.loading')} />}
       {patrimoine.error && (
-        <ErrorState error={patrimoine.error} title="The patrimoine statement could not be loaded" />
+        <ErrorState error={patrimoine.error} title={t('patrimoine.loadError')} />
       )}
 
       {patrimoine.data && snapshots.length === 0 && (
-        <EmptyState title="No statement has been compiled for this book.">
+        <EmptyState title={t('patrimoine.none')}>
           {simplified ? (
             <p>
-              {scope.record?.name} keeps simplified books, so art. 957 al. 2 CO asks it for one of
-              these alongside its recettes and dépenses. None is recorded yet.
+              {t('patrimoine.noneSimplified', {
+                book: scope.record?.name ?? t('noExercice.thisBook'),
+              })}
             </p>
           ) : (
             <p>
-              {scope.record?.name} keeps double-entry books, so it is not required to compile one —
-              its net worth is the equity side of{' '}
+              {t('patrimoine.noneDoubleBefore', {
+                book: scope.record?.name ?? t('noExercice.thisBook'),
+              })}{' '}
               <Link
                 href={scopedHref(base, '/balance-sheet', scope)}
                 className="text-primary-strong hover:underline"
               >
-                its balance sheet
+                {t('patrimoine.noneDoubleLink')}
               </Link>
-              . Nothing is missing here.
+              {t('patrimoine.noneDoubleAfter')}
             </p>
           )}
         </EmptyState>
@@ -113,16 +115,15 @@ export default function Page() {
       ))}
 
       {snapshots.length > 1 && (
-        <p className="mt-4 text-[11.5px] text-muted-foreground">
-          Newest first. Each statement stands on its own — they are compiled documents, not
-          revisions of one another.
-        </p>
+        <p className="mt-4 text-[11.5px] text-muted-foreground">{t('patrimoine.newestFirst')}</p>
       )}
     </ScreenFrame>
   )
 }
 
 function Snapshot({ snapshot }: { snapshot: PatrimoineView }) {
+  const t = useT()
+  const label = useLabel()
   return (
     <section
       className="mb-5 rounded-lg border border-border bg-card px-4 py-4"
@@ -130,11 +131,11 @@ function Snapshot({ snapshot }: { snapshot: PatrimoineView }) {
     >
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-border pb-2">
         <h2 className="text-sm font-medium text-foreground">
-          As of <DateText value={snapshot.as_of} />
+          {t('patrimoine.asOf')} <DateText value={snapshot.as_of} />
         </h2>
         <span className="text-[12px] text-muted-foreground">
           {/* Two dates, deliberately. See this file's header. */}
-          compiled <DateText value={snapshot.compiled} />
+          {t('patrimoine.compiled')} <DateText value={snapshot.compiled} />
         </span>
         <span className="ml-auto font-mono text-[11px] text-muted-foreground">
           #{snapshot.number}
@@ -146,13 +147,15 @@ function Snapshot({ snapshot }: { snapshot: PatrimoineView }) {
           {snapshot.items.length === 0 && (
             <tr>
               <td className="py-2 text-[12.5px] text-muted-foreground">
-                This statement records no items.
+                {t('patrimoine.noItems')}
               </td>
             </tr>
           )}
           {snapshot.items.map((item, i) => (
-            <tr key={`${en(item.label)}:${i}`} className="border-b border-border/50">
-              <td className="py-1.5 pr-3 text-foreground">{en(item.label)}</td>
+            // The key is the FRENCH side, not the reader's: a React key that
+            // changes with the language would remount every row on a switch.
+            <tr key={`${item.label.fr}:${i}`} className="border-b border-border/50">
+              <td className="py-1.5 pr-3 text-foreground">{label(item.label)}</td>
               <td className="num w-40 py-1.5">
                 <Money value={item.amount} bare />
               </td>
@@ -161,7 +164,9 @@ function Snapshot({ snapshot }: { snapshot: PatrimoineView }) {
         </tbody>
         <tfoot>
           <tr>
-            <td className="pt-2.5 pr-3 text-right text-[13px] font-semibold">Net worth</td>
+            <td className="pt-2.5 pr-3 text-right text-[13px] font-semibold">
+              {t('patrimoine.netWorth')}
+            </td>
             <td className="num-total w-40 pt-2.5 text-[13px]">
               <Money value={snapshot.total} bare />
             </td>
@@ -169,14 +174,11 @@ function Snapshot({ snapshot }: { snapshot: PatrimoineView }) {
         </tfoot>
       </table>
 
-      <p className="mt-1.5 text-[11px] text-muted-foreground">
-        The total is summed on read from the items above and is never stored, so it cannot disagree
-        with them.
-      </p>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">{t('patrimoine.totalNote')}</p>
 
       {snapshot.note && (
         <p className="mt-2 border-t border-border/60 pt-2 text-[12px] text-muted-foreground">
-          {en(snapshot.note)}
+          {label(snapshot.note)}
         </p>
       )}
     </section>

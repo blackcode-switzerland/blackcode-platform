@@ -17,38 +17,51 @@
 // screen did not FIND rendering as `false`, `0` or "Not registered" — so every
 // value below distinguishes null from a real negative.
 
+'use client'
+
 import type { Entity } from '@/lib/types'
+import { useT } from '@/lib/i18n'
 
 export function BookFacts({ entity }: { entity: Entity }) {
+  const t = useT()
   return (
     <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3">
-      <Fact label="Legal form" value={entity.legal_form} />
+      {/* `legal_form` is served ("SA", "RI") and is a legal designation, not a
+          word we chose — it is not translated, in either direction. */}
+      <Fact label={t('facts.legalForm')} value={entity.legal_form} />
       <Fact
-        label="Regime"
+        label={t('facts.regime')}
         value={
           entity.bookkeeping_regime === 'double_entry'
-            ? 'Double entry'
+            ? t('facts.doubleEntry')
             : entity.bookkeeping_regime === 'simplified'
-              ? 'Simplified (art. 957 al. 2)'
+              ? t('facts.simplified')
               : // A third value would be a regime this bundle does not know. Show
                 // it raw rather than folding it into one of the two we do.
                 entity.bookkeeping_regime
         }
       />
       <Fact
-        label="VAT"
+        label={t('facts.vat')}
         value={
           entity.vat.registered
-            ? [entity.vat.method, entity.vat.filing].filter(Boolean).join(', ') || 'Registered'
-            : 'Not registered'
+            ? [entity.vat.method, entity.vat.filing].filter(Boolean).join(', ') ||
+              t('facts.vatRegistered')
+            : t('facts.vatNot')
         }
       />
-      {entity.audit_status && <Fact label="Audit" value={entity.audit_status.replace('_', ' ')} />}
+      {/* `audit_status` is a served vocabulary value ("opted_out"). Translating
+          it is a BACKEND request — phase-7 README §6 puts server-sent
+          vocabularies out of scope, because their labels belong with the values.
+          The label beside it is ours. */}
+      {entity.audit_status && (
+        <Fact label={t('facts.audit')} value={entity.audit_status.replace('_', ' ')} />
+      )}
       {/* `fte_count` is a `numeric` STRING on the wire (`"4.60"`), not a number.
           It is printed as served — no parse, no rounding — because the only
           reason it is on the screen is that it is what preserves audit opt-out
           eligibility, and a rounded headcount is not that fact. */}
-      {entity.fte_count !== null && <Fact label="FTE" value={entity.fte_count} numeric />}
+      {entity.fte_count !== null && <Fact label={t('facts.fte')} value={entity.fte_count} numeric />}
     </dl>
   )
 }

@@ -6,6 +6,7 @@
 // nineteen unreviewed rules, and it is the difference between a screen that says
 // "this product is waiting for you" and one that says "something is wrong here".
 
+import { DICTIONARY } from './dictionary'
 import { describe, it, expect } from 'vitest'
 import {
   REVIEW_CHOICES,
@@ -75,9 +76,9 @@ describe('source confidence is PROVENANCE, and all three are calm', () => {
   // article behind it is not settled, which is not the same as the rule being
   // doubtful. A disclosure drawn as a defect is a disclosure people stop reading.
   it('the three seeded values each say something about the SOURCE', () => {
-    expect(provenanceOf('verified_fedlex')?.meaning).toMatch(/read the cited article/i)
-    expect(provenanceOf('doctrine_inferred')?.meaning).toMatch(/reading .* rather than a quotation/i)
-    expect(provenanceOf('needs_fiduciary_check')?.meaning).toMatch(/source itself is not settled/i)
+    expect(DICTIONARY.en[provenanceOf('verified_fedlex')!.meaningKey]).toMatch(/read the cited article/i)
+    expect(DICTIONARY.en[provenanceOf('doctrine_inferred')!.meaningKey]).toMatch(/reading .* rather than a quotation/i)
+    expect(DICTIONARY.en[provenanceOf('needs_fiduciary_check')!.meaningKey]).toMatch(/source itself is not settled/i)
   })
 
   // Mutation watched: added `tone: 'warn'` to `needs_fiduciary_check` and had
@@ -85,7 +86,7 @@ describe('source confidence is PROVENANCE, and all three are calm', () => {
   // opt-out mechanics need a fiduciary — then drew amber beside eighteen calm
   // ones, which reads as "this rule is wrong".
   it('provenance carries no tone at all, so it cannot be drawn as a defect', () => {
-    expect(Object.keys(provenanceOf('needs_fiduciary_check')!)).toEqual(['label', 'meaning'])
+    expect(Object.keys(provenanceOf('needs_fiduciary_check')!)).toEqual(['labelKey', 'meaningKey'])
   })
 
   it('a confidence this build does not know returns null rather than a default', () => {

@@ -25,7 +25,10 @@
 // might file, so the flag is rendered as words beside the figure and never as a
 // colour a reader has to know how to read.
 
+'use client'
+
 import { Money } from './money'
+import { useT } from '@/lib/i18n'
 
 export function CitedFigure({
   label,
@@ -47,6 +50,7 @@ export function CitedFigure({
   openQuestion?: string | null
   children?: React.ReactNode
 }) {
+  const t = useT()
   return (
     <div className="border-b border-border py-3" data-cited-figure={label}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -62,9 +66,7 @@ export function CitedFigure({
         ) : (
           // Not an em dash and not silence. An uncited figure is the exact thing
           // this component exists to make impossible to ship quietly.
-          <span className="text-destructive">
-            No article is recorded for this figure in this book&apos;s tax parameters.
-          </span>
+          <span className="text-destructive">{t('cited.noArticle')}</span>
         )}
         {note && <> · {note}</>}
       </p>
@@ -73,9 +75,11 @@ export function CitedFigure({
           A caveat the reader has to scroll to is a caveat that did not happen. */}
       {!confirmed && (
         <p className="mt-1 text-[11.5px] text-foreground">
-          <span className="font-medium">Not confirmed by a fiduciary.</span>{' '}
-          {openQuestion ??
-            'This book’s parameters do not record that anybody has settled this one, so the figure is an estimate on an unsettled basis.'}
+          <span className="font-medium">{t('cited.notConfirmed')}</span>{' '}
+          {/* The server's own open question when it has one; ours otherwise.
+              `openQuestion` comes off the book's tax parameters and is a filed
+              sentence — not chrome, and not translated. */}
+          {openQuestion ?? t('cited.notConfirmedDefault')}
         </p>
       )}
     </div>

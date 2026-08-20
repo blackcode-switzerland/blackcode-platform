@@ -18,6 +18,7 @@
     "@blackcode/platform-agent": "*",
     "@blackcode/platform-auth": "*",
     "@blackcode/platform-db": "*",
+    "@blackcode/platform-i18n": "*",
     "@blackcode/platform-storage": "*",
     "@vercel/blob": "^0.23.4",
     "drizzle-orm": "^0.45.2",

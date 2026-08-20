@@ -7,6 +7,98 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-20 — the platform can speak French: `platform.users.locale`, `@blackcode/platform-i18n`, and `locale` on `/api/me`
+
+**Not breaking.** A new nullable column, a new field on an existing payload, and a
+new shared package. Nothing that worked before behaves differently, and no
+existing shape changed.
+
+**What prompted it.** b/books is a Swiss statutory bookkeeping product and it had
+static French on screen inside an English-only interface — *compte de résultat*,
+*bilan*, *trésorerie*. The answer is not to translate those away; it is a real
+language switch. But **the preference belongs to the person, not to one app**, so
+it lands on the shared identity row and in a shared package. b/books is the first
+app to use it; issues and sales inherit the column and the mechanism the day they
+want them.
+
+### `platform.users.locale` — migration `0048_users_locale`
+
+`varchar(5)`, **NULLABLE**, no default and no CHECK constraint.
+
+**Null means "never chosen", which is a different fact from "chose English"** —
+and today it is the true one for every row that predates the migration. That is
+deliberate and it is what makes the resolution order below non-vacuous: a
+`NOT NULL DEFAULT 'en'` backfill would have answered step one for every account
+that already exists, and the `Accept-Language` step would have been unreachable
+on the day it shipped. A French-speaking colleague opening the product for the
+first time would have been told English was their preference by a migration.
+
+No CHECK: the vocabulary lives in `packages/platform-i18n` and a third copy of it
+in the database would be the copy that needs a migration to change. `PATCH
+/api/me` refuses an unknown value and `parseLocale()` falls through on read, so a
+row holding `de` is a *degradation* — it reaches the reader's cookie — not a
+corruption.
+
+### `@blackcode/platform-i18n` — the ninth shared package
+
+**It holds the MECHANISM. Every string belongs to an app.** Books' words are not
+sales' words, and a shared dictionary is where two products' vocabularies
+collide — the same split `platform-email` draws between an app's identity and the
+shared templates.
+
+What it owns:
+
+| Thing | Where |
+|---|---|
+| The vocabulary — `Locale`, `LOCALES`, `DEFAULT_LOCALE`, `LOCALE_NAMES` | `src/locale.ts` |
+| The resolution order, written once | `src/locale.ts` → `resolveLocale` |
+| The dictionary type and the typed lookup | `src/dictionary.ts` |
+| Server reader (layouts, route handlers, email) | `src/server.ts` |
+| `<LocaleProvider>` and the client hooks | `src/client.tsx` |
+
+The order is **user record → cookie → `Accept-Language` → default**, and it is in
+the package precisely so two apps cannot disagree about it.
+`packages/platform-testing/test/locale-resolution.test.ts` pins each step
+separately.
+
+`Dictionary<K>` is `Record<Locale, Record<K, string>>`, so **a key present in
+English and missing in French is a `tsc` error**, not a blank on screen. That is
+the strong half of the guard; a text scan is the weak half and belongs in the
+app.
+
+`README.md` beside the package is the five-step adoption checklist for a second
+app.
+
+### `GET /api/me` serves `locale`; `PATCH /api/me` accepts it
+
+`GET` serves **the raw column**, not the resolved locale — including `null`.
+Serving the resolution would collapse "I chose English" and "nobody chose
+anything", and a settings page could then never show "follow my browser" as the
+state it is actually in.
+
+`PATCH` accepts `'en'`, `'fr'` or **`null`**. Null clears the preference and
+hands the reader back to `Accept-Language`; without it a choice made once could
+be changed but never undone. An unknown value is a 400 `invalid_locale` carrying
+the list and a suggestion.
+
+**How a client should adapt:** nothing is required. If you read `/api/me`, the
+payload has one more field; if you show a profile, `locale` is `'en' | 'fr' |
+null` and null is a real answer.
+
+### It is deliberately NOT settable from `bk`, and that is a decision
+
+`bk profile view --json` carries the field because the route serves it. There is
+**no `bk profile edit --locale`**, on purpose:
+
+- **`bk` is English and stays English.** An agent that set the locale would
+  change nothing it can observe — the binary prints the same words either way.
+- **It would change what its owner sees, in three web apps, silently**, from
+  something that cannot see the result and was not asked to.
+
+This is the repo's "a capability may live behind one front door provided somebody
+decided it" rule, exercised. If that answer is ever revisited it is one flag on
+`bk profile edit` and one line in `client.UpdateProfileRequest`.
+
 ## 2026-08-19 — b/books serves the account surface: forgot-password, change-password, API tokens, `bk login --server`
 
 **Not breaking. b/books gains five routes it did not serve; nothing changed for

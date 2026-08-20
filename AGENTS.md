@@ -24,8 +24,10 @@ published to npm as `@blackcode_sa/bc-issues`).
 Run every command from the **repo root**; Turborepo delegates into the workspace.
 
 **The platform migration is finished — all nine phases (0–8) have landed.**
-`packages/platform-{db,api,ui,auth,agent,storage,testing,email}` exist — eight,
-`platform-email` since 2026-08-11. The database is `platform.*` + `issues.*` +
+`packages/platform-{db,api,ui,auth,agent,storage,testing,email,i18n}` exist —
+nine, `platform-email` since 2026-08-11 and `platform-i18n` since 2026-08-20
+(the locale vocabulary, the one resolution order, the typed dictionary lookup —
+and **no product copy**; each app supplies its own strings). The database is `platform.*` + `issues.*` +
 `sales.*` (never `public`), one bounded role per app. Apps are real data
 (`platform.apps` is the address book). The CLI, guide, changelog, `bk meta` and
 docs are split per app; everything is addressable by URN; the blob STORE is

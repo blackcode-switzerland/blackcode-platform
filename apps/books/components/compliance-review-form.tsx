@@ -62,6 +62,8 @@
 // original survives a correction; a correction that corrects nothing puts a
 // fiduciary's name on a change they did not make.
 
+'use client'
+
 import { useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Lock } from 'lucide-react'
@@ -74,22 +76,14 @@ import {
   type ReviewChoice,
 } from '@/lib/compliance'
 import type { ComplianceRule } from '@/lib/types'
+import { useT } from '@/lib/i18n'
+import type { BooksKey } from '@/lib/dictionary'
 
-const CHOICE_COPY: Record<ReviewChoice, { label: string; what: string }> = {
-  approved: {
-    label: 'Approve',
-    what: 'The rule stands as written. Its check logic below is the wording that applies.',
-  },
-  edited: {
-    label: 'Edit',
-    what:
-      'The rule is right in substance and wrong in wording. Your correction is recorded beside the original, which is kept — a review replaces nothing.',
-  },
-  rejected: {
-    label: 'Reject',
-    what:
-      'The rule is wrong. It is kept rather than deleted, because a compliance verdict already filed may cite it forever, and marked so nothing relies on it.',
-  },
+/** Keys, not words — the same arrangement `lib/compliance.ts`'s faces use. */
+const CHOICE_COPY: Record<ReviewChoice, { labelKey: BooksKey; whatKey: BooksKey }> = {
+  approved: { labelKey: 'review.approve', whatKey: 'review.approveWhat' },
+  edited: { labelKey: 'review.edit', whatKey: 'review.editWhat' },
+  rejected: { labelKey: 'review.reject', whatKey: 'review.rejectWhat' },
 }
 
 export function ComplianceReviewForm({
@@ -101,6 +95,7 @@ export function ComplianceReviewForm({
   onReviewed: (row: ComplianceRule) => void
 }) {
   const canWrite = useCanWrite()
+  const t = useT()
   const review = useReviewComplianceRule(rule.rule_id)
   const queryClient = useQueryClient()
 
@@ -126,9 +121,7 @@ export function ComplianceReviewForm({
   // learned this on the resolve button.
   if (!canWrite) {
     return (
-      <p className="mt-2 text-[12px] text-muted-foreground">
-        This session cannot change records, so this rule cannot be signed off here.
-      </p>
+      <p className="mt-2 text-[12px] text-muted-foreground">{t('review.cannotWrite')}</p>
     )
   }
 
@@ -140,7 +133,7 @@ export function ComplianceReviewForm({
         data-review-open={rule.rule_id}
         className="mt-2 rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-foreground hover:border-primary"
       >
-        Review this rule
+        {t('review.open')}
       </button>
     )
   }
@@ -190,7 +183,7 @@ export function ComplianceReviewForm({
     >
       <fieldset disabled={confirming}>
         <legend className="text-[11.5px] font-medium uppercase tracking-wider text-muted-foreground">
-          Sign off {rule.rule_id}
+          {t('review.legend', { rule: rule.rule_id })}
         </legend>
 
         <div className="mt-1.5 space-y-1.5">
@@ -205,9 +198,9 @@ export function ComplianceReviewForm({
                 className="mt-0.5"
               />
               <span>
-                <span className="font-medium text-foreground">{CHOICE_COPY[c].label}</span>
+                <span className="font-medium text-foreground">{t(CHOICE_COPY[c].labelKey)}</span>
                 <span className="block text-[11.5px] text-muted-foreground">
-                  {CHOICE_COPY[c].what}
+                  {t(CHOICE_COPY[c].whatKey)}
                 </span>
               </span>
             </label>
@@ -220,7 +213,7 @@ export function ComplianceReviewForm({
               htmlFor={`edited-${rule.rule_id}`}
               className="block text-[11.5px] font-medium uppercase tracking-wider text-muted-foreground"
             >
-              The corrected wording
+              {t('review.correctedWording')}
             </label>
             <textarea
               id={`edited-${rule.rule_id}`}
@@ -230,11 +223,10 @@ export function ComplianceReviewForm({
               className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-[12px] text-foreground focus:border-primary focus:outline-none"
               // Empty on purpose. See the header: a prefilled box makes "edit"
               // the cheapest button on the screen.
-              placeholder="The check logic as it should read"
+              placeholder={t('review.correctedPlaceholder')}
             />
             <p className="mt-1 text-[11.5px] text-muted-foreground">
-              The original stays on the record beside this. Both are shown, so a reader can see what
-              was corrected — which is the point of an edit rather than a rewrite.
+              {t('review.correctedNote')}
             </p>
           </div>
         )}
@@ -244,14 +236,17 @@ export function ComplianceReviewForm({
             htmlFor={`note-${rule.rule_id}`}
             className="block text-[11.5px] font-medium uppercase tracking-wider text-muted-foreground"
           >
-            Note <span className="font-normal normal-case tracking-normal">(optional)</span>
+            {t('review.note')}{' '}
+            <span className="font-normal normal-case tracking-normal">
+              {t('resolve.optional')}
+            </span>
           </label>
           <input
             id={`note-${rule.rule_id}`}
             value={note}
             onChange={(e) => setNote(e.target.value)}
             className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1 text-[12.5px] text-foreground focus:border-primary focus:outline-none"
-            placeholder="Why, in one line"
+            placeholder={t('review.notePlaceholder')}
           />
         </div>
       </fieldset>
@@ -262,8 +257,7 @@ export function ComplianceReviewForm({
           route, and the route's own sentence is what appears. */}
       {wordingMissing && !confirming && (
         <p className="mt-2 text-[11.5px] text-muted-foreground">
-          An edit needs the corrected wording. Recording one without it is refused — an edit that
-          changes nothing is an approval under another name.
+          {t('review.wordingMissing')}
         </p>
       )}
 
@@ -275,38 +269,31 @@ export function ComplianceReviewForm({
             data-review-continue={rule.rule_id}
             className="rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-foreground hover:border-primary"
           >
-            Continue
+            {t('review.continue')}
           </button>
           <button
             type="button"
             onClick={cancel}
             className="px-1 text-[12px] text-muted-foreground hover:text-foreground"
           >
-            Cancel
+            {t('review.cancel')}
           </button>
         </div>
       ) : (
         <div className="mt-2.5 rounded-md border border-destructive/30 bg-destructive/5 p-2.5">
           <p className="flex items-start gap-1.5 text-[12.5px] font-medium text-foreground">
             <Lock size={13} className="mt-0.5 shrink-0" />
-            <span>This cannot be taken back.</span>
+            <span>{t('review.cannotTakeBack')}</span>
           </p>
           <ul className="mt-1.5 space-y-1 text-[12px] text-muted-foreground">
+            <li>{t('review.item1')}</li>
+            <li>{t('review.item2')}</li>
             <li>
-              The review is recorded against{' '}
-              <span className="text-foreground">your account and this moment</span>. There is no
-              un-review: a rule cannot be returned to draft, because that would erase the fact that
-              somebody looked.
-            </li>
-            <li>
-              The rule is <span className="text-foreground">never deleted</span>, whatever you
-              choose. A compliance verdict already filed may cite it forever.
-            </li>
-            <li>
-              Recording{' '}
-              <span className="font-mono text-foreground">{CHOICE_COPY[choice].label.toLowerCase()}</span>{' '}
-              on <span className="font-mono text-foreground">{rule.rule_id}</span> —{' '}
-              {rule.citation}.
+              {t('review.item3', {
+                choice: t(CHOICE_COPY[choice].labelKey).toLowerCase(),
+                rule: rule.rule_id,
+                citation: rule.citation,
+              })}
             </li>
           </ul>
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -317,14 +304,14 @@ export function ComplianceReviewForm({
               data-review-submit={rule.rule_id}
               className="rounded-md bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {review.pending ? 'Recording…' : 'Record the review'}
+              {review.pending ? t('review.recording') : t('review.record')}
             </button>
             <button
               type="button"
               onClick={() => setConfirming(false)}
               className="px-1 text-[12px] text-muted-foreground hover:text-foreground"
             >
-              Back
+              {t('review.back')}
             </button>
           </div>
         </div>
@@ -342,7 +329,7 @@ export function ComplianceReviewForm({
           <p className="text-[12.5px] text-foreground">{refusal.message}</p>
           <p className="mt-1 font-mono text-[11px] text-muted-foreground">{refusal.code}</p>
           <p className="mt-1 text-[11.5px] text-muted-foreground">
-            Nothing was recorded. The rule is exactly as it was.
+            {t('review.nothingRecorded')}
           </p>
         </div>
       )}
@@ -353,6 +340,7 @@ export function ComplianceReviewForm({
 /** What the screen says after a review landed. Kept beside the form for
  *  `<PostedNotice>`'s reason: the sentence is the point of the component. */
 export function ReviewedNotice({ row }: { row: ComplianceRule }) {
+  const t = useT()
   return (
     <p
       role="status"
@@ -360,10 +348,14 @@ export function ReviewedNotice({ row }: { row: ComplianceRule }) {
       data-state={row.review_state}
       className="mt-2 rounded-md border border-border bg-secondary/40 px-2.5 py-1.5 text-[12px] text-foreground"
     >
-      <span className="font-medium">Recorded.</span> {row.rule_id} is{' '}
-      {row.review_state}
-      {row.reviewed_by && <> · signed off by {row.reviewed_by}</>}. It stays on the register, and
-      there is no way to undo this.
+      <span className="font-medium">{t('review.recordedLead')}</span>{' '}
+      {t('review.recordedBody', {
+        rule: row.rule_id,
+        // The SERVER's state word, verbatim — `review_state` is a stored value
+        // and `bk books compliance` prints the same one.
+        state: row.review_state,
+        by: row.reviewed_by ? t('review.recordedBy', { name: row.reviewed_by }) : '',
+      })}
     </p>
   )
 }

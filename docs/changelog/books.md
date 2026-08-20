@@ -32,6 +32,85 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-20 — b/books is bilingual: EN / FR, the theme toggle moves, and both header pickers become keyboard-operable
+
+**Not breaking. No route changed and no payload changed.** This is the web
+surface: what it says, where two controls live, and how one of them is operated.
+The `bk` binary is unaffected and stays English.
+
+### The language switch — and what it does NOT change
+
+Every user-facing string in the app is translated. The switch is in **two
+places** — Settings → Preferences, and a quiet `EN` / `FR` in the sidebar — and
+both go through one hook, so they cannot disagree.
+
+**It is stored on your blackcode account, not in this browser.** It follows you
+to another machine and to b/issues and b/sales the day they support it. The
+theme, beside it on the same page, is the opposite — per browser — and the page
+says so, because that difference is what it exists to make clear. The mechanism,
+the column and the resolution order are in `platform.md`.
+
+**No flash.** The locale is on the session row, so the server resolves it before
+it renders a byte and the first paint is already right. `<html lang>` follows it,
+including when you switch without navigating.
+
+**Three things are deliberately untouched by it:**
+
+1. **The statutory LINE labels of the bilan and the compte de résultat.** Art.
+   959a and 959b fix that wording and the filed document reproduces it, so
+   `legal()` returns the French to a French reader and an English one alike. What
+   changed is that the English *gloss* beside each line is now rendered only for
+   an English reader — a French reader was being shown the same words twice.
+2. **Anything exported or filed.** There is no export yet. When there is, it is
+   French whatever the reader chose: the setting is about reading, not filing.
+   `lib/label.ts` carries that rule where an export would import it.
+3. **Server-sent vocabularies.** Recognition states, evidence tiers, source
+   statuses and the like arrive from `/api/meta` with their own labels. A second
+   language for those is a backend request, not a frontend one.
+
+### The statutory document names now follow the reader
+
+**Decision (Bala, 2026-08-20).** A statement's heading is in the reader's
+language, and the legal French name stays visible beneath it:
+
+- an English reader sees **Income statement**, with *compte de résultat* under it;
+- a French reader sees **Compte de résultat**, and nothing under it, because the
+  two are the same string.
+
+This inverts what shipped before — the French was the `h1` for everybody and the
+English was a small gloss — which was right for an English-only product with a
+statutory exception and wrong the moment a reader can say which language they
+read. Nobody loses the legal identity of the document, and nobody has to read a
+language they did not choose. It supersedes the old "English only, French only in
+statutory line labels" position; `booksFrontend/DECISIONS.md` D-A is rewritten
+rather than appended to.
+
+### The theme toggle moved into the sidebar
+
+It was top-right in the page header; it is now in the sidebar footer, in a row of
+icon controls under your name and email — **language · theme · settings · sign
+out** — which is where b/issues has always put it. Same arrangement, this app's
+own spacing and tokens.
+
+**Signing out asks first.** It was one click; it now goes through the same
+confirmation dialog b/issues uses. Two apps disagreeing about whether sign-out
+asks was a difference nobody had decided.
+
+### The book and year pickers are keyboard-operable
+
+Both header dropdowns were native `<select>` elements and are now
+`PropertySelect`, the shared picker. **A native `<select>` is accessible for
+free** and a custom one is a regression unless that is written back by hand, so:
+each picker declares what it CHANGES for a screen reader ("Book", "Fiscal year"),
+rather than announcing only the current value; the year picker uses the
+`noSearch` mode, in which the list itself takes focus on open — the half that
+makes it operable from the keyboard at all.
+
+Both were operated with the keyboard alone before this shipped, per picker.
+Nothing else about them changed: the year still renders as a plain label when
+there is only one, the `closed` chip survives, and a closed year still reads
+`2025 — closed` inside the list.
+
 ## 2026-08-20 — The monthly compte de résultat is on screen, and a closed year now says so
 
 **Web only. No route changed, no record changed, and no new write door.** Two

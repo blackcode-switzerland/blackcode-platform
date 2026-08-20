@@ -65,6 +65,7 @@ import { NoExerciceNotice, isNoExerciceRefusal } from '@/components/no-exercice-
 import { ErrorState, Loading } from '@/components/states'
 import { StatementHeading } from '@/components/statement-heading'
 import { PostedOnlyNote } from '@/components/posted-only-note'
+import { useT } from '@/lib/i18n'
 
 /** The URL parameter that chooses the reading. One spelling, used three times. */
 const VIEW_PARAM = 'view'
@@ -74,6 +75,7 @@ export default function Page() {
   const search = useSearchParams()
   const router = useRouter()
   const scope = useScope()
+  const t = useT()
   const base = `/dashboard/${params.ws}`
   const cr = useCompteResultat(params.ws, scope)
 
@@ -100,17 +102,17 @@ export default function Page() {
   }
 
   return (
-    <ScreenFrame title="Income statement">
+    <ScreenFrame title={t('statements.crUi')}>
       <StatementHeading
-        fr="Compte de résultat"
-        en="Income statement"
+        fr={t('statements.crLegal')}
+        en={t('statements.crUi')}
         // Not cited when the book has no such statement — see the balance
         // sheet, same reason. F4.
         // Cited only when the document actually exists. Heading a page
         // "art. 959b CO, par nature" above an explanation that this book has no such
         // statement contradicts itself in two lines — true for a simplified
         // book (F4) and equally for one whose exercice is not open yet.
-        article={cr.data ? 'art. 959b CO, par nature' : undefined}
+        article={cr.data ? t('statements.crArticle') : undefined}
         bookName={scope.record?.name}
         exercice={scope.exercice}
         exerciceStatus={scope.exerciceStatus}
@@ -126,13 +128,13 @@ export default function Page() {
           test: nothing here can fail. */}
       {cr.data && <PostedOnlyNote ws={params.ws} scope={scope} journal={scope.journal} />}
 
-      {cr.isLoading && <Loading rows={8} label="Loading the income statement" />}
+      {cr.isLoading && <Loading rows={8} label={t('statements.loadingCr')} />}
 
       {isSimplifiedRefusal(cr.error) && (
         <SimplifiedBookNotice
           error={cr.error}
-          statement="income statement"
-          because="there are no expense and revenue accounts to arrange into the art. 959b lines"
+          statement={t('statements.crUi').toLowerCase()}
+          because={t('statements.simplifiedBecauseCr')}
           base={base}
           scope={scope}
           bookName={scope.record?.name}
@@ -144,13 +146,13 @@ export default function Page() {
       {isNoExerciceRefusal(cr.error) && (
         <NoExerciceNotice
           error={cr.error}
-          statement="income statement"
+          statement={t('statements.crUi').toLowerCase()}
           bookName={scope.record?.name}
         />
       )}
 
       {cr.error && !isSimplifiedRefusal(cr.error) && !isNoExerciceRefusal(cr.error) && (
-        <ErrorState error={cr.error} title="The income statement could not be derived" />
+        <ErrorState error={cr.error} title={t('statements.crFailed')} />
       )}
 
       {cr.data && (
@@ -159,12 +161,16 @@ export default function Page() {
               header of this file. Two buttons rather than a `<select>`: there
               are two readings and both are worth naming on screen. */}
           {months && (
-            <div className="mb-3 flex items-center gap-1" role="group" aria-label="Reading">
+            <div
+              className="mb-3 flex items-center gap-1"
+              role="group"
+              aria-label={t('statements.reading')}
+            >
               <ViewButton active={!monthly} onClick={() => setView('year')}>
-                Year
+                {t('statements.viewYear')}
               </ViewButton>
               <ViewButton active={monthly} onClick={() => setView('month')}>
-                By month
+                {t('statements.viewMonth')}
               </ViewButton>
             </div>
           )}
@@ -173,17 +179,13 @@ export default function Page() {
             <MonthlyCrGrid cr={{ ...cr.data, months }} meta={scope.meta} />
           ) : (
             <>
-              <p className="mb-3 text-[12px] text-muted-foreground">
-                Each line lists the accounts feeding it. Follow one to see its postings in the
-                general ledger. Amounts are magnitudes — the sign of each line is fixed by the
-                article, and only the result at the foot is signed.
-              </p>
+              <p className="mb-3 text-[12px] text-muted-foreground">{t('statements.crLead')}</p>
 
               <StatementTable
                 groups={crGroups(cr.data, scope.meta)}
                 base={base}
                 scope={scope}
-                footer={{ label: "Résultat de l'exercice", amount: cr.data.resultat }}
+                footer={{ label: t('statements.resultat'), amount: cr.data.resultat }}
               />
             </>
           )}

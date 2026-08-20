@@ -12,6 +12,7 @@
 import { useState } from 'react'
 import { Terminal } from 'lucide-react'
 import { useAuthorizeCli } from '@/lib/account'
+import { useT } from '@/lib/i18n'
 
 export function CliAuthorizeForm({
   callback,
@@ -22,6 +23,7 @@ export function CliAuthorizeForm({
   state: string
   defaultName: string
 }) {
+  const t = useT()
   const [name, setName] = useState(defaultName)
   const [error, setError] = useState<string | null>(null)
   const authorize = useAuthorizeCli()
@@ -37,7 +39,7 @@ export function CliAuthorizeForm({
       // The route answered 200 with no callback URL. Saying so beats a button
       // that stops spinning and does nothing, which reads as the click not
       // having landed — and the terminal is meanwhile still waiting.
-      setError('The server authorized the request but returned no callback URL.')
+      setError(t('cli.noRedirect'))
       return
     }
     window.location.replace(done.data.redirect_url)
@@ -56,7 +58,7 @@ export function CliAuthorizeForm({
 
       <div>
         <label htmlFor="token-name" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-          Token name
+          {t('cli.tokenName')}
         </label>
         <input
           id="token-name"
@@ -69,7 +71,7 @@ export function CliAuthorizeForm({
           className="w-full rounded-md border border-input bg-card px-3 py-2 font-mono text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/25"
         />
         <p className="mt-1 text-xs text-muted-foreground">
-          You can revoke it later from Settings → API tokens, in any blackcode app.
+          {t('cli.revokeLater')}
         </p>
       </div>
 
@@ -81,13 +83,13 @@ export function CliAuthorizeForm({
           className="flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
         >
           <Terminal size={15} />
-          {authorize.pending ? 'Authorizing…' : 'Authorize'}
+          {authorize.pending ? t('cli.approving') : t('cli.approve')}
         </button>
         <a
           href="/dashboard"
           className="rounded-md bg-secondary px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
         >
-          Cancel
+          {t('cli.deny')}
         </a>
       </div>
     </div>

@@ -48,6 +48,7 @@ import { toast } from 'sonner'
 import { Eye, EyeOff, Loader2, Mail, ShieldCheck } from 'lucide-react'
 import { useConfirmPassword, useRequestPasswordCode } from '@/lib/account'
 import { inputClass } from '@/components/settings/section'
+import { useT } from '@/lib/i18n'
 
 interface Props {
   /** True in Settings (a session exists), false on the login page. */
@@ -65,6 +66,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const RESEND_SECONDS = 120
 
 export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel }: Props) {
+  const t = useT()
   const [step, setStep] = useState<Step>('request')
   const [email, setEmail] = useState(presetEmail ?? '')
   const [sentTo, setSentTo] = useState('')
@@ -107,7 +109,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
     e?.preventDefault()
     setError(null)
     if (!authenticated && !EMAIL_RE.test(email.trim())) {
-      setError('Enter a valid email address.')
+      setError(t('reset.badEmail'))
       return
     }
     // The logged-in route takes no body — it uses the session's own address, and
@@ -123,22 +125,22 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
     setSentTo(sent.data.email ?? email.trim())
     setStep('verify')
     startCooldown()
-    toast.success('Verification code sent')
+    toast.success(t('reset.codeSent'))
   }
 
   async function submitNewPassword(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     if (!/^\d{6}$/.test(otp.trim())) {
-      setError('Enter the 6-digit code from your email.')
+      setError(t('reset.badCode'))
       return
     }
     if (password.length < 8) {
-      setError('Password must be at least 8 characters.')
+      setError(t('reset.tooShort'))
       return
     }
     if (password !== confirm) {
-      setError('Passwords do not match.')
+      setError(t('reset.mismatch'))
       return
     }
     const done = await confirmReset.run({
@@ -150,7 +152,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
       setError(done.message)
       return
     }
-    toast.success('Password updated')
+    toast.success(t('reset.passwordUpdated'))
     onDone?.()
   }
 
@@ -158,9 +160,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
     return (
       <form onSubmit={sendCode} className="space-y-3">
         <p className="text-[13px] leading-relaxed text-muted-foreground">
-          {authenticated
-            ? 'We will email a 6-digit code to confirm it is you, then you can set a new password.'
-            : 'Enter your account email and we will send you a 6-digit code to reset your password.'}
+          {authenticated ? t('reset.askBodyAuthenticated2') : t('reset.askBody')}
         </p>
 
         {!authenticated ? (
@@ -169,7 +169,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
               htmlFor="reset-email"
               className="mb-1.5 block text-xs font-medium text-muted-foreground"
             >
-              Email
+              {t('login.email')}
             </label>
             <input
               id="reset-email"
@@ -178,13 +178,13 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@blackcode.ch"
+              placeholder={t('login.emailPlaceholder')}
               className={inputClass}
             />
           </div>
         ) : presetEmail ? (
           <p className="rounded-md border border-border bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">
-            The code goes to <strong className="text-foreground">{presetEmail}</strong>
+            {t('reset.codeGoesTo', { email: presetEmail })}
           </p>
         ) : null}
 
@@ -197,7 +197,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
               onClick={onCancel}
               className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent"
             >
-              Cancel
+              {t('reset.cancel')}
             </button>
           )}
           <button
@@ -206,7 +206,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
-            Send code
+            {t('reset.send')}
           </button>
         </div>
       </form>
@@ -216,13 +216,12 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
   return (
     <form onSubmit={submitNewPassword} className="space-y-3">
       <p className="text-[13px] leading-relaxed text-muted-foreground">
-        We sent a 6-digit code to <strong className="text-foreground">{sentTo || email}</strong>.
-        Enter it below with your new password.
+        {t('reset.sentBody', { email: sentTo || email })}
       </p>
 
       <div>
         <label htmlFor="reset-otp" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-          Verification code
+          {t('reset.verificationCode')}
         </label>
         <input
           id="reset-otp"
@@ -242,7 +241,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
           htmlFor="reset-password"
           className="mb-1.5 block text-xs font-medium text-muted-foreground"
         >
-          New password
+          {t('reset.newPassword')}
         </label>
         <div className="relative">
           <input
@@ -251,13 +250,13 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="new-password"
-            placeholder="At least 8 characters"
+            placeholder={t('login.passwordHint')}
             className={`${inputClass} pr-10`}
           />
           <button
             type="button"
             onClick={() => setShowPw((v) => !v)}
-            aria-label={showPw ? 'Hide password' : 'Show password'}
+            aria-label={showPw ? t('reset.hidePassword') : t('reset.showPassword')}
             tabIndex={-1}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors hover:bg-accent"
           >
@@ -271,7 +270,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
           htmlFor="reset-confirm"
           className="mb-1.5 block text-xs font-medium text-muted-foreground"
         >
-          Confirm new password
+          {t('reset.confirmNewPassword')}
         </label>
         <input
           id="reset-confirm"
@@ -279,7 +278,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
           autoComplete="new-password"
-          placeholder="Re-enter password"
+          placeholder={t('reset.reenter')}
           className={inputClass}
         />
       </div>
@@ -293,7 +292,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
           className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
         >
           {busy ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-          Set new password
+          {t('reset.setNewPassword')}
         </button>
         <button
           type="button"
@@ -301,7 +300,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
           disabled={busy || cooldown > 0}
           className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent disabled:opacity-50"
         >
-          {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
+          {cooldown > 0 ? t('reset.resendIn', { seconds: cooldown }) : t('reset.resend')}
         </button>
       </div>
 
@@ -315,7 +314,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
           }}
           className="text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
-          &larr; Use a different email
+          &larr; {t('reset.back')}
         </button>
       )}
     </form>

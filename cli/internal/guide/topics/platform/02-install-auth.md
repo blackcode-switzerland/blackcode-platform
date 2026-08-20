@@ -158,6 +158,22 @@ export BK_NO_PROMPT=1     # skip every "are you sure?" confirmation
 Confirmation is also skipped automatically when stdin is not a TTY, and
 per-command with `--yes` / `-y`.
 
+
+## Your interface language is a WEB preference, and `bk` will not set it
+
+`platform.users.locale` holds the language a person reads the web apps in, and it
+is one row for every blackcode app. `bk profile view --json` carries it; **there
+is no flag that changes it.**
+
+That is a decision rather than an omission. `bk` is English and stays English, so
+an agent that set the locale would change nothing it can observe — and it would
+silently change what its owner sees in every web app, from something with no
+screen. A person changes it in the web UI, at Settings → Preferences.
+
+The value is `en`, `fr`, or **null**, and null is a real answer: it means the
+person has never chosen, and the web apps then follow the browser's own
+`Accept-Language`. Do not read null as English.
+
 ## When auth fails
 
 - Exit code **3** means not authenticated (401, or no config at all).

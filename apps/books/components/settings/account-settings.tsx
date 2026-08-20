@@ -37,23 +37,25 @@ import { useState } from 'react'
 import { signOut } from 'next-auth/react'
 import { KeyRound, LogOut, ShieldAlert } from 'lucide-react'
 import { useMe } from '@/lib/hooks'
+import { useT } from '@/lib/i18n'
 import { PasswordResetFlow } from '@/components/password-reset-flow'
 import { ErrorState, Loading } from '@/components/states'
 import { Section } from './section'
 
 export function AccountSettings({ otherApps }: { otherApps: { name: string; url: string }[] }) {
   const me = useMe()
+  const t = useT()
   const [changing, setChanging] = useState(false)
 
-  if (me.isLoading) return <Loading rows={4} label="Loading your account" />
-  if (me.error) return <ErrorState error={me.error} title="Your account could not be loaded" />
+  if (me.isLoading) return <Loading rows={4} label={t('settings.profile.loading')} />
+  if (me.error) return <ErrorState error={me.error} title={t('settings.profile.loadError')} />
   if (!me.data) return null
 
   return (
     <div className="space-y-4">
       <Section
-        title="Signed in"
-        note="One account, one sign-in, every blackcode app. Signing out here signs you out everywhere."
+        title={t('settings.account.signedIn')}
+        note={t('settings.account.signedInNote')}
       >
         <p className="text-sm text-foreground">{me.data.email}</p>
         <button
@@ -62,13 +64,13 @@ export function AccountSettings({ otherApps }: { otherApps: { name: string; url:
           className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm transition-colors hover:bg-accent"
         >
           <LogOut size={15} />
-          Sign out
+          {t('chrome.signOut')}
         </button>
       </Section>
 
       <Section
-        title="Password"
-        note="One password for every blackcode app. Changing it here signs you out everywhere, including this session."
+        title={t('settings.account.password')}
+        note={t('settings.account.passwordNote')}
       >
         {changing ? (
           <PasswordResetFlow
@@ -88,8 +90,7 @@ export function AccountSettings({ otherApps }: { otherApps: { name: string; url:
           // does — but the honest thing to say first is where their sign-in
           // actually comes from.
           <p className="text-[13px] leading-relaxed text-muted-foreground">
-            You sign in with Google, so there is no blackcode password to change here. Google owns
-            that credential and it is changed in your Google account.
+            {t('settings.account.passwordViaGoogle')}
           </p>
         ) : (
           <button
@@ -98,42 +99,31 @@ export function AccountSettings({ otherApps }: { otherApps: { name: string; url:
             className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm transition-colors hover:bg-accent"
           >
             <KeyRound size={15} />
-            Change password
+            {t('settings.account.changePassword')}
           </button>
         )}
       </Section>
 
-      <Section title="Your b/books data">
+      <Section title={t('settings.account.dataTitle')}>
         <p className="text-[13px] leading-relaxed text-muted-foreground">
-          <span className="font-medium text-foreground">
-            This app cannot delete what it holds for you, and that is the law rather than a
-            limitation of the software.
-          </span>{' '}
-          Art. 958f CO requires the books and their supporting documents to be kept for ten years,
-          and the database refuses the delete rather than relying on anybody remembering. Other apps
-          offer to remove your data; this one is not able to, and what closing a blackcode account
-          means for accounting records has not been settled.
+          <span className="font-medium text-foreground">{t('settings.account.dataLead')}</span>{' '}
+          {t('settings.account.dataBody')}
         </p>
         <p className="flex items-start gap-2 rounded-md border border-border bg-secondary/50 px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
           <ShieldAlert size={15} className="mt-0.5 shrink-0 text-primary-strong" />
-          <span>
-            Ask before you close a blackcode account from another app, rather than closing it and
-            finding out what happened to the books afterwards.
-          </span>
+          <span>{t('settings.account.dataWarning')}</span>
         </p>
       </Section>
 
       <Section
-        title="Elsewhere in blackcode"
-        note="Your account is one row shared by every app. These are the other places it works."
+        title={t('settings.account.elsewhere')}
+        note={t('settings.account.elsewhereNote')}
       >
         {otherApps.length === 0 ? (
           // The address book is empty rather than "you have access to nothing" —
           // `platform.apps` is which apps EXIST, not which you can reach, and
           // saying otherwise would be a grant claim this deployment cannot make.
-          <p className="text-[13px] text-muted-foreground">
-            No other blackcode app is registered in this deployment&rsquo;s address book.
-          </p>
+          <p className="text-[13px] text-muted-foreground">{t('settings.account.noOtherApps')}</p>
         ) : (
           <ul className="space-y-1.5 text-[13px]">
             {otherApps.map((a) => (
@@ -151,8 +141,7 @@ export function AccountSettings({ otherApps }: { otherApps: { name: string; url:
           </ul>
         )}
         <p className="text-[13px] leading-relaxed text-muted-foreground">
-          Users, error events and the drift reconcilers are platform-wide — the same rows whichever
-          app you ask. b/books has no administration screens of its own and will not grow any.
+          {t('settings.account.platformWide')}
         </p>
       </Section>
     </div>

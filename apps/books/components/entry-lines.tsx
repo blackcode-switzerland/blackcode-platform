@@ -22,7 +22,10 @@
 // "unmapped" rather than as an em dash. It is the thing Recognition exists to
 // resolve, and an em dash would hide it.
 
+'use client'
+
 import { AccountRef, type AccountRefScope } from './account-ref'
+import { useT } from '@/lib/i18n'
 import { Money } from './money'
 import type { EntryLine } from '@/lib/types'
 
@@ -38,10 +41,11 @@ export function EntryLines({
   scope: AccountRefScope
   detailed?: boolean
 }) {
+  const t = useT()
   if (!lines || lines.length === 0) {
     // An entry with no lines is not a thing the schema should permit, so this is
     // reported rather than rendered as blank space.
-    return <p className="text-[11.5px] italic text-muted-foreground">This entry has no lines.</p>
+    return <p className="text-[11.5px] italic text-muted-foreground">{t('entry.noLines')}</p>
   }
 
   if (!detailed) {
@@ -66,13 +70,13 @@ export function EntryLines({
       <thead>
         <tr className="border-b border-border">
           <th scope="col" className="px-0 py-1.5 text-left text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Account
+            {t('entry.colAccount')}
           </th>
           <th scope="col" className="px-3 py-1.5 text-right text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Débit
+            {t('entry.debit')}
           </th>
           <th scope="col" className="px-0 py-1.5 text-right text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Crédit
+            {t('entry.credit')}
           </th>
         </tr>
       </thead>

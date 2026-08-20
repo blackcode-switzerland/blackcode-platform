@@ -47,7 +47,10 @@
 // describe a distinction that book does not have. Same rule the management view
 // follows for its own disclosure.
 
+'use client'
+
 import type { BookToday } from '@/lib/analysis'
+import { useT } from '@/lib/i18n'
 import type { Journal } from '@/lib/journal'
 import { date as formatDate } from '@/lib/format'
 
@@ -68,21 +71,15 @@ export function BookTodayNotice({
   journal: Journal | null
   loading: boolean
 }) {
+  const t = useT()
   return (
     <section className="rounded-lg border border-border bg-secondary px-3.5 py-3" data-book-today>
-      <h2 className="text-[12.5px] font-medium text-foreground">
-        Nothing above was recalculated.
-      </h2>
-      <p className="mt-1 text-[12px] text-muted-foreground">
-        Every figure on this page is the text the agent filed with its answer. This app does not
-        recompute one and cannot: a filed value is prose with numbers in it, and nothing on the
-        record says which figure this app serves it came from. A fresh answer means asking the
-        agent again, outside this app — the record stands either way.
-      </p>
+      <h2 className="text-[12.5px] font-medium text-foreground">{t('today.title')}</h2>
+      <p className="mt-1 text-[12px] text-muted-foreground">{t('today.body')}</p>
 
       {loading && (
         <p className="mt-2 text-[12px] text-muted-foreground" role="status">
-          Checking what the book holds today…
+          {t('today.checking')}
         </p>
       )}
 
@@ -93,11 +90,8 @@ export function BookTodayNotice({
           presence, so it is reported as an absence of evidence. */}
       {!loading && (today === null || today.examined === 0) && (
         <p className="mt-2 text-[12px] text-muted-foreground">
-          <span className="font-medium text-foreground">
-            This screen could not look at the book.
-          </span>{' '}
-          No entries were served for {exercice ?? 'the selected year'}, so nothing was compared —
-          which is not the same as nothing having changed.
+          <span className="font-medium text-foreground">{t('today.couldNotLookLead')}</span>{' '}
+          {t('today.couldNotLookBody', { year: exercice ?? t('today.selectedYear') })}
         </p>
       )}
 
@@ -112,38 +106,34 @@ export function BookTodayNotice({
                 beneath a blackcode record, with nothing saying they were about
                 different books. The page knows they differ; this paragraph did
                 not say so. Found by the phase-5 review. */}
-            What it can check is <span className="text-foreground">{book ?? 'the selected book'}</span>.
-            Of the <span className="text-foreground">{today.examined}</span>{' '}
-            {today.examined === 1 ? 'entry' : 'entries'} it serves for{' '}
-            <span className="text-foreground">{exercice ?? 'this year'}</span>:
+            {t(
+              today.examined === 1 ? 'today.whatItCanCheckOne' : 'today.whatItCanCheckMany',
+              {
+                book: book ?? t('today.theSelectedBook'),
+                n: today.examined,
+                year: exercice ?? t('today.thisYear'),
+              }
+            )}
           </p>
           <ul className="mt-1.5 space-y-1 text-[12px] text-muted-foreground">
             <li data-check="dated-on-or-after">
-              <span className="font-medium text-foreground">{today.datedOnOrAfter}</span>{' '}
-              {today.datedOnOrAfter === 1 ? 'is' : 'are'} dated on or after{' '}
-              <span className="text-foreground">{formatDate(asked)}</span>, the day this answer was
-              filed.
+              {t(today.datedOnOrAfter === 1 ? 'today.datedOne' : 'today.datedMany', {
+                n: today.datedOnOrAfter,
+                date: formatDate(asked),
+              })}
             </li>
             {/* POSITIVE, and only for the journal that has the concept. */}
             {journal === 'grand_livre' && (
               <li data-check="staged">
-                <span className="font-medium text-foreground">{today.staged}</span>{' '}
-                {today.staged === 1 ? 'is' : 'are'} staged — recorded, and counting in nothing. The
-                balance sheet, the income statement and every derived figure exclude them.
+                {t(today.staged === 1 ? 'today.stagedOne' : 'today.stagedMany', {
+                  n: today.staged,
+                })}
               </li>
             )}
           </ul>
           <p className="mt-2 text-[11.5px] text-muted-foreground">
-            Neither line is a recomputation of anything above, and neither is a verdict on this
-            answer. A booking date is when the money moved rather than when the row was written, so
-            an entry back-dated into an earlier month is invisible to the first one.
-            {journal === 'recettes_depenses' && (
-              <>
-                {' '}
-                This book keeps recettes-dépenses, which has no posting status, so there is no
-                staged count to give.
-              </>
-            )}
+            {t('today.caveat')}
+            {journal === 'recettes_depenses' && <> {t('today.riNoStaged')}</>}
           </p>
         </>
       )}

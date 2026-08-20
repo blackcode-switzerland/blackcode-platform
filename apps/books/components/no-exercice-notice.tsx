@@ -27,6 +27,7 @@
 
 import { CalendarPlus } from 'lucide-react'
 import type { ApiRequestError } from '@/lib/client'
+import { useT } from '@/lib/i18n'
 
 export function NoExerciceNotice({
   error,
@@ -38,22 +39,21 @@ export function NoExerciceNotice({
   statement: string
   bookName: string | undefined
 }) {
+  const t = useT()
   return (
     <section className="rounded-lg border border-border bg-secondary px-4 py-4" aria-live="polite">
       <div className="flex items-start gap-2.5">
         <CalendarPlus size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
         <div className="min-w-0">
           <h2 className="text-sm font-medium text-foreground">
-            {bookName ?? 'This book'} has no fiscal year open yet.
+            {t('noExercice.title', { book: bookName ?? t('noExercice.thisBook') })}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            There is nothing to derive, so there is no {statement} to show. A book gets its
-            chart of accounts when it is created; opening an exercice is a second step, and
-            every book starts here.
+            {t('noExercice.body', { statement })}
           </p>
           {error.suggestion && (
             <p className="mt-3 border-t border-border pt-2 text-[12px] text-muted-foreground">
-              From the terminal: {error.suggestion}
+              {t('noExercice.fromTerminal', { suggestion: error.suggestion })}
             </p>
           )}
         </div>

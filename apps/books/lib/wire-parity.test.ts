@@ -2661,4 +2661,92 @@ const _scalars: _Scalars = [
   true, true, true, true, true, true, true, true, true, true, true, true, true,
   true, true, true, true,
 ]
+// ---------------------------------------------------------------------------
+// /api/me — THE ONE ROUTE WHOSE SHAPE LIVES IN A PACKAGE
+// ---------------------------------------------------------------------------
+// `app/api/me/route.ts` is four lines that re-export `meRoute(appContext)`, so
+// every other case in this file — which walks a `NextResponse.json(` literal in
+// `app/api/**` — is structurally blind to it. The literal is in
+// `packages/platform-api/src/routes/me.ts`, shared by three apps.
+//
+// That is exactly why it needs pinning HERE and not only there. `locale` landed
+// on 2026-08-20 for b/books' language switch; a rename or a removal in the
+// package is a change made for one app that silently reaches all three, and
+// this app's settings page reads the field to decide whether "Follow my
+// browser" is the current state. `MeRow` would keep compiling — it describes
+// what this app expects, not what the package sends.
+describe('/api/me — the shared factory, read where it actually lives', () => {
+  const ME_ROUTE = join(
+    APP_ROOT,
+    '..',
+    '..',
+    'packages',
+    'platform-api',
+    'src',
+    'routes',
+    'me.ts'
+  )
+
+  it('the package route is where this test thinks it is', () => {
+    // The input assertion. A moved file would make every case below walk an
+    // empty string and pass, which is the shape of half of CLAUDE.md's table.
+    expect(existsSync(ME_ROUTE), `${ME_ROUTE} is not there — this case is stale`).toBe(true)
+  })
+
+  /**
+   * The GET handler's response literal.
+   *
+   * NOT `envelopeKeys`. That reader takes the LAST `NextResponse.json(` after
+   * its anchor and bounds itself on `export const `, and this file has four
+   * handlers declared as plain `const` inside factory functions — so an
+   * unanchored read walked `pendingInvitationsRoute`'s `{ data }` and the case
+   * failed naming a key nobody had touched. Anchored, and FIRST rather than
+   * last, because `GET` has exactly one response and every later one belongs to
+   * a different handler.
+   */
+  function getResponseKeys(src: string): string[] {
+    const anchor = src.indexOf('const GET = apiHandler(')
+    if (anchor < 0) throw new Error('GET /api/me: the handler is not declared as this expects')
+    const call = src.indexOf('NextResponse.json(', anchor)
+    if (call < 0) throw new Error('GET /api/me: no NextResponse.json( — this case is stale')
+    return keysOfObjectAt(src, src.indexOf('{', call))
+  }
+
+  it('GET /api/me serves `locale`, and serves the COLUMN rather than the resolution', () => {
+    const src = readFileSync(ME_ROUTE, 'utf8')
+    const served = getResponseKeys(src)
+    // The input assertion: a reader that walked the wrong literal would report
+    // a confident, wrong absence.
+    expect(served, 'the GET response reader found the wrong object').toContain('email')
+    expect(
+      served,
+      'GET /api/me no longer serves `locale`. The settings page reads it to tell "I chose ' +
+        'English" from "nobody chose anything" — without it, "Follow my browser" can never be ' +
+        'shown as the current state and the nullable column has no way back.'
+    ).toContain('locale')
+    // `parseLocale(fresh.locale)`, never `resolveLocale(...)`. Serving the
+    // RESOLVED locale would make the column unreadable from the client and is
+    // the one wrong way to implement this field.
+    expect(
+      /locale:\s*parseLocale\(/.test(src),
+      'GET /api/me must serve the raw column through parseLocale, not a resolved locale'
+    ).toBe(true)
+    expect(
+      /locale:\s*resolveLocale\(/.test(src),
+      'GET /api/me is serving a RESOLVED locale. That collapses "chose English" and "never ' +
+        'chose", which is the distinction the nullable column exists for.'
+    ).toBe(false)
+  })
+
+  it('PATCH /api/me accepts `locale`, including null', () => {
+    const src = readFileSync(ME_ROUTE, 'utf8')
+    expect(/'locale' in body/.test(src), 'PATCH /api/me no longer reads `locale`').toBe(true)
+    expect(
+      /body\.locale === null/.test(src),
+      'PATCH /api/me must accept `null` — it is how a reader undoes a choice rather than ' +
+        'making a different one.'
+    ).toBe(true)
+  })
+})
+
 void [_keys, _scalars]

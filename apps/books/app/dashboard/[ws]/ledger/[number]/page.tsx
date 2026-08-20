@@ -40,7 +40,9 @@ import { ArrowLeft } from 'lucide-react'
 import { useScope } from '@/lib/scope'
 import { useEntry } from '@/lib/hooks'
 import { scopedHref } from '@/lib/nav'
-import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useLocale, useT } from '@/lib/i18n'
+import { JOURNAL_NAME } from '@/lib/journal'
 import { percent } from '@/lib/format'
 import { ScreenFrame } from '@/components/screen-frame'
 import { ErrorState, Loading } from '@/components/states'
@@ -58,6 +60,9 @@ import type { PostResult } from '@/lib/mutations'
 export default function Page() {
   const params = useParams<{ ws: string; number: string }>()
   const scope = useScope()
+  const t = useT()
+  const locale = useLocale()
+  const label = useLabel()
   const base = `/dashboard/${params.ws}`
 
   // `Number('abc')` is NaN and `Number('')` is 0; neither is an entry number.
@@ -79,7 +84,7 @@ export default function Page() {
   const [posted, setPosted] = useState<PostResult | null>(null)
 
   return (
-    <ScreenFrame title="Transaction">
+    <ScreenFrame title={t('entry.transaction')}>
       <Link
         href={scopedHref(base, '/ledger', scope)}
         className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground hover:text-foreground"
@@ -87,24 +92,25 @@ export default function Page() {
         <ArrowLeft size={13} />
         {/* Names the journal it goes back to, not the one this app has more of.
             "Grand livre" over a simplified book is the same mislabel the ledger's
-            own header carried until 2026-08-19. */}
-        {scope.journal === 'recettes_depenses' ? 'Recettes et dépenses' : 'Grand livre'}
+            own header carried until 2026-08-19. Read from `JOURNAL_NAME` rather
+            than spelled here, so a third journal cannot be labelled by whichever
+            of the two this ternary happened to fall through to. */}
+        {locale === 'fr'
+          ? JOURNAL_NAME[scope.journal ?? 'grand_livre'].fr
+          : JOURNAL_NAME[scope.journal ?? 'grand_livre'].en}
       </Link>
 
       {number === null && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3.5" role="alert">
           <p className="text-sm font-medium text-foreground">
-            <span className="font-mono">{params.number}</span> is not an entry number.
+            {t('entry.notANumber', { value: params.number })}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            An entry is addressed by its #number — a positive integer. The general ledger lists
-            them.
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{t('entry.notANumberBody')}</p>
         </div>
       )}
 
-      {entry.isLoading && <Loading rows={6} label="Loading the entry" />}
-      {entry.error && <ErrorState error={entry.error} title="This entry could not be loaded" />}
+      {entry.isLoading && <Loading rows={6} label={t('entry.loading')} />}
+      {entry.error && <ErrorState error={entry.error} title={t('entry.failed')} />}
 
       {/* ── A SIMPLIFIED BOOK'S MOVEMENT IS NOT AN ÉCRITURE ──────────────────
           This screen reads eight fields no RI row has — `entry_no`, `lines`,
@@ -124,18 +130,16 @@ export default function Page() {
       {entry.data && scope.journal === 'recettes_depenses' && (
         <section className="rounded-lg border border-border bg-secondary px-4 py-4" aria-live="polite">
           <h2 className="text-sm font-medium text-foreground">
-            {scope.record?.name ?? 'This book'} keeps no écritures.
+            {t('entry.riNoEcritures', { book: scope.record?.name ?? t('noExercice.thisBook') })}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Movement #{number} is a recette or a dépense under art. 957 al. 2 CO — one amount and a
-            direction, with no debit, no credit and no posting step. There is no detail screen for
-            one yet; the journal shows every field it has.
+            {t('entry.riNoEcrituresBody', { n: number ?? '—' })}
           </p>
           <Link
             href={scopedHref(base, '/ledger', scope)}
             className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary-strong hover:underline"
           >
-            Back to receipts and expenses
+            {t('entry.backToRi')}
           </Link>
         </section>
       )}
@@ -185,9 +189,7 @@ export default function Page() {
               {entry.data.counterparty && <> · {entry.data.counterparty}</>}
             </p>
             <p className="mt-1 text-[11.5px] text-muted-foreground">
-              An entry is addressed by its workspace #number, so the book and fiscal year
-              selectors above do not filter this screen and it does not name a book — this
-              record does not carry one.
+              {t('entry.notScoped')}
             </p>
           </header>
 
@@ -204,7 +206,7 @@ export default function Page() {
               the write below it, and a reader has to meet the reason before the
               button. */}
           <section className="mt-4">
-            <H2>Compliance</H2>
+            <H2>{t('entry.compliance')}</H2>
             <div className="mt-1.5">
               <VerdictPanel verdict={entry.data.verdict} base={base} scope={scope} />
             </div>
@@ -221,11 +223,8 @@ export default function Page() {
               nobody wrote, on the one write that cannot be undone. */}
           {entry.data.status === 'staged' && (
             <section className="mt-4">
-              <H2>Posting</H2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                This entry is staged. It is recorded and it counts in nothing: the balance sheet
-                and the income statement both derive from posted entries only.
-              </p>
+              <H2>{t('entry.posting')}</H2>
+              <p className="mt-1 text-sm text-muted-foreground">{t('entry.stagedNote')}</p>
               {/* ── THE FORM IS STILL OFFERED ON A BLOCKED ENTRY ─────────
                   The refusal is the SERVER'S — `postEntry` raises
                   `verdict_blocked` with the pass's own `resolves` text as the
@@ -237,9 +236,7 @@ export default function Page() {
                   actually refuses. */}
               {blocksPosting(entry.data.verdict) && (
                 <p className="mt-1.5 text-[12px] text-muted-foreground">
-                  A compliance pass has blocked this entry, so posting it will be refused. The
-                  refusal is the server&apos;s and it carries the pass&apos;s own way out — the
-                  panel above has it too.
+                  {t('entry.blockedNote')}
                 </p>
               )}
               {posted ? (
@@ -254,31 +251,28 @@ export default function Page() {
               as `posted` — because `already` lives only in the response. */}
           {entry.data.status === 'posted' && posted && (
             <section className="mt-4">
-              <H2>Posting</H2>
+              <H2>{t('entry.posting')}</H2>
               <PostedNotice result={posted} />
             </section>
           )}
 
           {entry.data.explanation ? (
             <section className="mt-4">
-              <H2>What this is</H2>
-              <p className="mt-1 text-sm text-foreground">{en(entry.data.explanation)}</p>
+              <H2>{t('entry.whatThisIs')}</H2>
+              <p className="mt-1 text-sm text-foreground">{label(entry.data.explanation)}</p>
             </section>
           ) : (
             <section className="mt-4">
-              <H2>What this is</H2>
+              <H2>{t('entry.whatThisIs')}</H2>
               {/* Not an em dash. An entry nobody has explained is the product's
                   central object of work, and saying so is more useful than a
                   blank that reads as a rendering gap. */}
-              <p className="mt-1 text-sm text-muted-foreground">
-                Nobody has said yet what this entry means. That is what the Recognition screen is
-                for.
-              </p>
+              <p className="mt-1 text-sm text-muted-foreground">{t('entry.nobodySaid')}</p>
             </section>
           )}
 
           <section className="mt-5">
-            <H2>The écriture</H2>
+            <H2>{t('entry.ecriture')}</H2>
             <div className="mt-1.5">
               <EntryLines lines={entry.data.lines} base={base} scope={scope} detailed />
             </div>
@@ -302,113 +296,121 @@ export default function Page() {
               into `books.entry` #4 by hand and opening the page. */}
           {entry.data.fx && (entry.data.fx.original || entry.data.fx.rate || entry.data.fx.source) && (
             <section className="mt-5">
-              <H2>Original currency</H2>
+              <H2>{t('entry.originalCurrency')}</H2>
               <dl className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3">
-                {entry.data.fx.original && <Fact label="Original amount" value={entry.data.fx.original} />}
-                {entry.data.fx.rate && <Fact label="Rate" value={entry.data.fx.rate} />}
-                {entry.data.fx.source && <Fact label="Rate source" value={entry.data.fx.source} />}
+                {entry.data.fx.original && (
+                  <Fact label={t('entry.originalAmount')} value={entry.data.fx.original} />
+                )}
+                {entry.data.fx.rate && <Fact label={t('entry.rate')} value={entry.data.fx.rate} />}
+                {entry.data.fx.source && (
+                  <Fact label={t('entry.rateSource')} value={entry.data.fx.source} />
+                )}
               </dl>
               <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-                Recorded as the issuer stated it. The écriture above is in CHF and is what the
-                books hold; nothing here is used to derive a figure.
+                {t('entry.fxNote')}
               </p>
             </section>
           )}
 
           <section className="mt-5">
-            <H2>VAT</H2>
+            <H2>{t('entry.vat')}</H2>
             {/* `tva` is ALWAYS an object on the wire; its FIELDS are what can be
                 null. A `rate` of null means no rate was recorded and renders an
                 em dash, which is not the same claim as 0%. */}
             <dl className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-4">
-              <Fact label="Rate" value={percent(entry.data.tva.rate)} />
+              <Fact label={t('entry.rate')} value={percent(entry.data.tva.rate)} />
               <div>
-                <Dt>Amount</Dt>
+                <Dt>{t('entry.amount')}</Dt>
                 <dd className="num text-foreground">
                   <Money value={entry.data.tva.amount} bare />
                 </dd>
               </div>
               <Fact
-                label="Input claimed"
-                value={entry.data.tva.input_claimed ? 'Yes' : 'No'}
+                label={t('entry.inputClaimed')}
+                value={entry.data.tva.input_claimed ? t('entry.yes') : t('entry.no')}
               />
             </dl>
             {entry.data.tva.note && (
-              <p className="mt-1.5 text-[12px] text-muted-foreground">{en(entry.data.tva.note)}</p>
+              <p className="mt-1.5 text-[12px] text-muted-foreground">
+                {label(entry.data.tva.note)}
+              </p>
             )}
             <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-              Independent of the evidence tier, always. A bank record can support a profit-tax
-              deduction (LIFD art. 58) and never an input VAT claim (LTVA art. 26).
+              {t('entry.vatNote')}
             </p>
           </section>
 
           <section className="mt-5">
-            <H2>Supporting document</H2>
+            <H2>{t('entry.supportingDocument')}</H2>
             <div className="mt-1.5">
               <DriveLink piece={entry.data.piece} withCaptured />
             </div>
             {entry.data.evidence_note && (
               <p className="mt-1.5 text-[12px] text-muted-foreground">
-                {en(entry.data.evidence_note)}
+                {label(entry.data.evidence_note)}
               </p>
             )}
           </section>
 
           {entry.data.related_party && (
             <section className="mt-5">
-              <H2>Related party — art. 959a al. 4 CO</H2>
+              <H2>{t('entry.relatedParty')}</H2>
               <dl className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3">
-                <Fact label="Counterpart" value={entry.data.related_party.counterpart} />
-                <Fact label="Kind" value={entry.data.related_party.kind} />
+                <Fact label={t('entry.counterpart')} value={entry.data.related_party.counterpart} />
+                <Fact label={t('entry.kind')} value={entry.data.related_party.kind} />
                 <Fact
-                  label="Mirror entry"
+                  label={t('entry.mirrorEntry')}
                   // A serial id, not a #number — the field name says so and this
                   // app has no route that resolves one. Shown, never linked.
                   value={
                     entry.data.related_party.mirror_entry_id === null
-                      ? 'Not recorded'
-                      : `id ${entry.data.related_party.mirror_entry_id}`
+                      ? t('entry.notRecorded')
+                      : t('entry.idValue', { id: entry.data.related_party.mirror_entry_id })
                   }
                 />
               </dl>
               {entry.data.related_party.justification ? (
                 <p className="mt-1.5 text-[12px] text-foreground">
-                  {en(entry.data.related_party.justification)}
+                  {label(entry.data.related_party.justification)}
                 </p>
               ) : (
                 <p className="mt-1.5 text-[12px] text-destructive">
-                  No arm&apos;s-length justification is recorded. That absence is the audit risk.
+                  {t('entry.noJustification')}
                 </p>
               )}
             </section>
           )}
 
           <section className="mt-5 border-t border-border pt-3">
-            <H2>Provenance</H2>
+            <H2>{t('entry.provenance')}</H2>
             <dl className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-4">
               <Fact
-                label="Journal n°"
+                label={t('entry.journalNo')}
                 // NOT NULL on the wire — every entry has one, staged included.
                 value={String(entry.data.entry_no)}
               />
               <Fact
-                label="Source"
-                value={entry.data.source_id === null ? 'Not recorded' : `id ${entry.data.source_id}`}
-              />
-              <Fact
-                label="Matched rule"
+                label={t('entry.source')}
                 value={
-                  entry.data.matched_rule_id === null
-                    ? 'None'
-                    : `id ${entry.data.matched_rule_id}`
+                  entry.data.source_id === null
+                    ? t('entry.notRecorded')
+                    : t('entry.idValue', { id: entry.data.source_id })
                 }
               />
               <Fact
-                label="Reverses"
+                label={t('entry.matchedRule')}
+                value={
+                  entry.data.matched_rule_id === null
+                    ? t('entry.none')
+                    : t('entry.idValue', { id: entry.data.matched_rule_id })
+                }
+              />
+              <Fact
+                label={t('entry.reverses')}
                 value={
                   entry.data.reverses_entry_id === null
-                    ? 'Nothing'
-                    : `id ${entry.data.reverses_entry_id}`
+                    ? t('entry.nothing')
+                    : t('entry.idValue', { id: entry.data.reverses_entry_id })
                 }
               />
             </dl>
@@ -424,15 +426,13 @@ export default function Page() {
             {hasHistory(entry.data.history) && (
               <div className="mt-1.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  History
+                  {t('entry.history')}
                 </p>
                 <HistoryTrail history={entry.data.history} />
               </div>
             )}
             <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-              Source, rule, mirror and reversal are internal ids and are not addressable from this
-              app. The journal n° is the statutory one, gapless within the book and the year — it is
-              not the #number in the header, and the two are not interchangeable.
+              {t('entry.provenanceNote')}
             </p>
           </section>
         </article>

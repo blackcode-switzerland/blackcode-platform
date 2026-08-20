@@ -30,13 +30,14 @@
 
 import Link from 'next/link'
 import { ArrowRight, Scale } from 'lucide-react'
+import { useT } from '@/lib/i18n'
 import { scopedHref } from '@/lib/nav'
 import type { ApiRequestError } from '@/lib/client'
 
 export function SimplifiedBookNotice({
   /** The refusal itself. Its `message` names the book and cites the article. */
   error,
-  /** What was asked for, for the heading: `balance sheet`, `income statement`. */
+  /** What was asked for, ALREADY TRANSLATED by the caller — see `because`. */
   statement,
   /**
    * Why THAT statement in particular does not exist for a simplified book.
@@ -47,6 +48,10 @@ export function SimplifiedBookNotice({
    * by citing the balance sheet's article. Found by opening the page, not by
    * review: the component was shared correctly and the shared copy was only
    * true of one of the two.
+   *
+   * Passed already translated (`t('statements.simplifiedBecauseBilan')`) rather
+   * than as a key, so the caller keeps naming its own document — which is the
+   * whole point of the prop.
    */
   because,
   /** `/dashboard/{ws}` — for the link to patrimoine. */
@@ -62,35 +67,37 @@ export function SimplifiedBookNotice({
   scope: { entity: string | null; exercice: number | null }
   bookName: string | undefined
 }) {
+  const t = useT()
   return (
     <section className="rounded-lg border border-border bg-secondary px-4 py-4" aria-live="polite">
       <div className="flex items-start gap-2.5">
         <Scale size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
         <div className="min-w-0">
           <h2 className="text-sm font-medium text-foreground">
-            {bookName ?? 'This book'} has no {statement}, and that is correct.
+            {t('statements.simplifiedTitle', {
+              book: bookName ?? t('noExercice.thisBook'),
+              statement,
+            })}
           </h2>
           {/* The server's own sentence. It names the book and the article, so
               repeating it in our words would be a second wording of one legal
               fact — and the one that goes stale would be ours. */}
           <p className="mt-1 text-sm text-muted-foreground">{error.message}</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Simplified bookkeeping is income and expenditure plus a statement of net worth. There
-            is no double entry behind it, so {because} — the second half of what the law asks for
-            is the patrimoine statement.
+            {t('statements.simplifiedBody', { because })}
           </p>
 
           <Link
             href={scopedHref(base, '/patrimoine', scope)}
             className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary-strong hover:underline"
           >
-            Open the patrimoine statement
+            {t('statements.openPatrimoine')}
             <ArrowRight size={14} />
           </Link>
 
           {error.suggestion && (
             <p className="mt-3 border-t border-border pt-2 text-[12px] text-muted-foreground">
-              From the terminal: {error.suggestion}
+              {t('statements.fromTerminal', { suggestion: error.suggestion })}
             </p>
           )}
           {/* `no_bilan_for_simplified` used to print here. It is the machine

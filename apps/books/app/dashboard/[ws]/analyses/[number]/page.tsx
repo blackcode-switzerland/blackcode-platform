@@ -56,10 +56,12 @@ import { ErrorState, Loading } from '@/components/states'
 import { DateText } from '@/components/date-text'
 import { FiguresTable, NoSnapshotNotice } from '@/components/analysis-figures'
 import { BookTodayNotice } from '@/components/book-today-notice'
+import { useT } from '@/lib/i18n'
 
 export default function Page() {
   const params = useParams<{ ws: string; number: string }>()
   const scope = useScope()
+  const t = useT()
   const base = `/dashboard/${params.ws}`
 
   // `Number()` and an integer test, like the entry screen: `/analyses/abc` must
@@ -95,13 +97,13 @@ export default function Page() {
   const today = record && rows ? bookToday(record.asked, rows) : null
 
   return (
-    <ScreenFrame title="Analysis">
+    <ScreenFrame title={t('analysis.title')}>
       <Link
         href={scopedHref(base, '/analyses', scope)}
         className="inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft size={13} />
-        All analyses
+        {t('analysis.all')}
       </Link>
 
       {number === null && (
@@ -110,24 +112,23 @@ export default function Page() {
           className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3.5"
         >
           <p className="text-sm font-medium text-foreground">
-            <span className="font-mono">{params.number}</span> is not an analysis number.
+            {t('analysis.notANumber', { value: params.number })}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            An analysis is addressed by its workspace #number. The journal lists them, and{' '}
-            <span className="font-mono">bk books analyse list</span> prints them.
+            {t('analysis.notANumberBody', { command: 'bk books analyse list' })}
           </p>
         </div>
       )}
 
       {analysis.isLoading && (
         <div className="mt-3">
-          <Loading rows={6} label="Loading the analysis" />
+          <Loading rows={6} label={t('analysis.loading')} />
         </div>
       )}
 
       {analysis.error && (
         <div className="mt-3">
-          <ErrorState error={analysis.error} title="This analysis could not be loaded" />
+          <ErrorState error={analysis.error} title={t('analysis.failed')} />
         </div>
       )}
 
@@ -139,12 +140,10 @@ export default function Page() {
               <span>·</span>
               <DateText value={record.asked} />
               <span>·</span>
-              <span>asked by {record.asked_by}</span>
+              <span>{t('analyses.askedBy', { who: record.asked_by })}</span>
               <span>·</span>
               {/* THE RECORD'S OWN BOOK. Not the scope's — see the header. */}
-              <span>
-                book <span className="font-mono text-foreground">{record.entity}</span>
-              </span>
+              <span>{t('analysis.book', { slug: record.entity })}</span>
               <span className="ml-auto font-mono">#{record.number}</span>
             </div>
 
@@ -167,39 +166,34 @@ export default function Page() {
               role="alert"
               className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12.5px] text-foreground"
             >
-              <span className="font-medium">This record belongs to another book.</span> The selector
-              above says <span className="font-mono">{scope.entity}</span>; analysis #{record.number}{' '}
-              was filed for <span className="font-mono">{record.entity}</span>. The record below is
-              that book&apos;s, unchanged — and the check further down describes the book the
-              selector names, not this one.
+              <span className="font-medium">{t('analysis.otherBookLead')}</span>{' '}
+              {t('analysis.otherBookBody', {
+                selected: scope.entity ?? '—',
+                number: record.number,
+                filed: record.entity,
+              })}
             </p>
           )}
 
           <section className="mt-4">
-            <H2>The answer</H2>
+            <H2>{t('analysis.theAnswer')}</H2>
             <p className="mt-1 text-sm text-foreground">{speech(record.verdict)}</p>
             {record.runway_after_months !== null && (
               <p className="mt-1.5 text-[12px] text-muted-foreground">
-                Runway under this scenario:{' '}
-                <span className="font-mono text-foreground">{record.runway_after_months}</span>{' '}
-                months.{' '}
+                {t('analysis.runwayUnder', { n: record.runway_after_months })}{' '}
                 {/* The mockup's gauges each draw a before against an after, and
                     this payload has one side. Stating the absence is what stops
                     a reader taking the figure for a delta. */}
-                The record does not carry the runway before it, so this is the scenario&apos;s
-                figure and not a change.
+                {t('analysis.runwayNoDelta')}
               </p>
             )}
           </section>
 
-          <Figures label="The figures it gave" value={record.figures} kind="figures" />
+          <Figures label={t('analysis.figuresTitle')} value={record.figures} kind="figures" />
 
           <section className="mt-5">
-            <H2>What the agent read</H2>
-            <p className="mt-1 mb-2 text-[12px] text-muted-foreground">
-              The inputs filed WITH the answer — a snapshot at the moment it was given, kept exactly
-              as it was written.
-            </p>
+            <H2>{t('analysis.readTitle')}</H2>
+            <p className="mt-1 mb-2 text-[12px] text-muted-foreground">{t('analysis.readLead')}</p>
             {hasSnapshot(record.based_on) ? (
               <SnapshotRows value={record.based_on} />
             ) : (
@@ -234,11 +228,10 @@ export default function Page() {
               cannot check it should not assert it. Found by the phase-5 review,
               which asked the database instead of reading the migration. */}
           <p className="mt-5 border-t border-border pt-3 text-[11.5px] text-muted-foreground">
-            This record cannot be edited or deleted through this product: there is no update route
-            and no delete route, here or in <span className="font-mono">bk</span>. A better answer
-            is a new one, and both stand.{' '}
-            <span className="font-mono">bk books analyse show {record.number}</span> prints it as
-            stored.
+            {t('analysis.immutable', {
+              bk: 'bk',
+              command: `bk books analyse show ${record.number}`,
+            })}
           </p>
         </article>
       )}

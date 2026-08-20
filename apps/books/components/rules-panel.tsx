@@ -33,12 +33,15 @@
 // Nothing here renders one through `<Money>`, whose prop type is the guard that
 // keeps floats off the display path.
 
+'use client'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
 import { scopedHref } from '@/lib/nav'
 import type { Journal } from '@/lib/journal'
-import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useT } from '@/lib/i18n'
 import { ruleAmount } from '@/lib/format'
 import { useCanWrite, useCreateRule } from '@/lib/mutations'
 import { booksCacheFilter } from '@/lib/query-keys'
@@ -71,20 +74,30 @@ export function RulesPanel({
   isLoading: boolean
   error: unknown
 }) {
+  const t = useT()
+  const label = useLabel()
   const columns: Column<RecognitionRule>[] = [
     {
       key: 'key',
-      header: 'Key: (source, merchant)',
+      header: t('rules.colKey'),
       cell: (r) => (
         <div className="min-w-0">
           <span className="font-mono text-[12px] text-foreground">
-            ({r.source === null ? 'no source' : `source #${r.source}`}, {r.pattern.counterparty})
+            (
+            {/* `source`, not `source_id`: renamed on the wire by #66, which
+                changed it from the serial to the workspace #number the source
+                register prints. Our translation keys were written against the
+                old name and the merge caught it. */}
+            {r.source === null ? t('rules.noSource') : t('rules.source', { id: r.source })},{' '}
+            {r.pattern.counterparty})
           </span>
           <div className="text-[11.5px] text-muted-foreground">
             {ruleAmount(r.pattern.amount_chf, r.pattern.tolerance_chf)}
             {/* Cadence is documentation: `matchesRule` never reads it. Saying so
                 here stops a reader believing a rule fires on a schedule. */}
-            {r.pattern.interval && <span> · {r.pattern.interval} (not matched on)</span>}
+            {r.pattern.interval && (
+              <span> · {t('rules.notMatchedOn', { interval: r.pattern.interval })}</span>
+            )}
           </div>
         </div>
       ),
@@ -92,35 +105,39 @@ export function RulesPanel({
     },
     {
       key: 'explanation',
-      header: 'Explanation',
+      header: t('rules.colExplanation'),
       cell: (r) => (
         <div className="min-w-0">
           {/* A rule may genuinely have none — `POST /rules` does not require one
               — so this is the absence, drawn as an absence. */}
           <span className="text-[12.5px] text-foreground">
-            {en(r.explanation) || <span className="text-muted-foreground">no explanation</span>}
+            {label(r.explanation) || (
+              <span className="text-muted-foreground">{t('rules.noExplanation')}</span>
+            )}
           </span>
-          {en(r.note) && (
-            <div className="text-[11.5px] text-muted-foreground">{en(r.note)}</div>
+          {label(r.note) && (
+            <div className="text-[11.5px] text-muted-foreground">{label(r.note)}</div>
           )}
         </div>
       ),
-      sortValue: (r) => en(r.explanation),
+      // Sorted on the reader's own side of the pair, so the order matches what
+      // is on screen rather than what an English reader would have seen.
+      sortValue: (r) => label(r.explanation),
     },
     {
       key: 'account',
-      header: 'Posts to',
+      header: t('rules.colAccount'),
       cell: (r) =>
         r.account ? (
           <span className="font-mono text-[12px]">{r.account}</span>
         ) : (
-          <span className="text-[12px] text-muted-foreground">unmapped</span>
+          <span className="text-[12px] text-muted-foreground">{t('statements.unmapped')}</span>
         ),
       sortValue: (r) => r.account,
     },
     {
       key: 'learned_from',
-      header: 'Origin',
+      header: t('rules.colOrigin'),
       cell: (r) =>
         // `learned_from` is `varchar(40)` and nullable, and the route validates
         // nothing — so it is rendered as whatever it is, never mapped through a
@@ -128,13 +145,13 @@ export function RulesPanel({
         r.learned_from ? (
           <span className="text-[12px]">{r.learned_from}</span>
         ) : (
-          <span className="text-[12px] text-muted-foreground">not recorded</span>
+          <span className="text-[12px] text-muted-foreground">{t('rules.notRecorded')}</span>
         ),
       sortValue: (r) => r.learned_from,
     },
     {
       key: 'created_from',
-      header: 'Taught by',
+      header: t('rules.colTaughtBy'),
       // ── NOT A LINK, AND NOT EVEN A NUMBER, ON A SIMPLIFIED BOOK ───────────
       // `created_from_entry_id` is ONE column holding ids from TWO tables:
       // `resolve.ts` writes a `books.entry` id at :130 and a `books.ri_entry` id
@@ -156,13 +173,13 @@ export function RulesPanel({
       // the payload says which table it came from. Backend ask, ticket #55.
       cell: (r) =>
         r.created_from === null ? (
-          <span className="text-[12px] text-muted-foreground">no entry — known first</span>
+          <span className="text-[12px] text-muted-foreground">{t('rules.knownFirst')}</span>
         ) : journal === 'recettes_depenses' ? (
           <span
             className="text-[12px] text-muted-foreground"
-            title="Taught by an entry in this book. The number the API returns for a simplified book resolves against the double-entry journal, so it is not shown rather than shown wrong."
+            title={t('rules.notAddressableTitle')}
           >
-            taught here — not addressable yet
+            {t('rules.notAddressable')}
           </span>
         ) : (
           <Link
@@ -176,7 +193,7 @@ export function RulesPanel({
     },
     {
       key: 'created_on',
-      header: 'Since',
+      header: t('rules.colSince'),
       cell: (r) =>
         // `created_on` is a Postgres `date` and nullable. `<DateText>` slices the
         // string and never constructs a `Date` — a rule's birthday printed in the
@@ -184,15 +201,15 @@ export function RulesPanel({
         r.created_on ? (
           <DateText value={r.created_on} className="text-[12px] text-muted-foreground" />
         ) : (
-          <span className="text-[12px] text-muted-foreground">not recorded</span>
+          <span className="text-[12px] text-muted-foreground">{t('rules.notRecorded')}</span>
         ),
       sortValue: (r) => r.created_on,
     },
     {
       key: 'active',
-      header: 'Active',
+      header: t('rules.colActive'),
       cell: (r) => (
-        <span className="text-[12px]">{r.active ? 'yes' : 'no'}</span>
+        <span className="text-[12px]">{r.active ? t('rules.yes') : t('rules.no')}</span>
       ),
       sortValue: (r) => String(r.active),
     },
@@ -202,14 +219,12 @@ export function RulesPanel({
     <section className="mt-8">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-[15px] font-semibold text-foreground">
-          Recognition rules
+          {t('rules.title')}
           {rules && <span className="ml-2 text-[13px] font-normal text-muted-foreground">{rules.length}</span>}
         </h2>
       </div>
       <p className="mt-1 max-w-2xl text-[12.5px] text-muted-foreground">
-        Inspectable data, not logic written into the app. The match key is the pair (source
-        account, merchant) — never the merchant alone, so a familiar name on a source nobody
-        tracks comes back to the list above rather than explaining itself.
+        {t('rules.lead')}
       </p>
 
       <div className="mt-3">
@@ -221,11 +236,8 @@ export function RulesPanel({
           error={error}
           initialSort={{ key: 'key', direction: 'asc' }}
           empty={
-            <EmptyState title="This book has taught the app nothing yet.">
-              <p>
-                A rule is created either by resolving an entry above, or here — when the knowledge
-                arrives before the money does.
-              </p>
+            <EmptyState title={t('rules.emptyTitle')}>
+              <p>{t('rules.emptyBody')}</p>
             </EmptyState>
           }
         />
@@ -256,6 +268,7 @@ export function RulesPanel({
  * give. The report asks for the source register.
  */
 function CreateRuleForm({ ws, scope }: { ws: string | undefined; scope: ReadScope }) {
+  const t = useT()
   const canWrite = useCanWrite()
   const queryClient = useQueryClient()
   const create = useCreateRule(ws, scope.entity)
@@ -302,7 +315,7 @@ function CreateRuleForm({ ws, scope }: { ws: string | undefined; scope: ReadScop
         onClick={() => setOpen(true)}
         className="mt-3 rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-foreground hover:border-primary"
       >
-        Add a rule the app has not been taught
+        {t('rules.addRule')}
       </button>
     )
   }
@@ -310,13 +323,12 @@ function CreateRuleForm({ ws, scope }: { ws: string | undefined; scope: ReadScop
   return (
     <form onSubmit={submit} className="mt-3 space-y-3 rounded-md border border-border bg-secondary/40 p-3">
       <p className="text-[12.5px] text-muted-foreground">
-        For knowledge that arrives before the money — a signed lease, a subscription. A rule taught
-        by resolving an entry is created up there instead, and records which entry taught it.
+        {t('rules.formLead')}
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className={LABEL} htmlFor="rule-cp">
-            Fragment matched against the raw label
+            {t('rules.fragment')}
           </label>
           <input
             id="rule-cp"
@@ -328,7 +340,10 @@ function CreateRuleForm({ ws, scope }: { ws: string | undefined; scope: ReadScop
         </div>
         <div>
           <label className={LABEL} htmlFor="rule-acct">
-            Account a match posts to <span className="font-normal normal-case tracking-normal">(optional)</span>
+            {t('rules.accountLabel')}{' '}
+            <span className="font-normal normal-case tracking-normal">
+              {t('resolve.optional')}
+            </span>
           </label>
           <input
             id="rule-acct"
@@ -340,31 +355,34 @@ function CreateRuleForm({ ws, scope }: { ws: string | undefined; scope: ReadScop
         </div>
         <div className="sm:col-span-2">
           <label className={LABEL} htmlFor="rule-expl">
-            Explanation a match will carry
+            {t('rules.explanationLabel')}
           </label>
           <input
             id="rule-expl"
             value={explanation}
             onChange={(e) => setExplanation(e.target.value)}
             className={FIELD + ' mt-1'}
-            placeholder="Prilly office rent — commercial lease"
+            placeholder={t('rules.explanationPlaceholder')}
           />
         </div>
         <div>
           <label className={LABEL} htmlFor="rule-interval">
-            Cadence <span className="font-normal normal-case tracking-normal">(documentation only)</span>
+            {t('resolve.cadence')}{' '}
+            <span className="font-normal normal-case tracking-normal">
+              {t('rules.cadenceDocOnly')}
+            </span>
           </label>
           <input
             id="rule-interval"
             value={interval}
             onChange={(e) => setInterval(e.target.value)}
             className={FIELD + ' mt-1'}
-            placeholder="monthly"
+            placeholder={t('rules.cadencePlaceholder')}
           />
         </div>
         <div>
           <label className={LABEL} htmlFor="rule-learned">
-            Learned from
+            {t('resolve.learnedFrom')}
           </label>
           <select
             id="rule-learned"
@@ -380,9 +398,7 @@ function CreateRuleForm({ ws, scope }: { ws: string | undefined; scope: ReadScop
       </div>
 
       <p className="text-[11.5px] text-muted-foreground">
-        A rule added here has no source, so it matches only entries that arrived without one. The
-        source register is not built yet — until it is, teach a rule by resolving an entry above and
-        the server keys it to that entry’s own source.
+        {t('rules.sourceless')}
       </p>
 
       {refusal && (
@@ -396,7 +412,7 @@ function CreateRuleForm({ ws, scope }: { ws: string | undefined; scope: ReadScop
         </div>
       )}
       {created !== null && (
-        <p className="text-[12.5px] text-foreground">Rule #{created} created.</p>
+        <p className="text-[12.5px] text-foreground">{t('rules.created', { n: created })}</p>
       )}
 
       <div className="flex items-center gap-2">
@@ -405,14 +421,14 @@ function CreateRuleForm({ ws, scope }: { ws: string | undefined; scope: ReadScop
           disabled={create.pending}
           className="rounded-md bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {create.pending ? 'Creating…' : 'Create rule'}
+          {create.pending ? t('rules.creating') : t('rules.create')}
         </button>
         <button
           type="button"
           onClick={() => setOpen(false)}
           className="text-[12px] text-muted-foreground hover:text-foreground"
         >
-          Cancel
+          {t('rules.cancel')}
         </button>
       </div>
     </form>

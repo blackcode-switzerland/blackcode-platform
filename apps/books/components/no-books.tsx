@@ -46,34 +46,30 @@
 // somebody decided it and wrote it down.
 
 import { BookOpen } from 'lucide-react'
+import { useT } from '@/lib/i18n'
 
 export function NoBooks({ email }: { email?: string | null }) {
+  const t = useT()
   return (
     <div className="mx-auto max-w-xl py-16 text-center">
       <span className="inline-flex size-11 items-center justify-center rounded-lg bg-primary/15 text-primary-strong">
         <BookOpen size={20} />
       </span>
-      <h1 className="mt-4 text-lg font-semibold text-foreground">You have no books yet</h1>
+      <h1 className="mt-4 text-lg font-semibold text-foreground">{t('noBooks.title')}</h1>
 
-      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-        A book is one legal entity&rsquo;s complete set of accounts — a company, or a
-        self-employment activity. It has its own chart of accounts, its own fiscal year and its own
-        balance sheet, and it never mixes with another one.
-      </p>
-      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-        You can have as many as you need. Everything else in b/books — the ledger, the statements,
-        the recognition queue — is scoped to whichever one you are looking at.
-      </p>
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{t('noBooks.p1')}</p>
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{t('noBooks.p2')}</p>
 
       <div className="mt-7 rounded-lg border border-border bg-card px-5 py-4 text-left">
-        <p className="text-sm font-medium text-foreground">Opening one</p>
+        <p className="text-sm font-medium text-foreground">{t('noBooks.openingOne')}</p>
         <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-          From a terminal, with the <code className="rounded bg-secondary px-1 py-0.5">bk</code>{' '}
-          CLI. It is not a form in this app on purpose: the legal form fixes which bookkeeping
-          rules the entity is kept under for its whole life, and the registered seat decides the
-          cantonal and communal tax parameters every later figure is computed with. Neither can be
-          changed afterwards by editing a field.
+          {t('noBooks.openingBody', { bk: 'bk' })}
         </p>
+        {/* The command itself is NOT in the dictionary and never will be. It is
+            a spelling the binary accepts, not prose: translating `--legal-form`
+            would produce a French sentence containing a flag that does not
+            exist. `lib/hardcoded-strings.test.ts` allows a `<pre>` for exactly
+            this, and its header says so. */}
         <pre className="mt-3 overflow-x-auto rounded-md bg-secondary px-3 py-2 font-mono text-[12px] leading-relaxed text-foreground">
 {`bk books entity create \\
   --slug blackcode \\
@@ -81,24 +77,21 @@ export function NoBooks({ email }: { email?: string | null }) {
   --legal-form SA`}
         </pre>
         <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
-          <span className="font-medium text-foreground">SA</span> for a capital company, which is
-          always double-entry, or <span className="font-medium text-foreground">RI</span> for a sole
-          proprietorship, which is kept simplified unless you say otherwise. The book arrives with
-          the Swiss PME chart of accounts already in it. Then open its first fiscal year with{' '}
-          <code className="rounded bg-secondary px-1 py-0.5">bk books exercice create</code> —
-          nothing can be posted until there is one.
+          {t('noBooks.formsBody', {
+            sa: 'SA',
+            ri: 'RI',
+            exercice: 'bk books exercice create',
+          })}
         </p>
       </div>
 
       <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-        No <code className="rounded bg-secondary px-1 py-0.5">bk</code> yet? Run{' '}
-        <code className="rounded bg-secondary px-1 py-0.5">bk login</code> once and it will bring
-        you back here to authorize it.
+        {t('noBooks.noCli', { bk: 'bk', login: 'bk login' })}
       </p>
 
       {email && (
         <p className="mt-6 text-xs text-muted-foreground">
-          Signed in as {email}. Your blackcode account works across every blackcode app.
+          {t('noBooks.signedInAs', { email })}
         </p>
       )}
     </div>

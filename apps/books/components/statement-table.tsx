@@ -31,16 +31,26 @@
 // last week files. So this component never renders `<EmptyState>`, and a caller
 // that wraps it in one has misunderstood the screen.
 //
-// ── THE LABELS ARE FRENCH, AND THAT IS D-A ─────────────────────────────────
-// b/books is English everywhere except here. These strings are the statute's own
-// wording and the filed PDF has to reproduce them, so `legal()` returns the
-// French and the English gloss sits under it in muted type for an operator who
-// does not read French. Never translate the line; never drop the gloss.
+// ── THE LINE LABELS ARE FRENCH IN BOTH LANGUAGES, AND THAT IS ALL THAT IS
+//    LEFT OF D-A ───────────────────────────────────────────────────────────
+// These strings are the statute's own wording and the filed document has to
+// reproduce them, so `legal()` returns the French whatever the reader chose.
+// **Never translate a line.**
+//
+// The GLOSS beside it is the part the language switch reaches, and it is
+// rendered only for an English reader: `en()` is "the English side" and a French
+// reader glossed with the French would see the same words twice. `en()`
+// deliberately did NOT become locale-aware — `lib/label.ts` records why, and the
+// second reason is finding #10.
+//
+// Everything else on this component — the collapse toggle, the two badges, the
+// group totals — is chrome and goes through `t()`.
 
 import { useState } from 'react'
 import { Money } from './money'
 import { AccountRef, type AccountRefScope } from './account-ref'
 import { en, legal } from '@/lib/label'
+import { useLocale, useT } from '@/lib/i18n'
 import type { StatementLabel } from '@/lib/statements'
 import type { Money as MoneyString } from '@/lib/types'
 
@@ -78,6 +88,8 @@ export function StatementTable({
   scope: AccountRefScope
   footer?: { label: string; amount: MoneyString | null }
 }) {
+  const t = useT()
+  const locale = useLocale()
   // Off by default. The reader's first question about a statement is "what does
   // it say", and a document with rows silently removed does not answer it. The
   // toggle exists because a 40-line bilan with 30 zeroes is genuinely hard to
@@ -94,7 +106,7 @@ export function StatementTable({
             onChange={(e) => setHideZero(e.target.checked)}
             className="accent-primary"
           />
-          Collapse zero lines
+          {t('statements.collapseZero')}
         </label>
       </div>
 
@@ -119,9 +131,11 @@ export function StatementTable({
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-primary-strong">
                     {legal(group.group)}
                   </span>
-                  <span className="ml-2 text-[11px] font-normal text-muted-foreground">
-                    {en(group.group)}
-                  </span>
+                  {locale === 'en' && (
+                    <span className="ml-2 text-[11px] font-normal text-muted-foreground">
+                      {en(group.group)}
+                    </span>
+                  )}
                 </th>
               </tr>
 
@@ -129,23 +143,25 @@ export function StatementTable({
                 <tr key={line.pos} className="border-b border-border/50" data-pos={line.pos}>
                   <td className="py-1.5 pr-3 align-top">
                     <span className="text-foreground">{legal(line.label)}</span>
-                    <span className="ml-2 text-[11.5px] text-muted-foreground">
-                      {en(line.label)}
-                    </span>
+                    {locale === 'en' && (
+                      <span className="ml-2 text-[11.5px] text-muted-foreground">
+                        {en(line.label)}
+                      </span>
+                    )}
                     {line.related && (
                       <span
                         className="ml-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
-                        title="art. 959a al. 4 CO — presented separately"
+                        title={t('statements.relatedPartyTitle')}
                       >
-                        related party
+                        {t('statements.relatedParty')}
                       </span>
                     )}
                     {line.derived && (
                       <span
                         className="ml-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
-                        title="Computed from the income statement, never posted"
+                        title={t('statements.derivedTitle')}
                       >
-                        derived
+                        {t('statements.derived')}
                       </span>
                     )}
                     {/* The drill-down. The array is kept even with one member
@@ -168,7 +184,18 @@ export function StatementTable({
               {group.total !== undefined && (
                 <tr>
                   <td className="py-1.5 pr-3 text-right text-[12px] font-medium text-muted-foreground">
-                    Total {en(group.group).toLowerCase()}
+                    {/* The group NAME inside the total is the statutory one for
+                        a French reader and the English gloss for an English one
+                        — "Total actifs circulants" against "Total current
+                        assets". `legal()` lowercased would read as broken French
+                        capitalisation to nobody and as an untranslated string to
+                        everybody, so the two sides are chosen explicitly. */}
+                    {t('statements.groupTotal', {
+                      group: (locale === 'fr'
+                        ? legal(group.group)
+                        : en(group.group)
+                      ).toLowerCase(),
+                    })}
                   </td>
                   <td className="num-total w-40 py-1.5">
                     <Money value={group.total} bare />

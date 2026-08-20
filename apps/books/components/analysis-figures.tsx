@@ -29,8 +29,11 @@
 // is a 404 dressed as a working link. So it renders as what it is: a reference
 // the agent recorded, in monospace, beside a line saying so.
 
+'use client'
+
 import type { AnalysisFigure } from '@/lib/types'
-import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useT } from '@/lib/i18n'
 
 export function FiguresTable({
   rows,
@@ -42,6 +45,8 @@ export function FiguresTable({
   dropped: number
   kind: 'figures' | 'based-on'
 }) {
+  const t = useT()
+  const label = useLabel()
   const anyHref = rows.some((r) => r.href)
 
   return (
@@ -50,7 +55,7 @@ export function FiguresTable({
         {rows.map((row, i) => (
           <div key={i} className="grid grid-cols-[1fr_auto] items-baseline gap-3 py-2">
             <dt className="text-[13px] text-muted-foreground">
-              {en(row.label)}
+              {label(row.label)}
               {row.href && (
                 // Not a link. See the header.
                 <span className="mt-0.5 block break-all font-mono text-[11px] text-muted-foreground/70">
@@ -74,9 +79,7 @@ export function FiguresTable({
 
       {anyHref && (
         <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-          The addresses under each label are what the agent recorded as its source. They are
-          references on the record, not links — this app does not serve them and cannot promise
-          where one points.
+          {t('figures.hrefNote')}
         </p>
       )}
 
@@ -86,10 +89,10 @@ export function FiguresTable({
           `analysisRows` in `lib/analysis.ts`. */}
       {dropped > 0 && (
         <p role="alert" className="mt-1.5 text-[11.5px] text-destructive">
-          {dropped} further {dropped === 1 ? 'row is' : 'rows are'} on this record and could not be
-          read: {dropped === 1 ? 'it is' : 'they are'} missing a label or a value. Nothing was
-          guessed and nothing was filled in. <span className="font-mono">bk books analyse show</span>{' '}
-          prints the record as stored.
+          {t(dropped === 1 ? 'figures.droppedOne' : 'figures.droppedMany', {
+            n: dropped,
+            command: 'bk books analyse show',
+          })}
         </p>
       )}
     </div>
@@ -104,25 +107,18 @@ export function FiguresTable({
  * a different owner. `hasSnapshot` is what tells them apart.
  */
 export function NoSnapshotNotice({ present }: { present: boolean }) {
+  const t = useT()
   return (
     <p className="rounded-md border border-border bg-secondary px-3 py-2 text-[12.5px] text-muted-foreground">
       {present ? (
         <>
-          <span className="font-medium text-foreground">
-            This record&apos;s snapshot could not be read.
-          </span>{' '}
-          The rows are on the record but none of them carries both a label and a value, so there is
-          nothing this screen can show without inventing it.
+          <span className="font-medium text-foreground">{t('figures.unreadableLead')}</span>{' '}
+          {t('figures.unreadableBody')}
         </>
       ) : (
         <>
-          <span className="font-medium text-foreground">
-            This answer was filed without a snapshot.
-          </span>{' '}
-          Nothing records what the agent read to produce it, so there is no way to tell what it
-          rested on — or whether that has since changed. Analyses filed through{' '}
-          <span className="font-mono">bk books analyse record</span> cannot be: the route refuses a{' '}
-          <span className="font-mono">based_on</span> item with no label or value.
+          <span className="font-medium text-foreground">{t('figures.noSnapshotLead')}</span>{' '}
+          {t('figures.noSnapshotBody', { command: 'bk books analyse record' })}
         </>
       )}
     </p>

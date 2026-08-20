@@ -34,7 +34,8 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { useScope } from '@/lib/scope'
 import { useManifest, useSource, findTerm, useMeta } from '@/lib/hooks'
-import { en } from '@/lib/label'
+import { useLabel } from '@/lib/use-label'
+import { useT } from '@/lib/i18n'
 import { scopedHref } from '@/lib/nav'
 import { ApiRequestError } from '@/lib/client'
 import { ScreenFrame } from '@/components/screen-frame'
@@ -63,6 +64,7 @@ export default function Page() {
   const scope = useScope()
   const base = `/dashboard/${params.ws}`
   const { data: meta } = useMeta()
+  const t = useT()
 
   // A #number the address bar can hold and this app cannot use. Refused here,
   // not by the server: a 400 from `…/sources/abc` reads as a broken page.
@@ -73,29 +75,27 @@ export default function Page() {
   const manifest = useManifest(params.ws, number)
 
   return (
-    <ScreenFrame title="Source">
+    <ScreenFrame title={t('source.title')}>
       <p className="mb-3">
         <Link
           href={scopedHref(base, '/sources', scope)}
           className="inline-flex items-center gap-1 text-[12.5px] text-muted-foreground hover:text-primary-strong"
         >
           <ArrowLeft size={12} />
-          Accounts &amp; sources
+          {t('source.back')}
         </Link>
       </p>
 
       {number === null && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3.5" role="alert">
           <p className="text-sm font-medium text-foreground">
-            <span className="font-mono">{params.number}</span> is not a source number.
+            {t('source.notANumber', { value: params.number })}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Source numbers are the ones in the register. Nothing was requested.
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{t('source.notANumberBody')}</p>
         </div>
       )}
 
-      {number !== null && source.isLoading && <Loading rows={5} label="Loading this source" />}
+      {number !== null && source.isLoading && <Loading rows={5} label={t('source.loading')} />}
       {number !== null && source.error && (
         // ── A 404 HERE IS AN ADDRESS, NOT A FAILURE, AND THE ROUTE SENDS NO
         //    SENTENCE FOR EITHER ─────────────────────────────────────────
@@ -114,15 +114,12 @@ export default function Page() {
         isNotFound(source.error) ? (
           <div className="rounded-lg border border-border px-4 py-3.5" role="alert">
             <p className="text-sm font-medium text-foreground">
-              There is no source <span className="font-mono">#{number}</span> in this account.
+              {t('source.notFound', { n: number ?? '—' })}
             </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Source numbers are the ones in the register. The address is asking for one that does
-              not exist — the request reached the server and was answered.
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{t('source.notFoundBody')}</p>
           </div>
         ) : (
-          <ErrorState error={source.error} title="This source could not be loaded" />
+          <ErrorState error={source.error} title={t('source.failed')} />
         )
       )}
       {source.data && (
@@ -145,13 +142,15 @@ function Body({
   meta: ReturnType<typeof useMeta>['data']
   manifest: ReturnType<typeof useManifest>
 }) {
-  const notes = en(source.notes_freeform)
+  const t = useT()
+  const label = useLabel()
+  const notes = label(source.notes_freeform)
   const cadenceKnown = !!source.expected && source.expected !== 'none'
 
   const pullColumns: Column<SourcePull>[] = [
     {
       key: 'file',
-      header: 'File',
+      header: t('source.colFile'),
       cell: (p) => (
         <span className="block min-w-0">
           <span className="block font-mono text-[12px] text-foreground">{p.file}</span>
@@ -166,11 +165,11 @@ function Body({
     },
     {
       key: 'period',
-      header: 'Period / format',
+      header: t('source.colPeriod'),
       cell: (p) => (
         <span className="text-[12px] text-muted-foreground">
           {[p.period, p.format].filter(Boolean).join(' · ') || (
-            <span className="italic">not recorded</span>
+            <span className="italic">{t('sources.notRecorded')}</span>
           )}
         </span>
       ),
@@ -178,7 +177,7 @@ function Body({
     },
     {
       key: 'hash',
-      header: 'Hash',
+      header: t('source.colHash'),
       cell: (p) =>
         p.hash ? (
           // The whole value in `title` and `data-hash`, the head on screen —
@@ -190,19 +189,21 @@ function Body({
           // A pulled file with no hash cannot prove what was captured. That is a
           // finding, not a blank.
           <span className="text-[11.5px] italic text-destructive" data-hash="none">
-            no hash
+            {t('source.noHash')}
           </span>
         ),
       sortValue: (p) => p.hash ?? '',
     },
     {
       key: 'pulled',
-      header: 'Pulled',
+      header: t('source.colPulled'),
       cell: (p) =>
         p.pulled ? (
           <DateText value={p.pulled} className="text-[12px]" />
         ) : (
-          <span className="text-[12px] italic text-muted-foreground">not recorded</span>
+          <span className="text-[12px] italic text-muted-foreground">
+            {t('sources.notRecorded')}
+          </span>
         ),
       sortValue: (p) => p.pulled ?? '',
     },
@@ -226,9 +227,8 @@ function Body({
               so the check is available. */}
           {source.retired ? (
             <>
-              Retired. This is the one lifecycle fact a person sets, and it beats every cadence: the
-              last import was <DateText value={source.last_import} /> and nothing is late, because
-              nothing more is expected.
+              {t('source.retiredVerdictBefore')} <DateText value={source.last_import} />{' '}
+              {t('source.retiredVerdictAfter')}
             </>
           ) : source.status === 'never_connected' ? (
             // FOUND IN THE BROWSER, 2026-08-18. This branch did not exist and
@@ -236,43 +236,43 @@ function Body({
             // explains why a status "can read current" — over a row reading
             // NEVER CONNECTED. A confident wrong explanation of a correct chip,
             // which is worse than no explanation at all.
-            <>
-              Nothing has ever been imported from this source, so there is no date to measure a
-              cadence against. That is the whole verdict: the register can say the channel is
-              unconnected, and it cannot tell you whether that is a decision or an oversight.
-            </>
+            t('source.neverConnectedVerdict')
           ) : cadenceKnown ? (
             <>
-              Expected {source.expected}. Last import{' '}
-              {source.last_import ? <DateText value={source.last_import} /> : 'never'} — stale after{' '}
-              {source.windows.stale_after_days} days, a gap after {source.windows.gap_after_days}.
-              Computed each time this page is read, from the cadence against that date. Nothing here
-              is settable.
+              {t('source.cadenceVerdictBefore', { cadence: source.expected ?? '' })}{' '}
+              {source.last_import ? (
+                <DateText value={source.last_import} />
+              ) : (
+                t('sources.never')
+              )}{' '}
+              {t('source.cadenceVerdictAfter', {
+                stale: source.windows.stale_after_days,
+                gap: source.windows.gap_after_days,
+              })}
             </>
           ) : (
-            <>
-              No cadence is expected, so nothing can be late. That is why the status can read
-              current over an import from months ago — the difference between quiet and late is the
-              whole reason this is computed rather than ticked.
-            </>
+            t('source.noCadenceVerdict')
           )}
         </p>
         <p className="mt-1 text-[12.5px] text-muted-foreground">
           {source.entity ? (
             <>
-              Book: <span className="font-mono text-foreground">{source.entity}</span>
+              {t('source.bookLabel')}{' '}
+              <span className="font-mono text-foreground">{source.entity}</span>
             </>
           ) : (
             <>
-              <span className="font-medium text-foreground">Not attributed to a book.</span> Nothing
-              this source carries reaches any statement until somebody says whose it is.
+              <span className="font-medium text-foreground">
+                {t('source.notAttributedLead')}
+              </span>{' '}
+              {t('source.notAttributedBody')}
             </>
           )}
         </p>
       </div>
 
       <section className="mb-6 rounded-lg border border-border px-4 py-3.5">
-        <h2 className="text-sm font-medium text-foreground">Notes — how to treat this source</h2>
+        <h2 className="text-sm font-medium text-foreground">{t('source.notesTitle')}</h2>
         {notes ? (
           <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">
             {notes}
@@ -280,22 +280,21 @@ function Body({
         ) : (
           // "No notes yet" is a real answer for a source nobody has written up.
           <p className="mt-1.5 text-[12.5px] italic text-muted-foreground">
-            No notes have been written for this source.
+            {t('source.noNotes')}
           </p>
         )}
         <p className="mt-2 text-[11.5px] text-muted-foreground">
-          Freeform on purpose: quirks, treatment rules, and what a statement never tells you.
-          Contact details live in the vault and are referenced here, never pasted.
+          {t('source.notesNote')}
         </p>
       </section>
 
       <section className="mb-6">
-        <h2 className="mb-2 text-[15px] font-semibold text-foreground">Ledger accounts fed here</h2>
+        <h2 className="mb-2 text-[15px] font-semibold text-foreground">
+          {t('source.ledgerAccounts')}
+        </h2>
         {source.ledger_accounts.length === 0 ? (
           <p className="text-[12.5px] text-muted-foreground">
-            No balance-sheet account is carried for this source. That is normal for a flow or
-            document source — a card, a processor or a Drive folder moves money that settles into a
-            bank account rather than holding any itself.
+            {t('source.noLedgerAccounts')}
           </p>
         ) : (
           <ul className="flex flex-wrap gap-2">
@@ -314,7 +313,7 @@ function Body({
                 ) : (
                   <span
                     className="inline-block rounded border border-dashed border-border px-2 py-1 font-mono text-[12px] text-muted-foreground"
-                    title="This source names no book, so there is no ledger to open it in."
+                    title={t('source.noBookForDrill')}
                   >
                     {no}
                   </span>
@@ -331,29 +330,18 @@ function Body({
         </div>
       ) : (
         <section className="mb-6 rounded-lg border border-dashed border-border px-4 py-3.5">
-          <h2 className="text-sm font-medium text-foreground">No pull runbook</h2>
+          <h2 className="text-sm font-medium text-foreground">{t('runbook.none')}</h2>
           {/* The consequence differs by source, so the sentence does. Written
               unconditionally first and caught in the browser: it told a reader
               looking at a RETIRED card that the steps live in somebody's head,
               which is a gap in an operation that has stopped. */}
           <p className="mt-1 text-[12.5px] text-muted-foreground">
             {source.retired ? (
-              <>
-                Nothing records how this source was pulled. It is retired, so nothing more is
-                expected from it — what is lost is the account of how the files above were obtained,
-                which matters for as long as they have to be defensible.
-              </>
+            t('source.noRunbookRetired')
             ) : cadenceKnown ? (
-              <>
-                Nothing records how this source is pulled, and it is expected {source.expected}. That
-                is a gap in the operation and not only in the documentation: the steps live in
-                somebody&apos;s head, and the status above measures whether they were followed.
-              </>
+            t('source.noRunbookCadence', { cadence: source.expected ?? '' })
             ) : (
-              <>
-                Nothing records how this source is pulled. No cadence is expected either, so nothing
-                is overdue — but there is also nothing written down for whoever pulls it next.
-              </>
+            t('source.noRunbookNoCadence')
             )}
           </p>
         </section>
@@ -361,7 +349,7 @@ function Body({
 
       <section className="mb-6">
         <h2 className="mb-1 text-[15px] font-semibold text-foreground">
-          Files pulled from this source
+          {t('source.pullsTitle')}
           {source.pulls.length > 0 && (
             <span className="ml-2 text-[13px] font-normal text-muted-foreground">
               {source.pulls.length}
@@ -369,8 +357,7 @@ function Body({
           )}
         </h2>
         <p className="mb-2 max-w-2xl text-[12.5px] text-muted-foreground">
-          Our copy, on our side. These are pièces comptables — hashed at capture, kept ten years
-          (art. 958f CO). The institution&apos;s portal is a convenience; this is the archive.
+          {t('source.pullsLead')}
         </p>
         <DataTable
           rows={source.pulls}
@@ -384,18 +371,18 @@ function Body({
           // absence.
           empty={
             source.type === 'drive_folder'
-              ? 'No files have been pulled by hand from this source. A Drive folder is polled by the worker instead, and what it holds is in the manifest below.'
-              : 'No files have been pulled from this source. For a source imported by hand that is the ordinary state; for one with a cadence it is the thing the status above is measuring.'
+              ? t('source.pullsEmptyDrive')
+              : t('source.pullsEmpty')
           }
         />
       </section>
 
       <section>
-        <h2 className="mb-1 text-[15px] font-semibold text-foreground">File manifest</h2>
+        <h2 className="mb-1 text-[15px] font-semibold text-foreground">
+          {t('source.manifestTitle')}
+        </h2>
         <p className="mb-2 max-w-2xl text-[12.5px] text-muted-foreground">
-          The worker&apos;s own ledger of this source&apos;s Drive folder — every file it has seen
-          and where each sits in the state machine. It answers &ldquo;did we miss a file?&rdquo; as a
-          query, so nobody re-lists Drive to find out.
+          {t('source.manifestLead')}
         </p>
         <ManifestTable
           files={manifest.data?.files}
@@ -409,8 +396,10 @@ function Body({
             a different source than the URL asked for. */}
         {manifest.data && manifest.data.source !== source.number && (
           <p className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12px] text-foreground" role="alert">
-            This manifest is for source #{manifest.data.source}, not #{source.number}. Do not read
-            it as this source&apos;s.
+            {t('source.manifestMismatch', {
+              served: manifest.data.source,
+              asked: source.number,
+            })}
           </p>
         )}
       </section>

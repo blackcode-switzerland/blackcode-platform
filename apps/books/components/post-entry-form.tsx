@@ -88,12 +88,15 @@
 // the match route's 404 discarding its own message. Two of these now; that is a
 // pattern rather than a one-off, and the report says so.
 
+'use client'
+
 import { useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Lock } from 'lucide-react'
 import { useCanWrite, usePostEntry, type PostResult } from '@/lib/mutations'
 import { booksCacheFilter } from '@/lib/query-keys'
 import type { Entry } from '@/lib/types'
+import { useT } from '@/lib/i18n'
 
 export function PostEntryForm({
   ws,
@@ -107,6 +110,7 @@ export function PostEntryForm({
   onPosted: (result: PostResult) => void
 }) {
   const canWrite = useCanWrite()
+  const t = useT()
   const post = usePostEntry(ws, entry.number)
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -134,9 +138,7 @@ export function PostEntryForm({
   // a permission. Phase 2 learned this on the resolve button.
   if (!canWrite) {
     return (
-      <p className="mt-2 text-[12px] text-muted-foreground">
-        This session cannot change records, so this entry cannot be posted here.
-      </p>
+      <p className="mt-2 text-[12px] text-muted-foreground">{t('post.cannotWriteHere')}</p>
     )
   }
 
@@ -150,7 +152,7 @@ export function PostEntryForm({
         onClick={() => setOpen(true)}
         className="mt-2 rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-foreground hover:border-primary"
       >
-        Post this entry
+        {t('post.open')}
       </button>
     )
   }
@@ -201,7 +203,7 @@ export function PostEntryForm({
     >
       <p className="flex items-start gap-1.5 text-[12.5px] font-medium text-foreground">
         <Lock size={13} className="mt-0.5 shrink-0" />
-        <span>This cannot be undone.</span>
+        <span>{t('post.cannotUndo')}</span>
       </p>
 
       {/* ── WHAT BECOMES IMMUTABLE, IN THE READER'S WORDS ─────────────────
@@ -210,36 +212,31 @@ export function PostEntryForm({
           specific things that stop being possible are what they need in order
           to decide. */}
       <ul className="mt-1.5 space-y-1 text-[12px] text-muted-foreground">
-        <li>
-          The <span className="text-foreground">date, the amounts and the accounts</span> of this
-          entry are fixed from now on. Nobody can change them — not you, not an agent, not the
-          database owner. A correction becomes a new reversing entry sitting beside this one.
-        </li>
-        <li>
-          <span className="text-foreground">What it means can still be revised.</span> The
-          explanation, the counterparty, the recognition state and the supporting document stay
-          open, and each revision keeps what was there before.
-        </li>
-        <li>
-          It <span className="text-foreground">starts counting</span> in the balance sheet and the
-          income statement. Staged entries are excluded from both.
-        </li>
+        {/* The three inline `<span className="text-foreground">` emphases are
+            gone: each of them split its sentence into fragments, and each
+            fragment falls in a different place in French. What the reader needs
+            here is the whole sentence — this is the copy that decides whether
+            somebody presses an irreversible button. */}
+        <li>{t('post.fixedItem')}</li>
+        <li>{t('post.meaningItem')}</li>
+        <li>{t('post.countsItem')}</li>
       </ul>
 
       {/* The entry, restated, so the number below is typed against something
           visible rather than remembered. */}
       <p className="mt-2.5 text-[12px] text-muted-foreground">
-        Posting <span className="font-mono text-foreground">#{entry.number}</span> — journal n°{' '}
-        <span className="font-mono text-foreground">{entry.entry_no}</span> —{' '}
-        <span className="text-foreground">{entry.raw_label}</span>
+        {t('post.restated', {
+          number: entry.number,
+          journalNo: entry.entry_no,
+          label: entry.raw_label,
+        })}
       </p>
 
       <label
         htmlFor={`post-confirm-${entry.number}`}
         className="mt-2.5 block text-[11.5px] font-medium uppercase tracking-wider text-muted-foreground"
       >
-        Type <span className="font-mono normal-case tracking-normal text-foreground">{target}</span>{' '}
-        to confirm
+        {t('post.typeToConfirm', { number: target })}
       </label>
       <div className="mt-1.5 flex flex-wrap items-center gap-2">
         <input
@@ -257,7 +254,7 @@ export function PostEntryForm({
           disabled={post.pending || !matches}
           className="rounded-md bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {post.pending ? 'Posting…' : 'Post entry'}
+          {post.pending ? t('post.posting') : t('post.submit')}
         </button>
         <button
           type="button"
@@ -268,16 +265,14 @@ export function PostEntryForm({
           }}
           className="px-1 text-[12px] text-muted-foreground hover:text-foreground"
         >
-          Cancel
+          {t('post.cancel')}
         </button>
       </div>
       <p id={`post-why-${entry.number}`} className="mt-1.5 text-[11.5px] text-muted-foreground">
         {/* Not an error state and not a scold: nothing has failed, and the box
             is empty because the reader has not typed yet. Same treatment the
             resolve form gives its own empty explanation. */}
-        The entry&apos;s own #number, so that this is typed against the record in front of you
-        rather than pressed. The database checks the entry again at the last moment — balanced, at
-        least two lines, every line mapped — and refuses in its own words if it is not.
+        {t('post.why')}
       </p>
 
       {refusal && (
@@ -303,15 +298,12 @@ export function PostEntryForm({
               bookkeeping error. */}
           {refusal.code === 'verdict_blocked' && (
             <p className="mt-1 text-[11.5px] text-muted-foreground">
-              That is a compliance pass refusing, not the books. The entry is unchanged and still
-              staged. There is no override: what clears it is a fresh verdict from a pass that no
-              longer finds the problem.
+              {t('post.verdictBlocked')}
             </p>
           )}
           {refusal.code === 'guard_refused' && (
             <p className="mt-1 text-[11.5px] text-muted-foreground">
-              That is the database refusing at the last moment, in its own words. The entry was not
-              posted and nothing about it changed.
+              {t('post.guardRefused')}
             </p>
           )}
           {/* ── THE 500, WHICH IS ALMOST CERTAINLY THE 0004 GUARD ───────────
@@ -354,6 +346,7 @@ export function PostEntryForm({
  * them in a 300-line page is how one of them gets edited into the other.
  */
 export function PostedNotice({ result }: { result: PostResult }) {
+  const t = useT()
   // POSITIVE, and against a boolean. See this file's header: `already` falsy
   // through absence would render a re-post as a fresh post.
   const already = result.already === true
@@ -367,16 +360,13 @@ export function PostedNotice({ result }: { result: PostResult }) {
     >
       {already ? (
         <>
-          <span className="font-medium">Already posted.</span> Entry #{result.number} (journal n°{' '}
-          {result.entry_no}) was in the books before this. Nothing changed, and that is not a
-          failure — this write is deliberately safe to repeat, because the agents that drive this
-          product retry.
+          <span className="font-medium">{t('post.alreadyLead')}</span>{' '}
+          {t('post.alreadyBody', { number: result.number, journalNo: result.entry_no })}
         </>
       ) : (
         <>
-          <span className="font-medium">Posted.</span> Entry #{result.number} is journal n°{' '}
-          {result.entry_no} and is now part of the record. Its amounts and accounts are fixed; a
-          correction from here is a new reversing entry.
+          <span className="font-medium">{t('post.postedLead')}</span>{' '}
+          {t('post.postedBody', { number: result.number, journalNo: result.entry_no })}
         </>
       )}
     </p>

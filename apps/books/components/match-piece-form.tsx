@@ -43,11 +43,16 @@
 // app is broken. See `lib/mutations.ts`'s header for the bug this rule exists
 // because of.
 
+'use client'
+
 import { useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCanWrite, useMatchPiece, type MatchResult } from '@/lib/mutations'
 import { booksCacheFilter } from '@/lib/query-keys'
 import type { Entity, InboxPiece } from '@/lib/types'
+import { useT } from '@/lib/i18n'
+import type { Translate } from '@blackcode/platform-i18n'
+import type { BooksKey } from '@/lib/dictionary'
 
 /**
  * Which journal this pièce's `--entry` number will be read in.
@@ -62,13 +67,17 @@ import type { Entity, InboxPiece } from '@/lib/types'
  * cannot reach a personal recettes-dépenses book."* That is also why matching
  * one is an ATTRIBUTION — see `<AttributionWarning>` below.
  */
-function journalLabel(piece: InboxPiece, entities: Entity[]): string | null {
-  if (piece.entity === null) return 'the grand livre'
+function journalLabel(
+  piece: InboxPiece,
+  entities: Entity[],
+  t: Translate<BooksKey>
+): string | null {
+  if (piece.entity === null) return t('match.journalGrandLivre')
   const book = entities.find((e) => e.slug === piece.entity)
   if (!book) return null
   return book.bookkeeping_regime === 'simplified'
-    ? "this book's recettes-dépenses journal"
-    : 'the grand livre'
+    ? t('match.journalRi')
+    : t('match.journalGrandLivre')
 }
 
 
@@ -104,14 +113,15 @@ function journalLabel(piece: InboxPiece, entities: Entity[]): string | null {
  * for "any failure", which would be the bug `lib/mutations.ts`'s header exists
  * about: swallowing a good message and printing a generic one.
  */
-function refusalText(message: string, status: number, entry: number, journal: string | null): string {
+function refusalText(
+  message: string,
+  status: number,
+  entry: number,
+  journal: string | null,
+  t: Translate<BooksKey>
+): string {
   if (status !== 404 || /\s/.test(message.trim())) return message
-  return (
-    `Nothing is numbered #${entry} in ${journal ?? "this document's journal"}, ` +
-    `so there is nothing to attach this document to. Check the number on the entry itself. ` +
-    `(The server answered 404 with no explanation — the route discards its own reason here, ` +
-    `and that is raised with the backend.)`
-  )
+  return t('match.notFound', { entry, journal: journal ?? t('match.thisJournal') })
 }
 
 export function MatchPieceForm({
@@ -126,6 +136,7 @@ export function MatchPieceForm({
   onMatched: (result: MatchResult) => void
 }) {
   const canWrite = useCanWrite()
+  const t = useT()
   const match = useMatchPiece(ws, piece.number)
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -135,7 +146,7 @@ export function MatchPieceForm({
   // a refusal the reader did not cause, over a write that succeeded.
   const inFlight = useRef(false)
 
-  const journal = journalLabel(piece, entities)
+  const journal = journalLabel(piece, entities, t)
   // ── AN UNATTRIBUTED PIÈCE IS THE CASE WITH A SIDE EFFECT ────────────────
   // `books.piece_inbox.entity_id` is nullable — a scanned receipt does not
   // always say whose it is — and this is the only thing on the screen that can
@@ -149,9 +160,7 @@ export function MatchPieceForm({
   // learned this on the resolve button.
   if (!canWrite) {
     return (
-      <p className="mt-2 text-[12px] text-muted-foreground">
-        This session cannot change records, so this document cannot be attached here.
-      </p>
+      <p className="mt-2 text-[12px] text-muted-foreground">{t('match.cannotWrite')}</p>
     )
   }
 
@@ -162,7 +171,7 @@ export function MatchPieceForm({
         onClick={() => setOpen(true)}
         className="mt-2 rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-foreground hover:border-primary"
       >
-        Attach to an entry
+        {t('match.open')}
       </button>
     )
   }
@@ -178,7 +187,10 @@ export function MatchPieceForm({
       // useful than saying what is wrong with what was typed.
       setRefusal({
         code: 'not_a_number',
-        message: `“${entry.trim()}” is not an entry number. Entry numbers are whole numbers from 1 up, as shown on ${journal ?? 'the entry'}.`,
+        message: t('match.notANumber', {
+          value: entry.trim(),
+          journal: journal ?? t('match.theEntry'),
+        }),
       })
       return
     }
@@ -192,7 +204,10 @@ export function MatchPieceForm({
       if (!result.ok) {
         // THE SERVER'S OWN SENTENCE. `message` already carries the route's
         // `suggestion` joined onto its reason — except on ONE path, below.
-        setRefusal({ message: refusalText(result.message, result.error.status, n, journal), code: result.error.code })
+        setRefusal({
+          message: refusalText(result.message, result.error.status, n, journal, t),
+          code: result.error.code,
+        })
         return
       }
       // The whole cache root: the pièce leaves the inbox count, the worklist
@@ -214,7 +229,7 @@ export function MatchPieceForm({
         htmlFor={`match-${piece.number}`}
         className="block text-[11.5px] font-medium uppercase tracking-wider text-muted-foreground"
       >
-        Which entry does this document prove?
+        {t('match.label')}
       </label>
       <div className="mt-1.5 flex flex-wrap items-center gap-2">
         <span className="text-[13px] text-muted-foreground">#</span>
@@ -232,7 +247,7 @@ export function MatchPieceForm({
           disabled={match.pending}
           className="rounded-md border border-primary bg-primary/10 px-2.5 py-1 text-[12px] font-medium text-primary-strong disabled:opacity-60"
         >
-          {match.pending ? 'Attaching…' : 'Attach'}
+          {match.pending ? t('match.attaching') : t('match.attach')}
         </button>
         <button
           type="button"
@@ -242,30 +257,22 @@ export function MatchPieceForm({
           }}
           className="px-1 text-[12px] text-muted-foreground hover:text-foreground"
         >
-          Cancel
+          {t('match.cancel')}
         </button>
       </div>
 
       <p className="mt-1.5 text-[11.5px] text-muted-foreground">
         {journal ? (
           <>
-            This number is read in <span className="text-foreground">{journal}</span>, decided by
-            this document&apos;s own book — so the same number in another book cannot be reached from
-            here. If it names nothing there, the attach is refused rather than applied elsewhere.
+            {t('match.journalBefore')} <span className="text-foreground">{journal}</span>
+            {t('match.journalAfter')}
           </>
         ) : (
-          <>
-            This document names a book this account does not have in hand, so which journal the
-            number is read in cannot be shown. The server decides it either way; a number that names
-            nothing is refused, never applied elsewhere.
-          </>
+          t('match.journalUnknown')
         )}
       </p>
       <p className="mt-1 text-[11.5px] text-muted-foreground">
-        Attaching writes the entry&apos;s document reference, its checksum and its capture date. It
-        does <span className="text-foreground">not</span> change the entry&apos;s evidence tier —
-        whether this receipt is sufficient proof is a judgment, and this gives you the material to
-        make it. A document proves one entry; there is no undo.
+        {t('match.writesNote')}
       </p>
 
       {/* ── THE ENTRY MAY REFUSE, AND THE READER IS TOLD BEFORE THE CLICK ───
@@ -282,11 +289,7 @@ export function MatchPieceForm({
           instead — which is nothing, because replacing evidence is deliberately
           not built. */}
       <p className="mt-1 text-[11.5px] text-muted-foreground" data-refusal-hint="entry_documented">
-        And the entry must not already have one. An entry cites{' '}
-        <span className="text-foreground">one</span> document; if the one you name already carries a
-        pièce the attach is refused rather than replacing it, in either journal. Swapping a
-        document out is not built, deliberately — evidence that can be quietly replaced is evidence
-        that proves nothing.
+        {t('match.oneDocumentNote')}
       </p>
 
       {unattributed && <AttributionWarning journal={journal} />}
@@ -335,18 +338,14 @@ export function MatchPieceForm({
  * from here at all, and saying so is better than a refusal they have to decode.
  */
 function AttributionWarning({ journal }: { journal: string | null }) {
+  const t = useT()
   return (
     <p
       className="mt-1.5 rounded-md border border-dashed border-border px-2.5 py-1.5 text-[11.5px] text-muted-foreground"
       data-attribution="unattributed"
     >
-      <span className="font-medium text-foreground">
-        This document does not say which book it belongs to, and attaching it decides that.
-      </span>{' '}
-      In the same write, it is filed under the book of whichever entry you name — so this is two
-      changes, not one, and neither can be undone. Until then it belongs to no book, which is why
-      its number is read in {journal ?? 'the grand livre'}: a document nobody has attributed cannot
-      reach a personal recettes-dépenses journal.
+      <span className="font-medium text-foreground">{t('match.attributionLead')}</span>{' '}
+      {t('match.attributionBody', { journal: journal ?? t('match.journalGrandLivre') })}
     </p>
   )
 }

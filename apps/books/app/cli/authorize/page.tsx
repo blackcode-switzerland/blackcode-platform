@@ -28,6 +28,7 @@ import { Terminal } from 'lucide-react'
 import { parseCallbackURL } from '@blackcode/platform-auth/cli-callback'
 import { getValidatedSessionUser } from '@/lib/auth/session'
 import { CliAuthorizeForm } from '@/components/cli-authorize-form'
+import { serverT } from '@/lib/i18n-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,15 +38,16 @@ export default async function CliAuthorizePage({
   searchParams: Promise<{ callback?: string; state?: string; name?: string }>
 }) {
   const sp = await searchParams
+  // A server translator — this page is `async` and resolves the session itself.
+  const t = await serverT()
   const callback = sp.callback ?? ''
   const state = sp.state ?? ''
   const proposedName = sp.name ?? ''
 
   if (!callback || !state) {
     return (
-      <Shell title="Missing parameters">
-        This authorization request has no callback URL or no state token. Re-run{' '}
-        <code className="rounded bg-secondary px-1 py-0.5">bk login</code> from your terminal.
+      <Shell title={t('cli.missingParams')} back={t('cli.back')}>
+        {t('cli.missingParamsBody', { login: 'bk login' })}
       </Shell>
     )
   }
@@ -53,9 +55,8 @@ export default async function CliAuthorizePage({
   const parsed = parseCallbackURL(callback)
   if (!parsed) {
     return (
-      <Shell title="Invalid callback">
-        The callback is not a localhost loopback. Refusing to send a token to an external host — the
-        credential this page mints works against every blackcode app, not only this one.
+      <Shell title={t('cli.invalidCallback')} back={t('cli.back')}>
+        {t('cli.invalidCallbackBody')}
       </Shell>
     )
   }
@@ -85,14 +86,14 @@ export default async function CliAuthorizePage({
             <Terminal size={20} className="text-primary-strong" />
           </span>
           <span>
-            <h1 className="text-lg font-semibold text-foreground">Authorize the bk CLI</h1>
-            <p className="text-xs text-muted-foreground">Signed in as {user.email}</p>
+            <h1 className="text-lg font-semibold text-foreground">{t('cli.title')}</h1>
+            <p className="text-xs text-muted-foreground">
+              {t('cli.signedInAs', { email: user.email })}
+            </p>
           </span>
         </div>
 
-        <p className="mb-3 text-sm text-muted-foreground">
-          A new API token will be created and sent to your terminal at:
-        </p>
+        <p className="mb-3 text-sm text-muted-foreground">{t('cli.willSendTo')}</p>
         <code className="mb-5 block break-all rounded-md bg-secondary px-3 py-2 font-mono text-xs">
           {parsed.url.toString()}
         </code>
@@ -102,8 +103,7 @@ export default async function CliAuthorizePage({
             assume otherwise — "I authorized in b/books, so I got a books token"
             is a reasonable guess and a wrong one. */}
         <p className="mb-6 rounded-md border border-border bg-secondary/50 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-          This token is not specific to b/books. It is your blackcode token and it works against
-          every app your account can reach. Revoke it from Settings → API tokens, in any of them.
+          {t('cli.notBooksSpecific')}
         </p>
 
         <CliAuthorizeForm callback={callback} state={state} defaultName={defaultName} />
@@ -112,7 +112,16 @@ export default async function CliAuthorizePage({
   )
 }
 
-function Shell({ title, children }: { title: string; children: React.ReactNode }) {
+function Shell({
+  title,
+  back,
+  children,
+}: {
+  title: string
+  /** Already translated: `Shell` is not `async` and cannot resolve its own. */
+  back: string
+  children: React.ReactNode
+}) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="max-w-md rounded-xl border border-border bg-card p-8 shadow-lg">
@@ -122,7 +131,7 @@ function Shell({ title, children }: { title: string; children: React.ReactNode }
           href="/dashboard"
           className="mt-6 inline-block text-sm text-primary-strong hover:underline"
         >
-          ← Back to b/books
+          {back}
         </a>
       </div>
     </div>

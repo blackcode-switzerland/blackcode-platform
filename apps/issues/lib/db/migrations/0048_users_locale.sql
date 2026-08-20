@@ -1,0 +1,56 @@
+-- `platform.users.locale` — the interface language, on the shared identity row.
+--
+-- ---------------------------------------------------------------------------
+-- WHY IT LIVES IN THE ISSUES DIRECTORY WHEN THE FEATURE IS BOOKS'
+-- ---------------------------------------------------------------------------
+-- `apps/issues/lib/db/migrations/` IS the platform ledger — issues was the first
+-- app and owns it (docs/platform-db.md). `platform.users` is one row per person
+-- across every app, so a column on it is a platform migration however it was
+-- prompted. b/books is the app that needed a language switch first; it is not
+-- the app that owns the answer, and a books-local copy of this column would mean
+-- a person who chose French in books gets English in sales forever.
+--
+-- ---------------------------------------------------------------------------
+-- THE DEFAULT IS A DECISION, AND IT IS **NULLABLE**
+-- ---------------------------------------------------------------------------
+-- NULL means "this person has never expressed a preference", which is a
+-- different fact from "this person chose English" — and today it is the true
+-- one for every row in the table.
+--
+-- `'en' NOT NULL DEFAULT 'en'` was the simpler option and was rejected for one
+-- concrete reason: `packages/platform-i18n` resolves
+--
+--     user record → cookie → Accept-Language → default
+--
+-- and a NOT NULL backfill answers step 1 for every existing account, which makes
+-- steps 2 and 3 unreachable for everybody who has one. The Accept-Language step
+-- would be dead code the day it shipped, and a French-speaking colleague opening
+-- b/books for the first time would get English because a migration decided for
+-- them. Nullable keeps the fallback chain honest: it is only consulted when the
+-- person really has not chosen, which is exactly what it is for.
+--
+-- The cost is that every reader has to handle NULL. That cost is paid once, in
+-- `resolveLocale`, and `Locale | null` is what the type says.
+--
+-- ---------------------------------------------------------------------------
+-- NO CHECK CONSTRAINT, DELIBERATELY
+-- ---------------------------------------------------------------------------
+-- The vocabulary is `'en' | 'fr'` and it lives in `packages/platform-i18n`
+-- (`LOCALES`). A CHECK here would be a third copy of it, in the one place that
+-- needs a migration to change — and it would buy nothing the two existing
+-- enforcement points do not already give: `PATCH /api/me` refuses an unknown
+-- value, and `parseLocale()` returns null for one it does not recognise, so a
+-- row holding 'de' falls through to the next source rather than rendering
+-- nothing. A stored value the code does not know is a *degradation*, not a
+-- corruption, and that is what makes the constraint optional.
+--
+-- ---------------------------------------------------------------------------
+-- varchar(5), NOT varchar(2)
+-- ---------------------------------------------------------------------------
+-- Room for a BCP-47 region subtag (`fr-CH`) without a second migration. Nothing
+-- writes one today.
+
+ALTER TABLE platform.users ADD COLUMN IF NOT EXISTS locale varchar(5);--> statement-breakpoint
+
+COMMENT ON COLUMN platform.users.locale IS
+  'Interface language for every blackcode app. NULL = never chosen; resolution then falls through to the cookie, then Accept-Language, then the default. Vocabulary lives in packages/platform-i18n.';

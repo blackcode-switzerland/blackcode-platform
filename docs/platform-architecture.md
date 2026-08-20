@@ -89,6 +89,7 @@ blackcode-platform/                 (monorepo, Turborepo)
 │   ├── platform-ui/                design system, rich-text editor, confirm dialog
 │   ├── platform-storage/           upload ledger, app-prefixed paths, the delete gate
 │   ├── platform-agent/             merged changelog feed, CLI version floor
+│   ├── platform-i18n/              the locale vocabulary, the resolution order, the typed lookup
 │   └── platform-testing/           the CLI-parity and app-isolation harnesses
 ├── cli/                            ONE Go binary `bk`
 │   └── internal/
@@ -105,12 +106,22 @@ blackcode-platform/                 (monorepo, Turborepo)
 └── tsconfig.base.json
 ```
 
-**There are eight platform packages.** `platform-storage` and `platform-testing`
+**There are nine platform packages.** `platform-storage` and `platform-testing`
 arrived during the migration and are as load-bearing as the rest — the first owns
-the only code that can reach `del()`. **`platform-email` arrived last**, on
-2026-08-11, when `apps/sales` became the second sender; it was the final piece of
-shared behaviour still living inside `apps/issues`, and the screens that deferred
-to another app for a password change were the visible cost of that.
+the only code that can reach `del()`. **`platform-email` arrived on 2026-08-11**,
+when `apps/sales` became the second sender; it was the final piece of shared
+behaviour still living inside `apps/issues`, and the screens that deferred to
+another app for a password change were the visible cost of that.
+
+**`platform-i18n` arrived last**, on 2026-08-20, for b/books' language switch —
+and it is the clearest example of the §7.6 rule in this list. The language a
+person reads is a property of the PERSON (`platform.users.locale`), so the
+preference and the resolution order that reads it are shared; the WORDS are not,
+because books' vocabulary is not sales'. It draws the same line `platform-email`
+draws between an app's identity and the shared templates: **the package holds the
+mechanism, the app holds the strings.** A books-shaped option appearing in
+`packages/platform-i18n/src/` is the signal that the thing belongs in
+`apps/books/lib/`.
 
 Each app keeps its own `app/api/**`, its own Drizzle schema file for its own
 Postgres schema, its own guide topics, its own `docs/`, and its own Vercel

@@ -21,6 +21,8 @@
 //   mint a token        POST /api/tokens                `platform.api_tokens`
 //   revoke a token      DELETE /api/tokens/{id}         the same rows
 //   authorize the CLI   POST /api/cli/authorize         mints the same token
+//   set your language   PATCH /api/me                   `platform.users.locale`,
+//                                                       one row across every app
 //
 // ── THE LIST GREW ON 2026-08-19, AND A WIDENED GUARD OWES ITS REASON ───────
 // It was two. b/books took fullstack ownership and gained the account surface
@@ -53,7 +55,11 @@
 // transport plus a loading flag. It refuses nothing.
 
 import { useCallback, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE, type Locale } from '@blackcode/platform-i18n'
+import { useLocaleContext } from '@blackcode/platform-i18n/client'
 import { apiSend, ApiRequestError } from './client'
+import { booksGlobalKey } from './query-keys'
 import type { MeRow } from './hooks'
 
 /**
@@ -308,4 +314,88 @@ export function useRevokeToken() {
  */
 export function useAuthorizeCli() {
   return useAccountWrite<{ redirect_url?: string }>('POST', '/api/cli/authorize')
+}
+
+/* -------------------------------------------------------------------- locale */
+
+/**
+ * Choose the interface language — or clear the choice.
+ *
+ * ===========================================================================
+ * THE ONE HOOK BOTH SWITCHES USE
+ * ===========================================================================
+ * There are two places to change the language: **Settings → Preferences** and
+ * the **sidebar**. They call this, and only this. Two switches with two code
+ * paths is how they end up disagreeing about what the stored value is, and in
+ * this app the disagreement would be ON SCREEN AT THE SAME TIME — the sidebar
+ * is mounted on the settings page.
+ *
+ * It is here rather than in `lib/mutations.ts` for this file's standing reason:
+ * it touches `platform.users`, one row across every blackcode app, and nothing
+ * in `books.*`. `lib/read-only.test.ts` names this module as one of exactly two
+ * allowed to send a write.
+ *
+ * ── THREE THINGS MOVE, AND EACH ANSWERS A DIFFERENT REQUEST ────────────────
+ *
+ *   1. **`PATCH /api/me`** — the durable choice. It is what makes the language
+ *      follow the person to another machine and to another blackcode app.
+ *   2. **The context** — the tree re-renders in the new language immediately.
+ *      Without it the reader clicks EN and nothing happens until a navigation.
+ *   3. **The `bk_locale` cookie** — what the SERVER reads on the next request,
+ *      before React exists. It is what keeps the first paint correct after a
+ *      hard reload, and it is the only source that works on `/login` and the
+ *      marketing page, where there is no session row to read.
+ *
+ * The `/api/me` cache is invalidated rather than patched: the settings page
+ * renders `me.data.locale` to decide whether "Follow my browser" is the current
+ * state, and the server is the only thing that knows what the column now says.
+ *
+ * ── `null` IS A REAL ARGUMENT AND MEANS "UNDO MY CHOICE" ───────────────────
+ * Not "choose English". It clears the column and the cookie, handing the reader
+ * back to `Accept-Language`. The route accepts it explicitly for this.
+ */
+export function useSetLocale() {
+  const write = useAccountWrite<MeRow>('PATCH', '/api/me')
+  const { setLocale } = useLocaleContext()
+  const queryClient = useQueryClient()
+
+  const run = useCallback(
+    async (locale: Locale | null) => {
+      const saved = await write.run({ locale })
+      if (!saved.ok) return saved
+      // The context takes the EFFECTIVE locale. Clearing the preference does not
+      // mean "render nothing" — it means "render what the browser asks for", and
+      // the server's answer to that arrives on the next request. Until then the
+      // honest thing on screen is what the reader was already reading, so a
+      // cleared preference leaves the current language alone rather than
+      // guessing at `navigator.language` in a second, different resolution order
+      // from the package's.
+      if (locale) setLocale(locale)
+      writeLocaleCookie(locale)
+      await queryClient.invalidateQueries({ queryKey: booksGlobalKey('me') })
+      return saved
+    },
+    [write, setLocale, queryClient]
+  )
+
+  return { run, pending: write.pending, error: write.error }
+}
+
+/**
+ * The cookie half, written from the browser rather than by the route.
+ *
+ * `PATCH /api/me` is shared by three apps and a `Set-Cookie` from it would put a
+ * books-shaped concern into `packages/platform-api` — the thing §7 of the phase
+ * brief warns about. The cookie is a client-side cache of a server-side fact;
+ * the server-side fact is the column, and it is already written above.
+ *
+ * `SameSite=Lax` and no `Secure` flag, because this has to work on
+ * `http://localhost:3200`. It carries a language name and nothing else — there
+ * is no session value here to protect.
+ */
+function writeLocaleCookie(locale: Locale | null) {
+  if (typeof document === 'undefined') return
+  document.cookie = locale
+    ? `${LOCALE_COOKIE}=${locale}; path=/; max-age=${LOCALE_COOKIE_MAX_AGE}; samesite=lax`
+    : `${LOCALE_COOKIE}=; path=/; max-age=0; samesite=lax`
 }

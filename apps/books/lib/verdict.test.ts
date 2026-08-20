@@ -9,6 +9,7 @@
 //
 // Every case was watched fail before it was kept.
 
+import { DICTIONARY } from './dictionary'
 import { describe, it, expect } from 'vitest'
 import { blocksPosting, citedRules, resolutionText, verdictFace, worstCaseText } from './verdict'
 import type { Verdict } from './types'
@@ -31,7 +32,7 @@ describe('the absence is its own state, and it is not an assurance', () => {
     for (const nothing of [null, undefined]) {
       const face = verdictFace(nothing)
       expect(face.state).toBe('never_checked')
-      expect(face.meaning).toMatch(/not the same as a clean one/i)
+      expect(DICTIONARY.en[face.meaningKey]).toMatch(/not the same as a clean one/i)
     }
   })
 
@@ -61,7 +62,7 @@ describe('the absence is its own state, and it is not an assurance', () => {
   it('a verdict this build does not know is named, not read either way', () => {
     const face = verdictFace(filed({ verdict: 'quarantined' as Verdict['verdict'] }))
     expect(face.state).toBe('unknown')
-    expect(face.meaning).toMatch(/rather than read as a pass or a refusal/i)
+    expect(DICTIONARY.en[face.meaningKey]).toMatch(/rather than read as a pass or a refusal/i)
   })
 })
 

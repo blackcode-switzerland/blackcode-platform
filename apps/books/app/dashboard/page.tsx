@@ -39,6 +39,7 @@
 import { redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
 import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { serverT } from '@/lib/i18n-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,21 +57,19 @@ export default async function DashboardIndex() {
 
   if (first) redirect(`/dashboard/${first.slug}`)
 
+  // Resolved AFTER the redirect, so the ordinary path — everybody who has a
+  // workspace — pays nothing for it.
+  const t = await serverT()
+
   return (
     <div className="mx-auto max-w-lg px-6 py-20">
-      <h1 className="text-lg font-semibold text-foreground">Your account is not set up yet</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Signing in should have finished setting up your account. It is best-effort and idempotent,
-        so signing out and back in retries it.
-      </p>
+      <h1 className="text-lg font-semibold text-foreground">{t('dashboard.notSetUp')}</h1>
+      <p className="mt-2 text-sm text-muted-foreground">{t('dashboard.notSetUpBody')}</p>
       <p className="mt-3 text-sm text-muted-foreground">
-        If it keeps failing, the server log carries the reason —{' '}
-        <span className="font-mono text-[12.5px]">ensureWorkspaceForUser failed at sign-in</span>.
-        Your account settings are still reachable at{' '}
-        <a href="/dashboard/settings" className="text-primary-strong hover:underline">
-          /dashboard/settings
-        </a>
-        .
+        {t('dashboard.notSetUpBody2', {
+          reason: 'ensureWorkspaceForUser failed at sign-in',
+          path: '/dashboard/settings',
+        })}
       </p>
     </div>
   )

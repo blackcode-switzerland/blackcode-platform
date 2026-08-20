@@ -14,14 +14,18 @@
 // the page you are already on. What the auth page keeps is the BRAND, which is
 // the way back to `/`, and that is the point of giving it a header at all.
 
+'use client'
+
 import Image from 'next/image'
 import Link from 'next/link'
+import { useT } from '@/lib/i18n'
 
 export function SiteHeader({ children }: { children?: React.ReactNode }) {
+  const t = useT()
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-11 max-w-5xl items-center gap-2.5 px-5 sm:px-6">
-        <Link href="/" aria-label="b/books home" className="flex items-center gap-2.5">
+        <Link href="/" aria-label={t('site.home')} className="flex items-center gap-2.5">
           <Image src="/logo.png" alt="b/" width={20} height={20} className="rounded-[14%]" />
           <span className="text-[15px] font-semibold tracking-tight">books</span>
         </Link>
@@ -32,10 +36,11 @@ export function SiteHeader({ children }: { children?: React.ReactNode }) {
 }
 
 export function SiteFooter() {
+  const t = useT()
   return (
     <footer className="border-t border-border">
       <div className="mx-auto flex max-w-5xl flex-col gap-2 px-5 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:px-6">
-        <span>b/books — a blackcode product.</span>
+        <span>{t('site.footer')}</span>
         <a href="mailto:contact@blackcode.ch" className="hover:text-foreground sm:ml-auto">
           contact@blackcode.ch
         </a>

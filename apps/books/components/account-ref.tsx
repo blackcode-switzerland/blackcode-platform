@@ -19,7 +19,10 @@
 // would drop them and send the reader to the default book's ledger with the
 // right account number on it — real numbers, wrong company. See `lib/nav.ts`.
 
+'use client'
+
 import Link from 'next/link'
+import { useT } from '@/lib/i18n'
 import { scopedHref } from '@/lib/nav'
 // ── `en`, NOT `accountLabelEn`, SINCE 2026-08-19 ──────────────────────────
 // Account labels shipped as `{fr, enSuffix}` — the mockup's shortcut — while the
@@ -28,7 +31,11 @@ import { scopedHref } from '@/lib/nav'
 // income-statement line rendered in French on an English screen. The backend
 // normalised it in the hardening pass; storage keeps `enSuffix`, the wire says
 // `en`, and the second spelling this file needed is gone with it.
-import { en } from '@/lib/label'
+// `useLabel()` since 2026-08-20, not `en()`: an account name is CHROME and
+// follows the reader's language. `en()` still means "the English side" and has
+// exactly one caller left (`<StatementTable>`'s gloss) — `lib/label.ts` records
+// why it was widened rather than redefined.
+import { useLabel } from '@/lib/use-label'
 import { journalAccepts, type Journal } from '@/lib/journal'
 import type { Label } from '@/lib/types'
 
@@ -67,6 +74,8 @@ export function AccountRef({
   scope: AccountRefScope
   className?: string
 }) {
+  const t = useT()
+  const label_ = useLabel()
   // A staged entry may legitimately have no account yet (`EntryLine.account` is
   // `string | null` and null is allowed only while staged). Saying so is the
   // point: an unmapped line is the thing Recognition exists to resolve, and
@@ -74,7 +83,7 @@ export function AccountRef({
   if (!no) {
     return (
       <span className={'text-xs italic text-muted-foreground ' + className}>
-        unmapped
+        {t('statements.unmapped')}
       </span>
     )
   }
@@ -84,7 +93,7 @@ export function AccountRef({
       <span className="font-mono text-[12.5px] tabular-nums">{no}</span>
       {label && (
         <span className="text-[13px] text-muted-foreground group-hover:text-primary-strong">
-          {en(label)}
+          {label_(label)}
         </span>
       )}
     </>
@@ -117,8 +126,8 @@ export function AccountRef({
         data-account-link="none"
         title={
           scope.journal === 'recettes_depenses'
-            ? 'This book keeps recettes and dépenses under art. 957 al. 2 CO. Its journal has no chart mapping, so there is nothing to drill into by account number.'
-            : 'Which journal this book keeps is not known yet, so this cannot be drilled into.'
+            ? t('statements.noDrillRi')
+            : t('statements.noDrillUnknown')
         }
       >
         {body}
