@@ -74,6 +74,28 @@ import type { BilanGroup, CrLine } from './statements'
 export interface MetaPayload {
   app: 'books'
   /**
+   * The platform half — who you are, where you are, and WHERE EVERY APP LIVES.
+   *
+   * All null/empty for an anonymous caller, which is the state the vocabulary
+   * half is served for. `apps` is the one the CLI depends on: `bk login` and
+   * `bk meta` build their address book from `apps.<slug>.base_url`, and until
+   * 2026-08-20 this route served none, so logging in against a books server
+   * wrote an EMPTY registry and every `bk books …` failed with "no app registry
+   * yet" (Bala's #57, blocking for deployment).
+   *
+   * Held loosely on purpose. The shapes belong to `@blackcode/platform-api`,
+   * this app only forwards them, and a narrower type here would be a second
+   * declaration of somebody else's payload that silently drops what it adds —
+   * the mistake `MetaApp.Raw` on the CLI side exists to avoid.
+   */
+  user: { id: number; email: string; name: string | null } | null
+  active_workspace: { id: number; slug: string; name: string } | null
+  workspaces: { id: number; slug: string; name: string; role: string }[]
+  current_app: Record<string, unknown> | null
+  apps: Record<string, { name: string; base_url: string | null; is_current: boolean }> | null
+  links: Record<string, unknown> | null
+  cli: Record<string, unknown> | null
+  /**
    * A pointer, not a list. `source` says where the books really live and is the
    * field to watch — a screen that ships against fixture data believing it is
    * real is what it exists to prevent.
