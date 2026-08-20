@@ -516,11 +516,21 @@ func newBilanCmd() *cobra.Command {
 
 func newCrCmd() *cobra.Command {
 	var scope client.BooksScope
+	var byMonth bool
 	cmd := &cobra.Command{
 		Use:         "cr",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/compte-resultat"},
 		Short:       "Compte de résultat par nature, art. 959b",
-		Args:        cobra.NoArgs,
+		Long: "The statutory profit and loss for one book and one fiscal year: ten lines,\n" +
+			"fixed order, each with its sign. Computed from movement, never from balances\n" +
+			"— a trading year starts at zero by definition.\n\n" +
+			"--by-month adds a column per month of the exercice, in the same line\n" +
+			"structure, so a year can be read across as well as down. Every month in the\n" +
+			"span appears, a quiet one as zeros, because a grid whose columns come and go\n" +
+			"cannot be read and hides the difference between no trading and no data.\n\n" +
+			"A monthly compte de résultat is a READING AID. art. 959b defines the annual\n" +
+			"statement; a month is not a legal reporting period and no column is filable.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -530,13 +540,40 @@ func newCrCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := c.GetBooksCr(ws, scope)
+			r, err := c.GetBooksCr(ws, scope, byMonth)
 			if err != nil {
 				return err
 			}
 			return output.Render(format, r, func(w io.Writer) error {
 				fmt.Fprintf(w, "COMPTE DE RÉSULTAT — %s, exercice %d\n\n", r.Entity, r.Exercice)
 				tw := output.Tabwriter(w)
+				if len(r.Months) > 0 {
+					// One column per month, the annual figure last. The line
+					// order is the statute's and is identical in every month,
+					// so the header is written once and the rows line up.
+					fmt.Fprintf(tw, "LINE\t")
+					for _, m := range r.Months {
+						fmt.Fprintf(tw, "%s\t", strings.TrimPrefix(m.Month, fmt.Sprintf("%d-", r.Exercice)))
+					}
+					fmt.Fprintf(tw, "YEAR\n")
+					for i, l := range r.Lines {
+						fmt.Fprintf(tw, "%s\t", l.Pos)
+						for _, m := range r.Months {
+							amount := ""
+							if i < len(m.Lines) {
+								amount = m.Lines[i].Amount
+							}
+							fmt.Fprintf(tw, "%s\t", amount)
+						}
+						fmt.Fprintf(tw, "%s\n", l.Amount)
+					}
+					fmt.Fprintf(tw, "RÉSULTAT\t")
+					for _, m := range r.Months {
+						fmt.Fprintf(tw, "%s\t", m.Resultat)
+					}
+					fmt.Fprintf(tw, "%s\n", r.Resultat)
+					return tw.Flush()
+				}
 				for _, l := range r.Lines {
 					kind := "charge"
 					if l.Sign == 1 {
@@ -551,6 +588,7 @@ func newCrCmd() *cobra.Command {
 		},
 	}
 	scopeFlags(cmd, &scope)
+	cmd.Flags().BoolVar(&byMonth, "by-month", false, "A column per month of the exercice, same line structure")
 	return cmd
 }
 

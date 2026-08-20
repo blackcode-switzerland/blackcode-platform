@@ -6,10 +6,27 @@
 // Computed from MOVEMENT and never from balances. A trading year starts at zero by
 // definition, which is what closing an exercice means, so a CR account has no
 // opening balance to carry.
+//
+// ── `?by=month` — THE SAME STATEMENT, TWELVE TIMES (ticket #64) ────────────
+// The annual statement answers "the year lost 10'993.60" and cannot answer
+// "and almost all of it was March". `by=month` adds a `months` array carrying
+// the real statutory line structure per month, derived through the same
+// `crFor` the annual figure uses, so the two can never disagree and the months
+// sum to the year exactly.
+//
+// The annual body is returned ALONGSIDE it, unchanged, rather than replaced: a
+// screen showing a monthly grid still has a total to show, and making it ask
+// twice for two views of one statement would invite them to be read from
+// different moments.
+//
+// A monthly compte de résultat is a READING AID. art. 959b defines the annual
+// statement; a month is not a legal reporting period and no column here is
+// filable.
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
 import { getCr, resolveScope } from '@/lib/db/queries/statutory'
+import { getCrByMonth } from '@/lib/db/queries/management'
 
 interface Params { params: Promise<{ ws: string }> }
 
@@ -29,9 +46,21 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   }
 
   const cr = await getCr(scope.entity.id, scope.exercice.id)
+
+  const by = q.get('by')
+  if (by !== null && by !== 'month') {
+    throw Errors.badRequest(
+      'bad_breakdown',
+      `"${by}" is not a breakdown this statement has`,
+      'the only one is `by=month`; the statement itself is annual (art. 959b)'
+    )
+  }
+  const months = by === 'month' ? await getCrByMonth(scope.entity, scope.exercice) : undefined
+
   return NextResponse.json({
     entity: scope.entity.slug,
     exercice: scope.exercice.year,
     ...cr,
+    ...(months ? { months } : {}),
   })
 })
