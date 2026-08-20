@@ -32,6 +32,53 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-20 — The compte de résultat can be read month by month
+
+**One new query parameter and one new flag; no route, record or stored figure
+changed.** Ticket #64, reported by the operator: the profit-and-loss view shows
+a whole year as one column, so "the year lost 10'993.60" is answerable and "and
+almost all of it was January" is not.
+
+    GET /api/workspaces/{ws}/compte-resultat?entity=…&exercice=…&by=month
+    bk books cr --entity acme --exercice 2026 --by-month
+
+`by=month` adds a `months` array carrying the **real statutory line structure**
+per month, not a produits/charges pair. Each month runs through the same
+`crFor` the annual statement uses, so nothing here knows what an art. 959b line
+is, the two views can never disagree about what a line means, and a change to
+the structure reaches both at once.
+
+The annual body is returned **alongside** `months`, unchanged, rather than
+replaced: a screen showing a grid still needs its total, and making it ask twice
+for two views of one statement would invite them to be read from two different
+moments.
+
+**Every month in the exercice appears, including the quiet ones.**
+`monthly_flows` on the analytique drops empty months, which is right for a
+sparkline and wrong for a grid: columns that come and go cannot be read across,
+and the reader cannot tell "no trading" from "no data". A quiet month comes back
+as a full set of zero lines — the same rule the annual statement already follows
+("every legal line is emitted, including the ones that come to zero"), applied
+to the second axis.
+
+Refused for a simplified book, exactly as the annual statement is: art. 957
+al. 2 bookkeeping has no compte de résultat to break down, and its monthly
+picture is `monthly_flows` on the analytique, which that regime does serve.
+`?by=` anything else answers `bad_breakdown`.
+
+### A monthly P&L is a reading aid, not a statement
+
+art. 959b defines the **annual** compte de résultat. A month is not a legal
+reporting period: nothing closes at a month boundary, no result is carried at
+one, and no column of this is filable. That is why `crByMonth` sits in
+`lib/derive/management.ts` beside the other management derivations rather than
+in `lib/derive/index.ts` with the statutory statements — the placement is the
+documentation.
+
+The invariant that makes it safe to show is pinned in the tests: the months sum
+to the year exactly, in total AND line by line, because they are a partition of
+the same rows rather than a second opinion.
+
 ## 2026-08-20 — Payroll, VAT registration, tax parameters, and switching a rule off
 
 **Four more write doors, one of which unblocks the VAT work shipped earlier

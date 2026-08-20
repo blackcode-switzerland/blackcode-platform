@@ -225,6 +225,19 @@ type BooksCr struct {
 	Exercice int           `json:"exercice"`
 	Lines    []BooksCrLine `json:"lines"`
 	Resultat string        `json:"resultat"`
+	// Months is present only when the caller asked for `by=month`. The annual
+	// figures above stay alongside it: a grid still needs its total, and asking
+	// twice would invite two views of one statement read from two moments.
+	Months []BooksMonthlyCr `json:"months,omitempty"`
+}
+
+// BooksMonthlyCr is one month in the same statutory line structure as the year.
+// A reading aid — art. 959b defines the ANNUAL statement, and no column here is
+// filable.
+type BooksMonthlyCr struct {
+	Month    string        `json:"month"`
+	Lines    []BooksCrLine `json:"lines"`
+	Resultat string        `json:"resultat"`
 }
 
 // BooksOverviewBook carries whichever statement the book's legal form has.
@@ -354,9 +367,17 @@ func (c *Client) GetBooksBilan(ws string, s BooksScope) (*BooksBilan, error) {
 	return &out, nil
 }
 
-func (c *Client) GetBooksCr(ws string, s BooksScope) (*BooksCr, error) {
+func (c *Client) GetBooksCr(ws string, s BooksScope, byMonth bool) (*BooksCr, error) {
 	var out BooksCr
-	if err := c.get(fmt.Sprintf("/api/workspaces/%s/compte-resultat%s", ws, s.query()), &out); err != nil {
+	q := s.query()
+	if byMonth {
+		if q == "" {
+			q = "?by=month"
+		} else {
+			q += "&by=month"
+		}
+	}
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/compte-resultat%s", ws, q), &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

@@ -7,6 +7,7 @@
 
 import { describe, it, expect } from 'vitest'
 import {
+  crByMonth,
   monthlyFlows,
   monthlyFlowsRi,
   costBreakdown,
@@ -16,7 +17,7 @@ import {
   pmCapitalTax,
   type TaxParams,
 } from './management'
-import type { ChartAccount } from './index'
+import { crFor, type ChartAccount } from './index'
 
 /** The seeded Vaud/Renens parameters, exactly as the fixture states them. */
 const VD_RENENS: TaxParams = {
@@ -186,5 +187,100 @@ describe('pmCapitalTax', () => {
   it('in a loss year nothing is credited and the gross is due', () => {
     const c = pmCapitalTax(10000000n, 0, VD_RENENS)
     expect(c).toEqual({ gross: '60.00', credited: '0.00', net_due: '60.00' })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// crByMonth — ticket #64
+// ---------------------------------------------------------------------------
+
+describe('crByMonth', () => {
+  // Real statutory positions, because `crFor` selects accounts by matching
+  // CR_STRUCTURE's own `pos`. A made-up position would silently produce a grid
+  // of zeros and the test would pass on nothing.
+  const REAL: ChartAccount[] = [
+    { no: '1020', class: 1, statement: 'bilan', statement_position: 'tresorerie' },
+    { no: '3400', class: 3, statement: 'cr', statement_position: 'produits_nets' },
+    { no: '5000', class: 5, statement: 'cr', statement_position: 'charges_personnel' },
+    { no: '6000', class: 6, statement: 'cr', statement_position: 'autres_charges_exploitation' },
+  ]
+  const SPAN = { starts_on: '2026-01-01', ends_on: '2026-12-31' }
+  const L = (date: string, account: string, debit: string, credit: string, status = 'posted') => ({
+    date,
+    account_no: account,
+    debit,
+    credit,
+    status,
+  })
+
+  const LINES = [
+    L('2026-01-25', '5000', '11600.00', '0'), // January payroll
+    L('2026-01-25', '1020', '0', '11600.00'),
+    L('2026-02-03', '3400', '0', '5420.00'), // February revenue
+    L('2026-02-03', '1020', '5420.00', '0'),
+    L('2026-03-08', '6000', '1850.00', '0', 'staged'), // never posted
+    L('2026-03-08', '1020', '0', '1850.00', 'staged'),
+  ]
+
+  it('gives one column per month of the exercice, quiet months included', () => {
+    const months = crByMonth(LINES, REAL, SPAN)
+    expect(months.map((m) => m.month)).toEqual([
+      '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06',
+      '2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12',
+    ])
+    // A grid whose columns come and go cannot be read across, and hides the
+    // difference between no trading and no data.
+    expect(months[5].resultat, 'June traded nothing and says so').toBe('0.00')
+    expect(months[5].lines.length, 'and still carries every statutory line').toBe(months[0].lines.length)
+  })
+
+  it('carries the statutory structure into every month, in the same order', () => {
+    const months = crByMonth(LINES, REAL, SPAN)
+    const order = months[0].lines.map((l) => l.pos)
+    for (const m of months) {
+      expect(m.lines.map((l) => l.pos), `${m.month} drifted from the statute's order`).toEqual(order)
+    }
+  })
+
+  it('puts each movement in its own month', () => {
+    const months = crByMonth(LINES, REAL, SPAN)
+    const at = (month: string, pos: string) =>
+      months.find((m) => m.month === month)!.lines.find((l) => l.pos === pos)!.amount
+    expect(at('2026-01', 'charges_personnel')).toBe('11600.00')
+    expect(at('2026-02', 'charges_personnel')).toBe('0.00')
+    expect(at('2026-02', 'produits_nets')).toBe('5420.00')
+    expect(at('2026-01', 'produits_nets')).toBe('0.00')
+  })
+
+  it('ignores staged money, exactly as the annual statement does', () => {
+    const months = crByMonth(LINES, REAL, SPAN)
+    const march = months.find((m) => m.month === '2026-03')!
+    expect(march.resultat, 'the March entry is staged and belongs to nobody yet').toBe('0.00')
+  })
+
+  it('sums to the year — the invariant that makes it safe to show', () => {
+    const months = crByMonth(LINES, REAL, SPAN)
+    const year = crFor(LINES, REAL)
+    const summed = months.reduce((t, m) => t + Math.round(Number(m.resultat) * 100), 0)
+    expect(summed, 'the months are a partition of the same rows, not a second opinion').toBe(
+      Math.round(Number(year.resultat) * 100)
+    )
+    // And line by line, not only in total.
+    for (const line of year.lines) {
+      const acrossMonths = months.reduce(
+        (t, m) => t + Math.round(Number(m.lines.find((l) => l.pos === line.pos)!.amount) * 100),
+        0
+      )
+      expect(acrossMonths, `${line.pos} does not sum to its annual figure`).toBe(
+        Math.round(Number(line.amount) * 100)
+      )
+    }
+  })
+
+  it('gives a line dated outside the exercice its own column rather than dropping it', () => {
+    // The entry door refuses such a line, so this cannot arise in practice —
+    // but a derivation that silently swallowed one would hide the day it does.
+    const months = crByMonth([...LINES, L('2025-12-31', '3400', '0', '99.00')], REAL, SPAN)
+    expect(months.map((m) => m.month)).toContain('2025-12')
   })
 })

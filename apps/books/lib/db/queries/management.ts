@@ -53,6 +53,7 @@ import { fromCentimes, toCentimes } from '../../derive'
 import {
   costBreakdown,
   costBreakdownRi,
+  crByMonth,
   monthlyFlows,
   monthlyFlowsRi,
   pmCapitalTax,
@@ -60,6 +61,7 @@ import {
   vatPosition,
   type BreakdownInputLine,
   type CategoryBreakdown,
+  type MonthlyCr,
   type MonthlyFlow,
   type TaxParams,
   type VatEntry,
@@ -359,6 +361,43 @@ async function breakdownLines(entityId: number, exerciceId: number): Promise<Bre
       )
     )
   return rows.map((r) => ({ ...r, counterparty: r.counterparty ?? r.raw_label }))
+}
+
+// ---------------------------------------------------------------------------
+// The compte de résultat, month by month — ticket #64
+// ---------------------------------------------------------------------------
+
+/**
+ * The annual statement is the one the law defines; this is how an operator
+ * reads it. See `crByMonth` in `derive/management.ts` for why it lives with the
+ * management derivations rather than the statutory ones.
+ *
+ * Refused for a simplified book, exactly as `getCr` is: art. 957 al. 2
+ * bookkeeping has no compte de résultat to break down. Its monthly picture is
+ * `monthly_flows` on the analytique, which that regime does serve.
+ */
+export async function getCrByMonth(
+  entity: BooksEntity,
+  exercice: BooksExercice
+): Promise<MonthlyCr[]> {
+  if (entity.bookkeeping_regime === 'simplified') {
+    throw new ManagementRefused(
+      'no_cr_for_simplified',
+      `"${entity.slug}" keeps recettes-dépenses: it has no compte de résultat to break down`,
+      'bk books analytique serves this book\'s monthly recettes and dépenses'
+    )
+  }
+  const [lines, accounts] = await Promise.all([
+    breakdownLines(entity.id, exercice.id),
+    listAccounts(entity.id),
+  ])
+  const chart = accounts.map((a) => ({
+    no: a.no,
+    class: Number(a.class),
+    statement: a.statement,
+    statement_position: a.statement_position,
+  }))
+  return crByMonth(lines, chart, { starts_on: exercice.starts_on, ends_on: exercice.ends_on })
 }
 
 export async function getAnalytique(entity: BooksEntity, exercice: BooksExercice): Promise<AnalytiqueResult> {

@@ -25,7 +25,7 @@
 // contract as crFor/bilanFor — so a metric cannot mix two years by
 // construction.
 
-import { toCentimes, fromCentimes, type ChartAccount, type PostingLine } from './index'
+import { crFor, toCentimes, fromCentimes, type ChartAccount, type CrLine, type PostingLine } from './index'
 import type { Money } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -313,4 +313,93 @@ export function pmCapitalTax(equityCentimes: bigint, cantCommProfitTax: number, 
   const gross = equity * (p.capital_tax.base_rate_permille / 1000)
   const credited = Math.min(gross, cantCommProfitTax)
   return { gross: round2(gross), credited: round2(credited), net_due: round2(Math.max(0, gross - credited)) }
+}
+
+// ---------------------------------------------------------------------------
+// The compte de résultat, month by month
+// ---------------------------------------------------------------------------
+
+/**
+ * One month's compte de résultat, in the statutory line structure.
+ *
+ * ===========================================================================
+ * A MONTHLY P&L IS A READING AID, NOT A STATEMENT
+ * ===========================================================================
+ * art. 959b fixes the ANNUAL compte de résultat. A month is not a legal
+ * reporting period: nothing closes at a month boundary, no result is carried at
+ * one, and no month of this is filable. It lives here, beside the other
+ * management derivations, rather than in `derive/index.ts` with the statutory
+ * statements — and that placement is the documentation.
+ *
+ * What it is for: the operator asked to see where a year went (ticket #64). The
+ * annual statement answers "the year lost 10'993.60" and cannot answer "and
+ * almost all of it was March".
+ */
+export interface MonthlyCr {
+  /** `YYYY-MM`. */
+  month: string
+  lines: CrLine[]
+  resultat: Money
+}
+
+/**
+ * Split the year into months and derive the real statement for each.
+ *
+ * ── EVERY MONTH IN THE SPAN, INCLUDING THE EMPTY ONES ──────────────────────
+ * `monthlyFlows` drops months with no movement, which is right for a sparkline
+ * and wrong for a grid: a table whose columns appear and disappear cannot be
+ * read across, and the reader cannot tell "no trading" from "no data". So the
+ * caller passes the exercice's own boundaries and gets one column per month
+ * between them, a quiet month coming back as a full set of zero lines.
+ *
+ * That is the same rule the annual statement already follows — "every legal
+ * line is emitted, including the ones that come to zero" — applied to the
+ * second axis.
+ *
+ * ── THE STRUCTURE IS DERIVED, NEVER SPLIT ──────────────────────────────────
+ * Each month runs through `crFor`, the same function the annual statement uses.
+ * Nothing here knows what a statutory line is, so a change to art. 959b's
+ * structure reaches the monthly view for free, and the two can never disagree
+ * about what a line means. Summing the twelve months gives the annual result
+ * exactly, because it is the same arithmetic over a partition of the same rows.
+ */
+export function crByMonth(
+  lines: DatedLine[],
+  accounts: ChartAccount[],
+  span: { starts_on: string; ends_on: string }
+): MonthlyCr[] {
+  const byMonth = new Map<string, DatedLine[]>()
+  for (const m of monthsBetween(span.starts_on, span.ends_on)) byMonth.set(m, [])
+  for (const l of lines) {
+    const month = l.date.slice(0, 7)
+    // A line dated outside the exercice cannot happen (the entry door refuses
+    // it), but a derivation that silently dropped one would hide the day it
+    // does. It gets its own column instead.
+    const bucket = byMonth.get(month)
+    if (bucket) bucket.push(l)
+    else byMonth.set(month, [l])
+  }
+  return [...byMonth.keys()].sort().map((month) => {
+    const cr = crFor(byMonth.get(month)!, accounts)
+    return { month, lines: cr.lines, resultat: cr.resultat }
+  })
+}
+
+/** `2026-01` … `2026-12` for a calendar year; whatever the span really is otherwise. */
+function monthsBetween(startsOn: string, endsOn: string): string[] {
+  const out: string[] = []
+  let y = Number(startsOn.slice(0, 4))
+  let m = Number(startsOn.slice(5, 7))
+  const last = endsOn.slice(0, 7)
+  for (let guard = 0; guard < 240; guard++) {
+    const cur = `${y}-${String(m).padStart(2, '0')}`
+    out.push(cur)
+    if (cur >= last) break
+    m += 1
+    if (m > 12) {
+      m = 1
+      y += 1
+    }
+  }
+  return out
 }
