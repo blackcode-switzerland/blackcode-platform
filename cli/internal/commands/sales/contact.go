@@ -65,15 +65,15 @@ func newContactListCmd() *cobra.Command {
 			}
 			return output.Render(format, rows, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "ID\tNAME\tROLE\tEMAIL\tPHONE")
+				fmt.Fprintln(tw, "ID\tNAME\tROLE\tPOWER\tEMAIL\tPHONE")
 				for _, r := range rows {
 					name := r.Name
 					if r.IsPrimary {
 						name = "★ " + name
 					}
-					fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\n",
-						r.ID, cmdutil.Truncate(name, 26), cmdutil.Truncate(r.Role, 26),
-						dashIf(r.Email), dashIf(r.Phone))
+					fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\n",
+						r.ID, cmdutil.Truncate(name, 26), cmdutil.Truncate(r.Role, 22),
+						dashIf(r.DecisionPower), dashIf(r.Email), dashIf(r.Phone))
 				}
 				if err := tw.Flush(); err != nil {
 					return err
@@ -142,6 +142,8 @@ everywhere in this app, and naming two different ones is an error.`,
 	cmd.Flags().StringVar(&req.Role, "role", "", "Their role (\"Co-founder · product\")")
 	cmd.Flags().StringVar(&req.Email, "email", "", "Email")
 	cmd.Flags().StringVar(&req.Phone, "phone", "", "Phone")
+	cmd.Flags().StringVar(&req.LinkedIn, "linkedin", "", "LinkedIn profile, full url including https://")
+	cmd.Flags().StringVar(&req.DecisionPower, "decision-power", "", "What they can DO in the deal — "+vocab("decision_powers"))
 	cmd.Flags().BoolVar(&primary, "primary", false, "Make this the primary contact")
 	cmd.Flags().StringVar(&req.Notes, "notes", "", "Notes about this person")
 	_ = cmd.MarkFlagRequired("name")
@@ -188,6 +190,8 @@ func newContactEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&req.Role, "role", "", "Their role")
 	cmd.Flags().StringVar(&req.Email, "email", "", "Email")
 	cmd.Flags().StringVar(&req.Phone, "phone", "", "Phone")
+	cmd.Flags().StringVar(&req.LinkedIn, "linkedin", "", "LinkedIn profile, full url including https://")
+	cmd.Flags().StringVar(&req.DecisionPower, "decision-power", "", "What they can DO in the deal — "+vocab("decision_powers"))
 	cmd.Flags().BoolVar(&primary, "primary", false, "Make this the primary contact")
 	cmd.Flags().StringVar(&req.Notes, "notes", "", "Notes about this person")
 	return cmd

@@ -51,6 +51,47 @@ function Chip({ label, color }: { label: string; color: string }) {
   )
 }
 
+/**
+ * The workspace **#number** — the address of a row, printed where a human can
+ * read it off the screen and say it out loud.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS EXISTS (sales #30)
+ * ---------------------------------------------------------------------------
+ * The issue was filed as a SORTING bug: "`bk sales product list` sorts
+ * alphabetically, the web page doesn't, so 'the third one' means two different
+ * things". Measured, the two surfaces were already in the same order — both
+ * render `GET …/products` verbatim, ordered `(category, name)`, and the CLI
+ * applies no sort of its own.
+ *
+ * The actual defect is that **no listing in this app printed the #number at
+ * all.** So the only way a human could refer to a row was by its position in a
+ * list, and a position is not an address: it moves when something is renamed,
+ * when a product is added, and when a filter is on. The agent, meanwhile,
+ * addresses everything by #number. Every conversation between the two needed a
+ * translation step, and the translation is what was wrong.
+ *
+ * Neither fix the issue proposed would have helped — a `position` column and
+ * "sort the CLI like the web" both make two already-identical orders identical,
+ * and leave the human with nothing to say but "the third one".
+ *
+ * `lib/views.ts` has said `number`, never `id` from the beginning. This is that
+ * rule reaching the screen.
+ */
+export function RecordNumber({ n, className }: { n: number; className?: string }) {
+  return (
+    <span
+      className={
+        'shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground ' + (className ?? '')
+      }
+      // A screen reader saying "hash one" is noise; "record number 1" is not.
+      aria-label={`Record number ${n}`}
+    >
+      #{n}
+    </span>
+  )
+}
+
 /** A bare dot, for a row too dense for a chip. */
 export function VocabDot({ color, title }: { color: string; title?: string }) {
   return (

@@ -10,6 +10,11 @@ import { publicProduct } from '@/lib/views'
 import { PRODUCT_NAME_MAX } from '@/lib/limits'
 import { numberOr, requireMaxLength, requireMoney, str } from '@/lib/http-input'
 import { PRODUCT_CATEGORY_VALUES } from '@/lib/pipeline'
+import {
+  requireExternalUrl,
+  requireInternalPriceRange,
+  requireReach,
+} from '@/lib/api/product-fields'
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -63,6 +68,15 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   if (from) requireMoney(from)
   if (to) requireMoney(to)
 
+  // Migration 0011 — internal guidance (#27) and reach (#29).
+  const internalMin = str(body?.internal_price_min)
+  const internalMax = str(body?.internal_price_max)
+  requireInternalPriceRange(internalMin, internalMax)
+  const reach = str(body?.reach)
+  if (reach) requireReach(reach)
+  const externalUrl = str(body?.external_url)
+  if (externalUrl) requireExternalUrl(externalUrl)
+
   const actor = await resolveActor(getDb(), req, ctx.user)
   const row = await createProduct(
     ctx.workspace.id,
@@ -81,6 +95,11 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       pitch: str(body?.pitch) ?? null,
       statusLabel: str(body?.status_label) ?? null,
       refs: strings(body?.refs),
+      internalPriceMin: internalMin ?? null,
+      internalPriceMax: internalMax ?? null,
+      internalPriceNote: str(body?.internal_price_note) ?? null,
+      reach,
+      externalUrl: externalUrl ?? null,
     },
     actor
   )

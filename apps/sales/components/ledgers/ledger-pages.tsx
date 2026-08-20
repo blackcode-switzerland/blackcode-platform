@@ -27,7 +27,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Video } from 'lucide-react'
 import { CHANNELS, COMM_DIRECTIONS, MEETING_STATUSES, commDirectionLabel } from '@/lib/pipeline'
-import { ChannelChip, MeetingTypeChip, VocabDot } from '@/components/chips'
+import { ChannelChip, MeetingTypeChip, RecordNumber, VocabDot } from '@/components/chips'
 import { BlockSkeleton, ErrorState } from '@/components/states'
 import {
   ClearFilters,
@@ -144,6 +144,7 @@ export function MeetingsPage({ ws }: { ws: string }) {
               }
             >
               <div className="flex flex-wrap items-center gap-2">
+                <RecordNumber n={m.number} />
                 <VocabDot color={meetingStatusColor(m.status)} title={m.status} />
                 <Link
                   href={`/dashboard/${ws}/prospects/${m.prospect_number}`}
@@ -323,6 +324,7 @@ export function CommunicationsPage({ ws }: { ws: string }) {
               }
             >
               <div className="flex flex-wrap items-center gap-2">
+                <RecordNumber n={c.number} />
                 <ChannelChip value={c.channel} />
                 <Link
                   href={`/dashboard/${ws}/prospects/${c.prospect_number}`}

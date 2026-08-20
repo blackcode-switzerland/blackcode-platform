@@ -11,9 +11,11 @@ import { getDb } from '../client'
 import {
   documentProducts,
   documentProspects,
+  documentStrategies,
   documents,
   products,
   prospects,
+  strategies,
   templateDocuments,
   templates,
 } from '../schema'
@@ -71,6 +73,12 @@ export interface ProductInput {
   fit?: string[] | null
   pitch?: string | null
   statusLabel?: string | null
+  /** Migration 0011 — internal-only guidance (#27) and reach (#29). */
+  internalPriceMin?: string | null
+  internalPriceMax?: string | null
+  internalPriceNote?: string | null
+  reach?: string
+  externalUrl?: string | null
   refs?: string[] | null
 }
 
@@ -98,6 +106,11 @@ export async function createProduct(
         pitch: input.pitch ?? null,
         status_label: input.statusLabel ?? null,
         refs: input.refs ?? null,
+        internal_price_min: input.internalPriceMin ?? null,
+        internal_price_max: input.internalPriceMax ?? null,
+        internal_price_note: input.internalPriceNote ?? null,
+        reach: input.reach ?? 'internal',
+        external_url: input.externalUrl ?? null,
       })
       .returning()
     if (!row) throw new Error('product insert returned nothing')
@@ -136,6 +149,11 @@ export async function updateProduct(
     if (input.pitch !== undefined) values.pitch = input.pitch
     if (input.statusLabel !== undefined) values.status_label = input.statusLabel
     if (input.refs !== undefined) values.refs = input.refs
+    if (input.internalPriceMin !== undefined) values.internal_price_min = input.internalPriceMin
+    if (input.internalPriceMax !== undefined) values.internal_price_max = input.internalPriceMax
+    if (input.internalPriceNote !== undefined) values.internal_price_note = input.internalPriceNote
+    if (input.reach !== undefined) values.reach = input.reach
+    if (input.externalUrl !== undefined) values.external_url = input.externalUrl
 
     const [row] = await tx
       .update(products)
@@ -355,9 +373,23 @@ export function renderTemplate(
 // ---------------------------------------------------------------------------
 
 export type DocumentRow = SalesDocument & {
-  /** Prospect and product #numbers this document is linked to. */
+  /** The #numbers this document is linked to. One library, many attachments
+   *  (D-8) — a document linked to a second prospect is not copied. */
   prospect_numbers: number[]
   product_numbers: number[]
+  /** Migration 0012 — the fourth attachment point (#40). */
+  strategy_numbers: number[]
+  /**
+   * Templates this document is attached to.
+   *
+   * `templateDocuments` has existed since 0001 and `doc link --template` has
+   * always written it — but nothing ever READ it back. The link was
+   * write-only: it returned 200 and was invisible from every surface, which is
+   * a capability nobody can verify. Found on 2026-08-17 while testing #40's
+   * multi-attach; adding `strategy_numbers` beside it made the asymmetry
+   * obvious.
+   */
+  template_numbers: number[]
 }
 
 export async function listDocuments(opts: {
@@ -367,6 +399,9 @@ export async function listDocuments(opts: {
   prospectSeq?: number
   /** Only documents linked to this product #number. */
   productSeq?: number
+  /** Only documents linked to this template #number. The read half of a link
+   *  `doc link --template` could always write. */
+  templateSeq?: number
   /**
    * Only documents carrying at least ONE of these tags.
    *
@@ -394,6 +429,13 @@ export async function listDocuments(opts: {
   if (!opts.includeDeleted) where.push(isNull(documents.deleted_at))
   if (opts.kind) where.push(eq(documents.kind, opts.kind))
   if (opts.q?.trim()) where.push(ilike(documents.title, `%${opts.q.trim()}%`))
+  if (opts.templateSeq != null) {
+    where.push(sql`EXISTS (
+      SELECT 1 FROM ${templateDocuments} td
+      JOIN ${templates} t ON t.id = td.template_id
+      WHERE td.document_id = ${documents.id} AND t.seq = ${opts.templateSeq}
+        AND t.workspace_id = ${opts.workspaceId})`)
+  }
   if (opts.prospectSeq != null) {
     where.push(sql`EXISTS (
       SELECT 1 FROM ${documentProspects} dp
@@ -476,6 +518,16 @@ async function decorateDocuments(rows: SalesDocument[]): Promise<DocumentRow[]> 
     .from(documentProducts)
     .innerJoin(products, eq(products.id, documentProducts.product_id))
     .where(inArray(documentProducts.document_id, ids))
+  const strats = await db
+    .select({ document_id: documentStrategies.document_id, seq: strategies.seq })
+    .from(documentStrategies)
+    .innerJoin(strategies, eq(strategies.id, documentStrategies.strategy_id))
+    .where(inArray(documentStrategies.document_id, ids))
+  const tpls = await db
+    .select({ document_id: templateDocuments.document_id, seq: templates.seq })
+    .from(templateDocuments)
+    .innerJoin(templates, eq(templates.id, templateDocuments.template_id))
+    .where(inArray(templateDocuments.document_id, ids))
 
   const byDoc = (list: Array<{ document_id: number; seq: number }>) => {
     const m = new Map<number, number[]>()
@@ -484,10 +536,14 @@ async function decorateDocuments(rows: SalesDocument[]): Promise<DocumentRow[]> 
   }
   const pMap = byDoc(pros)
   const dMap = byDoc(prods)
+  const sMap = byDoc(strats)
+  const tMap = byDoc(tpls)
   return rows.map((r) => ({
     ...r,
     prospect_numbers: (pMap.get(r.id) ?? []).sort((a, b) => a - b),
     product_numbers: (dMap.get(r.id) ?? []).sort((a, b) => a - b),
+    strategy_numbers: (sMap.get(r.id) ?? []).sort((a, b) => a - b),
+    template_numbers: (tMap.get(r.id) ?? []).sort((a, b) => a - b),
   }))
 }
 
@@ -500,6 +556,13 @@ export interface DocumentInput {
   mimeType?: string | null
   description?: string | null
   tags?: string[] | null
+  /** Migration 0012 — where the bytes live (#40). Derived by the route from the
+   *  url, never taken from the caller: a client that could declare its own file
+   *  `blob` would be declaring itself under the delete gate's protection. */
+  storageProvider?: string | null
+  externalId?: string | null
+  previewStatus?: string | null
+  previewCheckedAt?: Date | null
 }
 
 export async function addDocument(
@@ -523,6 +586,10 @@ export async function addDocument(
         mime_type: input.mimeType ?? null,
         description: input.description ?? null,
         tags: input.tags ?? null,
+        storage_provider: input.storageProvider ?? null,
+        external_id: input.externalId ?? null,
+        preview_status: input.previewStatus ?? null,
+        preview_checked_at: input.previewCheckedAt ?? null,
         added_by_user_id: actor.userId,
         added_by_label: actor.label,
       })
@@ -556,6 +623,15 @@ export async function updateDocument(
     if (input.kind !== undefined) values.kind = input.kind
     if (input.description !== undefined) values.description = input.description
     if (input.tags !== undefined) values.tags = input.tags
+    // `mime_type` was in `DocumentInput` and in `addDocument` from the start,
+    // and this line was missing — so every UPDATE that set it silently did
+    // nothing. Found on 2026-08-17 when `doc recheck` detected `video/mp4` for
+    // a Drive link, reported success, and changed no row.
+    if (input.mimeType !== undefined) values.mime_type = input.mimeType
+    if (input.storageProvider !== undefined) values.storage_provider = input.storageProvider
+    if (input.externalId !== undefined) values.external_id = input.externalId
+    if (input.previewStatus !== undefined) values.preview_status = input.previewStatus
+    if (input.previewCheckedAt !== undefined) values.preview_checked_at = input.previewCheckedAt
     // The two URL columns are NOT patchable, and that is deliberate. A CHECK
     // requires exactly one of them, so a partial update can violate it in a way
     // the caller cannot see coming — and moving a document from an upload to a
@@ -592,18 +668,12 @@ export async function softDeleteDocument(
 export async function setDocumentLink(
   workspaceId: number,
   documentId: number,
-  target: { kind: 'prospect' | 'product' | 'template'; id: number },
+  target: { kind: 'prospect' | 'product' | 'template' | 'strategy'; id: number },
   attach: boolean,
   actor: Actor
 ): Promise<void> {
   const db = getDb()
   await db.transaction(async (tx) => {
-    const table =
-      target.kind === 'prospect'
-        ? documentProspects
-        : target.kind === 'product'
-          ? documentProducts
-          : templateDocuments
     if (attach) {
       // ON CONFLICT DO NOTHING: attaching twice is the same state, not an error.
       // A 409 here would make an agent's retry a failure.
@@ -616,6 +686,11 @@ export async function setDocumentLink(
         await tx
           .insert(documentProducts)
           .values({ document_id: documentId, product_id: target.id })
+          .onConflictDoNothing()
+      } else if (target.kind === 'strategy') {
+        await tx
+          .insert(documentStrategies)
+          .values({ document_id: documentId, strategy_id: target.id })
           .onConflictDoNothing()
       } else {
         await tx
@@ -641,6 +716,15 @@ export async function setDocumentLink(
             eq(documentProducts.product_id, target.id)
           )
         )
+    } else if (target.kind === 'strategy') {
+      await tx
+        .delete(documentStrategies)
+        .where(
+          and(
+            eq(documentStrategies.document_id, documentId),
+            eq(documentStrategies.strategy_id, target.id)
+          )
+        )
     } else {
       await tx
         .delete(templateDocuments)
@@ -651,7 +735,6 @@ export async function setDocumentLink(
           )
         )
     }
-    void table
     await recordEvent(tx, {
       workspaceId,
       actorUserId: actor.userId,

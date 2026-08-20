@@ -37,5 +37,5 @@
 // "update available" nudge yet. Fix with either a redeploy or BK_CLI_LATEST=1.10.0
 // in Vercel — the env override exists for exactly this.
 
-export const CLI_LATEST_VERSION = process.env.BK_CLI_LATEST ?? '3.0.1'
-export const CLI_MIN_VERSION = process.env.BK_CLI_MIN ?? '3.0.0'
+export const CLI_LATEST_VERSION = process.env.BK_CLI_LATEST ?? '3.1.0'
+export const CLI_MIN_VERSION = process.env.BK_CLI_MIN ?? '3.1.0'

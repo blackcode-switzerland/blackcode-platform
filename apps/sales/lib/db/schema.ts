@@ -172,6 +172,95 @@ function weightedArray(w: 'A' | 'B', ...columns: string[]) {
 }
 
 // ===========================================================================
+// strategies — why a SEGMENT was chosen (#37)
+// ===========================================================================
+// Declared before `prospects` because `prospects.strategy_id` references it and
+// the drizzle callbacks are evaluated in order.
+//
+// The reusable half of a two-part answer. A strategy is "watch & jewellery
+// boutiques in Lausanne, pitched with the AP configurator demo plus the
+// consciencegems.ch case study" — reasoning that applies to ten prospects at
+// once and is worth browsing on its own. The per-prospect half is
+// `prospects.game_plan` (#35), and the migration's header says why collapsing
+// them into one field would have been wrong in both directions.
+//
+// It HAS a `seq`, so it has a #number and a URN. That is the test
+// `lib/dashboard-paths.ts` states: a strategy is independently addressable — you
+// browse the list and cite one — unlike a contact, an objection, a match or a
+// research note, which are only ever reached through a prospect.
+
+export const strategies = salesSchema.table(
+  'strategies',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    /** The workspace #number. `bc:sales:{ws}/strategy/{seq}`. */
+    seq: integer('seq').notNull(),
+
+    name: varchar('name', { length: 120 }).notNull(),
+    /** "watch & jewellery boutiques". Free text: the segments worth naming are
+     *  discovered by selling, and a closed list would refuse the first one
+     *  somebody found. */
+    vertical: varchar('vertical', { length: 120 }),
+    /** "Lausanne", "Romandie", "DACH". Also free text, and deliberately not a
+     *  structured geography — nothing here does spatial queries. */
+    area: varchar('area', { length: 120 }),
+
+    /** BLOB-REF (scan). Why this segment, and how we pitch it. */
+    rationale: text('rationale'),
+    /** BLOB-REF (scan). What we point at — the proof, by name or by URL. */
+    case_studies: text('case_studies'),
+
+    created_by: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    /** Soft delete — a retired segment lands in `bk sales trash` and can come
+     *  back. It has a #number, which is what the bin lists things under. */
+    deleted_at: timestamp('deleted_at', { withTimezone: true }),
+
+    search: tsvector('search').generatedAlwaysAs(
+      sql.raw(
+        [
+          weighted('A', 'name'),
+          weighted('B', 'vertical', 'area', 'rationale', 'case_studies'),
+        ].join(' || ')
+      )
+    ),
+  },
+  (t) => ({
+    wsSeq: uniqueIndex('uq_strategies_ws_seq').on(t.workspace_id, t.seq),
+    wsUpdated: index('idx_strategies_ws_updated').on(t.workspace_id, t.updated_at),
+    search: index('idx_strategies_search').using('gin', t.search),
+  })
+)
+
+/**
+ * Which products a strategy leads with — a join table, not an array column.
+ *
+ * `text[]` of names would be unjoinable and would rot on the first rename;
+ * `integer[]` of ids would carry no foreign key, so deleting a product would
+ * leave a dangling reference nothing could see. `ON DELETE CASCADE` on both
+ * sides is the behaviour that needs no maintenance.
+ */
+export const strategyProducts = salesSchema.table(
+  'strategy_products',
+  {
+    strategy_id: integer('strategy_id')
+      .notNull()
+      .references(() => strategies.id, { onDelete: 'cascade' }),
+    product_id: integer('product_id')
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.strategy_id, t.product_id] }),
+    productIdx: index('idx_strategy_products_product').on(t.product_id),
+  })
+)
+
+// ===========================================================================
 // prospects — the core object: company AND deal in one (D-5)
 // ===========================================================================
 //
@@ -200,6 +289,24 @@ export const prospects = salesSchema.table(
     /** Free text, not a vocabulary — "SaaS · staffing", "Fiduciaire". */
     sector: varchar('sector', { length: 120 }),
 
+    /**
+     * BLOB-REF (exact). The COMPANY's site — migration 0008, sales #34.
+     *
+     * `text` rather than `varchar(n)` for `meetings.meeting_url`'s reason: any
+     * cap is a guess that truncates somebody's URL, and Postgres charges nothing
+     * for `text`. `WEBSITE_MAX` (lib/limits.ts) is the app's sanity bound
+     * against paste accidents, not a schema fact.
+     *
+     * It lives on the prospect and not on a contact because a company has one
+     * site and its people share it. A PERSON's link is `contacts.linkedin`.
+     */
+    website: text('website'),
+    /** BLOB-REF (scan). One line, postal — "Rue du Rhône 42, 1204 Genève". Not
+     *  parsed into components: nothing in this app routes mail, and the moment
+     *  it is split into five columns somebody has to decide what a Swiss
+     *  `state` is. #34 asks for "company address", and this is that. */
+    address: varchar('address', { length: 200 }),
+
     /** `lib/pipeline.ts` STAGES. Validated in the route, not by a CHECK — the
      *  vocabulary is served live by `bk meta` and a CHECK would need a migration
      *  every time a stage is added. */
@@ -222,8 +329,35 @@ export const prospects = salesSchema.table(
      *  in tags today and the taxonomy is not settled. */
     source: varchar('source', { length: 60 }),
 
-    /** BLOB-REF (scan). The last-contact summary — prose, agent-authored. */
+    /** BLOB-REF (scan). The last-contact summary — prose, agent-authored.
+     *
+     *  It OVERWRITES on every write, and that is correct: "where this deal
+     *  stands" has one answer at a time. The field that ACCUMULATES is
+     *  `sales.prospect_notes` (migration 0009) — see it before widening this. */
     summary: text('summary'),
+
+    /**
+     * Which reusable segment strategy this prospect belongs to — migration
+     * 0010, sales #37.
+     *
+     * `ON DELETE SET NULL`, deliberately: retiring a segment must not take the
+     * live deals that belonged to it. The prospect keeps its own `game_plan`
+     * either way, which is the point of the two being separate columns.
+     */
+    strategy_id: integer('strategy_id').references(() => strategies.id, {
+      onDelete: 'set null',
+    }),
+    /**
+     * BLOB-REF (scan). The PRE-meeting plan for THIS prospect — migration 0010,
+     * sales #35: the upsell angle, the talking points, the language to use, the
+     * objections to expect.
+     *
+     * Distinct from `strategy_id`'s rationale on purpose. That one is shared by
+     * every prospect in a segment and goes stale nine times if it is copied;
+     * this one is about one company and one meeting. Distinct from `summary`
+     * too: a summary is what HAPPENED, this is what to DO next time.
+     */
+    game_plan: text('game_plan'),
 
     // ── the mockup's `nextAction` ─────────────────────────────────────────
     // Four columns rather than a jsonb blob: `due` is filtered on ("actions due
@@ -323,8 +457,35 @@ export const contacts = salesSchema.table(
     email: varchar('email', { length: 255 }),
     phone: varchar('phone', { length: 40 }),
     is_primary: boolean('is_primary').default(false).notNull(),
-    /** BLOB-REF (scan). */
+    /** BLOB-REF (scan). The freeform half of #33's person intelligence —
+     *  background, negotiation history, how they behave in a room. It existed
+     *  before #33 was written, which is why 0008 adds only the structured half
+     *  beside it rather than a second prose field. */
     notes: text('notes'),
+
+    /**
+     * BLOB-REF (exact). The person's profile — migration 0008, sales #34.
+     * `text` for `website`'s reason.
+     *
+     * Named for the network rather than `profile_url`, because that is what the
+     * issue asks for and what a rep types. If a second network ever matters this
+     * becomes a `jsonb` or a child table; one nullable column is not a shape
+     * that has to be right forever.
+     */
+    linkedin: text('linkedin'),
+    /**
+     * #33's structured half: what this person can actually DO in a deal.
+     *
+     * `lib/pipeline.ts` DECISION_POWERS — `economic | champion | influencer |
+     * gatekeeper | user`. Validated in the route rather than by a CHECK, for the
+     * reason stated at `prospects.stage`: the vocabulary is served live by
+     * `bk meta` and a CHECK would need a migration to add a value.
+     *
+     * Nullable and it stays nullable. Most contacts are logged mid-call with a
+     * name and nothing else, and a required field here would make the write that
+     * actually happens impossible.
+     */
+    decision_power: varchar('decision_power', { length: 24 }),
 
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -338,6 +499,65 @@ export const contacts = salesSchema.table(
     prospectIdx: index('idx_contacts_prospect').on(t.prospect_id),
     wsIdx: index('idx_contacts_ws').on(t.workspace_id),
     search: index('idx_contacts_search').using('gin', t.search),
+  })
+)
+
+// ===========================================================================
+// prospect_notes — the research log (#39)
+// ===========================================================================
+// APPEND-ONLY. There is no `updated_at` and no PATCH route, and that is the
+// whole design rather than an omission.
+//
+// `prospects.summary` overwrites, correctly: "where this deal stands" has one
+// answer at a time. Research is the opposite shape — a sequence of observations
+// each true when it was written — and the issue that produced this table was
+// filed after somebody had to destroy a prior finding to record a new one. An
+// editable log is a summary with extra steps: the moment a row can be rewritten,
+// "what did we know, and when" stops being answerable and nothing says so.
+//
+// No `seq`, for `contacts`' reason directly below it in spirit: a note is never
+// addressed on its own, so a #number would advertise an identity `bk` cannot
+// resolve. No `deleted_at` and no trash, matching `objections` — the recycle bin
+// is for records with a #number. DELETE is therefore HARD, which is why the
+// route makes the caller repeat the confirmation back before it runs.
+//
+// `author_user_id` + `author_label` is the actor pair, not a bare FK: an agent
+// writes most of these, and "Companion" is not a `platform.users` row.
+
+export const prospectNotes = salesSchema.table(
+  'prospect_notes',
+  {
+    id: serial('id').primaryKey(),
+    workspace_id: integer('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    prospect_id: integer('prospect_id')
+      .notNull()
+      .references(() => prospects.id, { onDelete: 'cascade' }),
+
+    /** BLOB-REF (scan). The observation. NOT NULL — a blank note is not a thing
+     *  anybody meant to write, and the route refuses one rather than storing it. */
+    body: text('body').notNull(),
+    /** "site audit", "competitor", "timing". Free text, not a vocabulary: what
+     *  is worth categorising here is not settled, and a closed list would refuse
+     *  the first note that did not fit. `documents.tags` decided the same way. */
+    kind: varchar('kind', { length: 40 }),
+
+    author_user_id: integer('author_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    author_label: varchar('author_label', { length: 80 }),
+
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+
+    search: tsvector('search').generatedAlwaysAs(
+      sql.raw([weighted('A', 'kind'), weighted('B', 'body')].join(' || '))
+    ),
+  },
+  (t) => ({
+    prospectIdx: index('idx_prospect_notes_prospect').on(t.prospect_id, t.created_at),
+    wsIdx: index('idx_prospect_notes_ws').on(t.workspace_id),
+    search: index('idx_prospect_notes_search').using('gin', t.search),
   })
 )
 
@@ -621,8 +841,55 @@ export const products = salesSchema.table(
      *  the product's maturity, not a state machine. */
     status_label: varchar('status_label', { length: 80 }),
     /** Reference customers, by NAME rather than by `prospect_id`: the mockup
-     *  cites names, and a reference can be a company we never had a deal row for. */
+     *  cites names, and a reference can be a company we never had a deal row for.
+     *
+     *  **Not a place for a URL.** `aioscompanion.com` was living here until
+     *  migration 0011 gave it `external_url`; a product's own site is not a
+     *  reference customer, and storing it here quietly changed what this array
+     *  means for every reader of it. */
     refs: text('refs').array(),
+
+    // ── INTERNAL-ONLY PRICE GUIDANCE (migration 0011, sales #27) ────────────
+    //
+    //   ┌──────────────────────────────────────────────────────────────────┐
+    //   │ THESE THREE ARE NOT CUSTOMER-FACING. A PUBLIC RENDERER MUST      │
+    //   │ SELECT COLUMNS EXPLICITLY — NEVER `SELECT *` — OR IT LEAKS THEM. │
+    //   └──────────────────────────────────────────────────────────────────┘
+    //
+    // `price_label`/`price_from`/`price_to` above are what the catalogue SAYS.
+    // These are "what do I quote if someone asks", and the reporter's complaint
+    // was that without them every rep negotiates blind or asks the founder.
+    //
+    // Nothing enforces the boundary at the database level and nothing can — a
+    // column is not a permission. What makes them internal is that no public
+    // renderer exists, and the rule above is what has to hold when one does.
+
+    /** A RANGE, not a point: "CHF 8–12k depending on scope" is what a rep
+     *  actually holds. A single column would force a false precision on the
+     *  common case. Either end may be null — a floor with no ceiling is a real
+     *  answer ("never below 8k"). */
+    internal_price_min: numeric('internal_price_min', { precision: 14, scale: 2 }),
+    internal_price_max: numeric('internal_price_max', { precision: 14, scale: 2 }),
+    /** BLOB-REF (scan). The negotiating context a number cannot carry — "hold
+     *  at 12k unless they commit to the maintenance retainer". */
+    internal_price_note: text('internal_price_note'),
+
+    // ── HOW FAR OUR OWN SITE CARRIES IT (migration 0011, sales #29) ────────
+    /**
+     * `internal | external` — `lib/pipeline.ts` PRODUCT_REACHES.
+     *
+     * Named `reach` because `kind`, `type` and `category` are all taken in this
+     * schema (documents, meetings/objections, and this very table), and a
+     * fourth word meaning "which sort of thing is this" would be unreadable in
+     * a grep. `reach` says what it distinguishes.
+     *
+     * NOT NULL with a default, rather than nullable: every product is ours
+     * until somebody says otherwise, and a tri-state would make every consumer
+     * handle "nobody has said" to no benefit.
+     */
+    reach: varchar('reach', { length: 16 }).notNull().default('internal'),
+    /** BLOB-REF (exact). Where an `external` product actually lives. */
+    external_url: text('external_url'),
 
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -745,6 +1012,49 @@ export const documents = salesSchema.table(
 
     size_bytes: integer('size_bytes'),
     mime_type: varchar('mime_type', { length: 120 }),
+
+    // ── WHERE THE BYTES LIVE (migration 0012, sales #40) ───────────────────
+    //
+    //   ┌──────────────────────────────────────────────────────────────────┐
+    //   │ THE MEDIA KIND, THE EMBED URL AND THE THUMBNAIL ARE **NOT**      │
+    //   │ COLUMNS. They are derived from the url on every read by          │
+    //   │ `@blackcode/platform-file-providers`, so improving the           │
+    //   │ recogniser improves every existing row with no backfill.         │
+    //   └──────────────────────────────────────────────────────────────────┘
+    //
+    /**
+     * `blob` (ours) | `google_drive` | `external` — the decision made at write
+     * time. Validated in the route against the live provider registry rather
+     * than by a CHECK: a provider can be registered without a migration.
+     *
+     * **NULL means "not yet classified", not "unknown".** Migration 0012 could
+     * backfill only the internal half (`platform.is_uploaded_asset` is the SQL
+     * authority for that, and reusing it avoids a second copy of the rule);
+     * deciding WHICH external provider is implemented once, in TypeScript, and
+     * transcribing that into SQL is the two-lists failure this repo keeps
+     * finding. `bk sales doc recheck --all` fills the rest.
+     *
+     * Nothing on screen depends on it — `publicDocument` derives the provider
+     * from the url every time, so a lagging column is invisible except to the
+     * `--provider` filter.
+     */
+    storage_provider: varchar('storage_provider', { length: 32 }),
+    /** The provider's own handle — a Drive file id. Null for our own uploads,
+     *  where `external_id` would have nothing to point at. */
+    external_id: varchar('external_id', { length: 255 }),
+    /**
+     * `public | restricted | unknown` — can a viewer actually open this?
+     *
+     * A PROBE RESULT, which is the entire reason it is a column: it cannot be
+     * recomputed without a network call. We hold no Google credentials, so the
+     * only credential-free signal is whether Drive's thumbnail endpoint answers
+     * for the file, and that answer has to be remembered.
+     *
+     * NULL for our own uploads, which are always viewable by anyone who can see
+     * the record — there is no external permission system in the way.
+     */
+    preview_status: varchar('preview_status', { length: 16 }),
+    preview_checked_at: timestamp('preview_checked_at', { withTimezone: true }),
     /** BLOB-REF (scan). The mockup's `note` — prose about what the file is for. */
     description: text('description'),
     tags: text('tags').array(),
@@ -874,6 +1184,29 @@ export const documentProspects = salesSchema.table(
 )
 
 /** Which products a document is collateral for. */
+/**
+ * A document attached to a segment strategy — migration 0012.
+ *
+ * The fourth of the four #40 asks for ("a prospect, a product, a strategy doc, a
+ * template"). The other three have existed since 0001; this one was missing only
+ * because `sales.strategies` did not exist until 0010.
+ */
+export const documentStrategies = salesSchema.table(
+  'document_strategies',
+  {
+    document_id: integer('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    strategy_id: integer('strategy_id')
+      .notNull()
+      .references(() => strategies.id, { onDelete: 'cascade' }),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.document_id, t.strategy_id] }),
+    strategyIdx: index('idx_document_strategies_strategy').on(t.strategy_id),
+  })
+)
+
 export const documentProducts = salesSchema.table(
   'document_products',
   {
@@ -1412,6 +1745,8 @@ export type NewSalesEvent = typeof salesEvents.$inferInsert
 
 export type Prospect = typeof prospects.$inferSelect
 export type Contact = typeof contacts.$inferSelect
+export type Strategy = typeof strategies.$inferSelect
+export type ProspectNote = typeof prospectNotes.$inferSelect
 export type StageEntry = typeof stageEntries.$inferSelect
 export type Meeting = typeof meetings.$inferSelect
 export type Communication = typeof communications.$inferSelect

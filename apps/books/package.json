@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev -p 3200",
     "build": "next build",
+    "postbuild": "node ./scripts/migrate-if-enabled.mjs",
     "start": "next start",
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest run",

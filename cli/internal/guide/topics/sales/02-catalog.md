@@ -92,3 +92,79 @@ pairing was chosen.
 Setting a match for a pair that already has one **replaces** it. The record holds
 one verdict per prospect-and-product, so it cannot accumulate three scores that
 contradict each other.
+
+## What to quote, and whose page it is
+
+```bash
+bk sales product edit 3 --internal-price-min 8000 --internal-price-max 12000 \
+  --internal-price-note "Hold at 12k unless they commit to the maintenance retainer."
+```
+
+`--price` is what the CATALOGUE says. `--internal-price-*` is what you may
+quote, and it is not customer-facing: it prints under an `INTERNAL` heading in
+`bk sales product show` and is shown only inside the workspace. A range rather
+than a number, because that is what a rep actually holds — a floor with no
+ceiling ("never below 8k") is a legitimate answer, and so is a note instead of
+either.
+
+The floor must not be above the ceiling; the route refuses that outright. It is
+the one mistake this pair can carry that nothing downstream would notice — a rep
+reading an inverted range does not see a broken range, they see a number.
+
+```bash
+bk sales product edit 1 --reach external --external-url https://aioscompanion.com
+```
+
+`--reach` says how far our own site carries a product. `internal` (the default)
+means the full story is ours to tell. `external` means the product has its own
+brand and site — our page is a teaser plus a link, because duplicating somebody
+else's marketing copy goes stale the moment they update it. Run `bk meta` for
+the current values.
+
+`--external-url` is its own field and NOT a `--ref`: `--ref` is reference
+CUSTOMERS, by name, and putting a URL there quietly changes what that list means
+for everyone reading it.
+
+## Strategies: why a segment was chosen
+
+```bash
+bk sales strategy add --name "Lausanne watch & jewellery" \
+  --vertical "watch & jewellery boutiques" --area Lausanne \
+  --why "Small independents, no online presence, high-value inventory." \
+  --case-studies "consciencegems.ch — e-commerce build" \
+  --product 3 --product 8
+bk sales strategy list
+bk sales strategy show 1
+```
+
+A strategy is the REUSABLE half of "which product suits whom": the reasoning
+behind going after a whole vertical or area, and what we lead with. It applies
+to ten prospects at once, which is why it is a record with its own #number
+rather than a field — copied onto each prospect it would go stale nine times.
+
+`--why` is the part worth writing. It is what the next person (or the next run)
+reads instead of reconstructing the reasoning from a list of prospects, and it
+is the whole reason this record exists rather than a tag.
+
+**`--product` REPLACES the set, it does not add to it.** Pass every product the
+strategy leads with. `--no-products` on `edit` clears it. There are no
+add/remove verbs deliberately: expressing "these two" through them takes three
+calls and requires first finding out what is there now.
+
+Link a prospect to one, and give that prospect its own angle on top:
+
+```bash
+bk sales prospect edit 12 --strategy 1 \
+  --game-plan "Angle: they already photograph every piece. Open with one collection, not the catalogue. Expect a price objection — answer with the consciencegems build."
+```
+
+**The two are different on purpose.** The strategy is why the SEGMENT was
+chosen; `--game-plan` is what to say to THIS company on the way into THIS
+meeting — the upsell angle, the talking points, the objections to expect.
+`bk sales prospect show` prints the game plan above the ledgers, because it is
+what you read before a meeting rather than after one.
+
+`--strategy ""` unlinks. Binning a strategy is a SOFT delete — it goes to
+`bk sales trash` and restores — and the prospects pointing at it are
+deliberately NOT unlinked, because a soft delete that detached them could not be
+undone. The command tells you how many deals are affected.

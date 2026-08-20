@@ -37,6 +37,7 @@ import {
   MessagesSquare,
   Moon,
   Package,
+  Target,
   Menu,
   Search,
   Settings as SettingsIcon,
@@ -73,6 +74,10 @@ const NAV_MAIN: NavEntry[] = [
 
 const NAV_CATALOG: NavEntry[] = [
   { seg: '/products', label: 'Products', icon: Package },
+  // A strategy is not a thing we sell, so it is not strictly catalog — but it
+  // is what you read BEFORE choosing which product to pitch, and it sits beside
+  // the products it names rather than among the daily pipeline pages.
+  { seg: '/strategies', label: 'Strategies', icon: Target },
   { seg: '/templates', label: 'Templates', icon: FileText },
   { seg: '/documents', label: 'Documents', icon: FolderOpen },
 ]

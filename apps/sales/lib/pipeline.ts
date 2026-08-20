@@ -81,6 +81,18 @@ function colorOf(options: Option[], value: string | null | undefined): string {
 const NEUTRAL = '#8a8578'
 
 /**
+ * The same grey, exported, for a picker whose options are DATA rather than a
+ * vocabulary — the strategy picker on the prospect form (#37).
+ *
+ * `VocabSelect` takes `Option[]`, and `Option` requires a colour. A list built
+ * from server rows has no colour to decide, and writing `'#8a8578'` at the call
+ * site is exactly what `lib/palette.test.ts` refuses: D-4 is that colour is
+ * chosen in this file and nowhere else. Exporting the fallback is how a
+ * non-vocabulary list satisfies the type without deciding anything.
+ */
+export const NEUTRAL_OPTION_COLOR = NEUTRAL
+
+/**
  * This app's primary, as a literal hex — the emerald-teal `--primary` in
  * `app/globals.css`.
  *
@@ -232,6 +244,33 @@ export const OBJECTION_STATUS_VALUES = OBJECTION_STATUSES.map((s) => s.value)
 export const objectionStatusLabel = (v?: string | null) => labelOf(OBJECTION_STATUSES, v)
 export const objectionStatusColor = (v?: string | null) => colorOf(OBJECTION_STATUSES, v)
 
+// ---------- contacts ----------
+
+/**
+ * What a contact can actually DO in a deal — `contacts.decision_power`,
+ * migration 0008, sales #33.
+ *
+ * Five values, and the set is deliberately about AUTHORITY rather than seniority:
+ * a title tells you where somebody sits on a chart, and this tells you whether
+ * talking to them can move the deal. The distinction that matters most in this
+ * pipeline is `champion` vs `economic` — the person who wants it is rarely the
+ * person who signs, and a rep who confuses the two spends three meetings with
+ * somebody delighted and powerless.
+ *
+ * `gatekeeper` is not a pejorative and is often the most useful row in the
+ * table: an assistant or an IT lead who cannot say yes can reliably say no.
+ */
+export const DECISION_POWERS: Option[] = [
+  { value: 'economic', label: 'Economic buyer', color: '#10a37f' },
+  { value: 'champion', label: 'Champion', color: '#14b8a6' },
+  { value: 'influencer', label: 'Influencer', color: '#8b5cf6' },
+  { value: 'gatekeeper', label: 'Gatekeeper', color: '#f0b66b' },
+  { value: 'user', label: 'End user', color: '#8a8578' },
+]
+export const DECISION_POWER_VALUES = DECISION_POWERS.map((d) => d.value)
+export const decisionPowerLabel = (v?: string | null) => labelOf(DECISION_POWERS, v)
+export const decisionPowerColor = (v?: string | null) => colorOf(DECISION_POWERS, v)
+
 // ---------- catalog ----------
 // `licence` is spelled the British way throughout, matching the mockup.
 
@@ -241,6 +280,26 @@ export const PRODUCT_CATEGORIES: Option[] = [
   { value: 'licence', label: 'Licence', color: '#8b5cf6' },
 ]
 export const PRODUCT_CATEGORY_VALUES = PRODUCT_CATEGORIES.map((c) => c.value)
+
+/**
+ * How far our own site carries a product — `products.reach`, migration 0011,
+ * sales #29.
+ *
+ * `internal` is a product whose full page belongs on our domain. `external` has
+ * its own brand, its own site and its own marketing copy — AIOS Companion at
+ * aioscompanion.com — and duplicating that copy goes stale the moment they
+ * update it, so our page is a teaser plus an outbound link.
+ *
+ * It is about OWNERSHIP OF THE STORY, not about who built the thing: blackcode
+ * built AIOS Companion, and the page describing it still is not ours to write.
+ */
+export const PRODUCT_REACHES: Option[] = [
+  { value: 'internal', label: 'Ours end to end', color: '#10a37f' },
+  { value: 'external', label: 'Has its own site', color: '#8b5cf6' },
+]
+export const PRODUCT_REACH_VALUES = PRODUCT_REACHES.map((r) => r.value)
+export const productReachLabel = (v?: string | null) => labelOf(PRODUCT_REACHES, v)
+export const productReachColor = (v?: string | null) => colorOf(PRODUCT_REACHES, v)
 export const productCategoryLabel = (v?: string | null) => labelOf(PRODUCT_CATEGORIES, v)
 export const productCategoryColor = (v?: string | null) => colorOf(PRODUCT_CATEGORIES, v)
 
@@ -350,7 +409,9 @@ export const VOCABULARY = {
   meeting_statuses: MEETING_STATUSES,
   objection_types: OBJECTION_TYPES,
   objection_statuses: OBJECTION_STATUSES,
+  decision_powers: DECISION_POWERS,
   product_categories: PRODUCT_CATEGORIES,
+  product_reaches: PRODUCT_REACHES,
   template_channels: TEMPLATE_CHANNELS,
   template_categories: TEMPLATE_CATEGORIES,
   document_kinds: DOCUMENT_KINDS,

@@ -130,6 +130,10 @@ func nouns() []*cobra.Command {
 		newTemplateCmd(),
 		newDocCmd(),
 		newMatchCmd(),
+		// Beside `match` rather than with the prospect nouns: both are about
+		// which product suits whom. `match` is the verdict for ONE prospect;
+		// `strategy` is the reasoning for a whole segment.
+		newStrategyCmd(),
 
 		// Last, and deliberately so: it is the only noun here that changes
 		// nothing about the pipeline. `bk sales --help` is read top to bottom.

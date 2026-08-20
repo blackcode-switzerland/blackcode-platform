@@ -96,7 +96,7 @@ func newMatchSetCmd() *cobra.Command {
 		Use: "set <prospect> --product <n>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/{n}," +
 			"POST /api/workspaces/{ws}/prospects/{n}/matches"},
-		Short:       "Record which product fits this prospect, and why",
+		Short: "Record which product fits this prospect, and why",
 		Long: `Store your verdict for one prospect and one product.
 
 --fit is a percentage you decided, 0–100. Nothing computes it: this command

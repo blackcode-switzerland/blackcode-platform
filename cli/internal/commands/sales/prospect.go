@@ -39,6 +39,7 @@ func newProspectCmd() *cobra.Command {
 		newProspectAssignCmd(),
 		newProspectStageCmd(),
 		newProspectNextCmd(),
+		newProspectNoteCmd(),
 		newProspectDeleteCmd(),
 	)
 	return cmd
@@ -200,6 +201,10 @@ The opening journey step is written for you, attributed to whoever ran this.`,
 	cmd.Flags().StringVar(&req.Name, "name", "", "Company name (required)")
 	cmd.Flags().StringVar(&req.City, "city", "", "City")
 	cmd.Flags().StringVar(&req.Sector, "sector", "", "Sector, free text (\"SaaS · staffing\")")
+	cmd.Flags().StringVar(&req.Website, "website", "", "The COMPANY's site, full url including https://")
+	cmd.Flags().StringVar(&req.Address, "address", "", "Postal address, one line")
+	cmd.Flags().IntVar(&req.Strategy, "strategy", 0, "The segment strategy's #number (bk sales strategy list)")
+	cmd.Flags().StringVar(&req.GamePlan, "game-plan", "", "The PRE-meeting angle for this prospect: talking points, upsell, objections to expect")
 	cmd.Flags().StringVar(&req.Stage, "stage", "", "Pipeline stage — "+vocab("stages", "default: the first"))
 	cmd.Flags().StringVar(&req.Value, "value", "", "Deal value, a plain amount (\"24000\")")
 	cmd.Flags().StringVar(&req.Currency, "currency", "", "ISO currency code (default CHF)")
@@ -211,7 +216,8 @@ The opening journey step is written for you, attributed to whoever ran this.`,
 }
 
 func newProspectEditCmd() *cobra.Command {
-	var name, city, sector, value, currency, owner, source, summary string
+	var name, city, sector, website, address, value, currency, owner, source, summary string
+	var strategy, gamePlan string
 	cmd := &cobra.Command{
 		Use:         "edit <n>",
 		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/prospects/{n}"},
@@ -243,6 +249,10 @@ is its own command: "bk sales prospect stage <n> <stage>".`,
 				Name:     patched(cmd, "name", name),
 				City:     patched(cmd, "city", city),
 				Sector:   patched(cmd, "sector", sector),
+				Website:  patched(cmd, "website", website),
+				Address:  patched(cmd, "address", address),
+				Strategy: patched(cmd, "strategy", strategy),
+				GamePlan: patched(cmd, "game-plan", gamePlan),
 				Value:    patched(cmd, "value", value),
 				Currency: patched(cmd, "currency", currency),
 				Owner:    patched(cmd, "owner", owner),
@@ -269,6 +279,10 @@ is its own command: "bk sales prospect stage <n> <stage>".`,
 	cmd.Flags().StringVar(&name, "name", "", "Company name")
 	cmd.Flags().StringVar(&city, "city", "", "City (\"\" clears)")
 	cmd.Flags().StringVar(&sector, "sector", "", "Sector (\"\" clears)")
+	cmd.Flags().StringVar(&website, "website", "", "The COMPANY's site, full url including https:// (\"\" clears)")
+	cmd.Flags().StringVar(&address, "address", "", "Postal address, one line (\"\" clears)")
+	cmd.Flags().StringVar(&strategy, "strategy", "", "The segment strategy's #number (\"\" unlinks)")
+	cmd.Flags().StringVar(&gamePlan, "game-plan", "", "The PRE-meeting angle for this prospect (\"\" clears)")
 	cmd.Flags().StringVar(&value, "value", "", "Deal value, a plain amount (\"\" clears)")
 	cmd.Flags().StringVar(&currency, "currency", "", "ISO currency code")
 	cmd.Flags().StringVar(&owner, "owner", "", "Deal owner: an email, \"me\", or \"\" to unassign")
@@ -636,7 +650,8 @@ func patched(cmd *cobra.Command, flag, value string) *client.NullString {
 
 func isEmptyPatch(r client.UpdateProspectRequest) bool {
 	return r.Name == nil && r.City == nil && r.Sector == nil && r.Value == nil &&
-		r.Currency == nil && r.Owner == nil && r.Source == nil && r.Summary == nil
+		r.Currency == nil && r.Owner == nil && r.Source == nil && r.Summary == nil &&
+		r.Website == nil && r.Address == nil && r.Strategy == nil && r.GamePlan == nil
 }
 
 // splitAll accepts both `--stage a --stage b` and `--stage a,b`. StringSliceVar
@@ -724,8 +739,17 @@ func renderProspect(w io.Writer, p *client.Prospect) error {
 	if p.City != "" || p.Sector != "" {
 		fmt.Fprintf(tw, "where\t%s\n", strings.TrimSpace(strings.Trim(p.City+" · "+p.Sector, " ·")))
 	}
+	if p.Address != "" {
+		fmt.Fprintf(tw, "address\t%s\n", p.Address)
+	}
+	if p.Website != "" {
+		fmt.Fprintf(tw, "website\t%s\n", p.Website)
+	}
 	if p.Source != "" {
 		fmt.Fprintf(tw, "source\t%s\n", p.Source)
+	}
+	if p.Strategy > 0 {
+		fmt.Fprintf(tw, "strategy\t#%d (bk sales strategy show %d)\n", p.Strategy, p.Strategy)
 	}
 	fmt.Fprintf(tw, "next\t%s\n", nextActionCell(p.NextAction))
 	if p.ClosedAt != "" {
@@ -748,8 +772,31 @@ func renderProspect(w io.Writer, p *client.Prospect) error {
 	if p.Summary != "" {
 		fmt.Fprintf(w, "\n%s\n", p.Summary)
 	}
+	// The plan comes BEFORE the ledgers on purpose: this is what somebody reads
+	// on the way into a meeting, and the history is what they read afterwards.
+	if p.GamePlan != "" {
+		fmt.Fprintf(w, "\nGAME PLAN\n%s\n", p.GamePlan)
+	}
 	if p.NextAction.Note != "" {
 		fmt.Fprintf(w, "\nnext action: %s\n", p.NextAction.Note)
+	}
+
+	if len(p.Contacts) > 0 {
+		fmt.Fprintln(w, "\nCONTACTS")
+		ct := output.Tabwriter(w)
+		for _, con := range p.Contacts {
+			name := con.Name
+			if con.IsPrimary {
+				name = "★ " + name
+			}
+			fmt.Fprintf(ct, "  %d\t%s\t%s\t%s\t%s\t%s\n",
+				con.ID, cmdutil.Truncate(name, 24), cmdutil.Truncate(con.Role, 22),
+				dashIf(con.DecisionPower), dashIf(con.Email), dashIf(con.Phone))
+		}
+		if err := ct.Flush(); err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "  (bk sales contact edit %d <id> — phone, email, linkedin, decision power)\n", p.Number)
 	}
 
 	if len(p.Journey) > 0 {

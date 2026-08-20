@@ -22,6 +22,9 @@ import { getDb } from '@/lib/db/client'
 import { resolveActor } from '@/lib/actor'
 import { addDocument, listDocuments } from '@/lib/db/queries/catalog'
 import { publicDocument } from '@/lib/views'
+import { describeFile } from '@blackcode/platform-file-providers'
+import { previewStatusNote, probeMimeType, probePreview } from '@/lib/api/preview-probe'
+import { defaultKindFor } from '@/lib/api/document-kind'
 import { DOCUMENT_TITLE_MAX } from '@/lib/limits'
 import { numberOr, parseList, requireMaxLength, str } from '@/lib/http-input'
 import { DOCUMENT_KIND_VALUES } from '@/lib/pipeline'
@@ -56,6 +59,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
     kind,
     prospectSeq: numberOr(q.get('prospect')),
     productSeq: numberOr(q.get('product')),
+    templateSeq: numberOr(q.get('template')),
     tags: parseList(q.get('tag')),
     q: str(q.get('q')),
     includeDeleted: q.get('include_deleted') === 'true',
@@ -74,10 +78,10 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   requireMaxLength(title, DOCUMENT_TITLE_MAX, 'title')
 
   const kind = str(body?.kind)
-  if (!kind || !DOCUMENT_KIND_VALUES.includes(kind)) {
+  if (kind && !DOCUMENT_KIND_VALUES.includes(kind)) {
     throw Errors.badRequest(
       'unknown_kind',
-      kind ? `unknown document kind ${JSON.stringify(kind)}` : 'kind is required',
+      `unknown document kind ${JSON.stringify(kind)}`,
       'run `bk meta` for the current kinds'
     )
   }
@@ -101,16 +105,65 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     )
   }
 
+  // ── WHERE DOES THIS LIVE? (migration 0012, sales #40) ───────────────────
+  // Derived from the url, never taken from the caller. A client that could
+  // declare its own link `blob` would be declaring itself under the delete
+  // gate's protection, which is a claim only we get to make.
+  let mimeType = str(body?.mime_type) ?? null
+  // No `filename` hint: the TITLE is a label, not a filename, and passing it
+  // makes it beat the url's own path. See `publicDocument`.
+  let file = describeFile(uploadUrl ?? externalUrl ?? '', { mime: mimeType })
+
+  // A Drive url says nothing about what it points AT — a video, a pdf and a
+  // sheet are the same url shape — so the recogniser can only answer `other`.
+  // Ask the provider once, with a one-byte range request; see `probeMimeType`
+  // for why the thumbnail cannot answer this and what the HTML interstitial
+  // would do to us.
+  //
+  // Only when the caller did not already say. An explicit `mime_type` is
+  // information we did not have to guess at, and it wins.
+  if (!mimeType && file.provider === 'google_drive') {
+    const detected = await probeMimeType(file.provider, file.external_id)
+    if (detected) {
+      mimeType = detected
+      // Re-derive. The first descriptor was built without a mime, so its
+      // `media_kind` is `other` — this is the line that turns a Drive link
+      // into a *video*.
+      file = describeFile(uploadUrl ?? externalUrl ?? '', { mime: mimeType })
+    }
+  }
+
+  // `kind` became OPTIONAL in this change. It is the author's own label and
+  // still wins when given; when it is absent we default it from what the file
+  // actually is, because `--kind` being required was a question an agent had to
+  // answer about a Drive url it could not inspect.
+  const resolvedKind = kind ?? defaultKindFor(file.media_kind)
+
+  // Best-effort, and it MUST NOT be able to fail this write — see
+  // `lib/api/preview-probe.ts`.
+  //
+  // `null` in two cases, and the second one is a bug found in the browser:
+  //   - OUR files: always viewable by anyone who can see the record.
+  //   - anything with NO EMBED — a folder, an unrecognised host. There is
+  //     nothing to preview, so a status is meaningless, and recording
+  //     `restricted` made the UI tell somebody to share a folder "anyone with
+  //     the link" so it could be previewed. It never would be.
+  const previewStatus = shouldProbe(file) ? await probePreview(file.provider, file.external_id, file.embed.url) : null
+
   const actor = await resolveActor(getDb(), req, ctx.user)
   const row = await addDocument(
     ctx.workspace.id,
     {
       title,
-      kind,
+      kind: resolvedKind,
       uploadUrl,
       externalUrl,
+      storageProvider: file.provider,
+      externalId: file.external_id,
+      previewStatus,
+      previewCheckedAt: previewStatus ? new Date() : null,
       sizeBytes: body?.size_bytes == null ? null : Number(body.size_bytes),
-      mimeType: str(body?.mime_type) ?? null,
+      mimeType,
       description: str(body?.description) ?? null,
       tags: Array.isArray(body?.tags)
         ? (body.tags as unknown[]).map(String).map((s) => s.trim()).filter(Boolean)
@@ -119,7 +172,27 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     actor
   )
   return NextResponse.json(
-    publicDocument({ ...row, prospect_numbers: [], product_numbers: [] }, ctx.workspace.slug),
+    {
+      ...publicDocument(
+        {
+          ...row,
+          prospect_numbers: [],
+          product_numbers: [],
+          strategy_numbers: [],
+          template_numbers: [],
+        },
+        ctx.workspace.slug
+      ),
+      // THE SENTENCE THE AGENT READS. A `restricted` verdict is the whole
+      // reason the probe runs, and an agent that only got a 201 would never
+      // learn its link is unopenable. `bk` prints this on stderr.
+      preview_note: previewStatusNote(previewStatus, file.provider),
+    },
     { status: 201 }
   )
 })
+
+/** Is there anything a preview verdict could change? See the call site. */
+function shouldProbe(file: { internal: boolean; embed: { mode: string } }): boolean {
+  return !file.internal && file.embed.mode !== 'none'
+}
