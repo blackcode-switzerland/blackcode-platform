@@ -24,6 +24,7 @@ import {
 } from '../schema'
 import { sourceStatus, sourceWindows } from '../../derive/sources'
 import { reconcile, type Reconciliation } from '../../derive/reconcile'
+import type { DelimitedMapping } from '../../import/delimited'
 import { nextSeq } from './imports'
 
 export async function listSources(workspaceId: number, entityId?: number): Promise<BooksSource[]> {
@@ -274,6 +275,10 @@ export interface UpdateSourceData {
   method?: string | null
   notes?: Record<string, unknown> | null
   retired?: boolean
+  /** The source this one settles into — DATA-MODEL §10's chain. `null` clears. */
+  drawsFromSeq?: number | null
+  /** How to read this source's delimited export. `null` clears (camt.053). */
+  importMapping?: DelimitedMapping | null
 }
 
 export async function updateSource(workspaceId: number, seq: number, data: UpdateSourceData): Promise<BooksSource> {
@@ -285,6 +290,42 @@ export async function updateSource(workspaceId: number, seq: number, data: Updat
   if (data.notes !== undefined) patch.notes_freeform = data.notes
   if (data.retired !== undefined) patch.retired = data.retired
 
+  if (data.importMapping !== undefined) {
+    if (data.importMapping !== null) {
+      const bad = mappingRefusal(data.importMapping)
+      if (bad) throw new SourceRefused('bad_mapping', bad, 'bk guide books/money-in shows a worked mapping')
+    }
+    patch.import_mapping = data.importMapping
+  }
+
+  // The chain is set by SOURCE NUMBER, never by database id: #numbers are what
+  // `bk books source list` shows and what a person can read back.
+  if (data.drawsFromSeq !== undefined) {
+    if (data.drawsFromSeq === null) patch.draws_from = null
+    else {
+      if (data.drawsFromSeq === seq) {
+        throw new SourceRefused(
+          'draws_from_itself',
+          `source #${seq} cannot settle into itself`,
+          'name the account it settles INTO — usually the bank'
+        )
+      }
+      const [parent] = await getDb()
+        .select({ id: booksSource.id })
+        .from(booksSource)
+        .where(and(eq(booksSource.workspace_id, workspaceId), eq(booksSource.seq, data.drawsFromSeq)))
+        .limit(1)
+      if (!parent) {
+        throw new SourceRefused(
+          'draws_from_not_found',
+          `no source #${data.drawsFromSeq} to settle into`,
+          'bk books source list shows the numbers'
+        )
+      }
+      patch.draws_from = parent.id
+    }
+  }
+
   const [row] = await getDb()
     .update(booksSource)
     .set(patch)
@@ -292,6 +333,35 @@ export async function updateSource(workspaceId: number, seq: number, data: Updat
     .returning()
   if (!row) throw new SourceRefused('source_not_found', `no source #${seq}`, 'bk books source list shows the numbers')
   return row
+}
+
+/**
+ * Is this mapping usable at all? Shape only — whether it FITS a given file is
+ * `parseDelimited`'s answer, and it names the header it actually found.
+ *
+ * Checked here so a mapping that could never read anything is refused on the
+ * day it is written, rather than on the morning somebody imports with it.
+ */
+function mappingRefusal(m: DelimitedMapping): string | null {
+  if (typeof m.delimiter !== 'string' || m.delimiter.length !== 1) {
+    return 'delimiter must be exactly one character (write a tab as "\\t")'
+  }
+  if (typeof m.header !== 'boolean') return 'header must be true or false'
+  if (!m.columns || typeof m.columns.date !== 'string' || typeof m.columns.label !== 'string') {
+    return 'columns.date and columns.label are required: a line with no date or no narrative cannot be booked or recognized'
+  }
+  const pair = m.columns.debit !== undefined || m.columns.credit !== undefined
+  if (pair === (m.columns.amount !== undefined)) {
+    return 'name EITHER columns.amount OR a columns.debit/columns.credit pair — never both and never neither'
+  }
+  if (!['YYYY-MM-DD', 'DD.MM.YYYY', 'MM/DD/YYYY'].includes(m.date_format)) {
+    return 'date_format must be YYYY-MM-DD, DD.MM.YYYY or MM/DD/YYYY — no free-form dates'
+  }
+  if (m.decimal !== '.' && m.decimal !== ',') return 'decimal must be "." or ","'
+  if (m.positive_means !== 'credit' && m.positive_means !== 'debit') {
+    return 'positive_means must be "credit" or "debit": say which way a positive number runs, because the file cannot'
+  }
+  return null
 }
 
 export interface RecordPullData {

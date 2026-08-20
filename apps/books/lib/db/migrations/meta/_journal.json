@@ -127,6 +127,13 @@
       "when": 1787001000000,
       "tag": "0018_pull_closing_balance",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787001100000,
+      "tag": "0019_source_import_mapping",
+      "breakpoints": true
     }
   ]
 }

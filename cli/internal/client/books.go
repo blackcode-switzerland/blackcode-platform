@@ -769,6 +769,22 @@ func (c *Client) ImportBooksSource(ws string, source int, file, xml string) (*Bo
 	return &out, nil
 }
 
+// ImportBooksDelimited sends a delimited export plus the balances it should
+// reconcile to. The balances are the caller's because the file usually does not
+// carry them, and without them nothing can tell a whole file from half of one —
+// the check camt.053 gets from its own OPBD/CLBD.
+func (c *Client) ImportBooksDelimited(ws string, source int, file, content, opening, closing, closingOn string) (*BooksImportSummary, error) {
+	var out BooksImportSummary
+	body := map[string]string{"file": file, "content": content, "opening": opening, "closing": closing}
+	if closingOn != "" {
+		body["closing_on"] = closingOn
+	}
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/sources/%d/import", ws, source), body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // BooksPostResult reports one posting. `Already` marks the idempotent no-op.
 type BooksPostResult struct {
 	Number  int    `json:"number"`

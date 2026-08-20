@@ -68,6 +68,20 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
       method: body.method === null || typeof body.method === 'string' ? (body.method as string | null) : undefined,
       notes: (body.notes as Record<string, unknown> | undefined) ?? undefined,
       retired: typeof body.retired === 'boolean' ? body.retired : undefined,
+      // The chain (DATA-MODEL §10) and how to read this feed's export (0019).
+      // `null` clears either; absent leaves it alone.
+      drawsFromSeq:
+        body.draws_from === null
+          ? null
+          : typeof body.draws_from === 'number'
+            ? body.draws_from
+            : undefined,
+      importMapping:
+        body.import_mapping === null
+          ? null
+          : typeof body.import_mapping === 'object' && body.import_mapping !== null
+            ? (body.import_mapping as never)
+            : undefined,
     })
     return NextResponse.json({ number: s.seq, name: s.name, retired: s.retired })
   } catch (e) {

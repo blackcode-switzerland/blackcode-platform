@@ -40,7 +40,7 @@ import {
   booksCounters,
   booksAccount,
 } from '../schema'
-import { parseCamt053, verifyCamt, CamtRefused, type CamtLine } from '../../import/camt053'
+import { parseCamt053, verifyCamt, CamtRefused, type CamtLine, type CamtStatement } from '../../import/camt053'
 import { listRules } from './rules'
 import { matchesRule } from '../../derive/recognition'
 
@@ -115,6 +115,31 @@ export async function importCamt(
     if (e instanceof CamtRefused) throw new ImportRefused(e.code, e.message)
     throw e
   }
+  return importStatement(workspaceId, sourceSeq, fileName, stmt, fileSha256, 'camt.053')
+}
+
+/**
+ * Everything after the parse, for EITHER format.
+ *
+ * Split out of `importCamt` on 2026-08-20 when the delimited reader landed. The
+ * seam is exact: `parseDelimited` produces the same `CamtStatement`, so the
+ * exercice checks, the idempotency on line reference, rule matching at arrival,
+ * the pull record and 0018's closing balance are all the code that was already
+ * here and already proven — not a second implementation that drifts.
+ *
+ * `verifyCamt` runs here rather than in each parser, so neither format can skip
+ * it. For a delimited file that check is the ONLY thing standing between a
+ * truncated download and a month with three days missing, because the caller
+ * declares the balances the file does not carry.
+ */
+export async function importStatement(
+  workspaceId: number,
+  sourceSeq: number,
+  fileName: string,
+  stmt: CamtStatement,
+  fileSha256: string,
+  format: string
+): Promise<ImportSummary> {
   const problems = verifyCamt(stmt)
   if (problems.length > 0) {
     throw new ImportRefused('does_not_reconcile', 'the file does not reconcile against itself', problems)
@@ -149,6 +174,46 @@ export async function importCamt(
       throw new ImportRefused('no_ledger_account', `source #${sourceSeq} names no ledger account`, [
         'a double-entry book must know which account this feed IS (e.g. 1020)',
       ])
+    }
+
+    // ── A FEED AND THE FEED IT SETTLES INTO DESCRIBE THE SAME MONEY ─────────
+    // A card is used four times and the bank debits the total once. Both files
+    // are true; posting both against the BANK account counts the spend twice,
+    // and the bilan balances either way, so nothing downstream can see it.
+    //
+    // DATA-MODEL §10 always specified the edge — `draws_from`, "the chain:
+    // Yapeal 6474 → WIR" — and nothing but the seed had ever written it,
+    // because until a card feed could be imported it decided nothing.
+    //
+    // The accounting answer is the ordinary one: a card is a LIABILITY while it
+    // is outstanding. Purchases credit the card's own account, the settlement
+    // debits it, and it nets to what is owed. So the rule the door can actually
+    // enforce is that a source which draws on another must not claim that
+    // other's account — stated here, once, at the only place a feed becomes
+    // entries.
+    if (!simplified && source.draws_from !== null) {
+      const [parent] = await tx
+        .select()
+        .from(booksSource)
+        .where(eq(booksSource.id, source.draws_from))
+        .limit(1)
+      if (!parent) {
+        throw new ImportRefused('draws_from_missing', `source #${sourceSeq} settles into a source that no longer exists`, [
+          'fix the chain: bk books source edit <n> --draws-from <n>, or --no-draws-from if it settles nowhere',
+        ])
+      }
+      const parentAccount = (parent.ledger_accounts ?? [])[0] ?? null
+      if (parentAccount && parentAccount === ledgerAccount) {
+        throw new ImportRefused(
+          'settles_into_same_account',
+          `source #${sourceSeq} settles into "${parent.name}" and both name account ${ledgerAccount}`,
+          [
+            `every line here would post against ${ledgerAccount}, and so would the settlement on "${parent.name}" — the same spend counted twice, on a bilan that balances either way`,
+            `give this feed its own account: a card is a liability while it is outstanding, so purchases credit ITS account and the settlement debits it`,
+            `create one with bk books account create --class 2, then bk books source edit ${sourceSeq} --ledger-account <no>`,
+          ]
+        )
+      }
     }
 
     // Exercices, by year of booking date. Refuse lines outside an open year
@@ -303,7 +368,7 @@ export async function importCamt(
       VALUES (
         ${workspaceId}, ${source.id}, ${fileName},
         ${stmt.from && stmt.to ? `${stmt.from} → ${stmt.to}` : null},
-        'camt.053', ${'sha256:' + fileSha256}, CURRENT_DATE,
+        ${format}, ${'sha256:' + fileSha256}, CURRENT_DATE,
         ${stmt.closing}, ${stmt.closing_on ?? null}
       )
       ON CONFLICT (source_id, file) DO NOTHING

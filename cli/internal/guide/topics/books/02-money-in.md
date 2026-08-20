@@ -32,11 +32,45 @@ the door refuses anything else.
 
 ## Importing a statement
 
-`source import` takes camt.053 and lands the file **whole or not at all**. It
-must reconcile to the rappen — opening balance plus the booked lines equals the
-closing balance — or the import refuses and names the problem. It also refuses a
-statement carrying no opening or closing balance, because a truncated export
-proves nothing.
+`source import` lands the file **whole or not at all**. It must reconcile to the
+rappen — opening balance plus the booked lines equals the closing balance — or
+the import refuses and names the problem. It also refuses a statement carrying
+no opening or closing balance, because a truncated export proves nothing.
+
+**Two formats, and the file decides which.** A camt.053 announces itself and
+states its own balances, so it needs nothing else. Anything else is read as a
+**delimited export** — the CSV a card or a processor issues — and needs two
+things:
+
+```bash
+bk books source mapping-set 2 --file yapeal-mapping.json
+bk books source import 2 --file card-2026-06.csv --opening 0.00 --closing -440.65
+```
+
+The mapping says how to read that issuer's columns, established once from a real
+export: there is no "CSV format", every issuer names its columns differently, so
+it is kept as data rather than code. `--opening` and `--closing` are required
+because such a file almost never carries balances, and without them nothing can
+tell a whole file from half of one. They also catch the one thing no reader can
+infer — whether a positive number means money in or money out.
+
+## A card and the bank that pays it are the same money
+
+Set the chain with `bk books source edit <card> --draws-from <bank>`. Then give
+the card **its own account**, and the import refuses if it names the bank's:
+
+```bash
+bk books account create --entity acme --no 2100 --class 2 \
+  --label-fr "Dettes cartes de crédit" --position autres_dettes_ct
+bk books source edit 2 --ledger-account 2100
+```
+
+Four purchases on the card and one settlement on the bank describe the same
+spend. Booked against the same account it is counted twice — and the bilan
+balances either way, so nothing downstream shows it. With the card on its own
+account, the purchases credit it, the settlement debits it, and it nets to what
+is still outstanding. Resolve the settlement line to that account, never to an
+expense: the expense was already booked, merchant by merchant.
 
 Every imported line converges on the bank's own reference, so re-importing an
 overlapping statement adds nothing: the second run reports the lines as already

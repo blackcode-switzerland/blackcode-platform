@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -28,7 +29,8 @@ func newSourceCmd() *cobra.Command {
 		Short: "The sources register — every place money data comes from",
 	}
 	cmd.AddCommand(newSourceListCmd(), newSourceShowCmd(), newSourceImportCmd(),
-		newSourceCreateCmd(), newSourceEditCmd(), newSourceRecordPullCmd(), newSourceRunbookSetCmd())
+		newSourceCreateCmd(), newSourceEditCmd(), newSourceRecordPullCmd(), newSourceRunbookSetCmd(),
+		newSourceMappingSetCmd())
 	return cmd
 }
 
@@ -160,11 +162,11 @@ func strOr(s *string, fallback string) string {
 }
 
 func newSourceImportCmd() *cobra.Command {
-	var file string
+	var file, opening, closing, closingOn string
 	cmd := &cobra.Command{
-		Use:         "import <source-number> --file <statement.xml>",
+		Use:         "import <source-number> --file <statement.xml|export.csv>",
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/sources/{number}/import"},
-		Short:       "Import one camt.053 bank statement through the door",
+		Short:       "Import one bank or card statement through the door",
 		Long: "Deliver one camt.053 statement to this source's book. Every booked line\n" +
 			"lands STAGED — whole file or nothing: the statement must reconcile against\n" +
 			"itself (opening + lines = closing, to the rappen) or it is refused with the\n" +
@@ -172,7 +174,19 @@ func newSourceImportCmd() *cobra.Command {
 			"Rules run at arrival: a clean hit lands `inferred` and waits on the worklist\n" +
 			"for a human to confirm — the machine suggests, it never applies. Re-importing\n" +
 			"an overlapping statement converges on the bank's own references and duplicates\n" +
-			"nothing. `--file -` reads stdin, which is how the Companion pipes.",
+			"nothing. `--file -` reads stdin, which is how the Companion pipes.\n\n" +
+			"TWO FORMATS. camt.053 XML needs nothing else — ISO 20022 states its own\n" +
+			"opening and closing balances. A DELIMITED export (the CSV a card or a\n" +
+			"processor issues) needs two things: an import mapping on the source, set once\n" +
+			"from a real export with `bk books source mapping-set`, and --opening/--closing,\n" +
+			"because the file almost never carries balances and without them nothing can\n" +
+			"tell a whole file from half of one.\n\n" +
+			"A CARD NEEDS ITS OWN ACCOUNT. If the source settles into another (set with\n" +
+			"`source edit --draws-from`), it may not name that one's ledger account: the\n" +
+			"card's four purchases and the bank's single settlement are the same money, and\n" +
+			"booking both against the bank counts it twice on a bilan that balances either\n" +
+			"way. Give the card a class 2 account; purchases credit it, the settlement\n" +
+			"debits it, and it nets to what is outstanding.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -198,7 +212,28 @@ func newSourceImportCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := c.ImportBooksSource(ws, n, name, string(raw))
+
+			// The FILE decides, not a flag: a camt.053 announces itself in its
+			// first element, and anything else is delimited. Asking the caller
+			// to declare a format they can see would be a flag that is only
+			// ever wrong.
+			body := string(raw)
+			var r *client.BooksImportSummary
+			if strings.Contains(body, "<BkToCstmrStmt") {
+				if opening != "" || closing != "" {
+					return fmt.Errorf("a camt.053 states its own balances — drop --opening/--closing, they are for delimited exports")
+				}
+				r, err = c.ImportBooksSource(ws, n, name, body)
+			} else {
+				if opening == "" || closing == "" {
+					return fmt.Errorf("a delimited export needs --opening and --closing: read them off the statement.\n" +
+						"Without them nothing can tell a whole file from half of one, which is the check a camt.053 gets from its own balances")
+				}
+				if file == "-" {
+					name = "stdin.csv"
+				}
+				r, err = c.ImportBooksDelimited(ws, n, name, body, opening, closing, closingOn)
+			}
 			if err != nil {
 				return err
 			}
@@ -218,7 +253,10 @@ func newSourceImportCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&file, "file", "", "Path to the camt.053 XML, or - for stdin (required)")
+	cmd.Flags().StringVar(&file, "file", "", "Path to the camt.053 XML or delimited export, or - for stdin (required)")
+	cmd.Flags().StringVar(&opening, "opening", "", "Delimited only: the balance this file opens at, e.g. 0.00")
+	cmd.Flags().StringVar(&closing, "closing", "", "Delimited only: the balance it must reconcile to")
+	cmd.Flags().StringVar(&closingOn, "closing-on", "", "Delimited only: the date that closing balance is stated as of (default: the last line's date)")
 	_ = cmd.MarkFlagRequired("file")
 	return cmd
 }
@@ -268,6 +306,8 @@ func newSourceCreateCmd() *cobra.Command {
 
 func newSourceEditCmd() *cobra.Command {
 	var name, expected, method string
+	var drawsFrom int
+	var noDrawsFrom bool
 	var retire, unretire bool
 	var ledger []string
 	cmd := &cobra.Command{
@@ -299,6 +339,14 @@ func newSourceEditCmd() *cobra.Command {
 			}
 			if cmd.Flags().Changed("ledger-account") {
 				patch["ledger_accounts"] = ledger
+			}
+			// The chain: which feed this one settles into (DATA-MODEL §10). By
+			// SOURCE NUMBER, the thing `source list` shows.
+			if cmd.Flags().Changed("draws-from") {
+				patch["draws_from"] = drawsFrom
+			}
+			if cmd.Flags().Changed("no-draws-from") && noDrawsFrom {
+				patch["draws_from"] = nil
 			}
 			if retire {
 				patch["retired"] = true
@@ -333,6 +381,8 @@ func newSourceEditCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&ledger, "ledger-account", nil, "Replace the ledger accounts (repeatable)")
 	cmd.Flags().BoolVar(&retire, "retire", false, "Retire the source")
 	cmd.Flags().BoolVar(&unretire, "unretire", false, "Bring a retired source back")
+	cmd.Flags().IntVar(&drawsFrom, "draws-from", 0, "Source #number this one settles into — a card settles into its bank")
+	cmd.Flags().BoolVar(&noDrawsFrom, "no-draws-from", false, "Clear the chain: this feed settles nowhere")
 	return cmd
 }
 
@@ -380,6 +430,72 @@ func newSourceRecordPullCmd() *cobra.Command {
 	cmd.Flags().StringVar(&req.Hash, "hash", "", "Hash of OUR copy, taken at download")
 	cmd.Flags().StringVar(&req.DriveRef, "drive-ref", "", "Where our copy lives")
 	cmd.Flags().StringVar(&req.Pulled, "pulled", "", "Pull date, YYYY-MM-DD (default today)")
+	_ = cmd.MarkFlagRequired("file")
+	return cmd
+}
+
+func newSourceMappingSetCmd() *cobra.Command {
+	var file string
+	cmd := &cobra.Command{
+		Use:         "mapping-set <source-number> --file <mapping.json>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/sources/{number}"},
+		Short:       "Say how to READ this source's delimited export",
+		Long: "The runbook says how to FETCH a file; this says how to read what comes back.\n" +
+			"Only delimited exports need it — a camt.053 needs none, because ISO 20022 is\n" +
+			"the mapping.\n\n" +
+			"There is no \"CSV format\": every issuer names its columns differently, so this\n" +
+			"is established ONCE per source by a human looking at a real export, and kept\n" +
+			"as data rather than code.\n\n" +
+			"  {\n" +
+			"    \"delimiter\": \",\", \"header\": true,\n" +
+			"    \"columns\": {\"date\": \"Date\", \"label\": \"Merchant\", \"amount\": \"Amount\"},\n" +
+			"    \"date_format\": \"YYYY-MM-DD\", \"decimal\": \".\",\n" +
+			"    \"positive_means\": \"credit\"\n" +
+			"  }\n\n" +
+			"`positive_means` is the one nobody can infer: a statement of CHARGES may write\n" +
+			"purchases positive, and getting it backwards inverts every line. The\n" +
+			"opening/closing check at import is what catches that, which is why those\n" +
+			"balances are required.\n\n" +
+			"Instead of `amount`, name a `debit`/`credit` pair when the issuer splits them.\n" +
+			"`--file -` reads stdin.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			n, err := strconv.Atoi(args[0])
+			if err != nil || n < 1 {
+				return fmt.Errorf("%q is not a source number", args[0])
+			}
+			var raw []byte
+			if file == "-" {
+				raw, err = io.ReadAll(os.Stdin)
+			} else {
+				raw, err = os.ReadFile(file)
+			}
+			if err != nil {
+				return fmt.Errorf("reading the mapping: %w", err)
+			}
+			var mapping map[string]any
+			if err := json.Unmarshal(raw, &mapping); err != nil {
+				return fmt.Errorf("the mapping is not JSON: %w", err)
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			r, err := c.EditBooksSource(ws, n, map[string]any{"import_mapping": mapping})
+			if err != nil {
+				return err
+			}
+			return output.Render(format, r, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "mapping set on source #%d (%s) — delimited files can now be imported\n", r.Number, r.Name)
+				return err
+			})
+		},
+	}
+	cmd.Flags().StringVar(&file, "file", "", "Path to the mapping JSON, or - for stdin (required)")
 	_ = cmd.MarkFlagRequired("file")
 	return cmd
 }
