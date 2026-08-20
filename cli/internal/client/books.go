@@ -601,6 +601,10 @@ type BooksSourceDetail struct {
 		Hash     *string `json:"hash"`
 		DriveRef *string `json:"drive_ref"`
 		Pulled   *string `json:"pulled"`
+		// What the bank said this statement closed at. Nil for a pull recorded
+		// by hand, which has no statement behind it.
+		ClosingBalance *string `json:"closing_balance"`
+		ClosingOn      *string `json:"closing_on"`
 	} `json:"pulls"`
 	Runbook *struct {
 		Version       string   `json:"version"`
@@ -610,6 +614,19 @@ type BooksSourceDetail struct {
 		Steps         []string `json:"steps"`
 		Output        *string  `json:"output"`
 	} `json:"runbook"`
+	// The ledger against what the bank last reported. `Known` false means no
+	// imported statement has ever carried a closing balance for this source —
+	// which is NOT the same as agreeing, and `Note` says which it is.
+	Reconciliation *struct {
+		Known             bool    `json:"known"`
+		Note              *string `json:"note"`
+		StatementClosing  *string `json:"statement_closing"`
+		StatementClosedOn *string `json:"statement_closed_on"`
+		LedgerBalance     *string `json:"ledger_balance"`
+		Drift             *string `json:"drift"`
+		Agrees            *bool   `json:"agrees"`
+		StagedOnAccount   *string `json:"staged_on_account"`
+	} `json:"reconciliation"`
 }
 
 func (c *Client) GetBooksSource(ws string, number int) (*BooksSourceDetail, error) {

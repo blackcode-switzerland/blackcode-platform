@@ -111,6 +111,29 @@ func newSourceShowCmd() *cobra.Command {
 						return err
 					}
 				}
+				// The bank reconciliation. It REPORTS and never refuses: a drift is
+				// usually something ordinary — a payment posted before it clears —
+				// and the point is that the question is asked at all, because until
+				// this existed a posting the bank never saw looked exactly the same.
+				if r := s.Reconciliation; r != nil {
+					fmt.Fprintf(w, "\n  RECONCILIATION\n")
+					if !r.Known {
+						fmt.Fprintf(w, "  not possible: %s\n", strOr(r.Note, "no closing balance on record"))
+					} else {
+						fmt.Fprintf(w, "  bank said     %s at %s\n",
+							strOr(r.StatementClosing, "—"), strOr(r.StatementClosedOn, "—"))
+						fmt.Fprintf(w, "  ledger says   %s\n", strOr(r.LedgerBalance, "—"))
+						if r.Agrees != nil && *r.Agrees {
+							fmt.Fprintf(w, "  drift         none — the books agree with the bank\n")
+						} else {
+							fmt.Fprintf(w, "  drift         %s\n", strOr(r.Drift, "—"))
+							if r.StagedOnAccount != nil && *r.StagedOnAccount != "0.00" {
+								fmt.Fprintf(w, "  staged        %s not counted — staged money is money nobody has judged\n",
+									*r.StagedOnAccount)
+							}
+						}
+					}
+				}
 				if s.Runbook != nil {
 					fmt.Fprintf(w, "\n  RUNBOOK v%s (updated %s)\n", s.Runbook.Version, strOr(s.Runbook.Updated, "—"))
 					if s.Runbook.CredentialRef != nil {

@@ -292,6 +292,29 @@ d('starting a book and ending a year', () => {
   // the close
   // -------------------------------------------------------------------------
 
+  // FIRST, because it is the first guard the door reaches: until 2026-08-20 the
+  // close asked only whether the books were TIDY and never whether the period
+  // had ENDED, and an eight-month year filed as a twelve-month result looked
+  // exactly like a correct close.
+  it('refuses to close a year that has not ended yet', async () => {
+    const { closeExercice } = await import('./queries/close')
+    const { getDb } = await import('./client')
+
+    await expect(closeExercice(ws, entity.id, x2026)).rejects.toMatchObject({
+      code: 'exercice_not_over',
+    })
+
+    // Every close below needs a year that has actually finished. Winding this
+    // one's end date back is also the SHORTENED-YEAR case (a company changing
+    // its year end): the guard reads `ends_on` rather than assuming twelve
+    // months, so a short exercice closes on its own dates and needs no
+    // override. 0016 freezes those dates only once the year is CLOSED, which
+    // is why this is allowed here and refused three tests later.
+    await getDb().execute(sql`
+      UPDATE books.exercice SET ends_on = '2026-06-30' WHERE id = ${x2026.id}`)
+    x2026.ends_on = '2026-06-30'
+  })
+
   it('refuses to close over an entry nobody has judged', async () => {
     const { closeExercice } = await import('./queries/close')
     // The declaration above is still staged.

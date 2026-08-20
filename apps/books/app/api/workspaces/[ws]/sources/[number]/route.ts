@@ -15,6 +15,7 @@ import {
   publicPull,
   publicRunbook,
   entitySlugsById,
+  reconcileSource,
 } from '@/lib/db/queries/sources'
 
 interface Params { params: Promise<{ ws: string; number: string }> }
@@ -28,11 +29,19 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   if (!src) throw Errors.notFound('source_not_found', `no source #${n} in this workspace`, 'bk books source list shows the register')
 
   const today = new Date().toISOString().slice(0, 10)
-  const [pulls, runbook, slugs] = await Promise.all([pullsOf(src.id), runbookOf(src.id), entitySlugsById(ctx.workspace.id)])
+  const [pulls, runbook, slugs, reconciliation] = await Promise.all([
+    pullsOf(src.id),
+    runbookOf(src.id),
+    entitySlugsById(ctx.workspace.id),
+    reconcileSource(src),
+  ])
   return NextResponse.json({
     ...publicSource(src, today, src.entity_id === null ? null : (slugs.get(src.entity_id) ?? null)),
     pulls: pulls.map(publicPull),
     runbook: runbook ? publicRunbook(runbook) : null,
+    // The ledger against what the bank last reported. Derived at read time and
+    // stored nowhere, like every other statement in this app.
+    reconciliation,
   })
 })
 

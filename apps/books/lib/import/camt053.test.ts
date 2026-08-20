@@ -107,4 +107,37 @@ describe('the refusals', () => {
   it('refuses a file that is not camt.053 at all', () => {
     expect(() => parseCamt053('{"hello": "world"}')).toThrow(/not a camt\.053/)
   })
+
+  // 2026-08-20: `<Dt><Dt>2026-08-17</Dt></Dt>` is the STANDARD form (ISO 20022
+  // DateAndDateTimeChoice) and this fixture has always used it, but the parser
+  // returned the raw markup. Nothing read the field until 0018 stored it, and
+  // the first statement to reach the new column answered 500 with
+  // `closing_on = "<Dt>2026-05-31"`.
+  //
+  // The period is REMOVED in these two, deliberately. With `<FrToDt>` present
+  // the `?? to` fallback answers 2026-08-17 whether the balance date parsed or
+  // not, and the first version of this test passed against the broken parser
+  // for exactly that reason. A check that cannot fail is the thing this suite
+  // exists to avoid.
+  const NO_PERIOD = GOLDEN.replace(/<FrToDt>[\s\S]*?<\/FrToDt>/, '')
+
+  it('reads the closing date through the nested date choice', () => {
+    expect(parseCamt053(NO_PERIOD).closing_on).toBe('2026-08-17')
+  })
+
+  it('the flat form reads the same', () => {
+    const flat = NO_PERIOD.replace('<Dt><Dt>2026-08-17</Dt></Dt>', '<Dt>2026-08-17</Dt>')
+    expect(parseCamt053(flat).closing_on).toBe('2026-08-17')
+  })
+
+  // A date this parser cannot read must not become one it invented. The period
+  // end is a second STATED fact, not a guess, so it is the fallback; with
+  // neither, the answer is null and `reconcile()` reports `known: false`.
+  it('an unreadable balance date falls back to the period, then to nothing', () => {
+    const junk = GOLDEN.replace('<Dt><Dt>2026-08-17</Dt></Dt>', '<Dt>not a date</Dt>')
+    expect(parseCamt053(junk).closing_on).toBe(parseCamt053(GOLDEN).to)
+
+    const noPeriod = junk.replace(/<FrToDt>[\s\S]*?<\/FrToDt>/, '')
+    expect(parseCamt053(noPeriod).closing_on, 'unknown, never a guess').toBeNull()
+  })
 })

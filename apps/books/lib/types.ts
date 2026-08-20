@@ -1141,6 +1141,16 @@ export interface SourcePull {
   hash: string | null
   drive_ref: string | null
   pulled: IsoDate | null
+  /**
+   * What the statement itself said it closed at, and when — 0018.
+   *
+   * NULL is a real answer and not a zero: a pull recorded by hand through
+   * `source record-pull` has no statement behind it, and one imported before
+   * 0018 genuinely does not know. `derive/reconcile.ts` reports those as
+   * `known: false` rather than as an agreement.
+   */
+  closing_balance: Money | null
+  closing_on: IsoDate | null
 }
 
 /**

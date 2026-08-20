@@ -68,13 +68,64 @@ export interface TaxParamsInput {
   capital_tax_base_rate_permille: number
 }
 
-function rate(name: string, v: unknown, max: number): number {
+/**
+ * One rate, range-checked and PLAUSIBILITY-checked.
+ *
+ * ── WHY A FLOOR, AND WHY IT IS NOT PEDANTRY ────────────────────────────────
+ * Measured 2026-08-20, from an agent asked to record "8.5%":
+ *
+ *   ifd.rate_pct              0.085   (meant 8.5)
+ *   cantonal.base_rate_pct    0.04    (meant 4.0)
+ *   cantonal.coefficient_pct  1.2     (meant 120)
+ *   communal.coefficient_pct  1.25    (meant 125)
+ *   capital_tax.base_rate_permille  0.0025  (meant 0.25)
+ *
+ * Every one a fraction, into a field named `_pct`. All five were accepted,
+ * because `0 <= n <= max` is true of a fraction and of the percentage it was
+ * meant to be. `derive/management.ts` then divides each by 100 (or 1000) — so
+ * the whole tax picture came out at a HUNDREDTH of the real bill, silently, and
+ * the only thing that hid it was a book with no profit yet.
+ *
+ * This is the shape of defect this codebase keeps meeting: a value the schema
+ * accepts, a statement that is quietly wrong, and nothing anywhere that says
+ * so. The chart-account check (0016) was the same, and the answer is the same —
+ * refuse at the door, with the correction in the message.
+ *
+ * ── THE FLOORS ARE STATUTORY, NOT TASTE ────────────────────────────────────
+ * `min` is the value below which a NON-ZERO figure cannot be what the caller
+ * meant:
+ *
+ *   the federal rate   art. 68 LIFD fixes it at 8.5% and it is the same in
+ *                      every canton — there is no Swiss federal profit tax
+ *                      below 1%
+ *   a coefficient      cantonal and communal multipliers run roughly 50–250
+ *                      (percent of the base rate); none is below 10
+ *   a base rate        cantonal profit-tax base rates run ~1.5–10%
+ *
+ * The capital-tax per mille keeps a very permissive floor: real cantonal rates
+ * span roughly 0.01‰ to 5‰ and the low end is genuinely tiny, so this field
+ * cannot carry a confident floor. Four of the five above are caught, which
+ * refuses the submission — the set is written in one transaction or not at all.
+ *
+ * ZERO IS ALWAYS ALLOWED. A canton that levies no capital tax says 0, and that
+ * is a declaration, not a unit error — the same reasoning `imports.ts` applies
+ * to a VAT rate of 0.
+ */
+function rate(name: string, v: unknown, max: number, min = 0): number {
   const n = Number(v)
   if (!Number.isFinite(n) || n < 0 || n > max) {
     throw new TaxParamsRefused(
       'bad_rate',
       `${name} is "${v}", which is not a percentage between 0 and ${max}`,
       'rates are written as numbers, e.g. --ifd-rate 8.5'
+    )
+  }
+  if (n > 0 && n < min) {
+    const asWritten = Number((n * 100).toPrecision(10))
+    throw new TaxParamsRefused(
+      'rate_looks_like_fraction',
+      `${name} is "${v}", which is below any real Swiss rate — this looks like a fraction where a percentage is meant`,
+      `write the rate the way it is quoted, not divided by 100: ${asWritten} rather than ${n}. Every figure here is divided by 100 when the tax is computed, so a fraction produces a bill a hundredth of the true one and nothing later says so. If ${n} is genuinely what this commune levies, there is no way to say it — tell a human`
     )
   }
   return n
@@ -114,16 +165,16 @@ export async function setTaxParams(
   }
 
   const params = {
-    ifd: { rate_pct: rate('the federal rate', input.ifd_rate_pct, 100) },
+    ifd: { rate_pct: rate('the federal rate', input.ifd_rate_pct, 100, 1) },
     cantonal: {
-      base_rate_pct: rate('the cantonal base rate', input.cantonal_base_rate_pct, 100),
-      coefficient_pct: rate('the cantonal coefficient', input.cantonal_coefficient_pct, 1000),
+      base_rate_pct: rate('the cantonal base rate', input.cantonal_base_rate_pct, 100, 0.5),
+      coefficient_pct: rate('the cantonal coefficient', input.cantonal_coefficient_pct, 1000, 10),
     },
     communal: {
-      coefficient_pct: rate('the communal coefficient', input.communal_coefficient_pct, 1000),
+      coefficient_pct: rate('the communal coefficient', input.communal_coefficient_pct, 1000, 10),
     },
     capital_tax: {
-      base_rate_permille: rate('the capital tax rate', input.capital_tax_base_rate_permille, 100),
+      base_rate_permille: rate('the capital tax rate', input.capital_tax_base_rate_permille, 100, 0.001),
     },
   }
 

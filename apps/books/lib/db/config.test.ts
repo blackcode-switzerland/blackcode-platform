@@ -141,6 +141,38 @@ d('the configuration doors', () => {
     await expect(setTaxParams(ws, sa, { ...VD, ifd_rate_pct: NaN })).rejects.toMatchObject({ code: 'bad_rate' })
   })
 
+  // 2026-08-20: an agent asked to record "8.5%" stored 0.085, and every figure
+  // in the tax snapshot came out at a hundredth of the real bill in silence.
+  it('a rate written as a fraction is refused, with the percentage in the message', async () => {
+    const { setTaxParams } = await import('./queries/tax-params')
+
+    await expect(setTaxParams(ws, sa, { ...VD, ifd_rate_pct: 0.085 })).rejects.toMatchObject({
+      code: 'rate_looks_like_fraction',
+    })
+    // The correction rides on `suggestion`, which is the half an agent acts on.
+    await expect(setTaxParams(ws, sa, { ...VD, ifd_rate_pct: 0.085 })).rejects.toMatchObject({
+      suggestion: expect.stringContaining('8.5 rather than 0.085'),
+    })
+
+    // Coefficients are the same mistake in a different unit: 1.2 meant 120.
+    await expect(
+      setTaxParams(ws, sa, { ...VD, cantonal_coefficient_pct: 1.2 })
+    ).rejects.toMatchObject({ code: 'rate_looks_like_fraction' })
+    await expect(
+      setTaxParams(ws, sa, { ...VD, communal_coefficient_pct: 1.25 })
+    ).rejects.toMatchObject({ code: 'rate_looks_like_fraction' })
+    await expect(
+      setTaxParams(ws, sa, { ...VD, cantonal_base_rate_pct: 0.04 })
+    ).rejects.toMatchObject({ code: 'rate_looks_like_fraction' })
+  })
+
+  it('zero is a declaration, not a unit error', async () => {
+    const { setTaxParams } = await import('./queries/tax-params')
+    // A canton levying no capital tax says so, and the floor must not object.
+    const row = await setTaxParams(ws, sa, { ...VD, capital_tax_base_rate_permille: 0 })
+    expect((row.params as { capital_tax: { base_rate_permille: number } }).capital_tax.base_rate_permille).toBe(0)
+  })
+
   it('refuses a simplified book: its result is its owner\'s personal income', async () => {
     const { setTaxParams } = await import('./queries/tax-params')
     await expect(setTaxParams(ws, ri, VD)).rejects.toMatchObject({

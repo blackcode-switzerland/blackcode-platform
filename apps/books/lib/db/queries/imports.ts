@@ -38,6 +38,7 @@ import {
   booksSource,
   booksSourcePull,
   booksCounters,
+  booksAccount,
 } from '../schema'
 import { parseCamt053, verifyCamt, CamtRefused, type CamtLine } from '../../import/camt053'
 import { listRules } from './rules'
@@ -296,11 +297,14 @@ export async function importCamt(
 
     // The pull record: first delivery is the record; a re-import converges.
     await tx.execute(sql`
-      INSERT INTO ${booksSourcePull} (workspace_id, source_id, file, period, format, hash, pulled)
+      INSERT INTO ${booksSourcePull}
+        (workspace_id, source_id, file, period, format, hash, pulled,
+         closing_balance, closing_on)
       VALUES (
         ${workspaceId}, ${source.id}, ${fileName},
         ${stmt.from && stmt.to ? `${stmt.from} → ${stmt.to}` : null},
-        'camt.053', ${'sha256:' + fileSha256}, CURRENT_DATE
+        'camt.053', ${'sha256:' + fileSha256}, CURRENT_DATE,
+        ${stmt.closing}, ${stmt.closing_on ?? null}
       )
       ON CONFLICT (source_id, file) DO NOTHING
     `)
@@ -409,6 +413,63 @@ export async function postEntry(
         `entry #${entrySeq} has ${unmapped} line(s) with no account`,
         'resolve it first: bk books resolve <n> --account <no> --explanation <what it was>'
       )
+    }
+
+    // ── A VAT-REGISTERED BOOK MAY NOT POST TURNOVER IN SILENCE ─────────────
+    // Measured 2026-08-20 on a book created from zero: registered effective,
+    // quarterly, 9'600.00 of card takings posted to a class 3 account with
+    // `tva_rate` NULL, and the tax snapshot then reported a REFUND owed to the
+    // company because the only VAT on the book was the input tax on a fridge
+    // repair. Nothing objected at any point. `2200 TVA due` sat unused.
+    //
+    // art. 25 LTVA fixes the rates; art. 35 sets the filing period. A company
+    // that is registered accounts for output tax on every taxable turnover in
+    // the period, and the figure the AFC receives is built from these rows.
+    //
+    // ── WHY THIS REFUSES SILENCE AND NOT ZERO ──────────────────────────────
+    // Refusing all untaxed revenue would be wrong: art. 21 LTVA exempts real
+    // turnover (medical, education, most rents), art. 23 zero-rates exports,
+    // and those sales are still booked and still REPORTED. So the door does not
+    // ask for tax — it asks for a DECLARATION, and `0` is already in the
+    // vocabulary `tva.ts` enforces. An exempt sale says 0 and is a complete
+    // record; a sale that says nothing is a figure nobody has judged, which is
+    // the one thing this app refuses to store as though it had been.
+    //
+    // It fires at POST rather than at resolve because posting is the commitment
+    // — the import/resolve loop stays free to leave a line half-understood, and
+    // 0004 freezes the rate the moment the entry becomes immutable.
+    //
+    // Entries posted BEFORE this rule are untouched: records are permanent
+    // (art. 958f), so the correction for one already filed is a reversing entry
+    // in the current year, not a rewrite of a closed fact.
+    const [entity] = await tx
+      .select({ vat_registered: booksEntity.vat_registered })
+      .from(booksEntity)
+      .where(eq(booksEntity.id, entry.entity_id))
+      .limit(1)
+    if (entity?.vat_registered && entry.tva_rate === null) {
+      const accounts = lines.map((l) => l.account_no).filter((a): a is string => a !== null)
+      const revenue = accounts.length
+        ? await tx
+            .select({ no: booksAccount.no, fr: booksAccount.label })
+            .from(booksAccount)
+            .where(
+              and(
+                eq(booksAccount.entity_id, entry.entity_id),
+                inArray(booksAccount.no, accounts),
+                eq(booksAccount.class, 3)
+              )
+            )
+        : []
+      if (revenue.length > 0) {
+        throw new PostRefused(
+          'revenue_without_tva',
+          `entry #${entrySeq} books turnover on ${revenue.map((r) => r.no).join(', ')} and this book is VAT-registered, but no TVA rate is stated`,
+          'name the rate this turnover carries — `bk books resolve ' +
+            entrySeq +
+            ' --tva-rate 8.1`. If the sale is exempt (art. 21 LTVA) or zero-rated for export (art. 23), say so with --tva-rate 0: the return reports it either way, and a blank is not the same answer as a zero'
+        )
+      }
     }
 
     await tx.update(booksEntry).set({ status: 'posted', updated_at: new Date() }).where(eq(booksEntry.id, entry.id))

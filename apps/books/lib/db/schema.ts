@@ -664,6 +664,11 @@ export const booksSourcePull = booksSchema.table(
     hash: varchar('hash', { length: 80 }),
     drive_ref: text('drive_ref'),
     pulled: date('pulled'),
+    // What the statement itself said it closed at, and when — 0018. Nullable
+    // because a pull recorded by hand (`source record-pull`) has no statement
+    // behind it, and one imported before 0018 genuinely does not know.
+    closing_balance: numeric('closing_balance', { precision: 14, scale: 2 }),
+    closing_on: date('closing_on'),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

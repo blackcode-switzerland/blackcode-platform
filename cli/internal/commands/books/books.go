@@ -68,9 +68,33 @@ RECOGNITION — phase 2, here now. The first write path:
 
 SOURCES AND PIÈCES — phase 3, here now. Provenance and the proof:
 
-  bk books source     list, show        the register: computed completeness status
+  bk books source     list, show, import   the register, and the camt.053 door
   bk books manifest   <n>               every Drive file one source has seen
   bk books piece      list, ingest, match   the receipts inbox and the robot door
+
+"source show" ends with a RECONCILIATION: the ledger against what the bank last
+reported. It reports and never refuses — a drift is usually a payment posted
+before it cleared — but an unknown says so rather than reading as agreement.
+
+MANAGEMENT AND TAX — phase 4, here now:
+
+  bk books analytique                   cost per category, and the monthly flows
+  bk books category   list, create      the analytique's buckets, account-mapped
+  bk books tax                          the PM tax snapshot: derived, cited, never stored
+  bk books tax-params show, set         where a company is taxed, and at what rates
+  bk books analyse    list, show, record   the agent write-back: a filed verdict
+
+COMPLIANCE — phase 5, here now:
+
+  bk books compliance list, show, review   the statutory rules, draft until signed off
+  bk books verdict    <n>               file a verdict onto a record
+
+STARTING AND ENDING A BOOK:
+
+  bk books account    create            an account this book keeps and the template does not
+  bk books opening    list, set         the balance sheet a book starts from (first year only)
+  bk books exercice   close             close a year and carry its bilan into the next
+  bk books entity     edit              a book's own facts; slug, form and regime are permanent
 
 THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
@@ -80,9 +104,10 @@ THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
 "bk books workspace use x" sets THIS app's active workspace and no other's.
 
-WHAT IS NOT HERE YET, and deliberately so:
-
-  analyse, tax                         phase 4 — management view and write-back
+The table below is generated from the commands this binary actually carries, so
+where it and this prose ever disagree, the table is right. (This paragraph
+replaced a "not here yet" list naming analyse and tax, which had both shipped —
+found 2026-08-20 by an agent that read the help and believed it.)
 
 CREATING A BOOK GIVES YOU TWO THINGS, and you need a third. "entity create"
 installs the Swiss PME chart of accounts, because a book with no accounts can

@@ -5,7 +5,7 @@
 // `today` travels in from the route so the derivation stays pure and the tests
 // stay honest; a route passes the real date, a test passes a fixed one.
 
-import { and, asc, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { getDb } from '../client'
 import {
   booksSource,
@@ -13,12 +13,17 @@ import {
   booksRunbook,
   booksDriveManifest,
   booksEntity,
+  booksEntry,
+  booksEntryLine,
+  booksExercice,
+  booksOpeningBalance,
   type BooksSource,
   type BooksSourcePull,
   type BooksRunbook,
   type BooksDriveManifest,
 } from '../schema'
 import { sourceStatus, sourceWindows } from '../../derive/sources'
+import { reconcile, type Reconciliation } from '../../derive/reconcile'
 import { nextSeq } from './imports'
 
 export async function listSources(workspaceId: number, entityId?: number): Promise<BooksSource[]> {
@@ -105,7 +110,78 @@ export function publicPull(p: BooksSourcePull) {
     hash: p.hash,
     drive_ref: p.drive_ref,
     pulled: p.pulled,
+    // What the statement said it closed at — 0018. Null for a pull recorded by
+    // hand, and for anything imported before that migration.
+    closing_balance: p.closing_balance,
+    closing_on: p.closing_on,
   }
+}
+
+/**
+ * The bank reconciliation for one source: the ledger against what the bank last
+ * reported. See `derive/reconcile.ts` for why this reports rather than refuses.
+ *
+ * It reads the MOST RECENT pull that carries a closing balance, not simply the
+ * most recent pull — `source record-pull` writes a row with no statement behind
+ * it, and a hand-recorded pull must not blank out a real reconciliation.
+ */
+export async function reconcileSource(source: BooksSource): Promise<Reconciliation> {
+  const accounts = (source.ledger_accounts ?? []) as string[]
+  if (accounts.length === 0 || source.entity_id === null) {
+    return reconcile({ accounts, closing_balance: null, closing_on: null, openings: [], lines: [] })
+  }
+
+  const db = getDb()
+  const [pull] = await db
+    .select()
+    .from(booksSourcePull)
+    .where(and(eq(booksSourcePull.source_id, source.id), sql`${booksSourcePull.closing_balance} IS NOT NULL`))
+    .orderBy(desc(booksSourcePull.closing_on))
+    .limit(1)
+
+  if (!pull) {
+    return reconcile({ accounts, closing_balance: null, closing_on: null, openings: [], lines: [] })
+  }
+
+  // The query builder rather than raw SQL for the account list: a JS array
+  // interpolated into `= ANY(...)` is parameterised as a string, not as a
+  // Postgres array, and the route answered 500 until this was `inArray`.
+  const openings = await db
+    .select({ account_no: booksOpeningBalance.account_no, amount: booksOpeningBalance.amount })
+    .from(booksOpeningBalance)
+    .innerJoin(booksExercice, eq(booksExercice.id, booksOpeningBalance.exercice_id))
+    .where(
+      and(
+        eq(booksExercice.entity_id, source.entity_id),
+        sql`${pull.closing_on}::date BETWEEN ${booksExercice.starts_on} AND ${booksExercice.ends_on}`
+      )
+    )
+
+  const lines = await db
+    .select({
+      account_no: booksEntryLine.account_no,
+      debit: booksEntryLine.debit,
+      credit: booksEntryLine.credit,
+      date: booksEntry.date,
+      status: booksEntry.status,
+    })
+    .from(booksEntryLine)
+    .innerJoin(booksEntry, eq(booksEntry.id, booksEntryLine.entry_id))
+    .where(
+      and(
+        eq(booksEntry.entity_id, source.entity_id),
+        isNull(booksEntry.deleted_at),
+        inArray(booksEntryLine.account_no, accounts)
+      )
+    )
+
+  return reconcile({
+    accounts,
+    closing_balance: pull.closing_balance,
+    closing_on: pull.closing_on,
+    openings,
+    lines,
+  })
 }
 
 export function publicRunbook(r: BooksRunbook) {

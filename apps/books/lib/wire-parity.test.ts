@@ -681,7 +681,7 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
   it('publicPull serves exactly these fields', () => {
     const out = publicPull(row({ file: 'x.csv' }))
     expect(Object.keys(out).sort()).toEqual(
-      ['file', 'period', 'format', 'hash', 'drive_ref', 'pulled'].sort()
+      ['file', 'period', 'format', 'hash', 'drive_ref', 'pulled', 'closing_balance', 'closing_on'].sort()
     )
   })
 
@@ -1415,7 +1415,7 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     // confirmation — the invitations case's bug, one merge later.
     const keys = envelopeKeys(src, { after: 'export const GET', label: 'sources/{number} GET' })
     expect(keys.length, 'found no envelope keys — the response moved').toBeGreaterThan(0)
-    expect(keys.sort()).toEqual(['...publicSource', 'pulls', 'runbook'].sort())
+    expect(keys.sort()).toEqual(['...publicSource', 'pulls', 'runbook', 'reconciliation'].sort())
   })
 
   // --- phase 4B: analytique -------------------------------------------------
