@@ -38,12 +38,6 @@
       "app": "books"
     },
     {
-      "method": "POST",
-      "path": "/api/workspaces/{ws}/accounts",
-      "command": "bk books account create",
-      "app": "books"
-    },
-    {
       "method": "GET",
       "path": "/api/workspaces/{ws}/analyses",
       "command": "bk books analyse list",
@@ -117,6 +111,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/openings",
+      "command": "bk books opening list",
+      "app": "books"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/overview",
       "command": "bk books overview",
       "app": "books"
@@ -159,6 +159,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/tax-params",
+      "command": "bk books tax-params show",
+      "app": "books"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/tax-snapshot",
       "command": "bk books tax",
       "app": "books"
@@ -177,8 +183,26 @@
     },
     {
       "method": "PATCH",
+      "path": "/api/workspaces/{ws}/analytique/categories/{number}",
+      "command": "bk books category retire",
+      "app": "books"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/entities/{slug}",
+      "command": "bk books entity edit",
+      "app": "books"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/rules/{number}",
+      "command": "bk books rule deactivate",
+      "app": "books"
+    },
+    {
+      "method": "PATCH",
       "path": "/api/workspaces/{ws}/sources/{number}",
-      "command": "bk books source edit",
+      "command": "bk books source edit, bk books source mapping-set",
       "app": "books"
     },
     {
@@ -191,6 +215,12 @@
       "method": "POST",
       "path": "/api/workspaces",
       "command": "bk books workspace create",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/accounts",
+      "command": "bk books account create",
       "app": "books"
     },
     {
@@ -209,12 +239,6 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/entities",
       "command": "bk books entity create",
-      "app": "books"
-    },
-    {
-      "method": "PATCH",
-      "path": "/api/workspaces/{ws}/entities/{slug}",
-      "command": "bk books entity edit",
       "app": "books"
     },
     {
@@ -249,6 +273,12 @@
     },
     {
       "method": "POST",
+      "path": "/api/workspaces/{ws}/exercices/{year}/close",
+      "command": "bk books exercice close",
+      "app": "books"
+    },
+    {
+      "method": "POST",
       "path": "/api/workspaces/{ws}/invitations",
       "command": "bk books invite send",
       "app": "books"
@@ -272,12 +302,6 @@
       "app": "books"
     },
     {
-      "method": "PATCH",
-      "path": "/api/workspaces/{ws}/rules/{number}",
-      "command": "bk books rule deactivate",
-      "app": "books"
-    },
-    {
       "method": "POST",
       "path": "/api/workspaces/{ws}/sources",
       "command": "bk books source create",
@@ -297,32 +321,14 @@
     },
     {
       "method": "PUT",
-      "path": "/api/workspaces/{ws}/sources/{number}/runbook",
-      "command": "bk books source runbook-set",
-      "app": "books"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/openings",
-      "command": "bk books opening list",
-      "app": "books"
-    },
-    {
-      "method": "PUT",
       "path": "/api/workspaces/{ws}/openings",
       "command": "bk books opening set",
       "app": "books"
     },
     {
-      "method": "POST",
-      "path": "/api/workspaces/{ws}/exercices/{year}/close",
-      "command": "bk books exercice close",
-      "app": "books"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/tax-params",
-      "command": "bk books tax-params show",
+      "method": "PUT",
+      "path": "/api/workspaces/{ws}/sources/{number}/runbook",
+      "command": "bk books source runbook-set",
       "app": "books"
     },
     {
