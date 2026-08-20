@@ -17,7 +17,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { workspacesRoute } from '@blackcode/platform-api/routes'
 import { Errors } from '@blackcode/platform-api'
 import { appContext, apiHandler } from '@/lib/api'
-import { createWorkspaceForUser } from '@/lib/db/queries/workspaces'
+import { createWorkspaceForUser, WorkspaceRefused } from '@/lib/db/queries/workspaces'
 
 export const GET = workspacesRoute(appContext)
 
@@ -35,6 +35,15 @@ export const POST = apiHandler(async (req: NextRequest) => {
     throw Errors.badRequest('name_too_long', `name max ${NAME_MAX} chars`, 'shorter; the slug is derived from it')
   }
 
-  const ws = await createWorkspaceForUser(user.id, name)
-  return NextResponse.json(ws, { status: 201 })
+  try {
+    const ws = await createWorkspaceForUser(user.id, name)
+    return NextResponse.json(ws, { status: 201 })
+  } catch (e) {
+    // 409, not 400: the request is well-formed and the CONFLICT is with a
+    // workspace that already exists — which is what the suggestion points at.
+    if (e instanceof WorkspaceRefused) {
+      throw Errors.conflict(e.code, e.message, e.suggestion)
+    }
+    throw e
+  }
 })

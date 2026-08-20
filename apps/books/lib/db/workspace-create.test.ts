@@ -1,15 +1,19 @@
 // Manual workspace creation: `bk books workspace create` behind
 // POST /api/workspaces.
 //
-// `ensureWorkspaceForUser` mints a person's FIRST workspace at sign-in and
-// deliberately refuses to mint a second. `createWorkspaceForUser` is the
-// second (and tenth): one set of books per venture. Three properties matter:
+// `ensureWorkspaceForUser` mints a person's FIRST workspace at sign-in.
+// `createWorkspaceForUser` is the manual door — and since 2026-08-20 it refuses
+// a SECOND one: b/books gives one workspace per person for now. Three
+// properties matter:
 //
 //   1. The membership row lands WITH the workspace, one transaction — a
 //      workspace without it locks its own owner out (the seed shipped that
 //      exact bug once; `listWorkspacesForUser` joins membership).
-//   2. It always creates — an existing workspace is not an answer.
+//   2. A person who already owns one is refused, in words, pointing at the
+//      workspace they have. This case REPLACED "it always creates".
 //   3. Slug collisions get a typeable counter suffix, never a random string.
+//      Still reachable, and now only ACROSS people — two different Annas — so
+//      the case below uses a second user rather than the same one twice.
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import { sql } from 'drizzle-orm'
@@ -39,9 +43,14 @@ d('createWorkspaceForUser', () => {
   beforeAll(async () => {
     const { getDb } = await import('./client')
     db = getDb()
+    // A FRESH person per run. The old fixture reused one address, which was
+    // harmless while this door always created — and became a false failure the
+    // moment it started refusing a second workspace, because the user arrived
+    // owning the ones previous runs had left. Nothing is deleted to fix that:
+    // the test simply stops sharing a person with its own history.
     const u = await db.execute(sql`
-      INSERT INTO platform.users (email, name) VALUES ('ws-create@example.test', 'ws-create')
-      ON CONFLICT (email) DO UPDATE SET name = 'ws-create' RETURNING id`)
+      INSERT INTO platform.users (email, name)
+      VALUES (${`ws-create-${stamp}@example.test`}, 'ws-create') RETURNING id`)
     userId = Number(u.rows[0].id)
   })
 
@@ -58,18 +67,32 @@ d('createWorkspaceForUser', () => {
     expect(mine.map((w: { id: number }) => w.id)).toContain(ws.id)
   })
 
-  it('always creates: a person with a workspace gets a second, not the first back', async () => {
+  it('refuses a second workspace, and names the one they already have', async () => {
     const { createWorkspaceForUser } = await import('./queries/workspaces')
-    const second = await createWorkspaceForUser(userId, `Second ${stamp}`)
+    await expect(createWorkspaceForUser(userId, `Second ${stamp}`)).rejects.toMatchObject({
+      code: 'one_workspace_per_person',
+    })
+    // The refusal has to be actionable: it names the workspace to work in, and
+    // says what to do instead — a second company is a second BOOK.
+    await expect(createWorkspaceForUser(userId, `Second ${stamp}`)).rejects.toMatchObject({
+      suggestion: expect.stringContaining(`bk books workspace use venture-${stamp}`),
+    })
+
     const rows = await db.execute(sql`
       SELECT count(*) AS n FROM books.workspace_members WHERE user_id = ${userId}`)
-    expect(Number(rows.rows[0].n)).toBeGreaterThanOrEqual(2)
-    expect(second.slug).toBe(`second-${stamp}`)
+    expect(Number(rows.rows[0].n), 'nothing was minted').toBe(1)
   })
 
-  it('suffixes a colliding slug with a counter, and stays owner on both', async () => {
+  it('suffixes a colliding slug with a counter — across two people', async () => {
     const { createWorkspaceForUser } = await import('./queries/workspaces')
-    const again = await createWorkspaceForUser(userId, NAME)
+    // The other Anna. The suffix path is not dead under the one-per-person
+    // rule, it just belongs to a different person now.
+    const u = await db.execute(sql`
+      INSERT INTO platform.users (email, name)
+      VALUES (${`ws-create-other-${stamp}@example.test`}, 'ws-create-2') RETURNING id`)
+    const otherId = Number(u.rows[0].id)
+
+    const again = await createWorkspaceForUser(otherId, NAME)
     expect(again.slug, 'same name, next typeable slug').toBe(`venture-${stamp}-2`)
     expect(again.member_role).toBe('owner')
   })

@@ -52,6 +52,14 @@ bk books invite send <email>
 Membership is the whole access gate, and the active workspace is stored per app:
 choosing one here disturbs no other app's choice.
 
+**One workspace per person, for now.** Signing in mints it; `bk books workspace
+create` refuses a second and names the one you have. This is a deliberate
+restriction rather than a limit of the model — sharing a workspace needs the
+invitation flow, which is not open yet. So if you are running several
+companies, they are several BOOKS in the one workspace, not several
+workspaces: `bk books entity create` is the command, and every read takes
+`--entity <slug>` to pick between them.
+
 Most read commands take `--entity <slug>` and `--exercice <year>` and fall back
 to the first book and its latest year. **Pass them explicitly in a script.** A
 workspace with three books will answer about whichever one sorts first, and the

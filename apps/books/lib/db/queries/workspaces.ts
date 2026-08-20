@@ -257,17 +257,66 @@ async function mintWorkspace(
   return { ...ws, member_role: 'owner' as const }
 }
 
+export class WorkspaceRefused extends Error {
+  constructor(
+    public code: string,
+    message: string,
+    public suggestion: string
+  ) {
+    super(message)
+  }
+}
+
 /**
- * Manual creation: `bk books workspace create --name X` — a SECOND (or tenth)
- * workspace for somebody who already has one. Unlike `ensureWorkspaceForUser`
- * this always creates: the caller said "create", not "sign me in". The name is
- * used as given (no "'s workspace" suffix — the person named it), the slug is
- * derived from it.
+ * ONE WORKSPACE PER PERSON, FOR NOW — the policy, in the one place that mints
+ * a workspace on request.
+ *
+ * ── WHY, AND WHY IT IS A POLICY RATHER THAN A MODEL CHANGE ─────────────────
+ * The tables are multi-workspace and stay that way: `books.workspaces` has
+ * owners and members, invitations exist, and every read is already scoped. What
+ * is NOT ready is the human half — there is no invitation-accept route mounted
+ * (`invite send` reports success on an invitation nobody can accept), and a
+ * second workspace is therefore a room only its creator can ever enter.
+ *
+ * It also caused real confusion on 2026-08-20: an agent creating its own
+ * workspace left the person's books in one workspace and their browser in
+ * another, and the dashboard showed nothing while `bk books entity list` showed
+ * everything. Nothing was wrong; there were simply two rooms and no sign
+ * saying which you were in.
+ *
+ * So this is deliberately ONE `if`, in ONE function, refusing with the reason.
+ * Lifting it when invitations land is deleting this block — not unpicking a
+ * constraint, a trigger, or a column that assumed singularity. Nothing else in
+ * this app was told that a person has one workspace, and nothing should be:
+ * `getDefaultForUser` still answers "the newest one you belong to", and
+ * `listForUser` still returns a list.
+ *
+ * ── WHAT IT DOES NOT TOUCH ─────────────────────────────────────────────────
+ * `ensureWorkspaceForUser` — sign-in — is untouched and already idempotent:
+ * it mints at most one, and returns the existing one forever after. That IS the
+ * default workspace this restriction leaves in place, so a person who has never
+ * created anything is unaffected and always has exactly one.
+ *
+ * `addMember` is untouched too. Somebody INVITED into another person's
+ * workspace legitimately belongs to two, and the day that flow works this rule
+ * must not have quietly become "one membership per person". The count below is
+ * of workspaces this person OWNS, for that reason.
  */
 export async function createWorkspaceForUser(
   userId: number,
   name: string
 ): Promise<WorkspaceMembershipRef> {
+  const mine = await listWorkspacesForUser(userId)
+  const owned = mine.filter((w) => w.member_role === 'owner')
+  if (owned.length > 0) {
+    const first = owned[0]
+    throw new WorkspaceRefused(
+      'one_workspace_per_person',
+      `you already have a workspace ("${first.name}", slug ${first.slug}) and b/books gives one per person for now`,
+      `work in it: \`bk books workspace use ${first.slug}\`. A workspace holds ANY number of books, so a second company is \`bk books entity create\` — not a second workspace. Sharing a workspace with somebody else needs the invitation flow, which is not open yet`
+    )
+  }
+
   const trimmed = name.trim()
   return getDb().transaction((tx) => mintWorkspace(tx, userId, trimmed, slugify(trimmed)))
 }
