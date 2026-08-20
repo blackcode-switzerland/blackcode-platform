@@ -52,6 +52,7 @@ app_registry() {
   cat <<'APPS'
 issues|bc-issues|prj_bueHX5y2f7uaemskB5Q1Plwbry2p|https://issues.blackcode.ch
 sales|bc-sales|prj_p5A74QYKnig8696ES87bT6rvHMdZ|https://sales.blackcode.ch
+books|bc-books|prj_OjkZc6y1oRGkCw3fFtTglIMCN9Ec|https://books.blackcode.ch
 APPS
 }
 
