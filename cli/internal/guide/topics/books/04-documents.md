@@ -52,17 +52,33 @@ the same folder creates nothing new.
 **Duplicates are flagged, never dropped.** A refund looks identical to a
 re-scan, and only a person can tell them apart.
 
-`source.sha256`, when present, must be a real digest. A malformed hash is worse
-than none: it would sit on an entry as proof that proves nothing.
+**Every delivery needs a LINK and a CHECKSUM.** A pièce nobody can open, or
+that cannot be told apart from the next capture of the same file, is a row that
+looks like evidence. Both are refused at the door, and both ask only for values
+Drive already handed the worker:
 
-**`file_id` and `web_view_link` are not interchangeable, and the door checks.**
-Drive hands back `id` and `webViewLink` side by side, both opaque strings, and
-only the second is a URL. Sent the wrong way round they used to ingest cleanly
-and leave the entry pointing at a reference that opens nothing — which is the
-one thing a pièce reference exists to avoid, since it is what somebody follows
-to the document years later. Send Drive's own values; the door will not build a
-URL out of an id, because it cannot check where that id actually leads. Having
-no link is fine — omit the field.
+    "source": {
+      "file_id":       "<Drive id>",
+      "web_view_link": "https://drive.google.com/file/d/<id>/view",
+      "sha256":        "<64 hex>"
+    }
+
+`web_view_link` is what somebody follows to the document years later
+(art. 958f). The door will NOT build it out of the id: it cannot check where an
+id leads, and a manufactured link that resolves to the wrong thing is worse
+than none.
+
+`sha256` (or Drive's `md5Checksum`) is what tells two captures apart. Without
+one the dedupe key for that file id is empty, so the NEXT capture is mistaken
+for a retry and silently dropped — a reissued invoice would never reach the
+inbox. When present, `sha256` must be a real digest: a malformed hash would sit
+on an entry as proof that proves nothing.
+
+**`file_id` and `web_view_link` are not interchangeable, and the door checks
+both directions.** Drive returns `id` and `webViewLink` side by side, both
+opaque strings, and only the second is a URL. Sent the wrong way round, the
+pièce used to ingest cleanly and leave the entry pointing at a reference that
+opens nothing.
 
 ## Matching
 

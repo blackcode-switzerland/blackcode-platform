@@ -1,6 +1,6 @@
 // The robot door's id-versus-link check, pinned on the delivery that prompted it.
 import { describe, it, expect } from 'vitest'
-import { driveSourceRefusal } from './drive'
+import { driveSourceRefusal, checksumRefusal } from './drive'
 
 const ID = '1TbLMz3WTc65dkq100ly106Xz1rviK3Rr'
 const LINK = `https://drive.google.com/file/d/${ID}/view?usp=drivesdk`
@@ -10,10 +10,15 @@ describe('driveSourceRefusal', () => {
     expect(driveSourceRefusal({ file_id: ID, web_view_link: LINK })).toBeNull()
   })
 
-  it('accepts no link at all — `drive://<id>` is an honest internal reference', () => {
-    expect(driveSourceRefusal({ file_id: ID })).toBeNull()
-    expect(driveSourceRefusal({ file_id: ID, web_view_link: null })).toBeNull()
-    expect(driveSourceRefusal({ file_id: ID, web_view_link: '' })).toBeNull()
+  // This REPLACED "accepts no link at all". The second report (2026-08-20) was
+  // a delivery with no link: accepted, and the screen had nothing to render but
+  // the bare id. A pièce nobody can open is not evidence.
+  it('refuses a delivery with no link, and says the worker already has one', () => {
+    for (const link of [undefined, null, '']) {
+      const r = driveSourceRefusal({ file_id: ID, web_view_link: link })
+      expect(r?.code, `web_view_link: ${String(link)}`).toBe('missing_web_view_link')
+    }
+    expect(driveSourceRefusal({ file_id: ID })?.suggestion).toContain('webViewLink')
   })
 
   // 2026-08-20: exactly this landed, and the reference filed against the entry
@@ -50,7 +55,31 @@ describe('driveSourceRefusal', () => {
 
   it('a Drive id is accepted in the id field whatever it looks like', () => {
     // Ids are opaque and their alphabet is Drive's business, not ours: the only
-    // thing refused there is something that is plainly a URL.
-    expect(driveSourceRefusal({ file_id: 'test-tampered' }), 'the suite ingests short fake ids').toBeNull()
+    // thing refused there is something that is plainly a URL. Checked with a
+    // link present, since the link is required in its own right.
+    expect(
+      driveSourceRefusal({ file_id: 'test-tampered', web_view_link: LINK }),
+      'the suite ingests short fake ids'
+    ).toBeNull()
+  })
+})
+
+describe('checksumRefusal', () => {
+  it('either checksum satisfies it', () => {
+    expect(checksumRefusal({ sha256: 'a'.repeat(64) })).toBeNull()
+    expect(checksumRefusal({ md5_checksum: 'd41d8cd98f00b204e9800998ecf8427e' })).toBeNull()
+  })
+
+  // The red line in both reports. The consequence is sharper than the phrase:
+  // with no checksum the dedupe key is '', so the NEXT capture of the same file
+  // id is mistaken for a retry and dropped.
+  it('refuses a delivery with neither, and names what would be lost', () => {
+    const r = checksumRefusal({ file_id: ID })
+    expect(r?.code).toBe('missing_checksum')
+    expect(r?.suggestion).toContain('reissued invoice')
+  })
+
+  it('an empty or blank checksum is not a checksum', () => {
+    expect(checksumRefusal({ sha256: '', md5_checksum: '   ' })?.code).toBe('missing_checksum')
   })
 })
