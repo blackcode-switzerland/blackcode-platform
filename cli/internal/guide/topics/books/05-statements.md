@@ -13,6 +13,7 @@ create`, `bk books tax`, `bk books tax-params show`, `bk books analyse list`,
 bk books overview                              # every book, latest year
 bk books bilan --entity acme --exercice 2026   # art. 959a, statutory order
 bk books cr --entity acme --exercice 2026      # art. 959b, by nature
+bk books cr --entity acme --by-month           # the same statement, month by month
 bk books analytique --entity acme              # cost buckets and monthly flows
 bk books tax --entity acme --exercice 2026     # VAT position + PM tax estimate
 ```
@@ -30,6 +31,29 @@ by construction. If they ever disagree, stop and report it.
 A simplified book has no balance sheet at all (art. 957 al. 2). `bilan` refuses
 for one and cites the article rather than printing an empty statement;
 `patrimoine` is the personal picture instead.
+
+## `--by-month` is a reading aid, not a filing
+
+`bk books cr --by-month` adds a column per month of the exercice and keeps the
+annual total beside them, in ONE answer. The annual body is unchanged, so the
+months and the year can never be read from two different moments, and the months
+sum to the year exactly — it is the same derivation over a partition of the same
+postings.
+
+Two things to rely on. Every month of the exercice is present, a month with no
+trading coming back as a full set of zero lines rather than being dropped: a
+column that appears and disappears cannot be read across, and "no trading" and
+"no data" are different answers. And the line structure is identical in every
+column, so a line can be followed along the row.
+
+**No column is filable.** Art. 959b defines the compte de résultat as the ANNUAL
+statement; a month is not a legal reporting period. Use it to find where a year
+went, never as something to hand to a fiduciary.
+
+`by` takes no other value — anything else is refused rather than ignored, so a
+misspelling fails instead of quietly serving the annual statement. A simplified
+book is refused before the breakdown is reached, for the reason above: it has no
+compte de résultat to break down.
 
 ## The tax snapshot
 

@@ -32,6 +32,12 @@ import { createContext, useCallback, useContext, useMemo } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEntities, useExercices, useMeta, type MetaPayload } from './hooks'
 import { journalFor, type Journal } from './journal'
+import {
+  exerciceOptions as exerciceOptionsFrom,
+  statusOf,
+  type ExerciceOption,
+  type ExerciceStatus,
+} from './exercice'
 import type { Entity } from './types'
 import type { Scope } from './query-keys'
 
@@ -63,6 +69,12 @@ export function useWorkspaceSlug(): string | undefined {
 export const ENTITY_PARAM = 'entity'
 export const EXERCICE_PARAM = 'exercice'
 
+// Re-exported so a screen reading `useScope()` can name the two types without
+// learning where the reducer lives. The reducer is `lib/exercice.ts` — it is a
+// separate module because it has to be testable in a `node` environment, and
+// its header carries the reasoning this field depends on.
+export type { ExerciceOption, ExerciceStatus }
+
 export interface ScopeState extends Scope {
   /** The book the slug resolves to, or null when the slug matches nothing. */
   record: Entity | null
@@ -87,6 +99,42 @@ export interface ScopeState extends Scope {
   entities: Entity[]
   /** Every fiscal year this book has. One today; the control is built for more. */
   exercices: number[]
+  /**
+   * The same years, each with whether it is still OPEN or has been CLOSED.
+   *
+   * ===========================================================================
+   * A CLOSED YEAR IS A FACT AND `exercices` DROPS IT
+   * ===========================================================================
+   * `GET …/exercices` has always served `status`, and this module reduced the
+   * list to `number[]` and threw it away — written when nothing could close a
+   * year. `bk books exercice close` landed on 2026-08-20 (PR #28) and **there is
+   * no reopen, ever, by design**, so "filed" and "still being worked in" became a
+   * distinction the screens rendered as nothing at all.
+   *
+   * It is carried HERE rather than fixed at the year switcher, because the place
+   * the fact was lost is the place to restore it: eight screens read `useScope`
+   * and any of them can now say it. Where it is actually SAID is a separate,
+   * deliberate decision — see `<ExerciceSwitcher>` in `components/books-shell.tsx`,
+   * which writes down both where it appears and where it was decided it should
+   * not.
+   *
+   * ── A `status` OF `null` IS "TWO ROWS DISAGREE", NOT A DEFAULT ────────────
+   * `useExercices` is called with a book, so normally one row is one year. But
+   * the hook also serves an UNSCOPED list — one row per book per year — and the
+   * dedup below then has three 2026 rows to fold into one option. If they do not
+   * all agree, this is `null`: "these books have not all closed 2026" is the
+   * truth, and picking the first row's status would be a legal claim taken from
+   * an array order. Nothing may render `null` as "open".
+   */
+  exerciceOptions: ExerciceOption[]
+  /**
+   * The status of the year currently in scope, or `null` when it cannot be told.
+   *
+   * `null` covers three real cases and none of them is "open": the years have
+   * not arrived, the book has none, or two books disagree (above). A screen
+   * showing a badge must test for `'closed'` and never for `!== 'open'`.
+   */
+  exerciceStatus: ExerciceStatus
   /**
    * Have this book's fiscal years ARRIVED?
    *
@@ -161,10 +209,12 @@ export function useScope(): ScopeState {
    * screen a year of finished books by default. Sorting here rather than
    * trusting either order is what makes the default below mean what it says.
    */
-  const exercices = useMemo(
-    () => [...new Set((years ?? []).map((y) => y.year))].sort((a, b) => b - a),
-    [years]
-  )
+  const exerciceOptions = useMemo(() => exerciceOptionsFrom(years), [years])
+
+  // Derived FROM the options rather than from `years` a second time, so the
+  // switcher's list and the years every screen reads cannot drift apart — one
+  // dedup, one sort, one source.
+  const exercices = useMemo(() => exerciceOptions.map((o) => o.year), [exerciceOptions])
 
   /** The newest year still open, which is the one a person is working in. */
   const currentYear = useMemo(() => {
@@ -210,6 +260,8 @@ export function useScope(): ScopeState {
     journal: journalFor(record?.bookkeeping_regime),
     entities,
     exercices,
+    exerciceOptions,
+    exerciceStatus: statusOf(exerciceOptions, exercice),
     // `isFetched` and not `!isPending`: a query that is DISABLED is "pending"
     // forever, and the years query is disabled until `ws` is known. Reading
     // `!isPending` would hold every statement read on a page that has a

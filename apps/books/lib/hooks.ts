@@ -369,12 +369,35 @@ export function useBilan(ws: string | undefined, scope: ReadScope) {
   })
 }
 
-/** The compte de résultat. `GET …/compte-resultat`. Art. 959b, ten lines. */
+/**
+ * The compte de résultat. `GET …/compte-resultat`. Art. 959b, ten lines.
+ *
+ * ── IT ALWAYS ASKS FOR `by=month`, AND THAT IS ONE REQUEST, NOT TWO ────────
+ * Ticket #64 added a monthly grid to this one screen. The obvious shape — an
+ * annual query and a monthly query, keyed apart, swapped by a toggle — is the
+ * thing the route's own header refuses: *"making it ask twice for two views of
+ * one statement would invite them to be read from different moments."*
+ *
+ * So there is ONE query and ONE cache entry. The response carries the annual
+ * body unchanged plus `months`, the toggle chooses which of the two it draws,
+ * and the total under a twelve-column grid is byte-for-byte the number the
+ * annual view showed a second earlier because it is the same object.
+ *
+ * The cost is that the annual view pays for a breakdown it is not drawing:
+ * twelve `crFor` passes over rows the server has already loaded, bounded by the
+ * exercice. That is the cheap side of the trade — the expensive side is two
+ * statements of one year, fetched at two moments, that a reader cannot tell
+ * apart.
+ *
+ * A simplified book is refused before any of this: `no_cr_for_simplified` is
+ * raised on the regime, above the breakdown, so the extra parameter changes
+ * nothing about that path. See `isSimplifiedRefusal`.
+ */
 export function useCompteResultat(ws: string | undefined, scope: ReadScope) {
   return useQuery({
-    queryKey: booksKey('compte-resultat', scope, { ws }),
+    queryKey: booksKey('compte-resultat', scope, { ws, by: 'month' }),
     queryFn: () =>
-      apiGet<CrResult>(`/api/workspaces/${ws}/compte-resultat?${scopeQuery(scope)}`),
+      apiGet<CrResult>(`/api/workspaces/${ws}/compte-resultat?${scopeQuery(scope)}&by=month`),
     enabled: !!ws && !!scope.entity && scopeReady(scope),
   })
 }

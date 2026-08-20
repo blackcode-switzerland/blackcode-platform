@@ -70,7 +70,7 @@ import { publicPiece } from './db/queries/pieces'
 import type { postEntry } from './db/queries/imports'
 import type { getTaxSnapshot } from './db/queries/management'
 import { bilanFor, crFor } from './derive'
-import { costBreakdown, costBreakdownRi, monthlyFlows } from './derive/management'
+import { costBreakdown, costBreakdownRi, crByMonth, monthlyFlows } from './derive/management'
 import type { WorklistRow as WorklistRowWire } from './db/queries/worklist'
 import type { OverviewBook as OverviewBookWire } from './db/queries/statutory'
 import type { InvitationRow } from './db/queries/invitations'
@@ -89,6 +89,7 @@ import type {
   ComplianceRule,
   CrLineResult,
   CrResult as CrResultType,
+  MonthlyCrResult,
   Entity,
   Entry,
   InboxPiece,
@@ -1063,6 +1064,224 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     expect(keys.sort()).toEqual(['...cr', 'entity', 'exercice'].sort())
   })
 
+  // --- the monthly breakdown, ticket #64 -----------------------------------
+  //
+  // ── WHY THIS IS THREE CASES AND NOT ONE ───────────────────────────────────
+  // `envelopeKeys` above CANNOT SEE `months`. The route spreads it in as
+  // `...(months ? { months } : {})`, and `keysOfObjectAt`'s spread pattern is
+  // `/^\.\.\.(\w+)/` — a `(` is not a word character, so the whole conditional
+  // is skipped in silence and the case above passes on a route that has stopped
+  // serving the breakdown entirely.
+  //
+  // That is worth saying plainly rather than widening the walker: teaching it
+  // conditional spreads would have RETARGETED the assertion above onto a wider
+  // key set, which is CLAUDE.md finding #10's exact mechanism — a correct change
+  // leaving a green assertion pointing at something it was not phrased for. So
+  // the annual case keeps the job it does well (the annual body is SPREAD, not
+  // nested) and the conditional key gets its own reader below.
+
+  /**
+   * The text of the LAST response object in a handler, so a check can look at
+   * what a route actually returns rather than at the whole file.
+   *
+   * The whole file is the trap here: `compte-resultat/route.ts` IMPORTS
+   * `getCrByMonth` and names `months` in three places before the response —
+   * a declaration, a ternary and a comment — so `expect(src).toContain('months')`
+   * is satisfied by an import line and a variable that is never served. Watched:
+   * deleting `...(months ? { months } : {})` leaves all three standing and a
+   * whole-file scan green. This slices from the response call.
+   */
+  function responseBody(src: string, label: string): string {
+    const calls: number[] = []
+    for (let at = src.indexOf('NextResponse.json('); at >= 0; at = src.indexOf('NextResponse.json(', at + 1)) {
+      calls.push(at)
+    }
+    expect(calls.length, `${label}: no NextResponse.json( — this case is stale`).toBeGreaterThan(0)
+    const open = src.indexOf('{', calls[calls.length - 1])
+    expect(open, `${label}: the response is not an object literal`).toBeGreaterThan(0)
+    let depth = 0
+    for (let i = open; i < src.length; i++) {
+      if (src[i] === '{') depth++
+      else if (src[i] === '}') {
+        depth--
+        if (depth === 0) return src.slice(open, i + 1)
+      }
+    }
+    throw new Error(`${label}: the response object literal is unterminated`)
+  }
+
+  // Mutation watched (2026-08-20): deleted `...(months ? { months } : {})` from
+  // the response. RED here. The case above — the annual envelope — stayed GREEN,
+  // which is the whole reason this one exists.
+  //
+  // Second mutation watched (2026-08-20): `by === 'month'` → `by !== null`, so
+  // the breakdown is served for `?by=quarter` too, which the route refuses two
+  // lines earlier. Red on the gate assertion.
+  it('the compte-resultat route ADDS `months` to the same response, gated on by=month', () => {
+    const src = readFileSync(join(APP_ROOT, 'app/api/workspaces/[ws]/compte-resultat/route.ts'), 'utf8')
+    expect(src, 'the CR route no longer calls getCrByMonth — this case is stale').toContain('getCrByMonth')
+
+    const body = responseBody(src, 'compte-resultat')
+    // In the RESPONSE, not in the import list. See `responseBody` above.
+    expect(body, '`months` left the compte-resultat response').toMatch(/\bmonths\b/)
+    // And the annual body is still spread ALONGSIDE it rather than replaced by
+    // it — the route header's first constraint, and the one thing that makes a
+    // total under the grid come off the wire instead of out of a loop.
+    expect(body, 'the annual derivation stopped being spread into the response').toMatch(/\.\.\.cr\b/)
+
+    // The gate. `by === 'month'` and nothing looser: `?by=quarter` is refused
+    // above with `bad_breakdown`, and a looser test here would let a future edit
+    // serve a breakdown for a word the route has already said it does not have.
+    expect(src, 'the `by=month` gate is gone or was rewritten').toMatch(
+      /getCrByMonth\(/
+    )
+    expect(src.replace(/\s+/g, ' '), 'the breakdown is no longer gated on by === \'month\'').toContain(
+      "by === 'month' ? await getCrByMonth("
+    )
+  })
+
+  // Technique 1 — this CALLS `crByMonth`, so the assertions below are about what
+  // it really produces rather than about its declaration.
+  //
+  // Mutation watched (2026-08-20): in `crByMonth`, `for (const m of
+  // monthsBetween(...)) byMonth.set(m, [])` → deleted, so only months with
+  // movement come back. RED on `every month in the span is present`, printing 1
+  // against 12. That is the failure the screen cannot survive: a table whose
+  // columns come and go cannot be read across.
+  //
+  // Second mutation watched (2026-08-20): `[...byMonth.keys()].sort()` →
+  // `sort().reverse()`. RED on the same case, because that case asserts the
+  // month list AS AN ARRAY and December first is a different array. It was
+  // written expecting the ordering case below to be the one that caught it, and
+  // it is not — the ordering case is about the ROWS inside a month, not about
+  // the columns. Recorded as observed rather than as predicted, because a
+  // mutation you did not actually run is the human half of the same defect.
+  //
+  // Third mutation watched (2026-08-20): inside the month map, `cr.lines` →
+  // `[...cr.lines].sort((a, b) => Number(a.amount) - Number(b.amount))`, i.e. a
+  // column sorted by its own values. RED on `the row order is identical in every
+  // month`. That mutation is the single thing ticket #64 asks the screen not to
+  // do, and it is invisible to every other check in this file.
+  describe('the monthly breakdown (ticket #64)', () => {
+    const CHART = [
+      { no: '3400', class: 3, statement: 'cr' as const, statement_position: 'produits_nets' },
+      { no: '5000', class: 5, statement: 'cr' as const, statement_position: 'charges_personnel' },
+      { no: '6000', class: 6, statement: 'cr' as const, statement_position: 'autres_charges_exploitation' },
+    ]
+    const SPAN = { starts_on: '2026-01-01', ends_on: '2026-12-31' }
+    const L = (date: string, account_no: string, debit: string, credit: string) => ({
+      date,
+      account_no,
+      debit,
+      credit,
+      status: 'posted',
+    })
+    // Two months with movement out of twelve, deliberately: the interesting
+    // property is what happens to the other ten.
+    const LINES = [
+      L('2026-02-04', '3400', '0.00', '5420.00'),
+      L('2026-01-31', '5000', '13350.00', '0.00'),
+      L('2026-01-15', '6000', '1983.60', '0.00'),
+    ]
+    const months = crByMonth(LINES, CHART, SPAN)
+
+    it('one month carries exactly {month, lines, resultat}', () => {
+      expect(months.length, 'crByMonth returned nothing — this whole block is vacuous').toBeGreaterThan(0)
+      for (const m of months) {
+        expect(Object.keys(m).sort()).toEqual(['lines', 'month', 'resultat'])
+        for (const l of m.lines) {
+          expect(Object.keys(l).sort()).toEqual(['accounts', 'amount', 'pos', 'sign'])
+        }
+      }
+    })
+
+    it('every month in the span is present, a quiet one as a full set of zero lines', () => {
+      expect(months.map((m) => m.month)).toEqual([
+        '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06',
+        '2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12',
+      ])
+      // March traded nothing. It is a column of real zeroes, not an absent
+      // column and not a short line list — the grid renders `0.00` for a derived
+      // zero and an em dash for an unknown one, and this is what makes the
+      // difference observable rather than a matter of trust.
+      const march = months.find((m) => m.month === '2026-03')!
+      expect(march.lines.length).toBe(months[0].lines.length)
+      for (const l of march.lines) expect(l.amount).toBe('0.00')
+      expect(march.resultat).toBe('0.00')
+    })
+
+    it('the row order is identical in every month, and it is the annual order', () => {
+      const annual = crFor(LINES, CHART).lines.map((l) => l.pos)
+      expect(annual.length, 'no CR lines — art. 959b structure is gone').toBeGreaterThan(0)
+      for (const m of months) {
+        expect(m.lines.map((l) => l.pos), `month ${m.month} is in a different order`).toEqual(annual)
+      }
+    })
+
+    it('the months sum to the year, which is why the grid never adds them up', () => {
+      // In CENTIMES, by digits, because this assertion exists to justify the
+      // screen NOT doing float arithmetic and doing it here would be funny.
+      const centimes = (s: string) => BigInt(s.replace('.', ''))
+      const summed = months.reduce((acc, m) => acc + centimes(m.resultat), 0n)
+      expect(summed).toBe(centimes(crFor(LINES, CHART).resultat))
+    })
+
+    // ── THE LINK NOTHING ELSE IN THIS PHASE GUARDED ─────────────────────────
+    //
+    // Added in review, 2026-08-20. The route serves `months` (asserted above),
+    // the transform arranges them (`lib/monthly-cr.test.ts`) — and the REQUEST
+    // that joins the two was checked by nothing at all.
+    //
+    // Mutation watched: `?${scopeQuery(scope)}&by=month` → `?${scopeQuery(scope)}`
+    // in `useCompteResultat`. **515/515 green and `tsc --noEmit` clean**, because
+    // `months` is optional on `CrResult` by design: the payload simply arrives
+    // without it, `cr.data?.months` is `undefined`, and the toggle and the whole
+    // of ticket #64 VANISH from the screen with no error anywhere. That is this
+    // phase's own stated failure mode — a page that renders without complaint
+    // against data it was never given — sitting in the one link with no check.
+    // Red here now, naming the hook.
+    //
+    // ── IT READS THE FUNCTION BODY, NOT THE FILE ────────────────────────────
+    // `useCompteResultat`'s docstring says `by=month` FIVE times, so
+    // `expect(src).toContain('by=month')` is satisfied by prose on a hook that
+    // stopped asking. Watched: with the mutation applied, a whole-file
+    // `toContain` stays green. This strips comments first and then slices from
+    // the declaration to the end of the function, which is the granularity
+    // CLAUDE.md finding #11 is about.
+    it('the screen actually ASKS for the breakdown, and its cache key says so', () => {
+      const src = readFileSync(join(APP_ROOT, 'lib/hooks.ts'), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1')
+      // `useCompteResultat(` and not `useCompteResultat`: written without the
+      // paren this matched `useCompteResultatX` too, so renaming the hook left
+      // the anti-vacuous assertion GREEN while it was checking a hook that no
+      // longer existed. Watched, and it is CLAUDE.md finding #17 exactly — a
+      // rename standing in for the thing the check exists to observe. Now red on
+      // the rename.
+      const at = src.indexOf('export function useCompteResultat(')
+      expect(at, 'useCompteResultat is gone from lib/hooks.ts — this case is stale').toBeGreaterThan(-1)
+      const body = src.slice(at, src.indexOf('\n}', at))
+      expect(body.length, 'sliced an empty hook body — this case is checking nothing').toBeGreaterThan(80)
+      expect(body, 'the hook body no longer contains the request at all').toContain('compte-resultat')
+
+      expect(
+        body,
+        'useCompteResultat stopped asking for `by=month`. The route still serves the ' +
+          'breakdown and lib/monthly-cr.ts still knows how to draw it, but the screen ' +
+          'never receives it: `months` is optional, so the payload is valid, the page ' +
+          'renders the annual statement, and the monthly toggle disappears silently.'
+      ).toContain('by=month')
+
+      // And the KEY carries it too. One cache slot per question asked: a URL
+      // that asks for the breakdown under a key that does not name it is how two
+      // different answers end up sharing one entry.
+      expect(
+        body.replace(/\s+/g, ' '),
+        'the query key stopped naming the breakdown while the URL still asks for it'
+      ).toMatch(/queryKey:\s*booksKey\('compte-resultat',\s*scope,\s*\{[^}]*by:\s*'month'/)
+    })
+  })
+
   // --- overview ------------------------------------------------------------
   //
   // The row shape is pinned at COMPILE time by `_OverviewKeys` below, against
@@ -2013,8 +2232,44 @@ type InvitationWire = InvitationRow
 type _BilanKeys = Mutual<keyof BilanWire | 'entity' | 'exercice', keyof BilanResultType>
 type _BilanGroupKeys = Mutual<keyof BilanWire['groups'][number], keyof BilanGroupResult>
 type _BilanLineKeys = Mutual<keyof BilanWire['groups'][number]['lines'][number], keyof BilanLineResult>
-type _CrKeys = Mutual<keyof CrWire | 'entity' | 'exercice', keyof CrResultType>
+type MonthlyCrWire = ReturnType<typeof crByMonth>[number]
+
+// `months` is in the union because the ROUTE adds it (`?by=month`, ticket #64)
+// and `crFor` — which is what `CrWire` is — knows nothing about it. Leaving it
+// out is what this assertion caught when `lib/types.ts` gained the field:
+// `npm run typecheck` went red here, naming the file, before a line of the grid
+// existed.
+type _CrKeys = Mutual<keyof CrWire | 'entity' | 'exercice' | 'months', keyof CrResultType>
 type _CrLineKeys = Mutual<keyof CrWire['lines'][number], keyof CrLineResult>
+
+/**
+ * One month of the breakdown, against `crByMonth`'s own return.
+ *
+ * ── IT WAS INERT WHEN IT WAS WRITTEN, AND THAT IS WORTH KEEPING ON RECORD ──
+ * A `Mutual<>` alias that resolves to `never` is not an error on its own: a type
+ * alias can BE `never`. What makes these fire is `_keys` below, which assigns
+ * `true` to every one of them. This alias was declared and left out of that
+ * object, exactly like `_RiEntryKeys` before it (HANDOFF §7's list of green-but-
+ * inert guards), and it passed every mutation until it was registered.
+ *
+ * Mutation watched (2026-08-20), FIRST attempt: renamed `resultat` to `result`
+ * in `MonthlyCr` (`lib/derive/management.ts`). Typecheck went red — but at
+ * `management.ts` itself and in three places in `management.test.ts`, NOT here.
+ * That mutation cannot isolate this assertion, because it breaks the definition
+ * the assertion reads from.
+ *
+ * Mutation watched (2026-08-20), the one that isolates it: added `label: string`
+ * to `MonthlyCrResult` in `lib/types.ts` — a field the wire does not carry, and
+ * the shape of drift this file exists for. Green before registration in `_keys`,
+ * red after, naming this property. Restored.
+ *
+ * The LINE shape inside a month is deliberately not re-asserted: `MonthlyCrResult
+ * .lines` is declared as `CrLineResult[]`, the same type `_CrLineKeys` above
+ * pins against `crFor`, and `crByMonth` builds each month by calling `crFor`. A
+ * second assertion over the same two types would be a copy that can only ever
+ * agree.
+ */
+type _MonthlyCrKeys = Mutual<keyof MonthlyCrWire, keyof MonthlyCrResult>
 
 /**
  * The overview row.
@@ -2289,6 +2544,7 @@ const _keys: {
   _BilanLineKeys: _BilanLineKeys
   _CrKeys: _CrKeys
   _CrLineKeys: _CrLineKeys
+  _MonthlyCrKeys: _MonthlyCrKeys
   _OverviewKeys: _OverviewKeys
   _OverviewEnvelope: _OverviewEnvelope
   _WorklistEnvelopeKeys: _WorklistEnvelopeKeys
@@ -2331,6 +2587,7 @@ const _keys: {
   _BilanLineKeys: true,
   _CrKeys: true,
   _CrLineKeys: true,
+  _MonthlyCrKeys: true,
   _OverviewKeys: true,
   _OverviewEnvelope: true,
   _WorklistEnvelopeKeys: true,

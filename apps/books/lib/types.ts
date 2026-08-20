@@ -867,12 +867,49 @@ export interface CrLineResult {
   accounts: string[]
 }
 
+/**
+ * One month of the compte de résultat — `?by=month`, ticket #64.
+ *
+ * ── IT IS THE SAME LINE SHAPE AS THE YEAR, AND THAT IS THE POINT ───────────
+ * `crByMonth` runs each month through `crFor`, the function the annual
+ * statement uses, so a month carries `CrLineResult` exactly — `pos`, `sign`,
+ * `amount` and the same `accounts` array. Declaring a narrower "monthly line"
+ * here would be a second shape that can disagree with the one the derivation
+ * emits, which is the failure `lib/statement-view.ts` opens by describing.
+ *
+ * **`month` is `"YYYY-MM"`, not a Date.** A Postgres month bucket has no time of
+ * day and constructing a `Date` from one puts it at midnight in whichever
+ * timezone the reader is in — the same reason `lib/format.ts`'s `date()` slices
+ * the string instead of parsing it.
+ */
+export interface MonthlyCrResult {
+  /** `YYYY-MM`. */
+  month: string
+  lines: CrLineResult[]
+  resultat: Money
+}
+
 /** `GET …/compte-resultat`. Same envelope as the bilan. */
 export interface CrResult {
   entity: string
   exercice: number
   lines: CrLineResult[]
   resultat: Money
+  /**
+   * The monthly breakdown, when `?by=month` was asked for. Ticket #64.
+   *
+   * ── OPTIONAL, BECAUSE THE ROUTE MAKES IT OPTIONAL ─────────────────────────
+   * `compte-resultat/route.ts` spreads it in only for `by=month`, so a payload
+   * without it is a correct answer to a request that did not ask. The screen
+   * offers the grid only when this is present rather than rendering twelve
+   * empty columns for a payload that never carried them.
+   *
+   * **The annual `lines` and `resultat` above are served ALONGSIDE it,
+   * unchanged.** That is deliberate on the route's side: the grid has a total to
+   * show without asking twice and reading two moments of one statement. Nothing
+   * in the view may add the months up to produce it.
+   */
+  months?: MonthlyCrResult[]
 }
 
 // ---------------------------------------------------------------------------
