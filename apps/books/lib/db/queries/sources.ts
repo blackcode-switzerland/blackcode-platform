@@ -26,6 +26,7 @@ import { sourceStatus, sourceWindows } from '../../derive/sources'
 import { reconcile, type Reconciliation } from '../../derive/reconcile'
 import type { DelimitedMapping } from '../../import/delimited'
 import { nextSeq } from './imports'
+import { accountsNotInChart } from './chart-guard'
 
 export async function listSources(workspaceId: number, entityId?: number): Promise<BooksSource[]> {
   const conds = [eq(booksSource.workspace_id, workspaceId)]
@@ -133,6 +134,18 @@ export async function reconcileSource(source: BooksSource): Promise<Reconciliati
   }
 
   const db = getDb()
+
+  // A simplified book posts no lines, so summing them would report 0.00 and a
+  // drift equal to the whole statement, forever. `reconcile` says so instead.
+  const [book] = await db
+    .select({ regime: booksEntity.bookkeeping_regime })
+    .from(booksEntity)
+    .where(eq(booksEntity.id, source.entity_id))
+    .limit(1)
+  if (book?.regime === 'simplified') {
+    return reconcile({ keeps_ledger: false, accounts, closing_balance: null, closing_on: null, openings: [], lines: [] })
+  }
+
   const [pull] = await db
     .select()
     .from(booksSourcePull)
@@ -219,6 +232,35 @@ export function publicManifestRow(m: BooksDriveManifest, pieceSeq: number | null
 // doctrine): creating and editing them is normal register upkeep, not record
 // mutation. The pulls themselves stay records — recordPull only ever adds.
 
+/**
+ * A source may only feed accounts this book's chart carries.
+ *
+ * 0016 put `trg_line_account_in_chart` on posting LINES, which catches a ghost
+ * account at the first post — in a double-entry book. A simplified book never
+ * posts a line, so its sources went unchecked entirely: found 2026-08-20, an RI
+ * book carrying a card feed on account `1090`, which its 25-account chart has
+ * never had and never will. The register pointed at nothing and nothing said so.
+ *
+ * Checked on the day the source is written rather than at the first import, for
+ * the same reason `mappingRefusal` is: a feed that could never reconcile should
+ * be refused while somebody is still looking at it.
+ */
+async function refuseGhostAccounts(
+  tx: Parameters<typeof accountsNotInChart>[0],
+  entityId: number,
+  accounts: string[]
+): Promise<void> {
+  if (accounts.length === 0) return
+  const ghosts = await accountsNotInChart(tx, entityId, accounts)
+  if (ghosts.length > 0) {
+    throw new SourceRefused(
+      'account_not_in_chart',
+      `this book's chart has no account ${ghosts.join(', ')}`,
+      'bk books account list shows the chart — a card wants its OWN class 2 account, added with bk books account create'
+    )
+  }
+}
+
 export class SourceRefused extends Error {
   constructor(
     public code: string,
@@ -248,6 +290,8 @@ export async function createSource(workspaceId: number, data: CreateSourceData):
       .where(and(eq(booksEntity.workspace_id, workspaceId), eq(booksEntity.slug, data.entitySlug)))
       .limit(1)
     if (!entity) throw new SourceRefused('bad_entity', `no book with slug "${data.entitySlug}"`, 'bk books entity list')
+
+    await refuseGhostAccounts(tx, entity.id, data.ledgerAccounts ?? [])
 
     const seq = await nextSeq(tx, workspaceId, 'source')
     const [row] = await tx
@@ -285,7 +329,16 @@ export async function updateSource(workspaceId: number, seq: number, data: Updat
   const patch: Record<string, unknown> = { updated_at: new Date() }
   if (data.name !== undefined) patch.name = data.name
   if (data.expected !== undefined) patch.expected = data.expected
-  if (data.ledgerAccounts !== undefined) patch.ledger_accounts = data.ledgerAccounts
+  if (data.ledgerAccounts !== undefined) {
+    const [current] = await getDb()
+      .select({ entity_id: booksSource.entity_id })
+      .from(booksSource)
+      .where(and(eq(booksSource.workspace_id, workspaceId), eq(booksSource.seq, seq)))
+      .limit(1)
+    if (!current) throw new SourceRefused('source_not_found', `no source #${seq}`, 'bk books source list shows the numbers')
+    if (current.entity_id !== null) await refuseGhostAccounts(getDb(), current.entity_id, data.ledgerAccounts)
+    patch.ledger_accounts = data.ledgerAccounts
+  }
   if (data.method !== undefined) patch.method = data.method
   if (data.notes !== undefined) patch.notes_freeform = data.notes
   if (data.retired !== undefined) patch.retired = data.retired

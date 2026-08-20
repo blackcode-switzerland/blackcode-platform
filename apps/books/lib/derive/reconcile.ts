@@ -41,6 +41,23 @@
 // behind it, and one imported before 0018 genuinely does not know. Reporting
 // zero would be inventing an agreement nobody checked — the same failure as a
 // boundary probe built entirely on negatives (0005's header, Finding #16).
+//
+// ── AND A BOOK THAT KEEPS NO LEDGER CANNOT BE ASKED THE QUESTION ───────────
+// The paragraph above was written about a MISSING closing balance, and it left
+// a second unknown answering `0.00`. A simplified book (art. 957 al. 2 CO)
+// keeps recettes-dépenses: it has no `entry_line` rows AT ALL, by construction,
+// so the sum below is 0.00 for a book that is perfectly kept and always will
+// be. Found 2026-08-20 driving the CLI: `mustneer-shop`, an RI book whose June
+// statement imported cleanly, reported
+//
+//   bank said     3837.60 at 2026-06-30
+//   ledger says      0.00
+//   drift         3837.60
+//
+// — a drift that can never close, growing with every import, on a book with
+// nothing wrong with it. That is the same false confidence this file was
+// written to remove, on a path 0018 did not think of, so it gets the same
+// answer: say the question does not apply here rather than answer it wrongly.
 
 import { toCentimes, fromCentimes } from './index'
 import type { Money } from '../types'
@@ -57,6 +74,12 @@ export interface ReconcilableLine {
 }
 
 export interface ReconcileInput {
+  /**
+   * Does this book keep a ledger at all? False for a simplified book, which
+   * has no posting lines to sum — see the header. Defaults to true so every
+   * existing caller keeps its meaning.
+   */
+  keeps_ledger?: boolean
   /** The accounts this source feeds — `source.ledger_accounts`. */
   accounts: string[]
   /** What the statement said it closed at, and when. Null when unknown. */
@@ -94,6 +117,12 @@ const UNRECONCILED: Reconciliation = {
 }
 
 export function reconcile(input: ReconcileInput): Reconciliation {
+  if (input.keeps_ledger === false) {
+    return {
+      ...UNRECONCILED,
+      note: 'this book keeps recettes-dépenses (art. 957 al. 2 CO) and has no ledger to reconcile a statement against — the file is still checked against itself on import, and `bk books overview` reports the movements it produced',
+    }
+  }
   if (input.accounts.length === 0) {
     return {
       ...UNRECONCILED,

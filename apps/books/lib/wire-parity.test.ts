@@ -414,7 +414,7 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     const served = [...body.slice(0, body.indexOf('})')).matchAll(/^\s*(\w+):/gm)].map((m) => m[1])
     expect(served.length, 'found no fields — the response moved and this test is stale').toBeGreaterThan(3)
     expect(served.sort()).toEqual(
-      ['explanation', 'history', 'number', 'recognition', 'taught_rule'].sort()
+      ['direction', 'explanation', 'history', 'number', 'recognition', 'taught_rule'].sort()
     )
   })
 

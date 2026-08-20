@@ -273,7 +273,11 @@ func newResolveCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, r, func(w io.Writer) error {
-				if _, err := fmt.Fprintf(w, "resolved #%d -> %s\n", r.Number, r.Recognition); err != nil {
+				line := fmt.Sprintf("resolved #%d -> %s", r.Number, r.Recognition)
+				if r.Direction != nil {
+					line += fmt.Sprintf(" (%s)", *r.Direction)
+				}
+				if _, err := fmt.Fprintf(w, "%s\n", line); err != nil {
 					return err
 				}
 				if r.TaughtRule != nil {
@@ -286,6 +290,7 @@ func newResolveCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&explanation, "explanation", "", "What this money was (required)")
 	cmd.Flags().StringVar(&req.Recognition, "recognition", "", "known_one_off or known_recurring (default: from whether a rule is taught)")
+	cmd.Flags().StringVar(&req.Direction, "direction", "", "SIMPLIFIED books: recette, depense, or neutral for an own-account transfer")
 	cmd.Flags().StringVar(&req.Counterparty, "counterparty", "", "Counterparty, once identified")
 	cmd.Flags().StringVar(&req.Account, "account", "", "Account for the staged line that has none (refused on posted entries)")
 	cmd.Flags().StringVar(&req.Entity, "entity", "", "A SIMPLIFIED book's slug: resolve in its recettes-dépenses journal")

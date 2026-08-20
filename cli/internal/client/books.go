@@ -553,6 +553,10 @@ type ResolveBooksEntryRequest struct {
 	Entity       string         `json:"entity,omitempty"`
 	Explanation  map[string]any `json:"explanation"`
 	Recognition  string         `json:"recognition,omitempty"`
+	// Direction is a SIMPLIFIED book's side: recette, depense, or neutral for
+	// an own-account transfer. Refused on a double-entry entry, whose
+	// direction is carried by its lines.
+	Direction    string         `json:"direction,omitempty"`
 	Counterparty string         `json:"counterparty,omitempty"`
 	Account      string         `json:"account,omitempty"`
 	// TVA usually arrives HERE: a bank line lands with no rate, and the rate
@@ -578,6 +582,9 @@ type ResolveBooksEntryRequest struct {
 type BooksResolveResult struct {
 	Number      int            `json:"number"`
 	Recognition string         `json:"recognition"`
+	// Direction is served for a simplified book's row, null for a grand-livre
+	// entry. Read back so a caller can confirm what it set.
+	Direction   *string        `json:"direction"`
 	TaughtRule  *int           `json:"taught_rule"`
 	History     []any          `json:"history"`
 	Explanation map[string]any `json:"explanation"`

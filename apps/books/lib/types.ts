@@ -802,6 +802,13 @@ export type EntryHistory = Label | HistoryEvent[] | null
 export interface ResolveResult {
   number: number
   recognition: Recognition
+  /**
+   * The side this movement now falls on, for a SIMPLIFIED book — `null` for a
+   * double-entry entry, whose direction is its lines. Served because `resolve`
+   * can now change it (see `ResolveData.direction`) and a caller must be able
+   * to read back what it set without a second request.
+   */
+  direction: RiDirection | null
   explanation: Label | null
   history: EntryHistory
   taught_rule: number | null

@@ -89,4 +89,28 @@ describe('reconcile', () => {
     expect(r.known).toBe(false)
     expect(r.note).toMatch(/names no ledger account/)
   })
+
+  // The second false zero, found 2026-08-20. A simplified book HAS a closing
+  // balance and HAS a named account, and still cannot be asked the question:
+  // it keeps no posting lines, so the sum is 0.00 for a book kept perfectly.
+  it('a book that keeps no ledger is unknown, not adrift by the whole statement', () => {
+    const r = reconcile({
+      keeps_ledger: false,
+      accounts: ['1020'],
+      closing_balance: '3837.60',
+      closing_on: '2026-06-30',
+      openings: [],
+      lines: [],
+    })
+    expect(r.known).toBe(false)
+    expect(r.ledger_balance, 'the old answer was 0.00, and it read as a fact').toBeNull()
+    expect(r.drift, 'the old answer was 3837.60, a drift that can never close').toBeNull()
+    expect(r.agrees).toBeNull()
+    expect(r.note).toMatch(/recettes-dépenses/)
+  })
+
+  it('still reconciles normally when the flag is absent or true', () => {
+    expect(reconcile({ ...APRIL, lines: BANK }).known).toBe(true)
+    expect(reconcile({ ...APRIL, keeps_ledger: true, lines: BANK }).known).toBe(true)
+  })
 })
