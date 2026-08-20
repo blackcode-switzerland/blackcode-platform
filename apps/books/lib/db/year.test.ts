@@ -445,4 +445,33 @@ describe('TVA on an entry', () => {
     const { tvaColumns } = await import('./queries/tva')
     expect(tvaColumns(undefined, '100.00')).toBeNull()
   })
+
+  // #67: the second call in the workflow the guide describes — resolve when the
+  // money arrives, claim the input tax when the pièce turns up.
+  it('a claim rests on a rate the ENTRY already carries, not only on this call', async () => {
+    const { tvaColumns } = await import('./queries/tva')
+    const stored = { rate: '8.10', amount: '7.50' }
+    const out = tvaColumns({ inputClaimed: true, evidenceTier: 'full' }, '100.00', stored)
+    expect(out).toEqual({ tva_input_claimed: true, evidence_tier: 'full' })
+    // The booked figures are NOT restated: this call was not about them.
+    expect(out).not.toHaveProperty('tva_rate')
+    expect(out).not.toHaveProperty('tva_amount')
+  })
+
+  it('still refuses a claim when neither the call nor the entry has a rate', async () => {
+    const { tvaColumns } = await import('./queries/tva')
+    expect(() => tvaColumns({ inputClaimed: true, evidenceTier: 'full' }, '100.00', { rate: null, amount: null })).toThrow(
+      /neither this call nor the entry/
+    )
+  })
+
+  it('an explicit clear removes the story; silence is not a clear', async () => {
+    const { tvaColumns } = await import('./queries/tva')
+    expect(tvaColumns({ clear: true }, '100.00', { rate: '8.10', amount: '7.50' })).toEqual({
+      tva_rate: null,
+      tva_amount: null,
+      tva_input_claimed: false,
+    })
+    expect(tvaColumns(undefined, '100.00', { rate: '8.10', amount: '7.50' }), 'silence touches nothing').toBeNull()
+  })
 })

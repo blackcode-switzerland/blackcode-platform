@@ -192,7 +192,7 @@ func newRuleCreateCmd() *cobra.Command {
 				req.ToleranceChf = &tolerance
 			}
 			if cmd.Flags().Changed("source") {
-				req.SourceID = &sourceID
+				req.Source = &sourceID
 			}
 			r, err := c.CreateBooksRule(ws, req)
 			if err != nil {
@@ -206,7 +206,7 @@ func newRuleCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&req.Entity, "entity", "", "Book slug (default: the first book)")
 	cmd.Flags().StringVar(&req.Counterparty, "counterparty", "", "Fragment matched against the raw label (required)")
-	cmd.Flags().IntVar(&sourceID, "source", 0, "Source id the pair is keyed to (omit only for sourceless entries)")
+	cmd.Flags().IntVar(&sourceID, "source", 0, "Source #number the pair is keyed to, as bk books source list prints it (omit only for sourceless entries)")
 	cmd.Flags().Float64Var(&amount, "amount", 0, "Expected amount in CHF (omit: any amount matches)")
 	cmd.Flags().Float64Var(&tolerance, "tolerance", 0, "Accepted deviation in CHF (with --amount; omit: exact)")
 	cmd.Flags().StringVar(&req.Interval, "interval", "", "Documented cadence: monthly, quarterly, weekly (not matched on)")
@@ -293,6 +293,7 @@ func newResolveCmd() *cobra.Command {
 	cmd.Flags().StringVar(&req.TvaAmount, "tva-amount", "", "VAT in CHF (default: derived from the entry's amount at that rate)")
 	cmd.Flags().BoolVar(&req.TvaInputClaimed, "tva-input-claimed", false, "Claim the input tax (art. 28 LTVA; needs --evidence-tier full)")
 	cmd.Flags().StringVar(&req.EvidenceTier, "evidence-tier", "", "full, partial or bare — full means the pièce is on file")
+	cmd.Flags().BoolVar(&req.TvaClear, "no-tva", false, "Remove the VAT story this entry carries (omitting the rate leaves it alone)")
 	cmd.Flags().StringVar(&ruleCounterparty, "rule-counterparty", "", "Teach a rule: fragment matched against future labels")
 	cmd.Flags().Float64Var(&ruleAmount, "rule-amount", 0, "Taught rule's expected amount in CHF")
 	cmd.Flags().Float64Var(&ruleTolerance, "rule-tolerance", 0, "Taught rule's accepted deviation in CHF")

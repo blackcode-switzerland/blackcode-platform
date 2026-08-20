@@ -183,6 +183,38 @@ type BooksEntry struct {
 	// without this field `--json` silently drops the one thing that proves a
 	// resolved row was once unrecognized.
 	History any `json:"history"`
+
+	// ── THE SEVEN THIS MODEL USED TO DROP (#68, 2026-08-20) ─────────────────
+	// The route served 22 fields and this struct declared 15, so the other
+	// seven were parsed and discarded — missing from the table view AND from
+	// `--json`, which is meant to carry the wire shape as served. Not a
+	// formatting choice: the data never reached the caller at all.
+	//
+	// `Explanation` is the sharpest of them. This product's premise is that
+	// every transaction carries an explanation and `bk books resolve` exists to
+	// write it — and an agent that wrote one could not read it back. The only
+	// surface showing it was the web UI, which agents do not use.
+	//
+	// `Verdict` is the operational one: an entry whose verdict is `blocked`
+	// REFUSES to post (imports.ts), and from the CLI there was no way to see
+	// that coming. The agent met the refusal instead of reading the state.
+	//
+	// `any` for the two shaped fields, deliberately, for the reason Meta.Raw
+	// gives: a typed struct silently drops what the server adds later, and
+	// `explanation` is bilingual speech whose shape the server owns.
+	Explanation any `json:"explanation"`
+	// {verdict, rules, worst_case, resolves, at, by} (0014). Nil = never checked.
+	Verdict any `json:"verdict"`
+	// Which rule inferred this, so a wrong rule can be found and deactivated.
+	MatchedRuleID *int `json:"matched_rule_id"`
+	// Which feed it arrived from. Nil for a declared entry — money no feed brings.
+	SourceID *int `json:"source_id"`
+	// Why the evidence is the tier it is, when somebody said so.
+	EvidenceNote any `json:"evidence_note"`
+	// art. 959a al. 4: presented separately, and the tax consequence differs.
+	RelatedParty bool `json:"related_party"`
+	// The correction link: this entry reverses that one (art. 958f).
+	ReversesEntryID *int `json:"reverses_entry_id"`
 }
 
 // BooksBilanLine is one legal line of the balance sheet. Zero-balance lines ARE
@@ -457,9 +489,12 @@ func (c *Client) GetBooksWorklist(ws string, s BooksScope) ([]BooksWorklistRow, 
 // counterparty), and `CreatedFrom` is the workspace #number of the entry that
 // taught it, when one did.
 type BooksRule struct {
-	Number      int    `json:"number"`
-	Active      bool   `json:"active"`
-	SourceID    *int   `json:"source_id"`
+	Number int  `json:"number"`
+	Active bool `json:"active"`
+	// The source's workspace #number — the `#` column `source list` prints, and
+	// the value `rule create --source` takes. It carried the row id until #66,
+	// which no caller could obtain and no caller could use.
+	Source      *int   `json:"source"`
 	LearnedFrom string `json:"learned_from"`
 	Pattern     struct {
 		Counterparty string   `json:"counterparty"`
@@ -486,9 +521,11 @@ func (c *Client) ListBooksRules(ws string, s BooksScope) ([]BooksRule, error) {
 // CreateBooksRuleRequest teaches a rule with no teaching entry: a contract or
 // subscription known before the first franc moves.
 type CreateBooksRuleRequest struct {
-	Entity       string   `json:"-"`
-	Counterparty string   `json:"counterparty"`
-	SourceID     *int     `json:"source_id,omitempty"`
+	Entity       string `json:"-"`
+	Counterparty string `json:"counterparty"`
+	// The source's #number, not a database id. The server resolves it and
+	// refuses `unknown_source` in words when there is no such feed.
+	Source       *int     `json:"source,omitempty"`
 	AmountChf    *float64 `json:"amount_chf,omitempty"`
 	ToleranceChf *float64 `json:"tolerance_chf,omitempty"`
 	Interval     string   `json:"interval,omitempty"`
@@ -524,7 +561,10 @@ type ResolveBooksEntryRequest struct {
 	TvaAmount       string `json:"tva_amount,omitempty"`
 	TvaInputClaimed bool   `json:"tva_input_claimed,omitempty"`
 	EvidenceTier    string `json:"evidence_tier,omitempty"`
-	Rule            *struct {
+	// TvaClear removes a VAT story the entry already has. Omitting the rate
+	// leaves it alone (#67), so the removal has to be said out loud.
+	TvaClear bool `json:"tva_clear,omitempty"`
+	Rule     *struct {
 		Counterparty string   `json:"counterparty"`
 		AmountChf    *float64 `json:"amount_chf,omitempty"`
 		ToleranceChf *float64 `json:"tolerance_chf,omitempty"`

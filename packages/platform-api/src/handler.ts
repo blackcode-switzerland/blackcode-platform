@@ -157,6 +157,38 @@ async function handleError(
   }
 
   const e = err as { message?: string; stack?: string; name?: string } | null | undefined
+
+  // ── A CONSTRAINT VIOLATION IS NOT AN "INTERNAL ERROR" TO THE CALLER ────────
+  // Reported 2026-08-20 (b/books #66): `rule create --source 1` sent a display
+  // number into a column expecting a row id, and the foreign-key violation
+  // surfaced as a bare 500. An agent can act on a code and a suggestion; it can
+  // do nothing at all with `internal_error`, which is exactly the invisible
+  // failure the suggestion convention exists to remove.
+  //
+  // ── AND IT IS STILL LOGGED AT ERROR LEVEL, DELIBERATELY ────────────────────
+  // Translating must not make it quieter. In this architecture the DOORS refuse
+  // first, with words, and the database is the backstop — so a constraint that
+  // reaches this handler means some door did not check something it should
+  // have. That is a bug to see, not a client mistake to wave through. The
+  // caller gets a usable answer; the log keeps the whole story.
+  const pg = pgViolation(err)
+  if (pg) {
+    await safeLog(app, {
+      level: 'error',
+      code: pg.code,
+      message: `${e?.message ?? 'constraint violation'} (a door should have refused this first)`,
+      stack: e?.stack ?? null,
+      route: routePath(req),
+      method: req.method,
+      status_code: pg.status,
+      context: errorLogContext({ details: { constraint: pg.constraint, sqlstate: pg.sqlstate } }, app),
+    })
+    return NextResponse.json(
+      { error: pg.message, code: pg.code, suggestion: pg.suggestion },
+      { status: pg.status }
+    )
+  }
+
   await safeLog(app, {
     level: 'error',
     code: 'internal_error',
@@ -175,6 +207,79 @@ async function handleError(
     },
     { status: 500 }
   )
+}
+
+/**
+ * Recognise a Postgres integrity error anywhere on the cause chain.
+ *
+ * The chain matters: drizzle wraps the driver's error and its own message is
+ * "Failed query: …", so anything matching on the top-level object alone never
+ * sees the sqlstate. b/books learned that the hard way with its COMMIT-time
+ * guards (`sqlErrorText`, ticket #55).
+ *
+ * Only INTEGRITY classes are translated. A syntax error or a dead connection is
+ * genuinely internal and must keep saying so.
+ */
+function pgViolation(err: unknown): {
+  status: number
+  code: string
+  message: string
+  suggestion: string
+  constraint: string | null
+  sqlstate: string
+} | null {
+  for (
+    let x = err as { code?: unknown; constraint?: unknown; cause?: unknown } | null | undefined;
+    x;
+    x = x.cause as typeof x
+  ) {
+    const sqlstate = typeof x.code === 'string' ? x.code : null
+    if (!sqlstate) continue
+    const constraint = typeof x.constraint === 'string' ? x.constraint : null
+    const named = constraint ? ` (${constraint})` : ''
+    switch (sqlstate) {
+      case '23503':
+        return {
+          status: 400,
+          code: 'unknown_reference',
+          message: `this request names something that does not exist${named}`,
+          suggestion:
+            'a reference here is a workspace #number, the value a listing shows — not a database id. List the thing you are pointing at and use the number from that listing',
+          constraint,
+          sqlstate,
+        }
+      case '23505':
+        return {
+          status: 409,
+          code: 'already_exists',
+          message: `this already exists${named}`,
+          suggestion: 'read it back rather than creating it again — a retry of a write that succeeded is not a new record',
+          constraint,
+          sqlstate,
+        }
+      case '23514':
+        return {
+          status: 400,
+          code: 'check_violation',
+          message: `the database refused this value${named}`,
+          suggestion: 'a CHECK constraint holds a rule the payload broke; `bk meta` serves the vocabularies, and the constraint name says which rule',
+          constraint,
+          sqlstate,
+        }
+      case '23502':
+        return {
+          status: 400,
+          code: 'missing_field',
+          message: `a required field was not sent${named}`,
+          suggestion: 'the column cannot be null; the command\'s --help lists what is required',
+          constraint,
+          sqlstate,
+        }
+      default:
+        return null
+    }
+  }
+  return null
 }
 
 /**

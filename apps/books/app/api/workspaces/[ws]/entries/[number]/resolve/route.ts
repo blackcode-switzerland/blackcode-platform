@@ -104,6 +104,10 @@ function tvaFromBody(body: Record<string, unknown>) {
   const amount = tva.amount ?? body.tva_amount
   const claimed = tva.input_claimed ?? body.tva_input_claimed
   const tier = tva.evidence_tier ?? body.evidence_tier
+  // The explicit clear (#67). Silence leaves the row's VAT alone, so removing
+  // one has to be said out loud.
+  const clear = tva.clear === true || body.tva_clear === true
+  if (clear) return { clear: true }
   if (rate == null && amount == null && claimed == null && tier == null) return undefined
   return {
     rate: rate as number | string | null,

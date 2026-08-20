@@ -65,6 +65,15 @@ export interface TvaInput {
   evidenceTier?: string | null
   /** Free note, e.g. why a rate applies. */
   note?: unknown
+  /**
+   * Explicitly REMOVE the VAT story from an entry that has one.
+   *
+   * Silence leaves the row alone (#67), so there has to be a way to say the
+   * other thing. `--no-tva` on the CLI. Refused on a posted entry by the same
+   * rule that freezes a rate: a booked figure is corrected with a reversing
+   * entry, never erased.
+   */
+  clear?: boolean
 }
 
 export interface TvaColumns {
@@ -98,10 +107,42 @@ export function tvaOnGross(gross: string, rate: number): string {
  * Returns `null` when the caller said nothing about VAT at all — an entry with
  * no VAT story stores NULLs, which is different from an entry at 0%.
  */
-export function tvaColumns(input: TvaInput | undefined, gross: string): TvaColumns | null {
+/**
+ * What the entry ALREADY holds, when this is not the first call about it.
+ *
+ * ── #67: A SECOND RESOLVE WAS TREATED AS IF THE ENTRY HAD NO VAT STORY ─────
+ * The workflow `bk guide books/entries` describes is: resolve when the money
+ * arrives, claim the input tax when the pièce turns up. That second call is one
+ * flag — `--tva-input-claimed` — and it was refused with "input tax cannot be
+ * claimed without a VAT rate on the entry" while the rate sat on the row,
+ * written by the first call.
+ *
+ * The cause was that `said` read `input.rate` alone: this function never saw
+ * the row, so it could not tell "no rate anywhere" from "no rate IN THIS CALL".
+ * Those are different facts and only one of them is a refusal.
+ */
+export interface StoredTva {
+  rate: string | null
+  amount: string | null
+}
+
+export function tvaColumns(
+  input: TvaInput | undefined,
+  gross: string,
+  stored?: StoredTva
+): Partial<TvaColumns> | null {
   if (!input) return null
-  const said =
-    input.rate !== undefined && input.rate !== null && input.rate !== ''
+
+  // An explicit clear: the entry had a VAT story and no longer should. Distinct
+  // from silence, which leaves the row alone — the same distinction
+  // `tvaFromBody` already draws for a fresh declaration.
+  if (input.clear === true) {
+    return { tva_rate: null, tva_amount: null, tva_input_claimed: false }
+  }
+
+  const saidHere = input.rate !== undefined && input.rate !== null && input.rate !== ''
+  const onRow = stored?.rate !== undefined && stored?.rate !== null && stored?.rate !== ''
+  const said = saidHere || onRow
   const claiming = input.inputClaimed === true
   const tier = input.evidenceTier ?? null
 
@@ -113,11 +154,12 @@ export function tvaColumns(input: TvaInput | undefined, gross: string): TvaColum
     )
   }
 
-  // A claim with no rate claims nothing: art. 28 deducts a FIGURE.
+  // A claim with no rate claims nothing: art. 28 deducts a FIGURE. "No rate"
+  // now means neither this call nor the row has one.
   if (claiming && !said) {
     throw new TvaRefused(
       'claim_without_rate',
-      'input tax cannot be claimed without a VAT rate on the entry',
+      'input tax cannot be claimed: neither this call nor the entry carries a VAT rate',
       'pass --tva-rate as well, or drop --tva-input-claimed'
     )
   }
@@ -125,6 +167,17 @@ export function tvaColumns(input: TvaInput | undefined, gross: string): TvaColum
   if (!said) {
     if (tier === null) return null
     return { tva_rate: null, tva_amount: null, tva_input_claimed: false, evidence_tier: tier }
+  }
+
+  // The rate is on the ROW and this call did not restate it. Touch only what
+  // the call is actually about — the claim and the tier — and leave the booked
+  // figures exactly as they are. Recomputing them from `gross` would be this
+  // function quietly rewriting a number nobody asked it to.
+  if (!saidHere) {
+    return {
+      tva_input_claimed: claiming,
+      ...(tier === null ? {} : { evidence_tier: tier }),
+    }
   }
 
   const rate = Number(input.rate)

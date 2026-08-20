@@ -597,15 +597,25 @@ export interface RecognitionRule {
   number: number
   active: boolean
   /**
-   * Half of the match key. The key is the PAIR (source, counterparty), never the
-   * merchant name alone: the same merchant on a source nobody tracks is a new
-   * fact and must stay queued rather than be silently matched.
+   * Half of the match key, as the source's workspace **#number** — the `#`
+   * column `bk books source list` prints. The key is the PAIR (source,
+   * counterparty), never the merchant name alone: the same merchant on a source
+   * nobody tracks is a new fact and must stay queued rather than be silently
+   * matched.
    *
-   * **It is a serial id and this app does not resolve it** — phase 3 brings the
-   * source register. Shown as a fact, never as a link. A null means the rule
-   * matches only sourceless entries, which is what the RI's rules are.
+   * A null means the rule matches only sourceless entries, which is what the
+   * RI's rules are.
+   *
+   * ── IT WAS `source_id`, THE SERIAL, UNTIL #66 ──────────────────────────────
+   * The old comment said "it is a serial id and this app does not resolve it —
+   * phase 3 brings the source register". Phase 3 shipped, and the field was
+   * never revisited: the wire carried a row id no caller could obtain, while
+   * `rule create --source` took a #number and the route pushed it straight into
+   * the FK. The flag was therefore unusable by anyone, and the resulting
+   * constraint violation surfaced as a bare 500. Now both ends speak #numbers,
+   * so what a listing shows is what a create takes.
    */
-  source_id: number | null
+  source: number | null
   /** Where the rule came from: `contract`, `subscription` or `manual`. */
   learned_from: string | null
   pattern: RulePattern

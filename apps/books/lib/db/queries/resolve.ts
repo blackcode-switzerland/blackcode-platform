@@ -126,7 +126,7 @@ export async function resolveEntry(
     if (
       entry.status === 'posted' &&
       data.tva &&
-      (data.tva.rate ?? null) !== null
+      ((data.tva.rate ?? null) !== null || data.tva.clear === true)
     ) {
       throw new ResolveRefused(
         'posted_tva_frozen',
@@ -134,7 +134,10 @@ export async function resolveEntry(
         'a correction is a reversing entry; --tva-input-claimed and --evidence-tier may still change'
       )
     }
-    const tva = tvaColumns(data.tva, gross.toFixed(2))
+    const tva = tvaColumns(data.tva, gross.toFixed(2), {
+      rate: entry.tva_rate,
+      amount: entry.tva_amount,
+    })
 
     // ---- history first: the old state, kept forever ----------------------
     // Append-only array. A pre-existing non-array history (the mockup seeds
@@ -179,7 +182,23 @@ export async function resolveEntry(
     }
 
     // ---- the entry itself -------------------------------------------------
-    const recognition = data.recognition ?? (data.rule ? 'known_recurring' : 'known_one_off')
+    // ── #67: AN OMITTED FLAG MUST NOT REWRITE A FIELD ─────────────────────
+    // This was `data.recognition ?? (data.rule ? 'known_recurring' : ...)`, so
+    // a SECOND resolve that did not repeat `--recognition` silently pushed a
+    // `known_recurring` entry back to `known_one_off`. No error, no notice, and
+    // the reported case reached it by claiming input tax when the pièce turned
+    // up — a call that has nothing to do with recognition at all.
+    //
+    // The default belongs to the FIRST resolve, which is the one deciding what
+    // an unrecognized line was. After that the stored value stands until
+    // somebody says otherwise.
+    const recognition =
+      data.recognition ??
+      (entry.recognition === 'unrecognized'
+        ? data.rule
+          ? 'known_recurring'
+          : 'known_one_off'
+        : entry.recognition)
     const [updated] = await tx
       .update(booksEntry)
       .set({
@@ -284,7 +303,14 @@ export async function resolveRiEntry(
       taughtRuleId = rule.id
     }
 
-    const recognition = data.recognition ?? (data.rule ? 'known_recurring' : 'known_one_off')
+    // The RI journal, same rule as the grand livre above (#67).
+    const recognition =
+      data.recognition ??
+      (row.recognition === 'unrecognized'
+        ? data.rule
+          ? 'known_recurring'
+          : 'known_one_off'
+        : row.recognition)
     const [updated] = await tx
       .update(booksRiEntry)
       .set({

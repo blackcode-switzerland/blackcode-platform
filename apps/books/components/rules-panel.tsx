@@ -78,7 +78,7 @@ export function RulesPanel({
       cell: (r) => (
         <div className="min-w-0">
           <span className="font-mono text-[12px] text-foreground">
-            ({r.source_id === null ? 'no source' : `source ${r.source_id}`}, {r.pattern.counterparty})
+            ({r.source === null ? 'no source' : `source #${r.source}`}, {r.pattern.counterparty})
           </span>
           <div className="text-[11.5px] text-muted-foreground">
             {ruleAmount(r.pattern.amount_chf, r.pattern.tolerance_chf)}

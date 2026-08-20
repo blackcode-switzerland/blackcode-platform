@@ -571,7 +571,7 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
       [
         'number',
         'active',
-        'source_id',
+        'source',
         'learned_from',
         'pattern',
         'explanation',
@@ -2449,8 +2449,9 @@ type _Scalars = [
   // ── PHASE 2 ────────────────────────────────────────────────────────────
   Mutual<RuleWire['number'], RecognitionRule['number']>,
   Mutual<RuleWire['active'], RecognitionRule['active']>,
-  // The half of the match key that was declared as `source`. Blank on every row.
-  Mutual<RuleWire['source_id'], RecognitionRule['source_id']>,
+  // The half of the match key. A #number on both sides since #66 — it was the
+  // serial id, which no caller could ever obtain.
+  Mutual<RuleWire['source'], RecognitionRule['source']>,
   Mutual<RuleWire['account'], RecognitionRule['account']>,
   Mutual<RuleWire['created_from'], RecognitionRule['created_from']>,
 

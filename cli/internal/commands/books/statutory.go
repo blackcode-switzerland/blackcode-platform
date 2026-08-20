@@ -357,6 +357,53 @@ func newEntryListCmd() *cobra.Command {
 	return cmd
 }
 
+// entryStory prints the fields #68 restored: what the money was, and whether a
+// compliance pass has already decided this entry cannot post. Shared by both
+// journals — an RI row carries an explanation and a verdict exactly as a
+// grand-livre row does.
+func entryStory(w io.Writer, e *client.BooksEntry) {
+	if x := biText(e.Explanation); x != "" {
+		fmt.Fprintf(w, "  explanation  %s\n", x)
+	}
+	if n := biText(e.EvidenceNote); n != "" {
+		fmt.Fprintf(w, "  evidence why %s\n", n)
+	}
+	// Read BEFORE trying to post, not discovered through the refusal.
+	if v, ok := e.Verdict.(map[string]any); ok && v != nil {
+		verdict, _ := v["verdict"].(string)
+		if verdict != "" {
+			fmt.Fprintf(w, "  verdict      %s", verdict)
+			if rules, ok := v["rules"].([]any); ok && len(rules) > 0 {
+				parts := make([]string, 0, len(rules))
+				for _, r := range rules {
+					parts = append(parts, fmt.Sprint(r))
+				}
+				fmt.Fprintf(w, " (%s)", strings.Join(parts, ", "))
+			}
+			fmt.Fprintln(w)
+			if verdict == "blocked" {
+				if resolves, ok := v["resolves"].(string); ok && resolves != "" {
+					fmt.Fprintf(w, "               this entry will REFUSE to post: %s\n", resolves)
+				} else {
+					fmt.Fprintln(w, "               this entry will REFUSE to post until the verdict is cleared")
+				}
+			}
+		}
+	}
+	if e.RelatedParty {
+		fmt.Fprintln(w, "  related      yes — presented separately (art. 959a al. 4)")
+	}
+	if e.MatchedRuleID != nil {
+		fmt.Fprintf(w, "  matched rule #%d\n", *e.MatchedRuleID)
+	}
+	if e.SourceID != nil {
+		fmt.Fprintf(w, "  source id    %d  (the feed it arrived from)\n", *e.SourceID)
+	}
+	if e.ReversesEntryID != nil {
+		fmt.Fprintf(w, "  reverses     entry %d\n", *e.ReversesEntryID)
+	}
+}
+
 func newEntryShowCmd() *cobra.Command {
 	var entity string
 	cmd := &cobra.Command{
@@ -397,6 +444,7 @@ func newEntryShowCmd() *cobra.Command {
 					}
 					fmt.Fprintf(w, "  recognition  %s\n", e.Recognition)
 					fmt.Fprintf(w, "  evidence     %s\n", e.EvidenceTier)
+					entryStory(w, e)
 					if e.Piece != nil {
 						fmt.Fprintf(w, "  pièce        %s (captured %s)\n", e.Piece.DriveRef, e.Piece.Captured)
 					} else {
@@ -421,6 +469,7 @@ func newEntryShowCmd() *cobra.Command {
 					fmt.Fprintf(w, "  (input VAT not recoverable, art. 26 LTVA)")
 				}
 				fmt.Fprintln(w)
+				entryStory(w, e)
 				if e.Piece != nil {
 					fmt.Fprintf(w, "  pièce        %s (captured %s)\n", e.Piece.DriveRef, e.Piece.Captured)
 				} else {
@@ -551,9 +600,32 @@ func newCrCmd() *cobra.Command {
 					// One column per month, the annual figure last. The line
 					// order is the statute's and is identical in every month,
 					// so the header is written once and the rows line up.
+					// ── #64: THE YEAR HAS TO SURVIVE A STRADDLING EXERCICE ──
+					// This trimmed the exercice's year off every heading, which
+					// reads fine for 1.1–31.12 and is ambiguous the moment a
+					// fiscal year crosses a boundary — and `monthsBetween`
+					// supports exactly that. Worse, TrimPrefix only strips the
+					// year that MATCHES, so a straddling year printed some
+					// columns as "11" and others as "2027-01".
+					//
+					// So: bare month numbers only when every column is in one
+					// year, which the heading above already names. Otherwise
+					// every column carries its year, uniformly — a grid whose
+					// headings are in two formats is the bug, not the fix.
+					sameYear := true
+					for _, m := range r.Months {
+						if !strings.HasPrefix(m.Month, fmt.Sprintf("%d-", r.Exercice)) {
+							sameYear = false
+							break
+						}
+					}
 					fmt.Fprintf(tw, "LINE\t")
 					for _, m := range r.Months {
-						fmt.Fprintf(tw, "%s\t", strings.TrimPrefix(m.Month, fmt.Sprintf("%d-", r.Exercice)))
+						head := m.Month
+						if sameYear {
+							head = strings.TrimPrefix(m.Month, fmt.Sprintf("%d-", r.Exercice))
+						}
+						fmt.Fprintf(tw, "%s\t", head)
 					}
 					fmt.Fprintf(tw, "YEAR\n")
 					for i, l := range r.Lines {
