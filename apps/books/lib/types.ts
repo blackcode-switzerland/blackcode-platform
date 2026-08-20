@@ -597,15 +597,25 @@ export interface RecognitionRule {
   number: number
   active: boolean
   /**
-   * Half of the match key. The key is the PAIR (source, counterparty), never the
-   * merchant name alone: the same merchant on a source nobody tracks is a new
-   * fact and must stay queued rather than be silently matched.
+   * Half of the match key, as the source's workspace **#number** — the `#`
+   * column `bk books source list` prints. The key is the PAIR (source,
+   * counterparty), never the merchant name alone: the same merchant on a source
+   * nobody tracks is a new fact and must stay queued rather than be silently
+   * matched.
    *
-   * **It is a serial id and this app does not resolve it** — phase 3 brings the
-   * source register. Shown as a fact, never as a link. A null means the rule
-   * matches only sourceless entries, which is what the RI's rules are.
+   * A null means the rule matches only sourceless entries, which is what the
+   * RI's rules are.
+   *
+   * ── IT WAS `source_id`, THE SERIAL, UNTIL #66 ──────────────────────────────
+   * The old comment said "it is a serial id and this app does not resolve it —
+   * phase 3 brings the source register". Phase 3 shipped, and the field was
+   * never revisited: the wire carried a row id no caller could obtain, while
+   * `rule create --source` took a #number and the route pushed it straight into
+   * the FK. The flag was therefore unusable by anyone, and the resulting
+   * constraint violation surfaced as a bare 500. Now both ends speak #numbers,
+   * so what a listing shows is what a create takes.
    */
-  source_id: number | null
+  source: number | null
   /** Where the rule came from: `contract`, `subscription` or `manual`. */
   learned_from: string | null
   pattern: RulePattern
@@ -792,6 +802,13 @@ export type EntryHistory = Label | HistoryEvent[] | null
 export interface ResolveResult {
   number: number
   recognition: Recognition
+  /**
+   * The side this movement now falls on, for a SIMPLIFIED book — `null` for a
+   * double-entry entry, whose direction is its lines. Served because `resolve`
+   * can now change it (see `ResolveData.direction`) and a caller must be able
+   * to read back what it set without a second request.
+   */
+  direction: RiDirection | null
   explanation: Label | null
   history: EntryHistory
   taught_rule: number | null
@@ -1141,6 +1158,16 @@ export interface SourcePull {
   hash: string | null
   drive_ref: string | null
   pulled: IsoDate | null
+  /**
+   * What the statement itself said it closed at, and when — 0018.
+   *
+   * NULL is a real answer and not a zero: a pull recorded by hand through
+   * `source record-pull` has no statement behind it, and one imported before
+   * 0018 genuinely does not know. `derive/reconcile.ts` reports those as
+   * `known: false` rather than as an agreement.
+   */
+  closing_balance: Money | null
+  closing_on: IsoDate | null
 }
 
 /**

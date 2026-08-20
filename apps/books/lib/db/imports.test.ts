@@ -207,4 +207,78 @@ d('the bank import door', () => {
     const again = await postEntry(ws, seq)
     expect(again.already, 'a retry is not an error').toBe(true)
   })
+
+  // The 2026-08-20 finding: a registered book posted 9'600.00 of turnover with
+  // no rate, and the tax snapshot reported a refund owed to the company.
+  // Silence is what is refused; a stated 0 is a complete answer (art. 21/23).
+  it('a VAT-registered book cannot post turnover without stating a rate', async () => {
+    const { postEntry, PostRefused } = await import('./queries/imports')
+    const { declareEntry } = await import('./queries/declare')
+    const { updateEntity } = await import('./queries/entity-edit')
+
+    await updateEntity(ws, 'bi-sa', {
+      vat_registered: true,
+      vat_method: 'effective',
+      vat_filing: 'quarterly',
+    })
+
+    const sale = await declareEntry(ws, {
+      entitySlug: 'bi-sa',
+      date: '2026-08-20',
+      amount: '9600.00',
+      label: 'RECETTES CARTES',
+      explanation: { en: 'Card takings' },
+      lines: [
+        { account: '1020', debit: '9600.00' },
+        { account: '3400', credit: '9600.00' },
+      ],
+      declaredBy: 'test',
+    })
+
+    await expect(postEntry(ws, sale.number)).rejects.toThrow(PostRefused)
+    await expect(postEntry(ws, sale.number)).rejects.toThrow(/no TVA rate is stated/)
+  })
+
+  it('exempt turnover states zero and posts — the blank was the problem', async () => {
+    const { postEntry } = await import('./queries/imports')
+    const { declareEntry } = await import('./queries/declare')
+
+    const exempt = await declareEntry(ws, {
+      entitySlug: 'bi-sa',
+      date: '2026-08-20',
+      amount: '4000.00',
+      label: 'FORMATION EXONEREE',
+      explanation: { en: 'Exempt training, art. 21 LTVA' },
+      lines: [
+        { account: '1020', debit: '4000.00' },
+        { account: '3400', credit: '4000.00' },
+      ],
+      tva: { rate: 0 },
+      declaredBy: 'test',
+    })
+
+    const posted = await postEntry(ws, exempt.number)
+    expect(posted.status).toBe('posted')
+  })
+
+  it('a cost-only entry owes no declaration', async () => {
+    const { postEntry } = await import('./queries/imports')
+    const { declareEntry } = await import('./queries/declare')
+
+    const cost = await declareEntry(ws, {
+      entitySlug: 'bi-sa',
+      date: '2026-08-20',
+      amount: '120.00',
+      label: 'ABONNEMENT',
+      explanation: { en: 'Subscription' },
+      lines: [
+        { account: '6570', debit: '120.00' },
+        { account: '1020', credit: '120.00' },
+      ],
+      declaredBy: 'test',
+    })
+
+    const posted = await postEntry(ws, cost.number)
+    expect(posted.status, 'no class 3 line, so no declaration is owed').toBe('posted')
+  })
 })

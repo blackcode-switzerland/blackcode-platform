@@ -292,6 +292,29 @@ d('starting a book and ending a year', () => {
   // the close
   // -------------------------------------------------------------------------
 
+  // FIRST, because it is the first guard the door reaches: until 2026-08-20 the
+  // close asked only whether the books were TIDY and never whether the period
+  // had ENDED, and an eight-month year filed as a twelve-month result looked
+  // exactly like a correct close.
+  it('refuses to close a year that has not ended yet', async () => {
+    const { closeExercice } = await import('./queries/close')
+    const { getDb } = await import('./client')
+
+    await expect(closeExercice(ws, entity.id, x2026)).rejects.toMatchObject({
+      code: 'exercice_not_over',
+    })
+
+    // Every close below needs a year that has actually finished. Winding this
+    // one's end date back is also the SHORTENED-YEAR case (a company changing
+    // its year end): the guard reads `ends_on` rather than assuming twelve
+    // months, so a short exercice closes on its own dates and needs no
+    // override. 0016 freezes those dates only once the year is CLOSED, which
+    // is why this is allowed here and refused three tests later.
+    await getDb().execute(sql`
+      UPDATE books.exercice SET ends_on = '2026-06-30' WHERE id = ${x2026.id}`)
+    x2026.ends_on = '2026-06-30'
+  })
+
   it('refuses to close over an entry nobody has judged', async () => {
     const { closeExercice } = await import('./queries/close')
     // The declaration above is still staged.
@@ -421,5 +444,34 @@ describe('TVA on an entry', () => {
   it('says nothing when the caller said nothing', async () => {
     const { tvaColumns } = await import('./queries/tva')
     expect(tvaColumns(undefined, '100.00')).toBeNull()
+  })
+
+  // #67: the second call in the workflow the guide describes — resolve when the
+  // money arrives, claim the input tax when the pièce turns up.
+  it('a claim rests on a rate the ENTRY already carries, not only on this call', async () => {
+    const { tvaColumns } = await import('./queries/tva')
+    const stored = { rate: '8.10', amount: '7.50' }
+    const out = tvaColumns({ inputClaimed: true, evidenceTier: 'full' }, '100.00', stored)
+    expect(out).toEqual({ tva_input_claimed: true, evidence_tier: 'full' })
+    // The booked figures are NOT restated: this call was not about them.
+    expect(out).not.toHaveProperty('tva_rate')
+    expect(out).not.toHaveProperty('tva_amount')
+  })
+
+  it('still refuses a claim when neither the call nor the entry has a rate', async () => {
+    const { tvaColumns } = await import('./queries/tva')
+    expect(() => tvaColumns({ inputClaimed: true, evidenceTier: 'full' }, '100.00', { rate: null, amount: null })).toThrow(
+      /neither this call nor the entry/
+    )
+  })
+
+  it('an explicit clear removes the story; silence is not a clear', async () => {
+    const { tvaColumns } = await import('./queries/tva')
+    expect(tvaColumns({ clear: true }, '100.00', { rate: '8.10', amount: '7.50' })).toEqual({
+      tva_rate: null,
+      tva_amount: null,
+      tva_input_claimed: false,
+    })
+    expect(tvaColumns(undefined, '100.00', { rate: '8.10', amount: '7.50' }), 'silence touches nothing').toBeNull()
   })
 })

@@ -389,6 +389,11 @@ export const booksSource = booksSchema.table(
     layer: varchar('layer', { length: 20 }),
     /** Self-reference: a card draws on a bank account. */
     draws_from: integer('draws_from'),
+    /**
+     * How to READ this source's delimited export (0019). NULL means camt.053,
+     * which needs no mapping. Shape: `lib/import/delimited.ts` DelimitedMapping.
+     */
+    import_mapping: jsonb('import_mapping'),
     ledger_accounts: text('ledger_accounts').array().default([]).notNull(),
     method: text('method'),
     expected: varchar('expected', { length: 20 }),
@@ -664,6 +669,11 @@ export const booksSourcePull = booksSchema.table(
     hash: varchar('hash', { length: 80 }),
     drive_ref: text('drive_ref'),
     pulled: date('pulled'),
+    // What the statement itself said it closed at, and when — 0018. Nullable
+    // because a pull recorded by hand (`source record-pull`) has no statement
+    // behind it, and one imported before 0018 genuinely does not know.
+    closing_balance: numeric('closing_balance', { precision: 14, scale: 2 }),
+    closing_on: date('closing_on'),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

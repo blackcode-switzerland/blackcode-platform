@@ -38,8 +38,9 @@ import {
   booksSource,
   booksSourcePull,
   booksCounters,
+  booksAccount,
 } from '../schema'
-import { parseCamt053, verifyCamt, CamtRefused, type CamtLine } from '../../import/camt053'
+import { parseCamt053, verifyCamt, CamtRefused, type CamtLine, type CamtStatement } from '../../import/camt053'
 import { listRules } from './rules'
 import { matchesRule } from '../../derive/recognition'
 
@@ -114,6 +115,31 @@ export async function importCamt(
     if (e instanceof CamtRefused) throw new ImportRefused(e.code, e.message)
     throw e
   }
+  return importStatement(workspaceId, sourceSeq, fileName, stmt, fileSha256, 'camt.053')
+}
+
+/**
+ * Everything after the parse, for EITHER format.
+ *
+ * Split out of `importCamt` on 2026-08-20 when the delimited reader landed. The
+ * seam is exact: `parseDelimited` produces the same `CamtStatement`, so the
+ * exercice checks, the idempotency on line reference, rule matching at arrival,
+ * the pull record and 0018's closing balance are all the code that was already
+ * here and already proven — not a second implementation that drifts.
+ *
+ * `verifyCamt` runs here rather than in each parser, so neither format can skip
+ * it. For a delimited file that check is the ONLY thing standing between a
+ * truncated download and a month with three days missing, because the caller
+ * declares the balances the file does not carry.
+ */
+export async function importStatement(
+  workspaceId: number,
+  sourceSeq: number,
+  fileName: string,
+  stmt: CamtStatement,
+  fileSha256: string,
+  format: string
+): Promise<ImportSummary> {
   const problems = verifyCamt(stmt)
   if (problems.length > 0) {
     throw new ImportRefused('does_not_reconcile', 'the file does not reconcile against itself', problems)
@@ -148,6 +174,46 @@ export async function importCamt(
       throw new ImportRefused('no_ledger_account', `source #${sourceSeq} names no ledger account`, [
         'a double-entry book must know which account this feed IS (e.g. 1020)',
       ])
+    }
+
+    // ── A FEED AND THE FEED IT SETTLES INTO DESCRIBE THE SAME MONEY ─────────
+    // A card is used four times and the bank debits the total once. Both files
+    // are true; posting both against the BANK account counts the spend twice,
+    // and the bilan balances either way, so nothing downstream can see it.
+    //
+    // DATA-MODEL §10 always specified the edge — `draws_from`, "the chain:
+    // Yapeal 6474 → WIR" — and nothing but the seed had ever written it,
+    // because until a card feed could be imported it decided nothing.
+    //
+    // The accounting answer is the ordinary one: a card is a LIABILITY while it
+    // is outstanding. Purchases credit the card's own account, the settlement
+    // debits it, and it nets to what is owed. So the rule the door can actually
+    // enforce is that a source which draws on another must not claim that
+    // other's account — stated here, once, at the only place a feed becomes
+    // entries.
+    if (!simplified && source.draws_from !== null) {
+      const [parent] = await tx
+        .select()
+        .from(booksSource)
+        .where(eq(booksSource.id, source.draws_from))
+        .limit(1)
+      if (!parent) {
+        throw new ImportRefused('draws_from_missing', `source #${sourceSeq} settles into a source that no longer exists`, [
+          'fix the chain: bk books source edit <n> --draws-from <n>, or --no-draws-from if it settles nowhere',
+        ])
+      }
+      const parentAccount = (parent.ledger_accounts ?? [])[0] ?? null
+      if (parentAccount && parentAccount === ledgerAccount) {
+        throw new ImportRefused(
+          'settles_into_same_account',
+          `source #${sourceSeq} settles into "${parent.name}" and both name account ${ledgerAccount}`,
+          [
+            `every line here would post against ${ledgerAccount}, and so would the settlement on "${parent.name}" — the same spend counted twice, on a bilan that balances either way`,
+            `give this feed its own account: a card is a liability while it is outstanding, so purchases credit ITS account and the settlement debits it`,
+            `create one with bk books account create --class 2, then bk books source edit ${sourceSeq} --ledger-account <no>`,
+          ]
+        )
+      }
     }
 
     // Exercices, by year of booking date. Refuse lines outside an open year
@@ -296,11 +362,14 @@ export async function importCamt(
 
     // The pull record: first delivery is the record; a re-import converges.
     await tx.execute(sql`
-      INSERT INTO ${booksSourcePull} (workspace_id, source_id, file, period, format, hash, pulled)
+      INSERT INTO ${booksSourcePull}
+        (workspace_id, source_id, file, period, format, hash, pulled,
+         closing_balance, closing_on)
       VALUES (
         ${workspaceId}, ${source.id}, ${fileName},
         ${stmt.from && stmt.to ? `${stmt.from} → ${stmt.to}` : null},
-        'camt.053', ${'sha256:' + fileSha256}, CURRENT_DATE
+        ${format}, ${'sha256:' + fileSha256}, CURRENT_DATE,
+        ${stmt.closing}, ${stmt.closing_on ?? null}
       )
       ON CONFLICT (source_id, file) DO NOTHING
     `)
@@ -409,6 +478,63 @@ export async function postEntry(
         `entry #${entrySeq} has ${unmapped} line(s) with no account`,
         'resolve it first: bk books resolve <n> --account <no> --explanation <what it was>'
       )
+    }
+
+    // ── A VAT-REGISTERED BOOK MAY NOT POST TURNOVER IN SILENCE ─────────────
+    // Measured 2026-08-20 on a book created from zero: registered effective,
+    // quarterly, 9'600.00 of card takings posted to a class 3 account with
+    // `tva_rate` NULL, and the tax snapshot then reported a REFUND owed to the
+    // company because the only VAT on the book was the input tax on a fridge
+    // repair. Nothing objected at any point. `2200 TVA due` sat unused.
+    //
+    // art. 25 LTVA fixes the rates; art. 35 sets the filing period. A company
+    // that is registered accounts for output tax on every taxable turnover in
+    // the period, and the figure the AFC receives is built from these rows.
+    //
+    // ── WHY THIS REFUSES SILENCE AND NOT ZERO ──────────────────────────────
+    // Refusing all untaxed revenue would be wrong: art. 21 LTVA exempts real
+    // turnover (medical, education, most rents), art. 23 zero-rates exports,
+    // and those sales are still booked and still REPORTED. So the door does not
+    // ask for tax — it asks for a DECLARATION, and `0` is already in the
+    // vocabulary `tva.ts` enforces. An exempt sale says 0 and is a complete
+    // record; a sale that says nothing is a figure nobody has judged, which is
+    // the one thing this app refuses to store as though it had been.
+    //
+    // It fires at POST rather than at resolve because posting is the commitment
+    // — the import/resolve loop stays free to leave a line half-understood, and
+    // 0004 freezes the rate the moment the entry becomes immutable.
+    //
+    // Entries posted BEFORE this rule are untouched: records are permanent
+    // (art. 958f), so the correction for one already filed is a reversing entry
+    // in the current year, not a rewrite of a closed fact.
+    const [entity] = await tx
+      .select({ vat_registered: booksEntity.vat_registered })
+      .from(booksEntity)
+      .where(eq(booksEntity.id, entry.entity_id))
+      .limit(1)
+    if (entity?.vat_registered && entry.tva_rate === null) {
+      const accounts = lines.map((l) => l.account_no).filter((a): a is string => a !== null)
+      const revenue = accounts.length
+        ? await tx
+            .select({ no: booksAccount.no, fr: booksAccount.label })
+            .from(booksAccount)
+            .where(
+              and(
+                eq(booksAccount.entity_id, entry.entity_id),
+                inArray(booksAccount.no, accounts),
+                eq(booksAccount.class, 3)
+              )
+            )
+        : []
+      if (revenue.length > 0) {
+        throw new PostRefused(
+          'revenue_without_tva',
+          `entry #${entrySeq} books turnover on ${revenue.map((r) => r.no).join(', ')} and this book is VAT-registered, but no TVA rate is stated`,
+          'name the rate this turnover carries — `bk books resolve ' +
+            entrySeq +
+            ' --tva-rate 8.1`. If the sale is exempt (art. 21 LTVA) or zero-rated for export (art. 23), say so with --tva-rate 0: the return reports it either way, and a blank is not the same answer as a zero'
+        )
+      }
     }
 
     await tx.update(booksEntry).set({ status: 'posted', updated_at: new Date() }).where(eq(booksEntry.id, entry.id))

@@ -164,13 +164,33 @@ d('the management layer', () => {
   })
 
   it('creates categories, and holds the two integrity lines: chart membership and one-franc-one-bar', async () => {
-    const { createCategory } = await import('./queries/management')
-    const bureau = await createCategory(ws, { entitySlug: 'mg', key: 'bureau', label: { fr: 'Bureau & loyer', en: 'Office & rent' }, accounts: ['6000'] })
-    expect(bureau.seq).toBe(1)
-    const it = await createCategory(ws, { entitySlug: 'mg', key: 'it_ai', label: 'IT & tooling', accounts: ['6570'] })
-    expect(it.label, 'a plain-string label is normalized: the wire always carries {fr, en}').toEqual({ fr: 'IT & tooling', en: 'IT & tooling' })
+    const { createCategory, listCategories, retireCategory } = await import('./queries/management')
+
+    // A book now ARRIVES with the five in `lib/categories.ts`, so this no
+    // longer creates `bureau` and `it_ai` by hand — they are already here, and
+    // the analytique case below reads the same mapping it always did.
+    const start = await listCategories(entity.id)
+    expect(start.map((c) => c.key).sort()).toEqual(['admin', 'autres', 'bureau', 'it_ai', 'personnel'])
+
+    // And between them the five claim EVERY cost account the chart carries,
+    // which is why `retire` had to ship with the template: without it a book
+    // could never add a bucket of its own. Retiring frees the accounts at once.
+    await expect(
+      createCategory(ws, { entitySlug: 'mg', key: 'divers', label: { fr: 'Divers' }, accounts: ['6900'] })
+    ).rejects.toMatchObject({ code: 'accounts_claimed' })
+
+    const autres = start.find((c) => c.key === 'autres')!
+    await retireCategory(ws, autres.seq)
     const demi = await createCategory(ws, { entitySlug: 'mg', key: 'divers', label: { fr: 'Divers' }, accounts: ['6900'] })
     expect(demi.label, 'a half-spoken {fr}-only label is filled, not stored half-empty').toEqual({ fr: 'Divers', en: 'Divers' })
+
+    const plain = await createCategory(ws, { entitySlug: 'mg', key: 'amort', label: 'Depreciation', accounts: ['6800'] })
+    expect(plain.label, 'a plain-string label is normalized: the wire always carries {fr, en}').toEqual({ fr: 'Depreciation', en: 'Depreciation' })
+
+    // Retiring is a STATE, so saying it twice is not an error.
+    const again = await retireCategory(ws, autres.seq)
+    expect(again.retired).toBe(true)
+    await expect(retireCategory(ws, 9999)).rejects.toMatchObject({ code: 'category_not_found' })
 
     await expect(
       createCategory(ws, { entitySlug: 'mg', key: 'fantome', label: 'x', accounts: ['9999'] })

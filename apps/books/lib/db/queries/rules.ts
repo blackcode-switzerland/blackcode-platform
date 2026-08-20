@@ -5,9 +5,9 @@
 // which entry taught it, and that link is what makes "why does this match?"
 // answerable forever (phase-2-recognition.md, Notes: provenance is permanent).
 
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import { getDb } from '../client'
-import { booksRule, booksEntry, booksCounters, type BooksRule } from '../schema'
+import { booksRule, booksEntry, booksSource, booksCounters, type BooksRule } from '../schema'
 import { sql } from 'drizzle-orm'
 
 export async function listRules(
@@ -83,12 +83,28 @@ export async function insertRule(tx: Tx, workspaceId: number, data: CreateRuleDa
 /**
  * The wire shape. `created_from` is exposed as the TEACHING ENTRY'S workspace
  * #number, never the serial id — same rule as every other payload.
+ *
+ * ── AND `source` FOLLOWS THAT RULE TOO, SINCE #66 ──────────────────────────
+ * It was `source_id: r.source_id` — the raw serial, one line under a comment
+ * saying payloads never carry those. That was half of the reported bug: the
+ * CLI's `--source` flag takes the # column `source list` prints, the route put
+ * it straight into the FK, and there was NO WAY through bk to learn a source's
+ * real id, so the flag could not be used correctly by anyone.
+ *
+ * Serving the #number closes the loop: what `rule list` shows is what
+ * `rule create --source` takes, which is the property every other reference in
+ * this app already had.
  */
-export function publicRule(r: BooksRule, createdFromSeq: number | null = null) {
+export function publicRule(
+  r: BooksRule,
+  createdFromSeq: number | null = null,
+  sourceSeq: number | null = null
+) {
   return {
     number: r.seq,
     active: r.active,
-    source_id: r.source_id,
+    /** The source's workspace #number — `bk books source list`'s # column. */
+    source: sourceSeq,
     learned_from: r.learned_from,
     pattern: r.pattern,
     explanation: r.explanation,
@@ -97,6 +113,22 @@ export function publicRule(r: BooksRule, createdFromSeq: number | null = null) {
     created_on: r.created_on,
     note: r.note,
   }
+}
+
+/**
+ * Map source row id -> its workspace #number, for `publicRule`'s `source`.
+ *
+ * Same shape as `teachingSeqs` and for the same reason: the row holds a serial
+ * and the wire may only carry a #number.
+ */
+export async function sourceSeqs(rules: BooksRule[]): Promise<Map<number, number>> {
+  const ids = [...new Set(rules.map((r) => r.source_id).filter((x): x is number => x !== null))]
+  if (ids.length === 0) return new Map()
+  const rows = await getDb()
+    .select({ id: booksSource.id, seq: booksSource.seq })
+    .from(booksSource)
+    .where(inArray(booksSource.id, ids))
+  return new Map(rows.map((x) => [x.id, x.seq]))
 }
 
 /** Map rule id -> teaching entry's seq, for `publicRule`'s created_from. */

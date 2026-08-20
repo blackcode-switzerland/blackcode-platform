@@ -8,6 +8,35 @@ There is **one supported interface: this CLI.** The HTTP API behind it is privat
 plumbing with no public contract — do not call it directly, and do not build
 against an OpenAPI spec (there isn't one any more).
 
+## If `bk` can do it, use `bk` — never a shell or filesystem tool
+
+**Do not use Desktop Commander, or any other MCP server that runs commands or
+edits files, to do something this CLI already has a verb for.** Not to reach the
+database, not to `curl` the API, not to edit a file the platform owns. If you
+are unsure whether a verb exists, `bk meta` and `bk guide --list` will tell you
+in one call each — ask, rather than reaching around.
+
+This is not a style preference. Three things follow from going around the CLI,
+and you will not see any of them happen:
+
+- **The doors are where the rules live.** Every write is checked before it
+  lands — that the thing it names exists, that the value is one the app allows,
+  that the state it assumes is the state you are in. A direct write skips all of
+  it and produces a row that looks exactly like a valid one. Nothing downstream
+  can tell the difference later.
+- **Some records cannot be taken back.** Apps here keep statutory records under
+  a retention duty; posted entries are immutable and nothing is hard-deleted, on
+  purpose. A bad write made through the front door is refused. The same write
+  made around it is permanent, and the correction is a whole new record
+  explaining the first.
+- **A refusal is the useful answer.** When `bk` says no, it says why and what to
+  send instead — that message is the fastest path to the correct call. A shell
+  command that "worked" tells you nothing, including when it was wrong.
+
+Those tools are for **your** side of the line: reading a bank statement off disk
+before `bk … import` takes it, building the JSON a robot door expects, running
+your own scripts. The moment the subject is platform data, the verb is `bk`.
+
 ## Two tiers of verb, and the spelling tells you which
 
 Every command sits in exactly one tier, and **you can see which from the command

@@ -183,6 +183,38 @@ type BooksEntry struct {
 	// without this field `--json` silently drops the one thing that proves a
 	// resolved row was once unrecognized.
 	History any `json:"history"`
+
+	// ── THE SEVEN THIS MODEL USED TO DROP (#68, 2026-08-20) ─────────────────
+	// The route served 22 fields and this struct declared 15, so the other
+	// seven were parsed and discarded — missing from the table view AND from
+	// `--json`, which is meant to carry the wire shape as served. Not a
+	// formatting choice: the data never reached the caller at all.
+	//
+	// `Explanation` is the sharpest of them. This product's premise is that
+	// every transaction carries an explanation and `bk books resolve` exists to
+	// write it — and an agent that wrote one could not read it back. The only
+	// surface showing it was the web UI, which agents do not use.
+	//
+	// `Verdict` is the operational one: an entry whose verdict is `blocked`
+	// REFUSES to post (imports.ts), and from the CLI there was no way to see
+	// that coming. The agent met the refusal instead of reading the state.
+	//
+	// `any` for the two shaped fields, deliberately, for the reason Meta.Raw
+	// gives: a typed struct silently drops what the server adds later, and
+	// `explanation` is bilingual speech whose shape the server owns.
+	Explanation any `json:"explanation"`
+	// {verdict, rules, worst_case, resolves, at, by} (0014). Nil = never checked.
+	Verdict any `json:"verdict"`
+	// Which rule inferred this, so a wrong rule can be found and deactivated.
+	MatchedRuleID *int `json:"matched_rule_id"`
+	// Which feed it arrived from. Nil for a declared entry — money no feed brings.
+	SourceID *int `json:"source_id"`
+	// Why the evidence is the tier it is, when somebody said so.
+	EvidenceNote any `json:"evidence_note"`
+	// art. 959a al. 4: presented separately, and the tax consequence differs.
+	RelatedParty bool `json:"related_party"`
+	// The correction link: this entry reverses that one (art. 958f).
+	ReversesEntryID *int `json:"reverses_entry_id"`
 }
 
 // BooksBilanLine is one legal line of the balance sheet. Zero-balance lines ARE
@@ -457,9 +489,12 @@ func (c *Client) GetBooksWorklist(ws string, s BooksScope) ([]BooksWorklistRow, 
 // counterparty), and `CreatedFrom` is the workspace #number of the entry that
 // taught it, when one did.
 type BooksRule struct {
-	Number      int    `json:"number"`
-	Active      bool   `json:"active"`
-	SourceID    *int   `json:"source_id"`
+	Number int  `json:"number"`
+	Active bool `json:"active"`
+	// The source's workspace #number — the `#` column `source list` prints, and
+	// the value `rule create --source` takes. It carried the row id until #66,
+	// which no caller could obtain and no caller could use.
+	Source      *int   `json:"source"`
 	LearnedFrom string `json:"learned_from"`
 	Pattern     struct {
 		Counterparty string   `json:"counterparty"`
@@ -486,9 +521,11 @@ func (c *Client) ListBooksRules(ws string, s BooksScope) ([]BooksRule, error) {
 // CreateBooksRuleRequest teaches a rule with no teaching entry: a contract or
 // subscription known before the first franc moves.
 type CreateBooksRuleRequest struct {
-	Entity       string   `json:"-"`
-	Counterparty string   `json:"counterparty"`
-	SourceID     *int     `json:"source_id,omitempty"`
+	Entity       string `json:"-"`
+	Counterparty string `json:"counterparty"`
+	// The source's #number, not a database id. The server resolves it and
+	// refuses `unknown_source` in words when there is no such feed.
+	Source       *int     `json:"source,omitempty"`
 	AmountChf    *float64 `json:"amount_chf,omitempty"`
 	ToleranceChf *float64 `json:"tolerance_chf,omitempty"`
 	Interval     string   `json:"interval,omitempty"`
@@ -516,6 +553,10 @@ type ResolveBooksEntryRequest struct {
 	Entity       string         `json:"entity,omitempty"`
 	Explanation  map[string]any `json:"explanation"`
 	Recognition  string         `json:"recognition,omitempty"`
+	// Direction is a SIMPLIFIED book's side: recette, depense, or neutral for
+	// an own-account transfer. Refused on a double-entry entry, whose
+	// direction is carried by its lines.
+	Direction    string         `json:"direction,omitempty"`
 	Counterparty string         `json:"counterparty,omitempty"`
 	Account      string         `json:"account,omitempty"`
 	// TVA usually arrives HERE: a bank line lands with no rate, and the rate
@@ -524,7 +565,10 @@ type ResolveBooksEntryRequest struct {
 	TvaAmount       string `json:"tva_amount,omitempty"`
 	TvaInputClaimed bool   `json:"tva_input_claimed,omitempty"`
 	EvidenceTier    string `json:"evidence_tier,omitempty"`
-	Rule            *struct {
+	// TvaClear removes a VAT story the entry already has. Omitting the rate
+	// leaves it alone (#67), so the removal has to be said out loud.
+	TvaClear bool `json:"tva_clear,omitempty"`
+	Rule     *struct {
 		Counterparty string   `json:"counterparty"`
 		AmountChf    *float64 `json:"amount_chf,omitempty"`
 		ToleranceChf *float64 `json:"tolerance_chf,omitempty"`
@@ -538,6 +582,9 @@ type ResolveBooksEntryRequest struct {
 type BooksResolveResult struct {
 	Number      int            `json:"number"`
 	Recognition string         `json:"recognition"`
+	// Direction is served for a simplified book's row, null for a grand-livre
+	// entry. Read back so a caller can confirm what it set.
+	Direction   *string        `json:"direction"`
 	TaughtRule  *int           `json:"taught_rule"`
 	History     []any          `json:"history"`
 	Explanation map[string]any `json:"explanation"`
@@ -601,6 +648,10 @@ type BooksSourceDetail struct {
 		Hash     *string `json:"hash"`
 		DriveRef *string `json:"drive_ref"`
 		Pulled   *string `json:"pulled"`
+		// What the bank said this statement closed at. Nil for a pull recorded
+		// by hand, which has no statement behind it.
+		ClosingBalance *string `json:"closing_balance"`
+		ClosingOn      *string `json:"closing_on"`
 	} `json:"pulls"`
 	Runbook *struct {
 		Version       string   `json:"version"`
@@ -610,6 +661,19 @@ type BooksSourceDetail struct {
 		Steps         []string `json:"steps"`
 		Output        *string  `json:"output"`
 	} `json:"runbook"`
+	// The ledger against what the bank last reported. `Known` false means no
+	// imported statement has ever carried a closing balance for this source —
+	// which is NOT the same as agreeing, and `Note` says which it is.
+	Reconciliation *struct {
+		Known             bool    `json:"known"`
+		Note              *string `json:"note"`
+		StatementClosing  *string `json:"statement_closing"`
+		StatementClosedOn *string `json:"statement_closed_on"`
+		LedgerBalance     *string `json:"ledger_balance"`
+		Drift             *string `json:"drift"`
+		Agrees            *bool   `json:"agrees"`
+		StagedOnAccount   *string `json:"staged_on_account"`
+	} `json:"reconciliation"`
 }
 
 func (c *Client) GetBooksSource(ws string, number int) (*BooksSourceDetail, error) {
@@ -746,6 +810,22 @@ type BooksImportSummary struct {
 func (c *Client) ImportBooksSource(ws string, source int, file, xml string) (*BooksImportSummary, error) {
 	var out BooksImportSummary
 	body := map[string]string{"file": file, "xml": xml}
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/sources/%d/import", ws, source), body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ImportBooksDelimited sends a delimited export plus the balances it should
+// reconcile to. The balances are the caller's because the file usually does not
+// carry them, and without them nothing can tell a whole file from half of one —
+// the check camt.053 gets from its own OPBD/CLBD.
+func (c *Client) ImportBooksDelimited(ws string, source int, file, content, opening, closing, closingOn string) (*BooksImportSummary, error) {
+	var out BooksImportSummary
+	body := map[string]string{"file": file, "content": content, "opening": opening, "closing": closing}
+	if closingOn != "" {
+		body["closing_on"] = closingOn
+	}
 	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/sources/%d/import", ws, source), body, &out); err != nil {
 		return nil, err
 	}
@@ -1024,6 +1104,18 @@ type CreateBooksCategoryRequest struct {
 func (c *Client) CreateBooksCategory(ws string, req CreateBooksCategoryRequest) (*BooksCategory, error) {
 	var out BooksCategory
 	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/analytique/categories", ws), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RetireBooksCategory stops a cost bucket counting, and frees the accounts it
+// held for a new one. One-way: there is no un-retire, because a bucket whose
+// meaning changed is a different bucket.
+func (c *Client) RetireBooksCategory(ws string, number int) (*BooksCategory, error) {
+	var out BooksCategory
+	body := map[string]any{"retired": true}
+	if err := c.patchJSON(fmt.Sprintf("/api/workspaces/%s/analytique/categories/%d", ws, number), body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

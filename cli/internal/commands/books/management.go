@@ -283,7 +283,7 @@ func newCategoryCmd() *cobra.Command {
 		Use:   "category",
 		Short: "The analytique's cost buckets — per book, account-mapped",
 	}
-	cmd.AddCommand(newCategoryListCmd(), newCategoryCreateCmd())
+	cmd.AddCommand(newCategoryListCmd(), newCategoryCreateCmd(), newCategoryRetireCmd())
 	return cmd
 }
 
@@ -323,6 +323,49 @@ func newCategoryListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&entity, "entity", "", "Which book (defaults to the first)")
+	return cmd
+}
+
+func newCategoryRetireCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:         "retire <number>",
+		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/analytique/categories/{number}"},
+		Short:       "Stop a cost bucket counting, and free the accounts it held",
+		Long: "A book starts with five buckets, and between them they claim every cost\n" +
+			"account the standard chart carries. Since an account belongs to at most one\n" +
+			"ACTIVE bucket, retiring is how a book makes room to group its costs its own\n" +
+			"way: retire what does not fit, then create the replacement — the accounts are\n" +
+			"free the moment the old bucket is retired.\n\n" +
+			"The row is kept, not deleted. A filed analysis may cite a breakdown that used\n" +
+			"this bucket, and its snapshot names it; removing the row would leave that\n" +
+			"analysis citing something that never existed.\n\n" +
+			"One-way, and there is no rename: a bucket whose meaning changed is a different\n" +
+			"bucket. Retiring one twice is not an error.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			n, err := strconv.Atoi(args[0])
+			if err != nil || n < 1 {
+				return fmt.Errorf("%q is not a category number; bk books category list shows them", args[0])
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			r, err := c.RetireBooksCategory(ws, n)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, r, func(w io.Writer) error {
+				fmt.Fprintf(w, "retired category #%d %q on %s — %v no longer counted, and free for a new bucket\n",
+					r.Number, r.Key, r.Entity, r.Accounts)
+				return nil
+			})
+		},
+	}
 	return cmd
 }
 

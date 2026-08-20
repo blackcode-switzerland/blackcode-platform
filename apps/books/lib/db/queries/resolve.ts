@@ -39,6 +39,25 @@ export interface ResolveData {
   explanation: Record<string, unknown>
   /** known_one_off unless a rule is being taught (then known_recurring). */
   recognition?: 'known_one_off' | 'known_recurring'
+  /**
+   * SIMPLIFIED books only: which side this movement falls on.
+   *
+   * ── WHY THE RESOLVE DOOR NEEDS THIS AND DID NOT HAVE IT ─────────────────
+   * `source import` derives a direction from the bank's own credit/debit
+   * indicator and can do no better — the file says money moved, not what the
+   * movement WAS. `declareEntry` has taken all three values since 0009, but
+   * `resolve` never took any, so a direction guessed at import could not be
+   * corrected by anybody, through any verb.
+   *
+   * That made Andrea's rule unreachable for imported money (#59: "an own-account
+   * transfer is logged but neutral"). A card settlement — the bank line that
+   * pays off a card whose purchases are themselves imported — is exactly that
+   * transfer, and it landed as a `depense` beside the purchases it settles, the
+   * same spend counted twice. Found 2026-08-20 on `mustneer-shop`.
+   *
+   * Refused on a double-entry entry, where direction is carried by the lines.
+   */
+  direction?: 'recette' | 'depense' | 'neutral'
   counterparty?: string | null
   /** STAGED entries only: the account for the line that has none. */
   account?: string | null
@@ -57,6 +76,8 @@ export interface ResolveData {
     learnedFrom?: string | null
   } | null
 }
+
+const RI_DIRECTIONS = new Set(['recette', 'depense', 'neutral'])
 
 export class ResolveRefused extends Error {
   constructor(
@@ -89,6 +110,16 @@ export async function resolveEntry(
     }
     if (entry.deleted_at) {
       throw new ResolveRefused('deleted', `entry #${entryNumber} is deleted`, 'nothing to resolve')
+    }
+
+    // A grand-livre entry's direction is its LINES: which account is debited
+    // and which credited. There is no single side to set.
+    if (data.direction !== undefined) {
+      throw new ResolveRefused(
+        'direction_is_ri_only',
+        `entry #${entryNumber} is a double-entry entry: its direction is carried by its lines, not by a word`,
+        'set the account instead (--account), or use bk books declare for a correcting entry'
+      )
     }
 
     if (data.account && entry.status === 'posted') {
@@ -126,7 +157,7 @@ export async function resolveEntry(
     if (
       entry.status === 'posted' &&
       data.tva &&
-      (data.tva.rate ?? null) !== null
+      ((data.tva.rate ?? null) !== null || data.tva.clear === true)
     ) {
       throw new ResolveRefused(
         'posted_tva_frozen',
@@ -134,7 +165,10 @@ export async function resolveEntry(
         'a correction is a reversing entry; --tva-input-claimed and --evidence-tier may still change'
       )
     }
-    const tva = tvaColumns(data.tva, gross.toFixed(2))
+    const tva = tvaColumns(data.tva, gross.toFixed(2), {
+      rate: entry.tva_rate,
+      amount: entry.tva_amount,
+    })
 
     // ---- history first: the old state, kept forever ----------------------
     // Append-only array. A pre-existing non-array history (the mockup seeds
@@ -179,7 +213,23 @@ export async function resolveEntry(
     }
 
     // ---- the entry itself -------------------------------------------------
-    const recognition = data.recognition ?? (data.rule ? 'known_recurring' : 'known_one_off')
+    // ── #67: AN OMITTED FLAG MUST NOT REWRITE A FIELD ─────────────────────
+    // This was `data.recognition ?? (data.rule ? 'known_recurring' : ...)`, so
+    // a SECOND resolve that did not repeat `--recognition` silently pushed a
+    // `known_recurring` entry back to `known_one_off`. No error, no notice, and
+    // the reported case reached it by claiming input tax when the pièce turned
+    // up — a call that has nothing to do with recognition at all.
+    //
+    // The default belongs to the FIRST resolve, which is the one deciding what
+    // an unrecognized line was. After that the stored value stands until
+    // somebody says otherwise.
+    const recognition =
+      data.recognition ??
+      (entry.recognition === 'unrecognized'
+        ? data.rule
+          ? 'known_recurring'
+          : 'known_one_off'
+        : entry.recognition)
     const [updated] = await tx
       .update(booksEntry)
       .set({
@@ -249,12 +299,20 @@ export async function resolveRiEntry(
         'a simplified book keeps recettes and dépenses, not a chart mapping — drop --account'
       )
     }
+    if (data.direction !== undefined && !RI_DIRECTIONS.has(data.direction)) {
+      throw new ResolveRefused(
+        'bad_direction',
+        `"${data.direction}" is not a direction a simplified book keeps`,
+        'recette, depense, or neutral for a transfer between the owner\'s own accounts (art. 957 al. 2 CO keeps the movement, and it counts on neither side)'
+      )
+    }
 
     const was = {
       at: new Date().toISOString(),
       event: 'resolved',
       was: {
         recognition: row.recognition,
+        direction: row.direction,
         counterparty: row.counterparty,
         explanation: row.explanation,
         matched_rule_id: row.matched_rule_id,
@@ -284,12 +342,20 @@ export async function resolveRiEntry(
       taughtRuleId = rule.id
     }
 
-    const recognition = data.recognition ?? (data.rule ? 'known_recurring' : 'known_one_off')
+    // The RI journal, same rule as the grand livre above (#67).
+    const recognition =
+      data.recognition ??
+      (row.recognition === 'unrecognized'
+        ? data.rule
+          ? 'known_recurring'
+          : 'known_one_off'
+        : row.recognition)
     const [updated] = await tx
       .update(booksRiEntry)
       .set({
         explanation: data.explanation,
         recognition,
+        direction: data.direction ?? row.direction,
         counterparty: data.counterparty === undefined ? row.counterparty : data.counterparty,
         evidence_note: data.evidenceNote === undefined ? row.evidence_note : data.evidenceNote,
         matched_rule_id: taughtRuleId ?? row.matched_rule_id,

@@ -5,7 +5,7 @@ year's opening balances. None of it is stored, so none of it can drift.
 
 Related commands: `bk books bilan`, `bk books cr`, `bk books overview`, `bk books
 patrimoine`, `bk books analytique`, `bk books category list`, `bk books category
-create`, `bk books tax`, `bk books tax-params show`, `bk books analyse list`,
+create`, `bk books category retire`, `bk books tax`, `bk books tax-params show`, `bk books analyse list`,
 `bk books analyse show`, `bk books analyse record`, `bk books compliance list`,
 `bk books compliance show`, `bk books compliance review`, `bk books verdict`.
 
@@ -17,6 +17,29 @@ bk books cr --entity acme --by-month           # the same statement, month by mo
 bk books analytique --entity acme              # cost buckets and monthly flows
 bk books tax --entity acme --exercice 2026     # VAT position + PM tax estimate
 ```
+
+## The analytique's cost buckets
+
+A book arrives with a starting set of buckets, installed with its chart. They
+are that book's own from then on, so reshaping them changes nothing for anybody
+else.
+
+The rule that shapes everything here is **one franc, one bar**: an account
+belongs to at most one ACTIVE bucket, so a breakdown can never double-count a
+charge. The starting set claims every cost account the standard chart carries —
+which means adding a bucket of your own usually starts by freeing the accounts
+it needs:
+
+```bash
+bk books category list --entity acme       # the numbers, and what each collects
+bk books category retire <n>               # frees the accounts it held, at once
+bk books category create --entity acme --key marketing \
+  --label-fr Marketing --accounts 6570
+```
+
+Retiring is one-way and keeps the row: a filed analysis may cite a breakdown
+that used the bucket. There is no rename — a bucket whose meaning changed is a
+different bucket.
 
 ## Reading the statements
 

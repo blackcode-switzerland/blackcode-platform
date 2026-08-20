@@ -246,7 +246,23 @@ function keysOfObjectAt(src: string, open: number): string[] {
  *   forget the ROUTE  → the runtime case below, naming the key
  *   change all three  → green, which is what an agreed addition looks like
  */
-const META_KEYS = ['app', 'entities', 'vocabularies', 'tva_rates', 'statements'] as const
+const META_KEYS = [
+  'app',
+  // The platform half (Bala's #57). Null for an anonymous caller; `apps` is
+  // what `bk login` turns into its address book, and serving none is what made
+  // `bk books` unbootstrappable against a books server.
+  'user',
+  'active_workspace',
+  'workspaces',
+  'current_app',
+  'apps',
+  'links',
+  'cli',
+  'entities',
+  'vocabularies',
+  'tva_rates',
+  'statements',
+] as const
 
 const META_VOCABULARIES = [
   'recognition',
@@ -360,6 +376,18 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
   // A source read is the weaker instrument and it is said so here: it sees that
   // one file. What it can do is refuse a rename, which is the whole failure this
   // payload has actually suffered.
+  // Bala's #57. The key-set case above passes on a route that serves
+  // `apps: null` unconditionally, which is EXACTLY the bug: the key was never
+  // missing from the CLI's point of view, the address book behind it was empty.
+  // So this asserts the wiring, not the spelling.
+  it('/api/meta feeds the address book from platformMetaBlock, not from null', () => {
+    const src = readFileSync(join(APP_ROOT, 'app/api/meta/route.ts'), 'utf8')
+    expect(src, 'books served no apps block at all until 2026-08-20').toContain('platformMetaBlock')
+    // `apps` must READ from the block. A literal null here is the shipped bug.
+    expect(src).toMatch(/apps:\s*platform\?\.meta\.apps/)
+    expect(src).toMatch(/user:\s*platform\?\.meta\.user/)
+  })
+
   it('/api/meta serves exactly the top-level keys MetaPayload declares', () => {
     const src = readFileSync(join(APP_ROOT, 'app/api/meta/route.ts'), 'utf8')
     const served = envelopeKeys(src, { label: '/api/meta' })
@@ -386,7 +414,7 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     const served = [...body.slice(0, body.indexOf('})')).matchAll(/^\s*(\w+):/gm)].map((m) => m[1])
     expect(served.length, 'found no fields — the response moved and this test is stale').toBeGreaterThan(3)
     expect(served.sort()).toEqual(
-      ['explanation', 'history', 'number', 'recognition', 'taught_rule'].sort()
+      ['direction', 'explanation', 'history', 'number', 'recognition', 'taught_rule'].sort()
     )
   })
 
@@ -543,7 +571,7 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
       [
         'number',
         'active',
-        'source_id',
+        'source',
         'learned_from',
         'pattern',
         'explanation',
@@ -681,7 +709,7 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
   it('publicPull serves exactly these fields', () => {
     const out = publicPull(row({ file: 'x.csv' }))
     expect(Object.keys(out).sort()).toEqual(
-      ['file', 'period', 'format', 'hash', 'drive_ref', 'pulled'].sort()
+      ['file', 'period', 'format', 'hash', 'drive_ref', 'pulled', 'closing_balance', 'closing_on'].sort()
     )
   })
 
@@ -1415,7 +1443,7 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     // confirmation — the invitations case's bug, one merge later.
     const keys = envelopeKeys(src, { after: 'export const GET', label: 'sources/{number} GET' })
     expect(keys.length, 'found no envelope keys — the response moved').toBeGreaterThan(0)
-    expect(keys.sort()).toEqual(['...publicSource', 'pulls', 'runbook'].sort())
+    expect(keys.sort()).toEqual(['...publicSource', 'pulls', 'runbook', 'reconciliation'].sort())
   })
 
   // --- phase 4B: analytique -------------------------------------------------
@@ -2421,8 +2449,9 @@ type _Scalars = [
   // ── PHASE 2 ────────────────────────────────────────────────────────────
   Mutual<RuleWire['number'], RecognitionRule['number']>,
   Mutual<RuleWire['active'], RecognitionRule['active']>,
-  // The half of the match key that was declared as `source`. Blank on every row.
-  Mutual<RuleWire['source_id'], RecognitionRule['source_id']>,
+  // The half of the match key. A #number on both sides since #66 — it was the
+  // serial id, which no caller could ever obtain.
+  Mutual<RuleWire['source'], RecognitionRule['source']>,
   Mutual<RuleWire['account'], RecognitionRule['account']>,
   Mutual<RuleWire['created_from'], RecognitionRule['created_from']>,
 

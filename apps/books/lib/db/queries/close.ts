@@ -100,6 +100,34 @@ export async function closeExercice(
     )
   }
 
+  // ---- 1b. the year has to be OVER ----------------------------------------
+  // Found 2026-08-20 by closing a 1 Jan – 31 Dec 2026 exercice on 20 August:
+  // accepted, and it filed eight months of a twelve-month year as the year's
+  // result. Every other guard here asks whether the books are TIDY; none asked
+  // whether the period had ended, so the one irreversible act in the app was
+  // reachable four months early and looked exactly like a correct close.
+  //
+  // art. 958 al. 1 CO ties the accounts to the end of the financial year, and
+  // 958f keeps them for ten years as filed. There is no reopen (see
+  // `already_closed`), so an early close is not a mistake anyone can take back
+  // — the correction would be a reversing entry in a year that should never
+  // have started.
+  //
+  // ── A SHORTENED YEAR IS NOT AN EXCEPTION ───────────────────────────────────
+  // A company changing its year end has a SHORT exercice, and its `ends_on` is
+  // the new, earlier date. This guard reads that column rather than assuming
+  // twelve months, so the shortened year closes the day after it truly ends and
+  // needs no override. Nothing here has to know why the year is the length it
+  // is — only that it is finished.
+  const today = new Date().toISOString().slice(0, 10)
+  if (exercice.ends_on > today) {
+    throw new CloseRefused(
+      'exercice_not_over',
+      `exercice ${exercice.year} runs to ${exercice.ends_on} and today is ${today} — it has not ended yet`,
+      'a close files the year as its final result and there is no reopen (art. 958f CO). For a figure before year end, read it instead: `bk books cr` for the result so far, or `bk books cr --by-month`. If this book really changes its year end, shorten the exercice first — the close follows the dates, not the calendar'
+    )
+  }
+
   // ---- 2. nothing still staged --------------------------------------------
   const staged = await db
     .select({ seq: booksEntry.seq })

@@ -84,7 +84,11 @@ export function RulesPanel({
         <div className="min-w-0">
           <span className="font-mono text-[12px] text-foreground">
             (
-            {r.source_id === null ? t('rules.noSource') : t('rules.source', { id: r.source_id })},{' '}
+            {/* `source`, not `source_id`: renamed on the wire by #66, which
+                changed it from the serial to the workspace #number the source
+                register prints. Our translation keys were written against the
+                old name and the merge caught it. */}
+            {r.source === null ? t('rules.noSource') : t('rules.source', { id: r.source })},{' '}
             {r.pattern.counterparty})
           </span>
           <div className="text-[11.5px] text-muted-foreground">

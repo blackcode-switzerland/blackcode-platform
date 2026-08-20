@@ -78,6 +78,18 @@ A book kept under art. 957 al. 2 has a recettes-dépenses journal instead of a
 grand livre: no accounts, no posting status. Declare with `--direction` and an
 amount, and resolve the same rows through the same worklist.
 
+`--direction` takes THREE values, and the third one matters. A transfer between
+the owner's own accounts is `neutral`: logged in the book, counted in neither
+recettes nor dépenses. The case you will meet is a card. Its purchases arrive on
+the card's own export and the bank shows one debit that settles them — both
+files are true, and if the settlement is booked as a `depense` beside the
+purchases it settles, the same money is an expense twice.
+
+`resolve --direction` is how a direction gets corrected. An import can only read
+the bank's credit/debit indicator, so it always guesses a side; only a person
+knows a settlement from a payment. Omitting the flag leaves the side alone, like
+every other field on `resolve`.
+
 ## Correcting a mistake
 
 There is no un-post, no edit and no delete, and the refusals come from the

@@ -494,11 +494,35 @@ export async function getTaxSnapshot(entity: BooksEntity, exercice: BooksExercic
         )
       )
       .limit(1)
+    // ── TWO FIXES OVER THE ONE LINE THIS REPLACED (2026-08-20, Bala's #65) ────
+    // It was:
+    //
+    //   bool_or(l.account_no = '3400' AND l.credit > 0) AS credits_revenue
+    //
+    // 1. SIGNED, NOT BOOLEAN. A credit note debits revenue, so `credit > 0` was
+    //    false and the entry fell through to the input branch, where
+    //    `tva_input_claimed` is false too — dropped in both directions. The sum
+    //    is credit-minus-debit so a sale is positive and an avoir negative, and
+    //    `vatPosition` follows that sign (art. 41 LTVA).
+    //
+    // 2. EVERY REVENUE ACCOUNT, NOT `3400`. The literal is the PME template's
+    //    one revenue account, and a book that adds another (`bk books account
+    //    create`, class 3) had its output VAT silently ignored on all of it.
+    //    Joining the chart and testing `class = 3` also makes this agree with
+    //    the post-time door, which demands a rate on ANY class 3 turnover —
+    //    two places asking the same question had to answer it the same way.
+    //
+    // The join is LEFT because an unresolved line carries no account, and such
+    // an entry contributes 0 rather than dropping the whole row.
     const entries = await getDb().execute(sql`
       SELECT e.status, e.tva_amount, e.tva_input_claimed,
-             bool_or(l.account_no = '3400' AND l.credit > 0) AS credits_revenue
+             COALESCE(SUM(
+               CASE WHEN a.class = 3 THEN l.credit - l.debit ELSE 0 END
+             ), 0) AS revenue_movement
         FROM books.entry e
         JOIN books.entry_line l ON l.entry_id = e.id
+        LEFT JOIN books.account a
+               ON a.entity_id = e.entity_id AND a.no = l.account_no
        WHERE e.entity_id = ${entity.id}
          AND e.exercice_id = ${exercice.id}
          AND e.deleted_at IS NULL
@@ -511,7 +535,7 @@ export async function getTaxSnapshot(entity: BooksEntity, exercice: BooksExercic
         status: String(r.status),
         tva_amount: r.tva_amount as string | null,
         tva_input_claimed: Boolean(r.tva_input_claimed),
-        credits_revenue: Boolean(r.credits_revenue),
+        revenue_movement: String(r.revenue_movement ?? '0'),
       })) as VatEntry[]
     )
   }
@@ -564,6 +588,62 @@ export function publicAnalysis({ analysis: a, entitySlug }: AnalysisWithEntity) 
     figures: a.figures,
     based_on: a.based_on,
   }
+}
+
+/**
+ * Retire a cost bucket, freeing the accounts it claimed.
+ *
+ * ── WHY THIS EXISTS, AND WHY IT HAD TO SHIP WITH THE TEMPLATE ──────────────
+ * `createCategory` already refused a duplicate key with the suggestion "retire
+ * the old one first if it is being replaced", and there was no door to do it —
+ * a refusal pointing at a verb the app does not have.
+ *
+ * That was survivable while a new book started with NO categories: the book
+ * built its own buckets and never needed to unmake one. From 2026-08-20
+ * `createEntity` installs the five in `lib/categories.ts`, and those five claim
+ * every cost account the PME chart carries. With "one franc, one bar" and no
+ * retire, a book could then never add a bucket of its own — the template would
+ * be permanent. So the template and this verb are one change.
+ *
+ * ── RETIRED, NOT DELETED, AND NOT FOR THE USUAL REASON ─────────────────────
+ * A category is CONFIGURATION, not a record: art. 958f is not what keeps this
+ * row. What keeps it is that a filed `books.analysis` may cite a breakdown that
+ * used it, and its `based_on` snapshot names the bucket. Deleting the row would
+ * leave a filed analysis citing something that never existed.
+ *
+ * `getAnalytique` already filters retired buckets out, and `createCategory`
+ * already skips them when working out which accounts are claimed — so a retired
+ * bucket's accounts are immediately available to a new one. Both were written
+ * before anything could set the flag.
+ *
+ * Retiring twice is not an error: the second call reports the same row. The
+ * verb describes a state, not an event.
+ */
+export async function retireCategory(
+  workspaceId: number,
+  seq: number
+): Promise<BooksAnalytiqueCategory> {
+  const db = getDb()
+  const [row] = await db
+    .select()
+    .from(booksAnalytiqueCategory)
+    .where(and(eq(booksAnalytiqueCategory.workspace_id, workspaceId), eq(booksAnalytiqueCategory.seq, seq)))
+    .limit(1)
+  if (!row) {
+    throw new ManagementRefused(
+      'category_not_found',
+      `no category #${seq} in this workspace`,
+      'bk books category list names them, with their numbers'
+    )
+  }
+  if (row.retired) return row
+
+  const [updated] = await db
+    .update(booksAnalytiqueCategory)
+    .set({ retired: true, updated_at: new Date() })
+    .where(eq(booksAnalytiqueCategory.id, row.id))
+    .returning()
+  return updated
 }
 
 export function publicCategory(c: BooksAnalytiqueCategory, entitySlug: string) {

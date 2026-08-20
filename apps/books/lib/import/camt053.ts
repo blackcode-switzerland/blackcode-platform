@@ -65,6 +65,17 @@ export interface CamtStatement {
   /** Signed, fixed-2. CRDT positive, DBIT negative. */
   opening: string
   closing: string
+  /**
+   * The date the CLBD balance is stated AS OF — the balance element's own
+   * `<Dt>`, not the statement period.
+   *
+   * `to` comes from `FrToDt`, which is optional in camt.053 and absent from
+   * plenty of real exports; the balance carries its own date and is the
+   * authoritative instant for "what the bank held". The bank reconciliation
+   * compares the ledger at exactly this date, so reading it from the period
+   * would give up on a statement that says perfectly clearly when it closed.
+   */
+  closing_on: string | null
   currency: string
   lines: CamtLine[]
 }
@@ -101,6 +112,34 @@ function amountWithCcy(xml: string, tag: string): { amount: string; ccy: string 
 
 // ── balances ────────────────────────────────────────────────────────────────
 
+/**
+ * The date a balance is stated as of, through ISO 20022's nested date choice.
+ *
+ * `<Dt>` here is a DateAndDateTimeChoice, so the standard form wraps the value
+ * in a SECOND element — `<Dt><Dt>2026-05-31</Dt></Dt>` — while plenty of real
+ * exports write it flat. `text()` returns the outer element's contents, which
+ * for the nested form is the literal string "<Dt>2026-05-31</Dt>".
+ *
+ * That was harmless for as long as nobody read the field: `parseCamt` dropped
+ * `date` on the floor. 0018 started storing it, and the first standards-correct
+ * statement to arrive sent the markup to Postgres as a date and answered 500.
+ * Anything that is not a plain YYYY-MM-DD after unwrapping is null, because a
+ * date this function cannot read is one the reconciliation must report as
+ * unknown rather than guess at.
+ */
+function readDate(block: string): string | null {
+  let v = text(block, 'Dt')
+  if (v === null) v = text(block, 'DtTm')
+  if (v === null) return null
+  // Strip any markup rather than matching a well-formed inner element: `text()`
+  // is non-greedy, so for the nested form it hands back "<Dt>2026-05-31" — an
+  // OPENING tag and the value, with the close consumed as the outer element's.
+  // Matching on a complete `<Dt>…</Dt>` therefore never fires on the very shape
+  // this exists for.
+  const d = v.replace(/<[^>]*>/g, '').trim().slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null
+}
+
 function readBalance(stmt: string, code: 'OPBD' | 'CLBD'): { amount: string; date: string | null } {
   for (const bal of allBlocks(stmt, 'Bal')) {
     const cd = text(bal, 'Cd')
@@ -112,7 +151,7 @@ function readBalance(stmt: string, code: 'OPBD' | 'CLBD'): { amount: string; dat
       throw new CamtRefused('bad_balance', `${code} balance has no CdtDbtInd`)
     }
     const signed = ind === 'DBIT' ? -toCentimes(amt.amount) : toCentimes(amt.amount)
-    return { amount: fromCentimes(signed), date: text(bal, 'Dt') }
+    return { amount: fromCentimes(signed), date: readDate(bal) }
   }
   throw new CamtRefused('missing_balance', `the statement carries no ${code} balance — a truncated export proves nothing`)
 }
@@ -233,7 +272,16 @@ export function parseCamt053(xml: string): CamtStatement {
   }
   const currency = [...ccys][0] ?? 'CHF'
 
-  return { iban, from, to, opening: opening.amount, closing: closing.amount, currency, lines }
+  return {
+    iban,
+    from,
+    to,
+    opening: opening.amount,
+    closing: closing.amount,
+    closing_on: closing.date ?? to,
+    currency,
+    lines,
+  }
 }
 
 /**
