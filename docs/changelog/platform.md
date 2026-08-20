@@ -7,6 +7,56 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-20 — four `bk meta` fixes: it no longer wipes your app registry, no longer reports success on a rejected token, `--app-server` no longer moves your home app, and `--vocab` can read b/books
+
+**Not breaking**, and two of the four are behaviour changes worth reading if you
+script `bk meta`.
+
+**1. An answer with no `apps` block leaves your registry alone.** `bk meta` learns
+the app address book from `/api/meta`'s `apps` object and used to REPLACE the
+stored registry with whatever it found — including nothing. `apps/books` serves
+`/api/meta` to anonymous callers (its vocabularies are public), so a stale or
+revoked token gets a `200` with `user: null` and `apps: null` rather than a `401`,
+and one `bk meta` turned a working config into:
+
+```
+error: no app registry yet, so `bk books …` has no address to use
+hint:  run `bk meta` to learn each app's server from the platform
+```
+
+— whose own hint is the command that caused it. An agent hit this on 2026-08-20
+and recovered by hand-editing `~/.config/bk/config.json`. A server that reports no
+apps has said nothing about which apps exist, so nothing is written now: not the
+registry, not the home app, not the home server. A run that learned nothing says
+so on stderr and names the registry it left in place. **A server that DOES report
+apps still replaces the registry wholesale**, so a retired app still disappears and
+a stale address is still repaired on the next run.
+
+**2. A logged-out reply is an error, not a context.** `bk meta` only ever sends a
+token, so a `200` carrying `user: null` means the server did not recognise it. The
+command used to print `user:  <> (id 0, via )` and exit `0`. It now exits non-zero
+with the one command that fixes it. `bk meta --vocab …` and `bk meta
+--contract-version` are unaffected — those are the two halves of the route that
+anonymous access exists for.
+
+**3. `bk meta --app-server <slug>` no longer changes your home app.** The flag is
+documented as "one invocation, home verbs only", and on this one command it
+permanently repointed `home_app` and `home_server` at the app that answered. The
+address book it reported is still learned; `bk app use <slug>` remains the command
+that moves home.
+
+**4. `bk meta --vocab` can read `apps/books`.** `apps/issues` and `apps/sales`
+serve the block as `vocabulary`; `apps/books` serves the same entries — `value`,
+`label`, `color` — under `vocabularies`. Only the key differed, so the command
+that is the AUTHORITY on an app's valid values answered "this server serves no
+vocabulary block" with the values in the payload it had just parsed. The client
+reads both spellings now; no payload changed.
+
+**5. The agent skill's bootstrap step names `--app-server`.** Step 2 said
+`bk meta` and left "the app that answered" as the only hint that a multi-app
+agent might be asking the wrong deployment. Run `bk skill sync` to pick it up.
+The template is still a pointer and still names no route, enum or auth header.
+
 ## 2026-08-20 — four guards added: help text that names a flag, a stale command tour, a write with no next step, and a server hint that will not run
 
 **Not breaking.** These are build-time checks; nothing a caller does changes.

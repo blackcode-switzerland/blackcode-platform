@@ -85,6 +85,32 @@ func effectiveReached(configured string) string {
 // current app can have one: it is the only app whose address is taken from
 // anywhere other than the registry.
 func applyAppRegistry(cfg *config.Config, meta *client.Meta, reachedURL string) *registryMismatch {
+	// ── A SERVER THAT REPORTED NO APPS HAS TOLD US NOTHING ──────────────────
+	// It has NOT told us the platform has no apps. Until 2026-08-20 those two
+	// were the same thing here: `servers` started empty, an answer with no
+	// `apps` block left it empty, and `SetAppServers({})` — whose documented
+	// contract is REPLACE — wiped a working address book.
+	//
+	// It is reachable from the one command every routing failure's hint points
+	// at. `apps/books` serves `/api/meta` to anonymous callers (its
+	// vocabularies are public), so a STALE OR REVOKED TOKEN gets 200 with
+	// `user: null` and `apps: null` rather than a 401 — and one `bk meta`
+	// turned a working config into `no app registry yet, so bk books … has no
+	// address to use`, whose own hint is `run bk meta`. An agent hit that on
+	// 2026-08-20 and recovered by hand-editing the config, which the comment at
+	// the top of this file says should never be necessary.
+	//
+	// So ABSENT and EXPLICITLY CLEARED are separated, the way they are for
+	// `routingBlock.ActiveWorkspaces` and for the `workspaces` array in
+	// `bk meta`'s own apps table. Nothing here is touched — not the registry,
+	// not the home app, not the home server: every one of those would be
+	// written from an answer that carried no address book to write them from.
+	// A server that DOES report apps still replaces the registry wholesale, so
+	// an app the platform has retired still disappears on the next refresh.
+	if len(meta.Apps) == 0 {
+		return nil
+	}
+
 	servers := map[string]string{}
 	current := ""
 	declared := ""
@@ -175,8 +201,38 @@ func reportMismatch(w io.Writer, m *registryMismatch) {
 // actually ran. What it must not do is fail SILENTLY when the registry is what
 // the user is trying to fix, so the error is printed.
 func refreshRegistry(cmd *cobra.Command, cfg *config.Config, meta *client.Meta, reachedURL string) {
+	// Nothing to learn is not nothing to SAY. `bk meta` is documented as the
+	// command that refreshes the address book, so a run that refreshed nothing
+	// must not look like one that refreshed everything — otherwise the caller's
+	// next `bk <app> …` failure has no visible cause.
+	if len(meta.Apps) == 0 {
+		fmt.Fprintf(cmd.ErrOrStderr(),
+			"note: %s reported no app registry, so yours was left as it is (%s).\n"+
+				"      An answer with no `apps` block says nothing about which apps exist.\n",
+			reachedURL, strings.Join(registryPairs(cfg), ", "))
+		return
+	}
+
+	// ── `--app-server` IS ONE INVOCATION, INCLUDING HERE ────────────────────
+	// applyAppRegistry pins the home app to whichever app answered, which is
+	// right for `bk login` — that command's whole job is to decide where home
+	// is. It is wrong for a REDIRECTED `bk meta`: `bk meta --app-server books`
+	// is documented as "one invocation, home verbs only" (cmdutil/client.go),
+	// and until 2026-08-20 it silently and permanently moved home_app and
+	// home_server to books. `bk app use <slug>` is the command that moves home,
+	// and a flag whose help says "this invocation only" must not do its job by
+	// accident.
+	//
+	// The ADDRESS BOOK the redirected server reported is still learned — that
+	// half is app-agnostic and is the reason to run the command.
+	homeApp, homeServer := cfg.HomeApp, cfg.HomeServer
+	redirected := strings.TrimSpace(cmdutil.AppOverride) != ""
+
 	before := fmt.Sprint(cfg.AppServers, cfg.HomeApp, cfg.HomeServer, cfg.ActiveWorkspaces)
 	mismatch := applyAppRegistry(cfg, meta, reachedURL)
+	if redirected {
+		cfg.HomeApp, cfg.HomeServer = homeApp, homeServer
+	}
 	// BEFORE the early return. A stale address is STABLE — nothing changes, so
 	// the unchanged-check below returns — and stable is exactly the state that
 	// needs saying out loud. Reporting only on change would have kept this

@@ -121,8 +121,17 @@ stores legible records and derives statements; the judgement lives in the agent
 driving these commands from outside. Nothing here decides what a transaction
 means — you tell it, and it remembers so the next one is automatic.
 
-Vocabularies and limits are served live by "bk meta". They change without a
-release of this binary, so this help text does not list them.
+Vocabularies and limits are served live by "bk meta --app-server books". They
+change without a release of this binary, so this help text does not list them.
+
+THAT SPELLING IS DELIBERATE. "bk meta" answers from whichever app your config is
+homed on, and one deployment cannot answer for another — a books recognition
+state is not something another app knows. "--app-server books" asks THIS app for
+one invocation and changes nothing about your config; when books is already your
+home app, plain "bk meta" is the same call. There is no "bk books meta": meta is
+the command that WRITES the app registry, and "bk books ..." resolves its server
+THROUGH that registry, so an app-owned spelling could not run in the one state
+it is most needed in — a config that has no address for books yet.
 
 Bare verbs are identity and this binary only: login, logout, whoami, token,
 profile, meta, app, guide, skill, changelog, version, super-admin. Run

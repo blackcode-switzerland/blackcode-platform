@@ -56,9 +56,9 @@ func newSourceListCmd() *cobra.Command {
 		Long: "Every place money data comes from, for one book or for all of them.\n\n" +
 			"STATUS IS COMPUTED AND STORED NOWHERE. It is this source's cadence measured\n" +
 			"against its last import, so nothing can mark a late feed green by hand and a\n" +
-			"source nobody has imported from reads as the gap it is. `bk meta` carries the\n" +
-			"status values; `bk books source show <n>` prints the day windows this source\n" +
-			"uses to reach one.\n\n" +
+			"source nobody has imported from reads as the gap it is.\n" +
+			"`bk meta --app-server books` carries the status values; `bk books source show <n>`\n" +
+			"prints the day windows this source uses to reach one.\n\n" +
 			"The `#` column is the argument every other source verb takes — import,\n" +
 			"mapping-set, runbook-set, record-pull, manifest and `rule create --source`. It\n" +
 			"is a workspace #number and not a database id.\n\n" +

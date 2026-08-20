@@ -150,7 +150,7 @@ Each phase produces complete sets of these for a group of pages.
 | # | Piece | Lives in | Can ship before data? |
 |---|---|---|---|
 | 1 | Shape: the public JSON a component types against | `lib/types.ts` and the route's shaping function | yes |
-| 2 | Vocabulary: chips and enums | `/api/meta`, served as `bk books meta` | yes |
+| 2 | Vocabulary: chips and enums | `/api/meta`, read with `bk meta --app-server books` | yes |
 | 3 | Seeded rows | migration plus seed script | no |
 | 4 | Route: workspace scoped GET | `app/api/workspaces/[ws]/...` | no |
 | 5 | CLI command with a `routes:` annotation | `cli/internal/commands/books/` | no, same PR as the route |
@@ -171,9 +171,9 @@ naming a route that does not exist fails the build.
 
 | When | CLI work |
 |---|---|
-| Phase 0 | The scaffolding: command group, registration in `root.go`, guide topics folder, typed client. Plus `bk books meta` and the workspace reads. Required, because route attribution reads the guide topics folder. |
+| Phase 0 | The scaffolding: command group, registration in `root.go`, guide topics folder, typed client. Plus the workspace reads (there is no `bk books meta` — `GET /api/meta` is claimed by the bare `bk meta`; see phase 0). Required, because route attribution reads the guide topics folder. |
 | Phases 1 to 4 | One command per route, in the same pull request as the route. Listed in each phase doc. |
-| Phase 5 | Guide topics filled out. `bk books meta` completed. |
+| Phase 5 | Guide topics filled out; every vocabulary reference spelled `bk meta --app-server books`. |
 
 **Two things with no precedent in the repo.** Both are yours to design.
 

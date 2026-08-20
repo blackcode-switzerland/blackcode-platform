@@ -363,7 +363,7 @@ func newResolveCmd() *cobra.Command {
 	cmd.Flags().StringVar(&req.Counterparty, "counterparty", "", "Counterparty, once identified")
 	cmd.Flags().StringVar(&req.Account, "account", "", "Account for the staged line that has none (refused on posted entries)")
 	cmd.Flags().StringVar(&req.Entity, "entity", "", "A SIMPLIFIED book's slug: resolve in its recettes-dépenses journal")
-	cmd.Flags().StringVar(&req.TvaRate, "tva-rate", "", "VAT rate as written on the invoice; run bk meta for the current ones (frozen once posted)")
+	cmd.Flags().StringVar(&req.TvaRate, "tva-rate", "", "VAT rate as written on the invoice; run bk meta --app-server books for the current ones (frozen once posted)")
 	cmd.Flags().StringVar(&req.TvaAmount, "tva-amount", "", "VAT in CHF (default: derived from the entry's amount at that rate)")
 	cmd.Flags().BoolVar(&req.TvaInputClaimed, "tva-input-claimed", false, "Claim the input tax (art. 28 LTVA; needs --evidence-tier full)")
 	cmd.Flags().StringVar(&req.EvidenceTier, "evidence-tier", "", "full, partial or bare — full means the pièce is on file")

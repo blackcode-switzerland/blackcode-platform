@@ -45,6 +45,16 @@ numeric id (ids are opaque and easy to confuse). Then target it with
 workspace is only a default, not necessarily where you mean to write.
 
 Use --ws <slug|id> to preview another workspace's context without switching.
+Use --app-server <slug> to ask ANOTHER app for one invocation — that is how you
+read a second app's vocabularies, and it is the whole of why there is no
+` + "`bk <app> meta`" + `: this command WRITES the app registry that every
+` + "`bk <app> …`" + ` command resolves its server through, so an app-owned
+spelling could not run before the registry existed. It leaves your home app
+alone; ` + "`bk app use <slug>`" + ` is what moves that.
+
+A server that answers with no ` + "`apps`" + ` block leaves your registry exactly
+as it is. It has told you nothing about which apps exist, and an empty address
+book is what makes every ` + "`bk <app> …`" + ` command fail.
 
 --contract-version prints ONE line: a short fingerprint of this app's
 vocabularies, limits and type lists. Poll it instead of re-reading this whole
@@ -97,6 +107,27 @@ An unknown key is an error naming the keys that exist.`,
 
 			if cmd.Flags().Changed("vocab") {
 				return renderVocab(cmd, format, meta, vocabKeyFrom(vocabKey, args))
+			}
+
+			// ── AN ANSWER WITH NO USER IS A REJECTED CREDENTIAL ──────────
+			// `bk meta` only ever sends a token (there is no anonymous config —
+			// NewClientAndConfig fails first), so a 200 carrying `user: null`
+			// means the server did not recognise it. `apps/issues` and
+			// `apps/sales` answer 401 there; `apps/books` serves its
+			// vocabularies to anonymous callers by design, so it answers 200,
+			// and this whole command printed `user:  <> (id 0, via )` and
+			// exited 0 — a bootstrap that reads as a success while having
+			// established nothing.
+			//
+			// Placed AFTER --vocab and --contract-version, which are the two
+			// halves of this route that anonymous access exists for and which
+			// must keep working, and BEFORE refreshRegistry, so nothing is
+			// written from an answer nobody was authenticated for.
+			if meta.User.ID == 0 && meta.User.Email == "" {
+				return fmt.Errorf(
+					"%s answered, but did not recognise your credentials — this is a "+
+						"logged-out reply, not your context. Run `bk login --server %s`",
+					c.BaseURL, c.BaseURL)
 			}
 
 			// Re-learn the app address book (D-1). `bk meta` is the command every

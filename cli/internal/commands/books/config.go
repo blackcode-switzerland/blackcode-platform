@@ -116,7 +116,7 @@ func newEntityEditCmd() *cobra.Command {
 				// serves no VAT position at all.
 				if cmd.Flags().Changed("vat-registered") && e.Vat.Registered {
 					also(w, "entries now carry a VAT story; the rate comes off the invoice, not the bank line:")
-					nextStep(w, "bk books resolve <n> --tva-rate <rate> --explanation <text>   (bk meta lists the rates)")
+					nextStep(w, "bk books resolve <n> --tva-rate <rate> --explanation <text>   (bk meta --app-server books lists the rates)")
 					also(w, "  and the position it produces: bk books tax --entity %s", e.Slug)
 					return nil
 				}

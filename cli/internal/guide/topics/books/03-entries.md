@@ -54,7 +54,8 @@ latter: a bank line lands with no rate, and the rate is known once somebody
 reads the invoice behind it.
 
 `--tva-rate` is the rate as written on the invoice. The rate set is fixed by
-law and served live by `bk meta`; anything outside it is refused.
+law and served live by `bk meta --app-server books`; anything outside it is
+refused.
 
 `--tva-amount` is optional. Swiss prices are TTC, so the tax INSIDE a gross is
 computed for you. Pass the invoice's own figure and it is kept, because a

@@ -198,8 +198,16 @@ Three rendering rules that fall out of these shapes:
 
 ### The vocabularies
 
-Eight lists, used by almost every page. They belong in `bk books meta`, never in
-a component or a help string.
+Eight lists, used by almost every page. They belong in `/api/meta` — read with
+`bk meta --app-server books` — never in a component or a help string.
+
+> **Corrected 2026-08-20.** This plan said `bk books meta` in seven places and
+> that command was never built, correctly. `meta` is the command that WRITES the
+> app registry, and every `bk books …` command RESOLVES its server through that
+> registry (`cmdutil.ServerForApp`, which by design never guesses), so an
+> app-owned spelling could not run in the one state it is most needed in: a
+> config that has no address for books yet. `--app-server books` asks this
+> deployment for one invocation and leaves the config alone.
 
 `RECOGNITION`, `EVIDENCE_TIERS`, `TX_STATUS`, `SOURCE_TYPES`, `SOURCE_LAYERS`,
 `SOURCE_STATUS`, `MANIFEST_STATES`, `TVA_RATES`
@@ -221,7 +229,10 @@ single real route.
 The group pins its app server, so `bk books ...` always talks to the books
 deployment regardless of `bk app use`. That comes for free from `root.go`.
 
-One command this phase: `bk books meta`.
+No `meta` command this phase: `GET /api/meta` is already claimed by the bare
+`bk meta`, and mounting this app's route is what puts books into that claim's
+parity scope. See the correction above, and the header of
+`apps/books/app/api/meta/route.ts`.
 
 Also mount the workspace reads from the scaffold, so `bk books workspace use`
 works: `list`, `show`, `use`. Do not mount workspace create, edit or delete.

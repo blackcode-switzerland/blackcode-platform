@@ -9,7 +9,7 @@ carries changes to workspaces, members, files, tokens and the `bk` CLI itself.
 For how the CLI **works** (rather than what changed), run **`bk guide`** — the
 complete usage guide, embedded in the binary, so it always describes the version
 you are running. For live values (vocabularies, limits, your books), run
-**`bk meta`** and `bk books entity list`.
+**`bk meta --app-server books`** and `bk books entity list`.
 
 Surfaced at: `GET /api/changelog` (JSON or `?format=markdown`) and `bk changelog`,
 which merge every app's file into one feed by date, each entry tagged with its
@@ -31,6 +31,26 @@ app. `bk changelog --app books` filters to this file.
 > gap. What they added is stated once, plainly, in the closing entry, so an agent
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
+
+## 2026-08-20 — books' help and guide topics name `bk meta --app-server books`, and there is deliberately no `bk books meta`
+
+**Not breaking.** Documentation and help text only; no route, payload or command
+changed.
+
+Every place in `bk books …` that pointed at the vocabularies, the VAT rates or the
+source statuses said "run `bk meta`". That answers from whichever app your config
+is **homed** on, and one deployment cannot answer for another — ask the wrong one
+and you get a correct answer to a different question. Those references now name
+`bk meta --app-server books`, which asks this deployment for one invocation and
+changes nothing about your config. If books is already your home app, plain
+`bk meta` is the same call.
+
+**There is no `bk books meta`, and that is a decision.** `docs/books-app-plan/`
+specified one in seven places; it was never built, correctly. `meta` is the command
+that WRITES the app registry, and every `bk books …` command RESOLVES its server
+through that registry — which by design never guesses an address. An app-owned
+spelling could therefore not run in the one state it is most needed in: a config
+that has no address for books yet. The plan documents carry a dated correction.
 
 ## 2026-08-20 — every `bk books` write now tells you what to do next, and every command has real `--help`
 

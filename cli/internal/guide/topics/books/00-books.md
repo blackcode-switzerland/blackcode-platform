@@ -93,5 +93,17 @@ See `bk guide platform/output-and-exit-codes`.
 ## Vocabularies
 
 Recognition states, evidence tiers, VAT rates and every limit are served live by
-`bk meta`. They change without a release of this binary, so this topic does not
-list them.
+`bk meta --app-server books`. They change without a release of this binary, so
+this topic does not list them.
+
+The `--app-server books` half is not decoration. `bk meta` answers from whichever
+app your config is homed on, and one deployment cannot answer for another — ask
+the wrong one and you get a correct answer to a different question. `--app-server
+books` asks this app for one invocation and changes nothing about your config;
+if books is already your home app, plain `bk meta` is the same call.
+
+There is no `bk books meta`, and that is a decision rather than a gap. `meta` is
+the command that WRITES the app registry, while every `bk books …` command
+RESOLVES its server through that registry — so an app-owned spelling could not
+run in the state it is most needed in: a config that has no address for books
+yet.

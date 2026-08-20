@@ -91,9 +91,19 @@ func vocabularyOf(meta *client.Meta) (map[string]json.RawMessage, string, error)
 		return out, true
 	}
 
+	// Two spellings, one block: `apps/issues` and `apps/sales` serve
+	// `vocabulary`, `apps/books` serves `vocabularies`. The entries are the same
+	// shape either way.
+	appVocab := func(a client.MetaApp) (map[string]json.RawMessage, bool) {
+		if v, ok := decode(a.Vocabulary); ok {
+			return v, true
+		}
+		return decode(a.Vocabularies)
+	}
+
 	slug := meta.CurrentApp
 	if a, ok := meta.Apps[slug]; ok {
-		if v, ok := decode(a.Vocabulary); ok {
+		if v, ok := appVocab(a); ok {
 			return v, slug, nil
 		}
 	}
@@ -103,11 +113,17 @@ func vocabularyOf(meta *client.Meta) (map[string]json.RawMessage, string, error)
 		if !a.IsCurrent {
 			continue
 		}
-		if v, ok := decode(a.Vocabulary); ok {
+		if v, ok := appVocab(a); ok {
 			return v, s, nil
 		}
 	}
 	if v, ok := decode(meta.Vocabulary); ok {
+		if slug == "" {
+			slug = "this app"
+		}
+		return v, slug, nil
+	}
+	if v, ok := decode(meta.Vocabularies); ok {
 		if slug == "" {
 			slug = "this app"
 		}

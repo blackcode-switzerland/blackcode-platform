@@ -80,6 +80,9 @@ type Meta struct {
 	CurrentApp string             `json:"current_app,omitempty" yaml:"current_app,omitempty"`
 	Apps       map[string]MetaApp `json:"apps,omitempty" yaml:"apps,omitempty"`
 	Vocabulary json.RawMessage    `json:"vocabulary,omitempty" yaml:"vocabulary,omitempty"`
+	// `apps/books` spells the same block `vocabularies`. Read, never written —
+	// see the note on MetaApp.Vocabularies.
+	Vocabularies json.RawMessage `json:"vocabularies,omitempty" yaml:"vocabularies,omitempty"`
 
 	// The unmodified response body. Not a wire field of its own.
 	Raw json.RawMessage `json:"-" yaml:"-"`
@@ -123,8 +126,22 @@ type MetaApp struct {
 	// vocabulary and has no business inventing another app's; read a different
 	// app's from its own /api/meta, which is what BaseURL is for.
 	Vocabulary json.RawMessage `json:"vocabulary,omitempty" yaml:"vocabulary,omitempty"`
-	Limits     json.RawMessage `json:"limits,omitempty" yaml:"limits,omitempty"`
-	Media      json.RawMessage `json:"media,omitempty" yaml:"media,omitempty"`
+	// AND THE OTHER SPELLING OF THE SAME BLOCK.
+	//
+	// `apps/books` serves this key as `vocabularies`, nested and top-level, with
+	// entries of exactly the shape above (`value`, `label`, `color`). Only the
+	// key differs, so `bk meta --vocab` — the command whose whole job is to be
+	// the AUTHORITY on an app's valid values — answered "this server serves no
+	// vocabulary block" against books, while the values sat in the payload it
+	// had just parsed. Found 2026-08-20 by running the command books' own help
+	// points at.
+	//
+	// Read here rather than renamed there: the payload is a published wire shape
+	// with a live deployment behind it, and a client that reads both spellings
+	// costs nothing and breaks nobody.
+	Vocabularies json.RawMessage `json:"vocabularies,omitempty" yaml:"vocabularies,omitempty"`
+	Limits       json.RawMessage `json:"limits,omitempty" yaml:"limits,omitempty"`
+	Media        json.RawMessage `json:"media,omitempty" yaml:"media,omitempty"`
 
 	// A short fingerprint of everything above — sales #31. An agent polls this
 	// instead of re-reading the whole block and the `--help` tree behind it: if

@@ -106,8 +106,12 @@ refuse with a reason.
 - Guide topics for `bk books` filled out. The folder was created in phase 0
   because route attribution needs it. Here it gets real content.
 - No help text or guide topic restates a dynamic value. Statuses, vocabularies
-  and limits come from `bk books meta`, because they change without a CLI release
-- `bk books meta` complete
+  and limits come from `bk meta --app-server books`, because they change without
+  a CLI release
+- Every books help string and guide topic that points at the vocabularies names
+  that spelling, not the bare `bk meta` — which answers from whichever app the
+  config is homed on. (There is no `bk books meta`; see phase 0's correction of
+  2026-08-20.)
 - Statutory PDF export renders in French
 
 ### Deploy
