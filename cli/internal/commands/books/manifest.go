@@ -22,7 +22,18 @@ func newManifestCmd() *cobra.Command {
 		Use:         "manifest <source-number>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/sources/{number}/manifest"},
 		Short:       "Every Drive file one source has seen, with its pipeline state",
-		Args:        cobra.ExactArgs(1),
+		Long: "The file-level ledger for ONE source: every Drive object the worker has\n" +
+			"delivered from it, what the pipeline made of each, and whether the original is\n" +
+			"archived.\n\n" +
+			"This is the completeness check that `bk books piece list` cannot make. The\n" +
+			"inbox shows the documents that ARRIVED; the manifest shows the files that were\n" +
+			"SEEN, so a file fetched and never turned into a pièce is visible here and\n" +
+			"nowhere else.\n\n" +
+			"ARCHIVED is the column with a retention duty behind it. b/books stores the\n" +
+			"hash, never the bytes; art. 958f requires the original be kept for ten years,\n" +
+			"and a `no` here means a hash that proves nothing once the file is gone.\n\n" +
+			"The argument is the source #number from `bk books source list`.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {

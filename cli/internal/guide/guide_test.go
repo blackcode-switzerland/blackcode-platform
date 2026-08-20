@@ -163,6 +163,13 @@ var (
 var vocabularySources = map[string]string{
 	"issues": "apps/issues/lib/work-items.ts",
 	"sales":  "apps/sales/lib/pipeline.ts",
+	// Added 2026-08-20, phase 8. b/books shipped eight topics on 2026-08-11 and
+	// went to production on 2026-08-20 with NO LINE HERE, so every one of them
+	// had a free pass from this guard for the whole of its life — the exact
+	// failure the comment above predicted ("an app that is missing simply is
+	// not checked"), sitting in the file that predicted it. The module has the
+	// same `value: '…'` shape as the other two, so nothing else had to change.
+	"books": "apps/books/lib/vocabularies.ts",
 }
 
 // optionValue matches `{ value: 'in_progress', …` — the shape both modules use

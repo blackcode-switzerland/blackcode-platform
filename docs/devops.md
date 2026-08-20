@@ -40,6 +40,7 @@ a clean tree, then asks to confirm before deploying.
 |---|---|---|---|
 | `issues` | https://issues.blackcode.ch | `bc-issues` | `prj_bueHX5y2f7uaemskB5Q1Plwbry2p` |
 | `sales` | https://sales.blackcode.ch | `bc-sales` | `prj_p5A74QYKnig8696ES87bT6rvHMdZ` |
+| `books` | https://books.blackcode.ch | `bc-books` | `prj_OjkZc6y1oRGkCw3fFtTglIMCN9Ec` |
 
 Dashboard: `https://vercel.com/balathanusans-projects-f76f8a7b/<project>`.
 `app_registry()` in `devops/release.sh` is the authority; this table is a copy.
@@ -175,6 +176,7 @@ git push origin main
 #    EVERY app, not just the one you fixed. See below.
 ./devops/release.sh web issues
 ./devops/release.sh web sales
+./devops/release.sh web books
 ```
 
 > **Step 4 is every app in `app_registry()`.** Each deployment answers "what CLI
@@ -183,7 +185,10 @@ git push origin main
 > never told an update exists — and on a forced release, one host locks them out
 > while the other does not. `release.sh` prints the per-app list at the end of a
 > CLI release; run all of it. Verified 2026-08-10: both apps returned
-> `x-bk-cli-latest: 2.1.0` only after the second pair of deploys.
+> `x-bk-cli-latest: 2.1.0` only after the second pair of deploys. **It is three
+> apps since 2026-08-20**, and books is the one most likely to be forgotten and
+> least able to afford it: its web surface is read-only, so a user homed on books
+> whose binary is stale has no other way in.
 >
 > Step 4 is also not optional busywork. The CLI release bumps the version in a
 > commit **it creates itself**, which lands after step 2's deploy — so without
@@ -225,7 +230,13 @@ After changing env vars, redeploy the affected app: `./devops/release.sh web iss
 | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Google OAuth sign-in — **configured and live** |
 | `RESEND_API_KEY` + `RESEND_FROM_EMAIL` | Transactional email (invitations, password reset) |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob — **configured and live** |
-| ~~`PLATFORM_ENFORCE_APP_ACCESS`~~ | **Removed 2026-08-10** — the per-app gate is gone; delete it from both projects (`docs/env.md`) |
+| ~~`PLATFORM_ENFORCE_APP_ACCESS`~~ | **Removed 2026-08-10** — the per-app gate is gone; delete it from every project (`docs/env.md`) |
+
+The table above is written from `bc-issues`. The other two projects carry the
+**same variable set** with their own `DATABASE_URL` role (`sales_app`,
+`books_app`) and their own `NEXTAUTH_URL`; `NEXTAUTH_SECRET` is deliberately the
+same value on all three, because that is what makes one sign-in reach all of
+them. `docs/env.md` has the per-project audit.
 
 > **Two credentials, deliberately.** `DATABASE_URL` is the app role and **cannot**
 > migrate — that is the point, not a limitation. `MIGRATE_DATABASE_URL` is the

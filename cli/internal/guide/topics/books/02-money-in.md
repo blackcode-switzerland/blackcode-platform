@@ -22,9 +22,10 @@ bk books entry post 14
 
 ## The sources register
 
-A source is any place money data comes from. Its status — current, stale, gap —
-is COMPUTED from its cadence against its last import and stored nowhere, so
-nothing can flip a late source green by hand.
+A source is any place money data comes from. Its status is COMPUTED from its
+cadence against its last import and stored nowhere, so nothing can flip a late
+source green by hand. `bk meta` carries the status values; `bk books source
+show <n>` prints the day windows this source uses to reach one.
 
 `source runbook-set` records how a feed is pulled by hand, as structured JSON.
 Its `credential_ref` must be a REFERENCE (a vault address), never a credential;

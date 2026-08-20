@@ -14,22 +14,28 @@ Two are not.** Get the distinction wrong on a new app and the failure is silent:
 ## What is actually set, per project — audited 2026-08-10
 
 Every `Status: Set ✓` further down was written when `bc-issues` was the only
-project, and means "set on issues". This table is the two-app truth. Re-audit it
-with `vercel env ls` rather than trusting it; it is a snapshot, not a mechanism.
+project, and means "set on issues". This table is the THREE-app truth
+(`bc-books` added 2026-08-20). Re-audit it with `vercel env ls` rather than
+trusting it; it is a snapshot, not a mechanism.
 
-| Variable | `bc-issues` | `bc-sales` | Note |
-|---|---|---|---|
-| `DATABASE_URL` | ✅ prod + preview | ✅ prod | different Postgres ROLE per app, same Neon project |
-| `MIGRATE_DATABASE_URL` | ✅ prod | ✅ prod | `neondb_owner`, same value |
-| `NEXTAUTH_URL` | ✅ prod | ✅ prod | per app. **Was wrong on issues until 2026-08-10** |
-| `NEXTAUTH_SECRET` | ✅ prod + preview | ✅ prod | **same value**, rotated onto both 2026-08-10 |
-| `AUTH_COOKIE_DOMAIN` | ✅ prod only | ✅ prod only | `.blackcode.ch`. Never on preview |
-| `BLOB_READ_WRITE_TOKEN` | ✅ prod + preview | ✅ prod + preview | **prod → real store, preview → preview store** |
-| `RUN_MIGRATIONS` | ✅ prod only | ✅ prod only | on preview it writes to the production database |
-| `SUPER_ADMINS` | ✅ | ✅ | issues has two addresses, sales one — deliberate, per app |
-| `GOOGLE_CLIENT_ID` / `_SECRET` | ✅ | ✅ | **the same client and secret on both**, project `blackcode-platform` since 2026-08-10 |
-| ~~`PLATFORM_ENFORCE_APP_ACCESS`~~ | — | — | **removed 2026-08-10** — nothing reads it; delete it from both projects |
-| `RESEND_API_KEY` / `_FROM_EMAIL` | ✅ | ✅ **now required** | **2026-08-11: sales sends its own email.** It was deliberately unset while sales had no email module; `packages/platform-email` ended that, and sales' password reset, forgot-password and invitation mail all need it. Sender is `admin@blackcode.ch` on the apex domain since 2026-08-10; the app identity is the display name |
+| Variable | `bc-issues` | `bc-sales` | `bc-books` | Note |
+|---|---|---|---|---|
+| `DATABASE_URL` | ✅ prod + preview | ✅ prod | ✅ prod | different Postgres ROLE per app, same Neon project — books runs as `books_app` |
+| `MIGRATE_DATABASE_URL` | ✅ prod | ✅ prod | ✅ prod | `neondb_owner`, same value |
+| `NEXTAUTH_URL` | ✅ prod | ✅ prod | ✅ prod | per app. **Was wrong on issues until 2026-08-10** |
+| `NEXTAUTH_SECRET` | ✅ prod + preview | ✅ prod | ✅ prod | **same value on all three** — it is what makes one sign-in work across them |
+| `AUTH_COOKIE_DOMAIN` | ✅ prod only | ✅ prod only | ✅ prod only | `.blackcode.ch`. Never on preview |
+| `BLOB_READ_WRITE_TOKEN` | ✅ prod + preview | ✅ prod + preview | ✅ prod | **prod → real store, preview → preview store**. b/books serves no upload route, but the shared delete gate still reads the store |
+| `RUN_MIGRATIONS` | ✅ prod only | ✅ prod only | ✅ prod only | on preview it writes to the production database |
+| `SUPER_ADMINS` | ✅ | ✅ | ✅ | issues has two addresses, sales and books one each — deliberate, per app |
+| `GOOGLE_CLIENT_ID` / `_SECRET` | ✅ | ✅ | ✅ | **the same client and secret on all three**, project `blackcode-platform` since 2026-08-10 |
+| ~~`PLATFORM_ENFORCE_APP_ACCESS`~~ | — | — | — | **removed 2026-08-10** — nothing reads it; delete it from every project |
+| `RESEND_API_KEY` / `_FROM_EMAIL` | ✅ | ✅ **required** | ✅ **required** | **2026-08-11: every app sends its own email.** `packages/platform-email` takes a four-field identity and the app's own db handle, so password reset, forgot-password and invitation mail work without sending anyone to another app. Sender is `admin@blackcode.ch` on the apex domain since 2026-08-10; the app identity is the display name |
+
+**b/books adds NO variable of its own.** That is worth stating rather than
+leaving to inference: the third app was provisioned entirely from the list above,
+which is the check that `docs/adding-an-app.md` step 9 actually describes a
+repeatable process rather than issues' history.
 
 **Removed 2026-08-10:** 17 `NEON_*` variables that were injected by the Neon
 integration and read by no code in this repo — they duplicated live database
@@ -504,3 +510,22 @@ SUPER_ADMINS=balathanusan@blackcode.ch
 
 Start the local Postgres with `docker compose up -d`, then — **from the repo
 root** — `npm run dev`.
+
+### The other apps' local env
+
+Each app reads its OWN `apps/<app>/.env.local`; there is no root one. The other
+two need the same three variables and a different port and database:
+
+| App | File | Port | `NEXTAUTH_URL` |
+|---|---|---|---|
+| issues | `apps/issues/.env.local` | 3000 | `http://localhost:3000` |
+| sales | `apps/sales/.env.local` | 3100 | `http://localhost:3100` |
+| books | `apps/books/.env.local` | 3200 | `http://localhost:3200` |
+
+Start one at a time with `npm run dev --workspace=<app>`; the root `npm run dev`
+is filtered to issues.
+
+`bk` finds a locally running app through its **app registry**, not through the
+port: `~/.config/bk/config.json` carries `app_servers`, and `bk meta` rewrites
+that map from whatever the home server answers. Pointing `bk books` at a local
+build is `bk login --server http://localhost:3200`, or editing that map by hand.

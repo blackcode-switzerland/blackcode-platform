@@ -24,6 +24,16 @@ func newPieceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "piece",
 		Short: "Pièces justificatives — the receipts inbox and the robot door",
+		Long: "A pièce is the proof behind an entry.\n\n" +
+			"THIS APP NEVER HOLDS THE FILE. The bytes live in Drive; b/books stores the\n" +
+			"extracted record, a link and a hash. There is no upload route and no\n" +
+			"`bk books upload` — `ingest` takes an ExtractionResult JSON produced by\n" +
+			"something outside that downloaded the file, hashed it, archived it and read it.\n" +
+			"Keeping the original for the ten years art. 958f requires is the caller's job,\n" +
+			"and a hash proves nothing once the thing it hashed is gone.\n\n" +
+			"A pièce and an entry are separate until `match` joins them, and matching\n" +
+			"deliberately does NOT change the entry's evidence tier: whether a document makes\n" +
+			"the input-tax claim safe is a judgment, and judgments are yours.",
 	}
 	cmd.AddCommand(newPieceListCmd(), newPieceIngestCmd(), newPieceMatchCmd())
 	return cmd
@@ -35,7 +45,20 @@ func newPieceListCmd() *cobra.Command {
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/pieces"},
 		Short:       "The inbox: what the worker delivered, and what the server thinks of it",
-		Args:        cobra.NoArgs,
+		Long: "The receipts inbox: every ExtractionResult the robot door has taken, with the\n" +
+			"server's own verdict on each.\n\n" +
+			"THE FLAGS COLUMN IS WHY THIS LIST EXISTS. `review` means the server re-ran the\n" +
+			"arithmetic and it did not add up — the document landed anyway, deliberately,\n" +
+			"because a wrong total is exactly the one a human must see and bouncing it would\n" +
+			"hide it in the worker's retry queue. `dup-of #n` means the content matches an\n" +
+			"earlier capture; it is flagged and never dropped, because a refund and a\n" +
+			"re-scan look identical and only a person can tell them apart.\n\n" +
+			"STATUS is the match state, not the validation state: `staged` is a document\n" +
+			"attached to nothing. Attach it with `bk books piece match <n> --entry <entry>`;\n" +
+			"until then it is evidence for nothing and sits on the worklist.\n\n" +
+			"Without --entity this is the whole workspace's inbox, including documents the\n" +
+			"worker could not attribute to a book.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -147,6 +170,14 @@ func newPieceIngestCmd() *cobra.Command {
 				if r.DuplicateOf != nil {
 					fmt.Fprintf(w, "same content as piece #%d — flagged, not dropped (a refund looks identical)\n", *r.DuplicateOf)
 				}
+				// An ingested pièce proves NOTHING until it is attached to the
+				// money it documents. Until then it sits on the worklist as
+				// evidence for no entry, which is not a visible failure.
+				// The ingest result carries no match, because the door never
+				// makes one: a pièce arrives attached to nothing.
+				also(w, "it documents nothing yet — the worklist suggests candidates by amount and date:")
+				nextStep(w, "bk books worklist%s", entityFlag(entity))
+				also(w, "  then: bk books piece match %d --entry <entry-number>", r.Number)
 				return nil
 			})
 		},
@@ -187,8 +218,18 @@ func newPieceMatchCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, p, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "matched piece #%d -> %s#%d\n", p.Number, riPrefix(p.MatchedJournal), *p.MatchedEntry)
-				return err
+				if _, err := fmt.Fprintf(w, "matched piece #%d -> %s#%d\n", p.Number, riPrefix(p.MatchedJournal), *p.MatchedEntry); err != nil {
+					return err
+				}
+				// The match writes the Drive reference and DELIBERATELY leaves
+				// the evidence tier alone — whether a receipt makes the claim
+				// safe is a sufficiency judgment, and judgments are the
+				// caller's. So the next step is the one that acts on it, and
+				// without it the input tax stays unclaimable (art. 28 LTVA).
+				also(w, "the entry's evidence TIER is untouched — that judgment is yours:")
+				nextStep(w, "bk books resolve %d --evidence-tier full --explanation <what this money was>", *p.MatchedEntry)
+				also(w, "  add --tva-input-claimed on the same call to claim the input tax (art. 28 LTVA).")
+				return nil
 			})
 		},
 	}

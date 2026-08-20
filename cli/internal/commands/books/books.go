@@ -54,7 +54,7 @@ THE STATUTORY CORE — phase 1, and here now:
   bk books entity     list, create      a book. Arrives with the PME chart in it
   bk books exercice   list, create      a fiscal year. Needed before anything posts
   bk books account    list              that book's chart of accounts
-  bk books entry      list, show        the grand livre
+  bk books entry      list, show, declare, post   the grand livre, and the two writes
   bk books bilan                        balance sheet, art. 959a
   bk books cr                           compte de résultat, art. 959b
   bk books patrimoine                   net worth, for a sole proprietorship
@@ -63,12 +63,14 @@ THE STATUTORY CORE — phase 1, and here now:
 RECOGNITION — phase 2, here now. The first write path:
 
   bk books worklist                     what needs a human, with live suggestions
-  bk books rule       list, create      remembered judgments, keyed to the pair
+  bk books rule       list, create, deactivate   remembered judgments, keyed to the pair
   bk books resolve    <n>               say what the money was; history kept
 
 SOURCES AND PIÈCES — phase 3, here now. Provenance and the proof:
 
   bk books source     list, show, import   the register, and the camt.053 door
+  bk books source     create, edit, mapping-set, record-pull, runbook-set
+                                        registering a feed and saying how it is read
   bk books manifest   <n>               every Drive file one source has seen
   bk books piece      list, ingest, match   the receipts inbox and the robot door
 
@@ -79,7 +81,7 @@ before it cleared — but an unknown says so rather than reading as agreement.
 MANAGEMENT AND TAX — phase 4, here now:
 
   bk books analytique                   cost per category, and the monthly flows
-  bk books category   list, create      the analytique's buckets, account-mapped
+  bk books category   list, create, retire   the analytique's buckets, account-mapped
   bk books tax                          the PM tax snapshot: derived, cited, never stored
   bk books tax-params show, set         where a company is taxed, and at what rates
   bk books analyse    list, show, record   the agent write-back: a filed verdict
@@ -99,7 +101,7 @@ STARTING AND ENDING A BOOK:
 THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
   bk books workspace  list, show, use
-  bk books member     list, remove
+  bk books member     list
   bk books invite     send, list, revoke
 
 "bk books workspace use x" sets THIS app's active workspace and no other's.
@@ -125,6 +127,36 @@ release of this binary, so this help text does not list them.
 Bare verbs are identity and this binary only: login, logout, whoami, token,
 profile, meta, app, guide, skill, changelog, version, super-admin. Run
 "bk guide platform/apps" for the rule.`
+
+// ---------------------------------------------------------------------------
+// WHICH GROUP NODES CARRY A `Long:`, AND WHICH DELIBERATELY DO NOT
+// ---------------------------------------------------------------------------
+// Phase 8 (2026-08-20) gave every LEAF a `Long:` — an agent runs a leaf, and a
+// `Short:` is a menu entry, not a description. Group nodes are a different
+// question: nobody runs `bk books entry`, they route through it, and filling
+// every one with prose adds surface that can drift while telling a reader
+// nothing the child does not.
+//
+// So the test applied was: does this group carry a CROSS-CUTTING fact that no
+// single child states, and that costs a real mistake to not know?
+//
+// SIX DO, and have one:
+//
+//	entry      two journals under one noun; everything lands staged; posted is
+//	           immutable; the #number is not the journal no.
+//	exercice   nothing posts without one, and close is the one irreversible act
+//	opening    typed once per book, first year only; later years are produced
+//	source     the register, the runbook and the door are three different things
+//	piece      this app never holds the file, and match does not set the tier
+//	rule       the match key is the PAIR, and rules never apply themselves
+//
+// SIX DELIBERATELY DO NOT — account, entity, category, analyse, compliance,
+// tax-params. Each has at most three children whose own `Long:` covers it
+// completely, and the parent's `Short:` already names the concept. A paragraph
+// there would restate a child, and a restatement is the thing that goes stale.
+//
+// This is the record the decision is supposed to leave. If a seventh group
+// grows a cross-cutting rule, it moves to the first list.
 
 // NewGroup returns the `bk books` command group. Registered from
 // commands/root.go, exactly as an app's group should be.

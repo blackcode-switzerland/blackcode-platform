@@ -7,6 +7,53 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-08-20 — four guards added: help text that names a flag, a stale command tour, a write with no next step, and a server hint that will not run
+
+**Not breaking.** These are build-time checks; nothing a caller does changes.
+
+They exist because help text is the easiest thing in this repo to write
+convincingly and never check, and a `Long:` that reads well and is subtly wrong
+is *worse* than none — the agent believes it.
+
+- **`cli/internal/commands/help_flag_drift_test.go`** — every `--flag` spelled in
+  any command's `Short`, `Long`, `Example` or flag usage must EXIST on the
+  command the sentence is about. It found three live cases across two apps on the
+  first run (`bk books resolve --rule`, which is `--rule-counterparty`; a
+  line-wrapped `bk issues issue edit … --status done` whose flag had drifted onto
+  the wrong command; and `--description/--body` named on `bk <app> upload`, which
+  has neither). It also INVERTS a documented absence — "there is no `--status`",
+  "`bk sales prospect edit` refuses `--stage`" — so a refusal that stopped being
+  true goes red too.
+- **`cli/internal/commands/help_prose_table_test.go`** — the hand-written command
+  tour at the top of `bk books --help` must list the verbs the binary carries. It
+  found five discrepancies, including a command advertised that does not exist.
+- **`cli/internal/commands/books/nextstep_test.go`** — every books command whose
+  `routes` annotation carries a write method must print a next step, or be listed
+  as exempt WITH its reason. The exempt list is empty.
+
+- **`cli/internal/commands/server_hint_test.go`** — every `bk books …` spelling
+  in that app's TypeScript is resolved against the real command tree: the command
+  must exist, every flag it names must exist on it, and every flag that command
+  REQUIRES must be present. A hint is the whole recovery path for an app whose
+  web surface writes nothing, and six of them named a command that fails cobra's
+  argument parsing before it ever reaches the server — five omitting a required
+  `--entity`, one naming "the patrimoine route" rather than a verb. A separate
+  refusal promised "shorten the exercice first", which **nothing in the CLI can
+  do**; that hint now stops at what is reachable and the gap is a tracker item.
+
+All four keep their mutations IN the suite rather than performing them by hand
+once, so a later narrowing of a scanner goes red there instead of leaving the
+real check green and blind.
+
+**And one guard was found green-but-inert.** `guide_test.go`'s
+`vocabularySources` map — which is what stops a guide topic hardcoding a status,
+a vocabulary or a limit — had entries for `issues` and `sales` and **none for
+`books`**. Its own comment says "an app that is missing simply is not checked",
+so every one of b/books' eight topics had a free pass from the day it was written
+until 2026-08-20. Adding the line found one real restatement immediately. This is
+finding #22 for CLAUDE.md's table: the failure was predicted, in a comment, in
+the file it happened in.
+
 ## 2026-08-20 — the platform can speak French: `platform.users.locale`, `@blackcode/platform-i18n`, and `locale` on `/api/me`
 
 **Not breaking.** A new nullable column, a new field on an existing payload, and a

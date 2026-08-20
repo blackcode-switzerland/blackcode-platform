@@ -32,6 +32,98 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-20 — every `bk books` write now tells you what to do next, and every command has real `--help`
+
+**Not breaking.** No route changed shape, no flag was renamed or removed, and no
+exit code moved. What changed is what the CLI SAYS.
+
+**Why.** The CLI is the only door this product has — the web surface reads and
+never writes — so a command an agent cannot find, a refusal it cannot act on, or
+a success that does not say what comes next is not a rough edge: it is the
+feature being unavailable, and the agent reports it as *"this is not possible"*.
+An hour of driving `bk books` cold on 2026-08-20 produced four such reports, none
+of which was a bug in the product.
+
+### Every write ends with a runnable next step
+
+`bk books entity create` already did (`chart of accounts installed. Next: bk
+books exercice create …`). All 25 writes do now. Bookkeeping is a chain, and each
+link's half-finished state reads exactly like a finished one — a source with no
+import has produced nothing, an unmatched pièce is evidence attached to nothing,
+a staged entry is money nobody has judged.
+
+Three of them read STATE first, because the right next move depends on it:
+
+- **`resolve`** — "post it" only if nothing blocks posting. Against a `blocked`
+  verdict it says so and names what would clear it; against an already-posted
+  entry it says the lines are fixed and only interpretation changed.
+- **`exercice create`** — a book's FIRST year takes typed openings; a later one
+  does not, and being told to type them would send you at a refusal.
+- **`account create`** — a class 1 or 2 account is usually what a feed IS, so the
+  step is `source create --ledger-account`; class 3 and above is where an entry
+  gets resolved to.
+
+Next-step lines go to the same writer as the result, so **`--json` and `--yaml`
+are unaffected**. A script parsing JSON sees nothing new.
+
+**One next step was wrong and is fixed.** `source import` printed
+`next: bk books worklist` with no `--entity`. The worklist is scoped to ONE book
+and defaults to whichever sorts first, so in a workspace with more than one book
+the follow-up answered about a different book — and looked like an answer. Every
+next step now carries the book it is about.
+
+### `--help` is now sufficient on its own
+
+Every leaf command has a `Long:`, and six group nodes gained one where they carry
+a rule no child states (`entry`'s two journals, `source`'s three different jobs,
+`piece`'s "this app never holds the file", `rule`'s pair key, `exercice`'s
+no-reopen, `opening`'s first-year-only). The other six group nodes deliberately
+have none, and the reason is recorded in `cli/internal/commands/books/books.go`.
+
+Three help texts were WRONG and are corrected:
+
+- `bk books --help`'s hand-written tour never named `entry declare`, `entry post`,
+  `rule deactivate`, `category retire` or five of `source`'s eight verbs — and it
+  advertised `bk books member remove`, which does not exist for this app.
+- `bk books rule create` pointed at `bk books resolve --rule`. The flag is
+  `--rule-counterparty`.
+- `--legal-form` said "SA or RI". The column takes any string, and SA, SARL,
+  SÀRL, AG and GmbH are all treated as capital companies (forced to
+  double-entry) while anything else defaults to simplified. Since the slug, the
+  form and the regime are all permanent, the help now says so.
+
+`--tva-rate` and `compliance list` no longer restate values `bk meta` serves.
+
+### Refusals
+
+Three refusals named a recovery that could not be performed, and all three are
+fixed:
+
+- Closing a year that has not ended suggested "shorten the exercice first".
+  **Nothing can**: `bk books exercice` has list, create and close, `create` takes
+  only `--year`, and no verb writes `ends_on`. The hint now stops at what is
+  reachable. (A short exercice is a real statutory case with no write door.)
+- `there is no exercice N to carry the balances into` suggested
+  `bk books exercice create --year N` — without `--entity`, which is **required**.
+- A bad import mapping pointed at `bk guide books/money-in`, which shows the
+  command and no worked mapping. It points at
+  `bk books source mapping-set --help`, which carries the whole shape.
+
+Nine `Errors.*` in books routes carried no `suggestion`; all nine do now. Four of
+them were re-throws that DROPPED a suggestion the domain error already carried.
+
+**Confirmed fixed, and verified rather than assumed:** `rule create --source`
+with an unknown number answers `400 unknown source` with a hint (it was a 500);
+`entry show` renders `explanation`, `verdict`, the matched rule and the source;
+and a second `resolve` no longer drops the VAT rate or downgrades the
+recognition.
+
+**One display fix.** `entry show` printed `matched rule #634` and `source id 947`
+— DATABASE ids, while `bk books rule list` and `bk books source list` show that
+rule and that source as `#5`. An agent that read the `#` and used it was
+addressing nothing. They print as internal ids now, and name the command that
+shows the real numbers.
+
 ## 2026-08-20 — b/books is bilingual: EN / FR, the theme toggle moves, and both header pickers become keyboard-operable
 
 **Not breaking. No route changed and no payload changed.** This is the web

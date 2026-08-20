@@ -283,8 +283,9 @@ func newTaskEditCmd() *cobra.Command {
 		Short:       "Edit a task (name, description, due date, lead; 'none' clears due date or lead)",
 		Long: "Edit a task.\n\n" +
 			"There is no --status: a task's status is derived from its issues.\n" +
-			"To move a task forward, move its issues — bk issues issue edit <id>\n" +
-			"--status done, or attach/detach with bk issues task attach|detach.",
+			"To move a task forward, move its issues:\n" +
+			"  bk issues issue edit <id> --status done\n" +
+			"or attach/detach with bk issues task attach|detach.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := strconv.Atoi(args[0])

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
@@ -108,7 +109,15 @@ func newAnalyseListCmd() *cobra.Command {
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/analyses"},
 		Short:       "List filed analyses",
-		Args:        cobra.NoArgs,
+		Long: "Every analysis filed against this workspace's books: the question, who asked,\n" +
+			"which agent answered, and when.\n\n" +
+			"THESE ROWS ARE PERMANENT. There is no edit and no delete — an answer that has\n" +
+			"drifted is re-asked into a NEW record and both stand, because the value of a\n" +
+			"filed verdict is that it says what was believed on a date.\n\n" +
+			"Read one whole with `bk books analyse show <n>`, which prints the based_on\n" +
+			"snapshot — the figures that were actually READ to reach the answer. Two rows\n" +
+			"answering the same question differently are not a conflict; they are two dates.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -152,7 +161,15 @@ func newAnalyseShowCmd() *cobra.Command {
 		Use:         "show <number>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/analyses/{number}"},
 		Short:       "One analysis, whole: verdict, figures, and the based_on snapshot as filed",
-		Args:        cobra.ExactArgs(1),
+		Long: "One filed analysis in full: the question as asked, the verdict as given, and\n" +
+			"the BASED_ON snapshot.\n\n" +
+			"The snapshot is the point of the record. It is what was read at the moment the\n" +
+			"question was answered, stored as values and NEVER RECOMPUTED — so this row still\n" +
+			"says what the figures were then, even though `bk books bilan` now says something\n" +
+			"else. An analysis that recomputed itself could not explain a decision anybody\n" +
+			"made on the strength of it.\n\n" +
+			"The argument is the #number from `bk books analyse list`.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -253,6 +270,11 @@ func newAnalyseRecordCmd() *cobra.Command {
 			}
 			return output.Render(format, a, func(w io.Writer) error {
 				fmt.Fprintf(w, "analysis #%d filed on %s — permanent, with its snapshot\n", a.Number, a.Entity)
+				// There is no edit and no delete: a drifted answer is re-asked
+				// into a NEW record and both stand. So the next step is to read
+				// back what was actually stored, before anything is built on it.
+				nextStep(w, "bk books analyse show %d", a.Number)
+				also(w, "  a later answer is a NEW record, never an edit: bk books analyse record --entity %s …", a.Entity)
 				return nil
 			})
 		},
@@ -293,7 +315,17 @@ func newCategoryListCmd() *cobra.Command {
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/analytique/categories"},
 		Short:       "List a book's cost categories",
-		Args:        cobra.NoArgs,
+		Long: "The buckets `bk books analytique` groups spend into, for one book.\n\n" +
+			"A category is a set of LEDGER ACCOUNTS, and that is all it is: the analytique is\n" +
+			"derived by summing the entries on those accounts, so nothing is tagged and no\n" +
+			"entry has to know a category exists. The ACCOUNTS column is the whole\n" +
+			"definition.\n\n" +
+			"Categories are PER BOOK: two books with the same chart still keep their own,\n" +
+			"because what counts as one cost centre in one company is three in another.\n\n" +
+			"The `#` column is the argument to `bk books category retire`. Retiring frees\n" +
+			"the accounts for a new bucket and leaves them counted nowhere until one claims\n" +
+			"them.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -362,6 +394,11 @@ func newCategoryRetireCmd() *cobra.Command {
 			return output.Render(format, r, func(w io.Writer) error {
 				fmt.Fprintf(w, "retired category #%d %q on %s — %v no longer counted, and free for a new bucket\n",
 					r.Number, r.Key, r.Entity, r.Accounts)
+				// The accounts it counted are now uncounted, not recategorised:
+				// the analytique will show them nowhere until a bucket claims them.
+				nextStep(w, "bk books analytique --entity %s", r.Entity)
+				also(w, "  those accounts are free for a new bucket: bk books category create --entity %s --key <key> --accounts %s",
+					r.Entity, strings.Join(r.Accounts, ","))
 				return nil
 			})
 		},
@@ -406,6 +443,7 @@ func newCategoryCreateCmd() *cobra.Command {
 			}
 			return output.Render(format, r, func(w io.Writer) error {
 				fmt.Fprintf(w, "category #%d %q on %s, counting %v\n", r.Number, r.Key, r.Entity, r.Accounts)
+				nextStep(w, "bk books analytique --entity %s", r.Entity)
 				return nil
 			})
 		},

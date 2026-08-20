@@ -107,8 +107,21 @@ func newEntityEditCmd() *cobra.Command {
 				if e.Vat.Registered {
 					vat = fmt.Sprintf("VAT %s, %s", e.Vat.Method, e.Vat.Filing)
 				}
-				_, err := fmt.Fprintf(w, "updated %s — %s (%s)\n", e.Slug, e.Name, vat)
-				return err
+				if _, err := fmt.Fprintf(w, "updated %s — %s (%s)\n", e.Slug, e.Name, vat); err != nil {
+					return err
+				}
+				// What changed decides what to do next. Turning VAT on changes
+				// how every later entry is written — the rate arrives when
+				// somebody reads the invoice, and until then the snapshot
+				// serves no VAT position at all.
+				if cmd.Flags().Changed("vat-registered") && e.Vat.Registered {
+					also(w, "entries now carry a VAT story; the rate comes off the invoice, not the bank line:")
+					nextStep(w, "bk books resolve <n> --tva-rate <rate> --explanation <text>   (bk meta lists the rates)")
+					also(w, "  and the position it produces: bk books tax --entity %s", e.Slug)
+					return nil
+				}
+				nextStep(w, "bk books overview")
+				return nil
 			})
 		},
 	}
@@ -145,7 +158,17 @@ func newTaxParamsShowCmd() *cobra.Command {
 		Use:         "show --entity <book>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/tax-params"},
 		Short:       "The canton, commune and rates this book is taxed at",
-		Args:        cobra.NoArgs,
+		Long: "Where this book is taxed and at what rates — the five figures `bk books tax`\n" +
+			"needs before it can compute anything.\n\n" +
+			"UNCONFIGURED IS A REAL ANSWER and this command gives it plainly. Nothing in\n" +
+			"this app may assume a canton, and no rate is ever defaulted: a supplied rate\n" +
+			"would be inventing somebody's tax bill. So until `bk books tax-params set` has\n" +
+			"run, this says so and names the command, and the tax snapshot answers\n" +
+			"`configured: false` rather than a plausible number.\n\n" +
+			"These are CONFIGURATION, not history: setting them again replaces them, because\n" +
+			"a coefficient that has been voted supersedes the one before it. A snapshot\n" +
+			"already taken is unaffected — it is derived at request time and stored nowhere.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -216,9 +239,15 @@ func newTaxParamsSetCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, p, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "%s is taxed in %s (%s) — the tax snapshot is configured\n",
-					p.Entity, p.Commune, p.Canton)
-				return err
+				if _, err := fmt.Fprintf(w, "%s is taxed in %s (%s) — the tax snapshot is configured\n",
+					p.Entity, p.Commune, p.Canton); err != nil {
+					return err
+				}
+				// The snapshot is derived at request time and stored nowhere,
+				// so it answers with the new rates immediately — which is the
+				// only way to see that five figures were typed correctly.
+				nextStep(w, "bk books tax --entity %s", p.Entity)
+				return nil
 			})
 		},
 	}
@@ -273,8 +302,15 @@ func newRuleDeactivateCmd() *cobra.Command {
 			}
 			out := map[string]any{"number": n, "active": false}
 			return output.Render(format, out, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "rule #%d no longer matches new imports; the entries it already explained keep it\n", n)
-				return err
+				if _, err := fmt.Fprintf(w, "rule #%d no longer matches new imports; the entries it already explained keep it\n", n); err != nil {
+					return err
+				}
+				// There is no reactivate, on purpose: teaching it again records
+				// what the new rule was learned from, which a flag flipped back
+				// would not.
+				nextStep(w, "bk books rule list")
+				also(w, "  to teach a corrected one: bk books resolve <n> --explanation <text> --rule-counterparty <fragment>")
+				return nil
 			})
 		},
 	}

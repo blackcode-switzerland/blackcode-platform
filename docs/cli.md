@@ -12,11 +12,13 @@
 >                                   super-admin. Nothing else.
 >   commands/issues/                that app's nouns — bk issues issue|task|project|…
 >                                   …plus what it adds to tier 2 (appverbs.go)
+>   commands/sales/                 bk sales prospect|meeting|doc|template|…
+>   commands/books/                 bk books entity|exercice|entry|source|piece|…
 > cli/internal/appverbs/            tier 2 — workspace, member, invite, user, upload,
 >                                   trash, label, search, activity, inbox, storage,
 >                                   built PER APP from a per-app Config
 > cli/internal/cmdutil/             what both need: client construction, --ws/-v, flags, formatting
-> cli/internal/guide/topics/{platform,issues,sales,scaffold}/
+> cli/internal/guide/topics/{platform,issues,sales,books,scaffold}/
 > ```
 >
 > | Tier | Verbs | Spelling | Server |
@@ -260,6 +262,10 @@ cli/
 │   ├── client/               # HTTP client + DTO types (client.go, types.go, workspace.go)
 │   ├── appverbs/             # upload/trash/label — built once per app
 │   ├── commands/             # Cobra commands (root + subcommands)
+│   │   ├── books/            #   bk books … — the largest app group, 57 leaves
+│   │   ├── issues/
+│   │   ├── platform/         #   the bare tier
+│   │   └── sales/
 │   ├── config/               # ~/.config/bk/config.json loader
 │   └── output/               # table / json / yaml renderer
 ├── go.mod
@@ -833,6 +839,33 @@ bk issues analytics --status todo,in_progress --priority 1 --priority 2
 bk issues analytics --ws acme --view member --id 5 --from 2026-01-01
 ```
 
+### The other apps' groups
+
+This reference documents `bk issues` in detail because it is the app the CLI grew
+around. The other two carry their own nouns under their own group, and the shape
+is the same throughout: workspace-scoped routes, `{ data, next_cursor }` on
+lists, a `routes` annotation per leaf, and the parity guard holding both ends.
+
+| Group | Nouns | Guide |
+|---|---|---|
+| `bk sales …` | `prospect` `meeting` `communication` `doc` `template` `catalog` … | `bk guide sales/pipeline` |
+| `bk books …` | `entity` `exercice` `account` `entry` `resolve` `worklist` `rule` `source` `piece` `manifest` `bilan` `cr` `patrimoine` `tax` `tax-params` `analytique` `category` `analyse` `compliance` `verdict` `opening` `overview` | `bk guide books/books` and seven more |
+
+**`bk books` is the largest group in the binary and the only one that is the
+whole product.** b/books' web surface reads and never writes: posting an entry,
+importing a statement, resolving a bank line and closing a year all happen here.
+So two things that are good practice elsewhere are load-bearing there —
+
+- **`cli-parity` is not a formality.** A books route with no command is a
+  capability nobody can reach, by any door.
+- **Every write prints a runnable NEXT STEP** (`cli/internal/commands/books/nextstep.go`,
+  guarded by `nextstep_test.go`). Bookkeeping is a chain, and each link's
+  half-finished state — a source with no import, an unmatched pièce, a staged
+  entry — reads exactly like a finished one.
+
+What a `position` is, why an RI book has no bilan, and how a compte de résultat
+is derived are **app internals**: `apps/books/docs/backend.md` (§7.5).
+
 ### Super admin (platform-wide)
 
 The `bk super-admin` group (alias `admin`) mirrors the web Super Admin section.
@@ -968,12 +1001,17 @@ on Windows (mode `0600`, directory mode `0700`, where the OS has them):
   "home_server": "https://issues.blackcode.ch",
   "app_servers": {
     "issues": "https://issues.blackcode.ch",
-    "sales":  "https://sales.blackcode.ch"
+    "sales":  "https://sales.blackcode.ch",
+    "books":  "https://books.blackcode.ch"
   },
   "user_id": 7,
   "email":  "alice@example.com",
   "active_workspace_id": 3,
   "active_workspace_slug": "acme",
+  "active_workspaces": {
+    "issues": { "id": 3, "slug": "acme" },
+    "books":  { "id": 9, "slug": "acme-books" }
+  },
   "last_update_check": 1718668800
 }
 ```
@@ -991,6 +1029,10 @@ the platform serves for longer than one `bk meta`.
 - A 2.x config has no `app_servers`, and the CLI does not guess one: `bk <app> …`
   fails naming `bk meta`, which learns it. Guessing here means guessing which
   host a file is uploaded to.
+- `active_workspaces` is the PER-APP active workspace, keyed by slug. Two apps'
+  workspace tables have overlapping ids, so the single `active_workspace_*` pair
+  above it is the legacy 2.x/3.x field, kept for rollback and adopted only for
+  the HOME app.
 
 `last_update_check` is a unix timestamp the CLI writes to throttle the soft update notice to once per 24h (see [Updates](#updates)).
 

@@ -33,10 +33,21 @@ data flows. **Source of truth is the code** — this describes it as it is today
 - [State & data fetching](#state--data-fetching)
 - [Conventions](#conventions)
 
-**App docs:** [`apps/issues/docs/frontend.md`](../apps/issues/docs/frontend.md) ·
-[`apps/issues/docs/backend.md`](../apps/issues/docs/backend.md) ·
-[`apps/books/docs/frontend.md`](../apps/books/docs/frontend.md) §9 — the worked
-example of the language switch
+**App docs:** [`apps/issues/docs/`](../apps/issues/docs/) ·
+[`apps/sales/docs/`](../apps/sales/docs/) ·
+[`apps/books/docs/`](../apps/books/docs/) — and in particular
+[`apps/books/docs/frontend.md`](../apps/books/docs/frontend.md) §9, the worked
+example of the language switch.
+
+> **One of the three front ends WRITES NOTHING.** `apps/books`' web surface is
+> read-only by design (its §5, "the surface is read-mostly, and that is
+> checked"): every write — posting an entry, importing a statement, resolving a
+> bank line, closing a year — is a `bk books` command. Two things follow for
+> anyone reviewing frontend work here. A books screen with no mutation is not an
+> unfinished screen, so do not "add the missing button"; and the conventions
+> below that describe mutations, optimistic updates and `toast.success` on every
+> write apply to issues and sales, and to books only where a genuinely shared
+> primitive (the account surface, the language switch) writes.
 
 ## Stack
 

@@ -4,8 +4,9 @@
 
 A **monorepo** (npm workspaces + Turborepo) holding Blackcode's internal apps.
 
-**Two apps are in production**, on one database and one login:
-`issues.blackcode.ch` and `sales.blackcode.ch` (live since 2026-08-10).
+**Three apps are in production**, on one database and one login:
+`issues.blackcode.ch` and `sales.blackcode.ch` (live since 2026-08-10), and
+`books.blackcode.ch` (live 2026-08-20).
 
 - **`apps/issues`** — an AI-native issue tracker (Linear-style). Next.js 16 App
   Router, TypeScript, Tailwind v4, Drizzle ORM + PostgreSQL, next-auth, TanStack
@@ -14,6 +15,13 @@ A **monorepo** (npm workspaces + Turborepo) holding Blackcode's internal apps.
   the reason most of the platform exists in its current shape: it was the second
   question every shared thing had ever been asked. Same stack; its own schema,
   migrations, CLI group and docs.
+- **`apps/books`** — **b/books**, Swiss statutory bookkeeping: any number of
+  books per workspace, double-entry or recettes-dépenses, bilan and compte de
+  résultat derived rather than stored, and every transaction *explained*. The
+  **third** app, and the first whose **web surface is read-only** — every write
+  is a `bk books` command, so the CLI is not a convenience layer here, it is the
+  product. Same stack plus `platform-i18n` (EN/FR); its own `books.*` schema,
+  nineteen migrations, CLI group, eight guide topics and docs.
 - **`apps/_scaffold`** — the scaffold. A real, minimal app: one entity, one
   route, its own migrations and ledger, nine platform route factories, an entity
   projection and its reconciler, a CLI command group, a guide topic, a page.
@@ -50,9 +58,10 @@ What the migration bought:
   reachable. Apps import these; apps never import each other.
   **`apps/issues/lib/auth.ts` (next-auth `authOptions`) deliberately did NOT
   move** — the reason is in `packages/platform-auth/src/index.ts`.
-- The database is **`platform.*` + `issues.*` + `sales.*`** (and `scaffold.*`,
-  never deployed) — never `public`. Each app runs as its own bounded role
-  (`issues_app`, `sales_app`), with no grant on any other app's schema;
+- The database is **`platform.*` + `issues.*` + `sales.*` + `books.*`** (and
+  `scaffold.*`, never deployed) — never `public`. Each app runs as its own
+  bounded role (`issues_app`, `sales_app`, `books_app`), with no grant on any
+  other app's schema;
   migrations run as `MIGRATE_DATABASE_URL`. See **`docs/platform-db.md`** — the
   boundary, the two credentials, the grants.
   > **`platform.*` is NOT a synonym for "shared".** Only `users`, `apps`,
@@ -62,7 +71,8 @@ What the migration bought:
   > `inbox_messages`, `deletion_batches`, `entities` and `links` are
   > **`apps/issues`' own**, left in that schema because moving a live app's
   > tenancy costs a migration and buys nothing. `apps/sales` has its own in
-  > `sales.*` and reads none of them. The full split:
+  > `sales.*` and `apps/books` its own in `books.*`; neither reads any of them.
+  > The full split:
   > `docs/platform-architecture.md` §2.
 - Apps are real data: **`platform.apps` is the ADDRESS BOOK** — which apps exist
   and where they are deployed. `workspace_apps` and `app_access` were **dropped
@@ -131,13 +141,15 @@ end to end. Extracting one is **`docs/extracting-an-app.md`**, rehearsed.
 ```
 apps/issues/          the issue tracker — app/ components/ lib/ types/ docs/ public/
 apps/sales/           the sales app — prospects, meetings, communications
+apps/books/           b/books — Swiss statutory bookkeeping; the web reads, bk writes
 apps/_scaffold/       the scaffold. Copy it; don't edit it
 cli/                  the `bk` Go binary (repo root — shared by every app)
   internal/commands/platform/   bare verbs: workspace, label, upload, trash, …
   internal/commands/issues/     that app's nouns, behind `bk issues …`
+  internal/commands/books/      that app's nouns, behind `bk books …`
   internal/commands/scaffold/    the scaffold's, behind `bk scaffold …`
   internal/cmdutil/             what both need; app packages never import each other
-  internal/guide/topics/{platform,issues,sales,scaffold}/
+  internal/guide/topics/{platform,issues,sales,books,scaffold}/
 packages/             shared libraries — apps import these, never each other
 docs/                 PLATFORM docs only (see the Docs sync rule)
 docs/changelog/       one file per app + platform.md — merged by `bk changelog`
@@ -179,7 +191,7 @@ npm run lint       # eslint, all apps and packages
 > guardrail, test, assertion or probe works, break the thing it guards and watch
 > it go red. Then restore.
 
-This is not a style preference. **Twenty-one guardrails in this repo have been
+This is not a style preference. **Twenty-three guardrails in this repo have been
 found green-but-inert** — eight during the migration, and the count is still growing.
 Every one looked like working protection:
 
@@ -209,6 +221,17 @@ Every one looked like working protection:
 | 20 | Migration `0003_scaffold_owns_its_tenancy.sql`'s foreign-key swap | The DROP was guarded on a constraint NAME — `notes_workspace_id_workspaces_id_fk`, Drizzle's spelling. Postgres had called it `notes_workspace_id_fkey`, because `0001` is hand-written SQL with an inline `REFERENCES` clause and the server names those itself. So the DROP matched nothing, the ADD succeeded, and the table ended up carrying **both** foreign keys: a row then had to satisfy `platform.workspaces` AND `scaffold.workspaces` at once — strictly worse than the coupling the migration existed to remove. **Every statement succeeded and psql exited 0.** Found by reading `pg_constraint` after running it, not by review. It matches on `confrelid` now, which is also what makes it correct for a copy whose `0001` was drizzle-generated. Fourth time on this project that the catalog contradicted the code (agent 1's trigger, agent 3's twelve FKs, agent 4's cascade ordering) |
 
 | 21 | `password-degradation.test.ts`'s POSITIVE case | Written 2026-08-11 **to satisfy finding #16** — the rule that a guard built only on "was this denied?" cannot tell a working check from a subject that refuses everything. So it asserted the route "got past the 503" by watching a flag set on any access to a `db` proxy. It passed against `if (true \|\| !contribution.canDeliverEmail())` — an unconditional refusal — because **`apiHandler` writes an `error_events` row when it catches the ApiError, and that touched the db and set the flag**. The guard was satisfied by the error path of the exact bug it existed to catch. Found by mutating the route and watching the test stay green; it asserts the RESPONSE now (`status !== 503`). **The positive case written to cure #16 had #16's own disease** |
+| 22 | `guide_test.go`'s `vocabularySources` map | Had a line for `issues` and one for `sales` and **none for `books`**. The map is what stops a guide topic hardcoding a status, a vocabulary or a limit, and its own comment says *"Adding an app means adding a line. An app that is missing simply is not checked"* — so b/books' eight topics had a free pass from the day the first was written until 2026-08-20, through the app going to production. The suite was green the whole time and the section header read `--- PASS: .../books` only because there was no books section at all. **The failure was predicted, in a comment, in the file it happened in.** Adding one line found a real restatement immediately. The lesson is narrower than "add the line": a per-app registry that a new app must OPT INTO is a guard whose coverage silently shrinks every time the platform grows, and it cannot report the app it never heard of |
+| 23 | `bk books --help`'s hand-written command tour | Named `entry list, show` while `declare` and `post` — the two WRITES — existed and went unnamed, missed `rule deactivate`, `category retire` and five of `source`'s eight verbs, and advertised **`bk books member remove`, which that app does not carry**. It had been corrected once before by hand, and the paragraph under it apologises for the previous drift and says "where it and this prose disagree, the table is right" — an honest disclaimer and no protection at all, because the reader has already read the wrong line. **A prose copy of a fact that lives in the code is a guard's job, not a comment's**; `help_prose_table_test.go` now checks the tour against the tree and found all five |
+
+**#22 and #23 landed 2026-08-20**, the day b/books went to production, in a phase
+whose job was to make one app's CLI answer for itself. Both are the same shape as
+#5 and #17 — a check that could not see its subject, and a hand-written copy of a
+fact the code already owns — and #22 is the sharper one, because the file
+predicted its own failure in a comment and nobody was reading that comment when
+the third app was added. **When you add an app, grep the test suites for the
+other apps' slugs**: every list that names them by hand is a place your app is
+invisible.
 
 **Findings 10–14 all landed on 2026-08-07, in the phase whose entire job was to
 disbelieve the previous seven agents — and 11 and 12 are that phase's own new
@@ -649,6 +672,11 @@ never describe an app's internals, and an app's docs never describe another app.
 `/apps/issues/docs` — that app only: `backend.md`, `frontend.md`, `marketing.md`
 (moved from root 2026-08-06 — it describes the app's landing page, which is an
 app internal).
+
+`/apps/books/docs` — that app only: `backend.md`, `frontend.md`. The statutory
+model, the nineteen migrations, the derivations and the i18n column live here
+and nowhere else — a root doc says *books exists, here is its schema and its
+command group*, never how a compte de résultat is derived (§7.5).
 
 `/apps/<app>/docs` — that app only.
 

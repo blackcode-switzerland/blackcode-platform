@@ -5,21 +5,33 @@
 // silently changes is worse than a stale one. Whether the inputs have moved
 // since is a comparison a CLIENT may draw against the live routes; the record
 // itself does not shift.
-import { NextRequest, NextResponse } from 'next/server'
-import { Errors } from '@blackcode/platform-api'
-import { apiHandler, resolveWorkspace } from '@/lib/api'
-import { getAnalysis, publicAnalysis } from '@/lib/db/queries/management'
+import { NextRequest, NextResponse } from "next/server";
+import { Errors } from "@blackcode/platform-api";
+import { apiHandler, resolveWorkspace } from "@/lib/api";
+import { getAnalysis, publicAnalysis } from "@/lib/db/queries/management";
 
-interface Params { params: Promise<{ ws: string; number: string }> }
+interface Params {
+  params: Promise<{ ws: string; number: string }>;
+}
 
 export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
-  const { ws, number } = await params
-  const ctx = await resolveWorkspace(req, ws)
-  const n = Number(number)
+  const { ws, number } = await params;
+  const ctx = await resolveWorkspace(req, ws);
+  const n = Number(number);
   if (!Number.isInteger(n) || n < 1) {
-    throw Errors.badRequest('bad_number', 'number must be a positive integer', 'try `bk books analyse list` for the numbers')
+    throw Errors.badRequest(
+      "bad_number",
+      "number must be a positive integer",
+      "try `bk books analyse list` for the numbers",
+    );
   }
-  const found = await getAnalysis(ctx.workspace.id, n)
-  if (!found) throw Errors.notFound('analysis_not_found', `no analysis #${n} in this workspace`)
-  return NextResponse.json(publicAnalysis(found))
-})
+  const found = await getAnalysis(ctx.workspace.id, n);
+  if (!found) {
+    throw Errors.notFound(
+      "analysis_not_found",
+      `no analysis #${n} in this workspace`,
+      "`bk books analyse list` shows the numbers; an analysis is never deleted, so a missing one was never filed",
+    );
+  }
+  return NextResponse.json(publicAnalysis(found));
+});

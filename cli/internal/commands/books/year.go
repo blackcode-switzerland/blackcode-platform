@@ -70,9 +70,21 @@ func newAccountCreateCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, a, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "added account %s (class %d, %s) — %s\n",
-					a.No, a.Class, a.StatementPosition, a.Label.Fr)
-				return err
+				if _, err := fmt.Fprintf(w, "added account %s (class %d, %s) — %s\n",
+					a.No, a.Class, a.StatementPosition, a.Label.Fr); err != nil {
+					return err
+				}
+				// The next move follows the CLASS. A balance-sheet account is
+				// usually the thing a feed IS (a second bank, a card); a
+				// profit-and-loss account is somewhere an entry gets resolved to.
+				if a.Class <= 2 {
+					nextStep(w, "bk books source create --entity %s --name <name> --type <type> --ledger-account %s",
+						req.Entity, a.No)
+					also(w, "  or point an existing feed at it: bk books source edit <n> --ledger-account %s", a.No)
+				} else {
+					nextStep(w, "bk books resolve <n> --account %s --explanation <what this money was>", a.No)
+				}
+				return nil
 			})
 		},
 	}
@@ -98,6 +110,15 @@ func newOpeningCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "opening",
 		Short: "Opening balances — what a book starts from",
+		Long: "The figures a fiscal year begins with.\n\n" +
+			"THEY ARE TYPED ONCE PER BOOK, and only for its FIRST year: that is the\n" +
+			"migration from whatever kept the books before this app. Every later year's\n" +
+			"openings are PRODUCED by `bk books exercice close`, which carries the previous\n" +
+			"bilan forward and adds the result to 2970 — and `set` refuses a year that is\n" +
+			"not the first, because two sources for the same balance sheet is how a book\n" +
+			"stops reconciling.\n\n" +
+			"`set` replaces the whole set in one transaction rather than a line at a time,\n" +
+			"because a balance sheet is one statement and it has to balance.",
 	}
 	cmd.AddCommand(newOpeningListCmd(), newOpeningSetCmd())
 	return cmd
@@ -109,7 +130,17 @@ func newOpeningListCmd() *cobra.Command {
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/openings"},
 		Short:       "The balances a fiscal year opened with",
-		Args:        cobra.NoArgs,
+		Long: "What a book's year starts from, account by account.\n\n" +
+			"WHERE THESE CAME FROM DEPENDS ON THE YEAR, and it is the one thing to know\n" +
+			"here. A book's FIRST year holds figures somebody typed with `bk books opening\n" +
+			"set` — the migration from whatever kept the books before. Every later year's\n" +
+			"are produced by `bk books exercice close`, which carries the previous bilan\n" +
+			"forward and adds the result to 2970; typing those is refused.\n\n" +
+			"So --exercice matters here in a way it does not on the chart: each year has its\n" +
+			"own set, and reading the wrong year reads a different balance sheet.\n\n" +
+			"An empty answer means the year starts at zero, which is correct for a book\n" +
+			"whose first year has not been typed yet.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -181,10 +212,17 @@ func newOpeningSetCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, r, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w,
+				if _, err := fmt.Fprintf(w,
 					"%s %d opens with %d balance(s) — actif %s = passif %s\n",
-					r.Entity, r.Exercice, r.Written, r.TotalActif, r.TotalPassif)
-				return err
+					r.Entity, r.Exercice, r.Written, r.TotalActif, r.TotalPassif); err != nil {
+					return err
+				}
+				// Read it back before anything is posted on top of it: this is
+				// the one set of figures nobody else can derive, and the only
+				// year it may be typed for.
+				nextStep(w, "bk books bilan --entity %s --exercice %d", r.Entity, r.Exercice)
+				also(w, "  then bring the money in: bk books source create --entity %s --name <name> --type bank --ledger-account <no>", r.Entity)
+				return nil
 			})
 		},
 	}
@@ -277,10 +315,19 @@ func newExerciceCloseCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, r, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w,
+				if _, err := fmt.Fprintf(w,
 					"closed %s %d — résultat %s carried into %d across %d opening balance(s); 2970 now %s\n",
-					r.Entity, r.Year, r.Resultat, r.CarriedInto, r.Carried, r.RetainedEarnings)
-				return err
+					r.Entity, r.Year, r.Resultat, r.CarriedInto, r.Carried, r.RetainedEarnings); err != nil {
+					return err
+				}
+				// Two things are now true and both are worth a command: the
+				// closed year is final and readable, and the next year is
+				// carrying openings nobody typed.
+				nextStep(w, "bk books opening list --entity %s --exercice %d", r.Entity, r.CarriedInto)
+				also(w, "  the filed year: bk books bilan --entity %s --exercice %d", r.Entity, r.Year)
+				also(w, "  and open the one after it when it starts: bk books exercice create --entity %s --year %d",
+					r.Entity, r.CarriedInto+1)
+				return nil
 			})
 		},
 	}

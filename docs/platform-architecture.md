@@ -4,8 +4,10 @@
 production. It describes the shape of the monorepo, the database boundary, the
 access model, the URN scheme and the separation rules between apps.
 
-Read this before starting work on a second app, or before touching anything in
+Read this before starting work on a new app, or before touching anything in
 `packages/platform-*`, an app's `lib/db/schema.ts`, `lib/api/`, or `cli/`.
+**Three apps are in production**: `issues` and `sales` since 2026-08-10, `books`
+since 2026-08-20.
 
 - **How** to add an app: [`adding-an-app.md`](adding-an-app.md) — the walked checklist.
 - **Why** the repo looks like this: [`2026-08-platform-migration.md`](2026-08-platform-migration.md) — the history.
@@ -25,8 +27,21 @@ Blackcode runs a **monorepo of apps on a shared platform**: one Turborepo, one
 Neon project with **one Postgres schema per app**, shared `packages/platform-*`
 libraries, **one `bk` CLI** with a subcommand namespace per app, and **separate
 Vercel projects + subdomains** per app. Apps stay visually and operationally
-independent; underneath they share identity, workspaces, files, activity and the
-agent surface.
+independent; underneath they share **identity and the file STORE**, and nothing
+else of substance.
+
+> **That last clause was rewritten on 2026-08-20**, because the sentence it
+> replaced — "they share identity, workspaces, files, activity and the agent
+> surface" — described the platform as it was designed and not as it is. The
+> multi-app refactor (§4.5, `2026-08-multi-app-refactor.md`) gave every app its
+> own workspaces, members, invitations, labels, upload LEDGER and event feed
+> during 2026-08-10, and by the time b/books was built it never had a shared
+> tenancy to move away from. What the apps genuinely share is short: **one
+> account, one password, one set of API tokens, one sign-in, one app registry,
+> one Blob store** — plus the `bk` binary and the `packages/platform-*`
+> libraries, which is code rather than data. A reader planning a fourth app from
+> the old sentence would design against a platform that has not existed since
+> 2026-08-10.
 
 Full separation — separate repo, database and CLI per app — was **rejected**. It
 rebuilds ~65% of the codebase N times and makes cross-app agent work impossible

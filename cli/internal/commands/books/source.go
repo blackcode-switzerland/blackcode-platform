@@ -27,6 +27,19 @@ func newSourceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "source",
 		Short: "The sources register — every place money data comes from",
+		Long: "A source is any place money data comes from: a bank, a card, a processor, a\n" +
+			"Drive folder. THREE DIFFERENT THINGS live under this noun, and knowing which\n" +
+			"you are setting is most of using it:\n\n" +
+			"  the REGISTER   create, edit, list, show — that the feed exists, what account\n" +
+			"                 it IS, and how often it should arrive\n" +
+			"  the RUNBOOK    runbook-set — how a human fetches it, as structured JSON,\n" +
+			"                 with a credential REFERENCE and never a credential\n" +
+			"  the DOOR       mapping-set, import, record-pull — how a delivered file is\n" +
+			"                 read, and the delivery itself\n\n" +
+			"A source's completeness STATUS is computed from its cadence against its last\n" +
+			"import and stored nowhere, so nothing can mark a late feed green by hand.\n\n" +
+			"A registered source that has never been imported from has produced nothing.\n" +
+			"The register is not the money.",
 	}
 	cmd.AddCommand(newSourceListCmd(), newSourceShowCmd(), newSourceImportCmd(),
 		newSourceCreateCmd(), newSourceEditCmd(), newSourceRecordPullCmd(), newSourceRunbookSetCmd(),
@@ -40,7 +53,18 @@ func newSourceListCmd() *cobra.Command {
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/sources"},
 		Short:       "List sources with their computed completeness status",
-		Args:        cobra.NoArgs,
+		Long: "Every place money data comes from, for one book or for all of them.\n\n" +
+			"STATUS IS COMPUTED AND STORED NOWHERE. It is this source's cadence measured\n" +
+			"against its last import, so nothing can mark a late feed green by hand and a\n" +
+			"source nobody has imported from reads as the gap it is. `bk meta` carries the\n" +
+			"status values; `bk books source show <n>` prints the day windows this source\n" +
+			"uses to reach one.\n\n" +
+			"The `#` column is the argument every other source verb takes — import,\n" +
+			"mapping-set, runbook-set, record-pull, manifest and `rule create --source`. It\n" +
+			"is a workspace #number and not a database id.\n\n" +
+			"A source with no LEDGER ACCOUNT cannot be imported from in a double-entry book:\n" +
+			"the account is what the feed IS. Set it with `bk books source edit`.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -75,7 +99,19 @@ func newSourceShowCmd() *cobra.Command {
 		Use:         "show <number>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/sources/{number}"},
 		Short:       "One source in full: status, pulls, and the runbook",
-		Args:        cobra.ExactArgs(1),
+		Long: "One source, whole: its register row, the windows behind its computed status,\n" +
+			"every pull on record, the runbook for fetching it, and a RECONCILIATION.\n\n" +
+			"THE RECONCILIATION IS THE POINT. It sets the ledger balance for this feed's\n" +
+			"account against what the bank last said it was. It reports and never refuses —\n" +
+			"a drift is usually a payment posted before it cleared — but it distinguishes a\n" +
+			"drift from an UNKNOWN, because a source that has never stated a closing balance\n" +
+			"agrees with nothing, and printing that as agreement would be the reassuring\n" +
+			"wrong answer.\n\n" +
+			"Staged money is excluded from the ledger side and said so explicitly: staged is\n" +
+			"money nobody has judged, and counting it would hide the judgement that is owed.\n\n" +
+			"The runbook prints its credential REFERENCE, never a credential — the door\n" +
+			"refuses anything that is not a vault address.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -164,8 +200,11 @@ func strOr(s *string, fallback string) string {
 func newSourceImportCmd() *cobra.Command {
 	var file, opening, closing, closingOn string
 	cmd := &cobra.Command{
-		Use:         "import <source-number> --file <statement.xml|export.csv>",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/sources/{number}/import"},
+		Use: "import <source-number> --file <statement.xml|export.csv>",
+		// The GET names the BOOK this feed belongs to, which the next-step line
+		// needs: `bk books worklist` without --entity answers about whichever
+		// book sorts first, and that reads exactly like an answer.
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/sources/{number}/import, GET /api/workspaces/{ws}/sources/{number}"},
 		Short:       "Import one bank or card statement through the door",
 		Long: "Deliver one camt.053 statement to this source's book. Every booked line\n" +
 			"lands STAGED — whole file or nothing: the statement must reconcile against\n" +
@@ -237,6 +276,12 @@ func newSourceImportCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Which book this feed belongs to, for the next-step line. Best
+			// effort: a failed read costs the --entity, never the import.
+			var entity string
+			if d, e := c.GetBooksSource(ws, r.Source); e == nil && d.Entity != nil {
+				entity = *d.Entity
+			}
 			return output.Render(format, r, func(w io.Writer) error {
 				fmt.Fprintf(w, "imported %s into source #%d (%s)\n", r.File, r.Source, r.Journal)
 				fmt.Fprintf(w, "  period      %s -> %s\n", strOr(r.Period.From, "?"), strOr(r.Period.To, "?"))
@@ -246,8 +291,21 @@ func newSourceImportCmd() *cobra.Command {
 				if r.WithFx > 0 {
 					fmt.Fprintf(w, "  fx          %d line(s) carry an original-currency story\n", r.WithFx)
 				}
+				// The worklist is scoped to ONE book and defaults to the first
+				// one in the workspace. Printing the bare form sent this
+				// phase's cold run at a different book's work, which reads as
+				// an answer — so the step carries the book this import landed
+				// in. `entityFlag` degrades to the bare form if the lookup
+				// below failed, which is correct for a single-book workspace.
 				if r.Unrecognized > 0 {
-					fmt.Fprintln(w, "next: bk books worklist")
+					nextStep(w, "bk books worklist%s", entityFlag(entity))
+				} else if r.Inferred > 0 {
+					also(w, "every new line matched a rule and landed `inferred` — a suggestion, never applied:")
+					nextStep(w, "bk books worklist%s", entityFlag(entity))
+				} else if r.Imported > 0 {
+					nextStep(w, "bk books entry list%s", entityFlag(entity))
+				} else {
+					also(w, "nothing new — this statement was already imported.")
 				}
 				return nil
 			})
@@ -287,8 +345,26 @@ func newSourceCreateCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, r, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "created source #%d: %s (%s)\n", r.Number, r.Name, r.Type)
-				return err
+				if _, err := fmt.Fprintf(w, "created source #%d: %s (%s)\n", r.Number, r.Name, r.Type); err != nil {
+					return err
+				}
+				if len(ledger) == 0 {
+					also(w, "it names no ledger account, so a double-entry book cannot import from it yet:")
+					nextStep(w, "bk books source edit %d --ledger-account <no>", r.Number)
+					return nil
+				}
+				// A registered source that has never been imported from has
+				// produced nothing. Which door depends on what the feed emits:
+				// a bank states its own balances in camt.053, anything else is
+				// read as a delimited export and needs a mapping first.
+				if r.Type == "bank" {
+					nextStep(w, "bk books source import %d --file <statement.xml>", r.Number)
+				} else {
+					also(w, "a non-camt export is read as delimited — teach its columns once:")
+					nextStep(w, "bk books source mapping-set %d --file <mapping.json>", r.Number)
+					also(w, "  then: bk books source import %d --file <export.csv> --opening <chf> --closing <chf>", r.Number)
+				}
+				return nil
 			})
 		},
 	}
@@ -370,8 +446,15 @@ func newSourceEditCmd() *cobra.Command {
 				if r.Retired {
 					state = " (retired)"
 				}
-				_, err := fmt.Fprintf(w, "updated source #%d: %s%s\n", r.Number, r.Name, state)
-				return err
+				if _, err := fmt.Fprintf(w, "updated source #%d: %s%s\n", r.Number, r.Name, state); err != nil {
+					return err
+				}
+				// `source show` is the only read that ends with the
+				// RECONCILIATION — the ledger against what the bank last
+				// reported — which is what an edit to the ledger accounts or
+				// the cadence changes.
+				nextStep(w, "bk books source show %d", r.Number)
+				return nil
 			})
 		},
 	}
@@ -419,8 +502,15 @@ func newSourceRecordPullCmd() *cobra.Command {
 				if !r.Created {
 					verb = "already recorded — converged on"
 				}
-				_, err := fmt.Fprintf(w, "%s %s\n", verb, r.File)
-				return err
+				if _, err := fmt.Fprintf(w, "%s %s\n", verb, r.File); err != nil {
+					return err
+				}
+				// A recorded pull moves the source's computed status; it does
+				// NOT book anything. The statement still has to come through
+				// the door before the money exists in the ledger.
+				also(w, "a pull is provenance, not money — the statement still has to be imported:")
+				nextStep(w, "bk books source import %d --file <statement.xml>", n)
+				return nil
 			})
 		},
 	}
@@ -490,8 +580,13 @@ func newSourceMappingSetCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, r, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "mapping set on source #%d (%s) — delimited files can now be imported\n", r.Number, r.Name)
-				return err
+				if _, err := fmt.Fprintf(w, "mapping set on source #%d (%s) — delimited files can now be imported\n", r.Number, r.Name); err != nil {
+					return err
+				}
+				nextStep(w, "bk books source import %d --file <export.csv> --opening <chf> --closing <chf>", r.Number)
+				also(w, "  --opening/--closing are required for a delimited file: it carries no balances,")
+				also(w, "  so nothing else can tell a whole export from half of one.")
+				return nil
 			})
 		},
 	}
@@ -543,8 +638,11 @@ func newSourceRunbookSetCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, r, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "runbook set on source #%d (version %v)\n", n, r["version"])
-				return err
+				if _, err := fmt.Fprintf(w, "runbook set on source #%d (version %v)\n", n, r["version"]); err != nil {
+					return err
+				}
+				nextStep(w, "bk books source show %d", n)
+				return nil
 			})
 		},
 	}

@@ -60,7 +60,17 @@ func newEntityListCmd() *cobra.Command {
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/entities"},
 		Short:       "List the books in the active workspace",
-		Args:        cobra.NoArgs,
+		Long: "Every book in this app's active workspace, with the two facts that decide\n" +
+			"how each one is kept: its LEGAL FORM and its bookkeeping REGIME. Both are\n" +
+			"permanent, and every other command names a book by the SLUG in this list —\n" +
+			"`bk books bilan --entity northgate`, and so on for every read and write.\n\n" +
+			"The `#` column is the workspace #number. It is not the argument to anything —\n" +
+			"books are addressed by slug everywhere.\n\n" +
+			"A workspace holds ANY NUMBER of books, and most read commands default to the\n" +
+			"first one. If this list has more than one row, name the book explicitly in a\n" +
+			"script: the default answers about whichever book sorts first, and the answer\n" +
+			"looks perfectly reasonable.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -105,10 +115,15 @@ func newEntityCreateCmd() *cobra.Command {
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/entities"},
 		Short:       "Create a book",
 		Long: "Create a book.\n\n" +
-			"The bookkeeping regime follows from the legal form unless you state it: a capital\n" +
-			"company is always double-entry (art. 957 al. 1 ch. 2 CO, no exceptions at any\n" +
-			"turnover) and a sole proprietorship defaults to simplified. The server refuses a\n" +
+			"The bookkeeping regime follows from the legal form unless you state it: a CAPITAL\n" +
+			"COMPANY is always double-entry (art. 957 al. 1 ch. 2 CO, no exceptions at any\n" +
+			"turnover) and anything else defaults to simplified. The server refuses a\n" +
 			"simplified SA with a database constraint rather than a warning.\n\n" +
+			"The forms recognised as capital companies are SA, SARL, SÀRL, AG and GmbH. The\n" +
+			"COLUMN is an open string and takes whatever you send — deliberately, so a form\n" +
+			"this product has not met is recorded rather than refused — but a form outside\n" +
+			"that list is treated as a sole proprietorship, and `slug`, `legal-form` and the\n" +
+			"regime are all PERMANENT. Check the spelling before you create the book.\n\n" +
 			"The book arrives with the Swiss PME chart of accounts already in it, because a\n" +
 			"book with no accounts cannot take a posting. Those accounts are then this book's\n" +
 			"own: editing them affects no other book. It still needs a fiscal year before\n" +
@@ -135,14 +150,17 @@ func newEntityCreateCmd() *cobra.Command {
 				// Say what is still missing. The book has a chart and no fiscal
 				// year, so nothing can be posted to it yet, and a reader who is
 				// not told that reads "created" as "ready".
-				_, err := fmt.Fprintf(w, "chart of accounts installed. Next: bk books exercice create --entity %s --year <yyyy>\n", e.Slug)
-				return err
+				also(w, "chart of accounts installed, and it is this book's own from here on.")
+				// It does NOT open a fiscal year, and until one exists every
+				// read answers that the book has no exercice.
+				nextStep(w, "bk books exercice create --entity %s --year <yyyy>", e.Slug)
+				return nil
 			})
 		},
 	}
 	cmd.Flags().StringVar(&req.Slug, "slug", "", "URL-safe handle, e.g. blackcode (required)")
 	cmd.Flags().StringVar(&req.Name, "name", "", "Legal name (required)")
-	cmd.Flags().StringVar(&req.LegalForm, "legal-form", "", "SA or RI (required)")
+	cmd.Flags().StringVar(&req.LegalForm, "legal-form", "", "The legal form, stored as given: SA, SARL, AG, GmbH, RI, … (required)")
 	cmd.Flags().StringVar(&req.BookkeepingRegime, "regime", "", "double_entry or simplified (default: from legal form)")
 	cmd.Flags().StringVar(&req.Seat, "seat", "", "Registered seat")
 	_ = cmd.MarkFlagRequired("slug")
@@ -159,6 +177,15 @@ func newExerciceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "exercice",
 		Short: "Fiscal years",
+		Long: "Fiscal years. Every entry and every statement is scoped to one, and a book\n" +
+			"with no exercice answers nothing — `bk books entity create` does not open one.\n\n" +
+			"A year runs 1 January to 31 December; there is no flag for another shape.\n\n" +
+			"`close` is the only irreversible act in this app. It files the year as its\n" +
+			"final result and carries the bilan into the next one, and THERE IS NO REOPEN:\n" +
+			"art. 958f keeps a filed year for ten years as it was, so anything found\n" +
+			"afterwards is corrected in the current year with a reversing entry. It refuses\n" +
+			"before it writes anything, and `bk books exercice close --help` lists the four\n" +
+			"conditions.",
 	}
 	cmd.AddCommand(newExerciceListCmd(), newExerciceCreateCmd(), newExerciceCloseCmd())
 	return cmd
@@ -170,7 +197,16 @@ func newExerciceListCmd() *cobra.Command {
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/exercices"},
 		Short:       "List fiscal years",
-		Args:        cobra.NoArgs,
+		Long: "The exercices a book has, newest first, with the dates they actually run\n" +
+			"between and whether they are still open.\n\n" +
+			"STATUS is the one that matters. `closed` means the year has been filed: it\n" +
+			"takes no new entries, its openings are fixed, and there is no reopen (art. 958f\n" +
+			"CO keeps it for ten years as it was). `open` is everything else.\n\n" +
+			"FROM and TO are read, never assumed — a book that changed its year end has a\n" +
+			"short exercice, and `bk books exercice close` follows these dates rather than\n" +
+			"the calendar.\n\n" +
+			"Without --entity this answers for EVERY book in the workspace.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -201,10 +237,24 @@ func newExerciceListCmd() *cobra.Command {
 func newExerciceCreateCmd() *cobra.Command {
 	var req client.CreateBooksExerciceRequest
 	cmd := &cobra.Command{
-		Use:         "create --entity <slug> --year <yyyy>",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/exercices"},
+		Use: "create --entity <slug> --year <yyyy>",
+		// The GET is the state read behind the next-step line: a book's FIRST
+		// year is the only one whose openings may be typed, and pointing a
+		// second-year caller at `opening set` would send it at a refusal.
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/exercices, GET /api/workspaces/{ws}/exercices"},
 		Short:       "Open a fiscal year",
-		Args:        cobra.NoArgs,
+		Long: "Open a fiscal year. Nothing can be posted, opened or derived without one:\n" +
+			"`entity create` does not open one, and until this runs every read answers that\n" +
+			"the book has no exercice.\n\n" +
+			"The year runs 1 January to 31 December of --year. There is no flag for another\n" +
+			"shape: a non-calendar or shortened exercice is a real statutory case and has no\n" +
+			"write door in this CLI yet.\n\n" +
+			"What comes next depends on whether this is the book's FIRST year. A first year\n" +
+			"takes typed opening balances (`bk books opening set`) — the figures from\n" +
+			"whatever kept the books before. Every later year's openings are produced by\n" +
+			"closing the year before it, and typing them is refused. The command says which\n" +
+			"case you are in when it succeeds.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -218,9 +268,25 @@ func newExerciceCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// The next move DEPENDS ON STATE, and the state is which year this
+			// is. A book's FIRST year is the only one whose openings may be
+			// typed (every later year's are produced by closing the one before
+			// it), so telling a second-year caller to type them would send it
+			// at a refusal. One cheap GET decides it; if that read fails the
+			// step still prints, in the form that is true either way.
+			years, listErr := c.ListBooksExercices(ws, req.Entity)
 			return output.Render(format, x, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "opened exercice %d (%s to %s)\n", x.Year, x.StartsOn, x.EndsOn)
-				return err
+				if _, err := fmt.Fprintf(w, "opened exercice %d (%s to %s)\n", x.Year, x.StartsOn, x.EndsOn); err != nil {
+					return err
+				}
+				if listErr == nil && len(years) == 1 {
+					also(w, "this is %s's first year — its opening balance sheet is typed, once:", req.Entity)
+					nextStep(w, "bk books opening set --entity %s --balance <account>=<amount> …", req.Entity)
+					return nil
+				}
+				nextStep(w, "bk books source import <n> --file <statement.xml>   (bk books source list%s)",
+					entityFlag(req.Entity))
+				return nil
 			})
 		},
 	}
@@ -250,7 +316,17 @@ func newAccountListCmd() *cobra.Command {
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/accounts"},
 		Short:       "List a book's chart of accounts",
-		Args:        cobra.NoArgs,
+		Long: "The accounts this book keeps. A new book arrives with the Swiss PME template\n" +
+			"installed and the accounts are ITS OWN from then on — adding one here changes\n" +
+			"no other book.\n\n" +
+			"POSITION is the statutory statement line the account reports on, and it is the\n" +
+			"value `bk books account create --position` takes: this list is where you find\n" +
+			"the spelling of a position the book already uses. CL is the account class —\n" +
+			"1 and 2 are bilan lines (art. 959a), 3 and above compte de résultat (959b) —\n" +
+			"and class and position must agree.\n\n" +
+			"A CHART IS NOT YEAR-SCOPED. --exercice is accepted and changes nothing here;\n" +
+			"accounts belong to the book, not to one of its years.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -287,6 +363,19 @@ func newEntryCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "entry",
 		Short: "The grand livre — écritures",
+		Long: "The écritures. TWO JOURNALS live under this noun and the commands serve both:\n" +
+			"a double-entry book keeps a GRAND LIVRE of balanced lines, and a simplified\n" +
+			"book (art. 957 al. 2) keeps a RECETTES-DÉPENSES journal with a direction and an\n" +
+			"amount and no lines at all. Naming a simplified book —\n" +
+			"`bk books entry list --entity <slug>` — is what selects the second; without it\n" +
+			"you are reading the grand livre.\n\n" +
+			"EVERYTHING LANDS STAGED, whether it arrived through an import or was declared\n" +
+			"by hand. `post` is the gate, and posted is immutable — enforced by the database,\n" +
+			"not by app code. From then on a correction is a reversing entry and nothing is\n" +
+			"ever deleted (art. 958f, ten-year retention).\n\n" +
+			"Every command here takes the `#number`, which is workspace-wide. The journal\n" +
+			"no. shown beside it is the gapless statutory number within (book, year) — what\n" +
+			"a tax authority reads, and not an argument to anything.",
 	}
 	cmd.AddCommand(newEntryListCmd(), newEntryShowCmd(), newEntryPostCmd(), newEntryDeclareCmd())
 	return cmd
@@ -394,10 +483,15 @@ func entryStory(w io.Writer, e *client.BooksEntry) {
 		fmt.Fprintln(w, "  related      yes — presented separately (art. 959a al. 4)")
 	}
 	if e.MatchedRuleID != nil {
-		fmt.Fprintf(w, "  matched rule #%d\n", *e.MatchedRuleID)
+		// NOT a `#number`. The wire sends the rule's database id here, and the
+		// number `bk books rule list` prints is a different one — an agent that
+		// read "#634" and ran `bk books rule …` against it would be addressing
+		// nothing. Printed as what it is until the wire serves the display
+		// number (booksFrontend tracker, 2026-08-20).
+		fmt.Fprintf(w, "  matched rule internal id %d  (bk books rule list shows the #numbers)\n", *e.MatchedRuleID)
 	}
 	if e.SourceID != nil {
-		fmt.Fprintf(w, "  source id    %d  (the feed it arrived from)\n", *e.SourceID)
+		fmt.Fprintf(w, "  source       internal id %d  (the feed it arrived from; bk books source list shows the #numbers)\n", *e.SourceID)
 	}
 	if e.ReversesEntryID != nil {
 		fmt.Fprintf(w, "  reverses     entry %d\n", *e.ReversesEntryID)
@@ -410,7 +504,18 @@ func newEntryShowCmd() *cobra.Command {
 		Use:         "show <number>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/entries/{number}"},
 		Short:       "Show one écriture with its lines",
-		Args:        cobra.ExactArgs(1),
+		Long: "One écriture in full: what the money was, what was decided about it, and the\n" +
+			"lines it posts.\n\n" +
+			"Read this BEFORE posting. It carries the two things that decide whether a post\n" +
+			"will succeed — the account on every line, and any VERDICT filed against the\n" +
+			"entry. A `blocked` verdict makes the entry refuse to post, server side, and the\n" +
+			"line here says so rather than leaving you to meet the refusal.\n\n" +
+			"NOTE BOTH NUMBERS. The `#number` is workspace-wide and is what every command\n" +
+			"takes; the journal no. is the gapless statutory number within (book, year),\n" +
+			"which is what a tax authority reads. Neither substitutes for the other.\n\n" +
+			"--entity is only for a SIMPLIFIED book, whose numbers live in its own\n" +
+			"recettes-dépenses journal rather than the grand livre.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -669,7 +774,18 @@ func newOverviewCmd() *cobra.Command {
 		Use:         "overview",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/overview"},
 		Short:       "Every book, with whichever statement its legal form has",
-		Args:        cobra.NoArgs,
+		Long: "One row per book in the workspace: the year it is currently on, its result,\n" +
+			"the statement its legal form actually has, how many entries it holds and how\n" +
+			"much of that is still unexplained.\n\n" +
+			"BALANCE reads `n/a (art. 957 al. 2)` for a sole proprietorship rather than 0.00\n" +
+			"or a blank. A simplified book keeps no balance sheet at all, and printing a\n" +
+			"zero would be an answer to a question the law does not ask of it.\n\n" +
+			"TO RESOLVE is the honest health number: money that has arrived and that nobody\n" +
+			"has yet said anything about. Work it down one book at a time:\n" +
+			"`bk books worklist --entity <slug>`.\n\n" +
+			"It takes no scope at all: it is the whole workspace, by design, and it is the\n" +
+			"right first call in an unfamiliar one.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -714,7 +830,16 @@ func newPatrimoineCmd() *cobra.Command {
 		Use:         "patrimoine",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/patrimoine"},
 		Short:       "Net-worth statement for a sole proprietorship, art. 957 al. 2",
-		Args:        cobra.NoArgs,
+		Long: "The net-worth statement a SIMPLIFIED book has instead of a bilan. A sole\n" +
+			"proprietorship under art. 957 al. 2 keeps recettes-dépenses and a statement of\n" +
+			"patrimoine; it has no balance sheet, which is why `bk books bilan` refuses for\n" +
+			"such a book and cites the article.\n\n" +
+			"IT READS SNAPSHOTS, and a snapshot is something somebody recorded. An empty\n" +
+			"answer here means no snapshot exists — for a capital company that is permanent\n" +
+			"and correct, and for a sole proprietorship it means none has been taken.\n\n" +
+			"There is no write door: nothing in this CLI records a patrimoine snapshot. A\n" +
+			"book that needs one cannot get it here yet.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -767,8 +892,10 @@ func fxLine(fx *client.BooksFx) string {
 
 func newEntryPostCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:         "post <number>",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/entries/{number}/post"},
+		Use: "post <number>",
+		// The GET names the book and year, so the statement lines the post
+		// prints are runnable rather than templates.
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/entries/{number}/post, GET /api/workspaces/{ws}/entries/{number}"},
 		Short:       "Post a staged écriture — after review, it becomes immutable",
 		Long: "Staged -> posted, after review. The database has the last word: a posted\n" +
 			"entry must balance, carry at least two lines, and have every line mapped to\n" +
@@ -793,13 +920,34 @@ func newEntryPostCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Which book and year, so the two statement lines below are
+			// runnable rather than templates. Best effort: a failed read costs
+			// the arguments, never the post, which has already landed.
+			var entity string
+			var exercice int
+			if e, readErr := c.GetBooksEntry(ws, n, ""); readErr == nil {
+				entity, exercice = e.Entity, e.Exercice
+			}
 			return output.Render(format, r, func(w io.Writer) error {
 				if r.Already {
 					_, err := fmt.Fprintf(w, "entry #%d was already posted (journal no. %d)\n", r.Number, r.EntryNo)
 					return err
 				}
-				_, err := fmt.Fprintf(w, "posted entry #%d (journal no. %d) — now immutable; corrections are reversing entries\n", r.Number, r.EntryNo)
-				return err
+				if _, err := fmt.Fprintf(w, "posted entry #%d (journal no. %d) — now immutable; corrections are reversing entries\n", r.Number, r.EntryNo); err != nil {
+					return err
+				}
+				// A post is the only write that changes a STATEMENT, so the
+				// statement is the thing to read back. The entry knows its own
+				// book; `entry show` needs no --entity and the statements do.
+				nextStep(w, "bk books entry show %d", r.Number)
+				if entity != "" {
+					also(w, "  the effect on the year: bk books cr --entity %s --exercice %d", entity, exercice)
+					also(w, "  what is still unjudged: bk books worklist --entity %s", entity)
+				} else {
+					also(w, "  the effect on the year: bk books cr --entity <book> --exercice <yyyy>")
+					also(w, "  what is still unjudged: bk books worklist --entity <book>")
+				}
+				return nil
 			})
 		},
 	}
@@ -851,15 +999,27 @@ func newEntryDeclareCmd() *cobra.Command {
 			return output.Render(format, r, func(w io.Writer) error {
 				if r.Journal == "recettes_depenses" {
 					// No "(staged)" here: an RI journal has no posting lifecycle.
-					_, err := fmt.Fprintf(w, "declared entry #%d in the recettes-dépenses journal\n", r.Number)
-					return err
+					if _, err := fmt.Fprintf(w, "declared entry #%d in the recettes-dépenses journal\n", r.Number); err != nil {
+						return err
+					}
+					// A simplified book keeps no balance sheet (art. 957 al. 2),
+					// so the statement to read back is the journal itself.
+					nextStep(w, "bk books entry list --entity %s", req.Entity)
+					return nil
 				}
 				no := 0
 				if r.EntryNo != nil {
 					no = *r.EntryNo
 				}
-				_, err := fmt.Fprintf(w, "declared entry #%d (journal no. %d, staged) — post it after review: bk books entry post %d\n", r.Number, no, r.Number)
-				return err
+				if _, err := fmt.Fprintf(w, "declared entry #%d (journal no. %d, staged)\n", r.Number, no); err != nil {
+					return err
+				}
+				// It lands STAGED and passes the same posting gate as imported
+				// money: review is the point of the gate, so the next step is
+				// the post, not the declaration.
+				nextStep(w, "bk books entry post %d", r.Number)
+				also(w, "  read it first: bk books entry show %d", r.Number)
+				return nil
 			})
 		},
 	}
@@ -874,7 +1034,7 @@ func newEntryDeclareCmd() *cobra.Command {
 	cmd.Flags().StringVar(&req.Contra, "contra", "", "Double-entry books: the settling account")
 	cmd.Flags().StringArrayVar(&debits, "debit", nil, "A debit line, repeatable: 5000=11600.00 (more than two sides)")
 	cmd.Flags().StringArrayVar(&credits, "credit", nil, "A credit line, repeatable: 1020=13350.00")
-	cmd.Flags().StringVar(&req.TvaRate, "tva-rate", "", "VAT rate as written on the invoice: 8.1, 3.8, 2.6 or 0")
+	cmd.Flags().StringVar(&req.TvaRate, "tva-rate", "", "VAT rate as written on the invoice; run bk meta for the current ones")
 	cmd.Flags().StringVar(&req.TvaAmount, "tva-amount", "", "VAT in CHF (default: derived from the TTC amount at that rate)")
 	cmd.Flags().BoolVar(&req.TvaInputClaimed, "tva-input-claimed", false, "Claim the input tax (art. 28 LTVA; needs --evidence-tier full)")
 	cmd.Flags().StringVar(&req.EvidenceTier, "evidence-tier", "", "full, partial or bare — full means the pièce is on file")

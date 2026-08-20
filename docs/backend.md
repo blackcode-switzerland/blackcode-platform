@@ -142,8 +142,8 @@ shared handler needs from an app:
 |---|---|
 | `appSlug` | who this deployment IS. It tags `platform.error_events.app` and `platform.uploads.app`, prefixes blob paths (`<app>/<workspace>/<file>`), and keys `platform.blob_references` — so it is the answer to "who wrote this row?" wherever a shared table still carries rows from more than one app |
 | `db` | a Drizzle client typed to the platform tables; every app's is a superset. **Supply it as a getter if the app's client is lazy** — `next build` imports every route module |
-| `workspaces` | **where this app's workspaces live** (2026-08-10). A `WorkspaceSource`: **six** methods over one subject — resolve one for a caller, list them, one by id, its members, and the default workspace's read/write. (It was seven until 2026-08-10: `assertAppAccess` went with `platform.app_access`, and a method every app implements as an empty function is not a seam.) `apps/issues` supplies `platformWorkspaceSource(db, APP_SLUG)`; `apps/sales` supplies its own over `sales.*`. **Required, with no platform default** — a default would mean an app that never answered the question serves, correctly and silently, against another app's tenancy |
-| `uploads` | **where this app records its uploads** (2026-08-10, Phase 3). An `UploadLedger`: attribute a file to a workspace, and write the ledger row. `apps/issues` supplies `platformUploadLedger(db, APP_SLUG)`; `apps/sales` writes `sales.uploads`. **Required, with no platform default** — the cross-app delete gate asks an app whether a file is still in use, and an app writing its rows into another app's ledger would be asked the wrong question. **The STORE does not split**: one Blob store, one quota, one `platform.blob_references` |
+| `workspaces` | **where this app's workspaces live** (2026-08-10). A `WorkspaceSource`: **six** methods over one subject — resolve one for a caller, list them, one by id, its members, and the default workspace's read/write. (It was seven until 2026-08-10: `assertAppAccess` went with `platform.app_access`, and a method every app implements as an empty function is not a seam.) `apps/issues` supplies `platformWorkspaceSource(db, APP_SLUG)`; `apps/sales` supplies its own over `sales.*` and `apps/books` its own over `books.*`. **Required, with no platform default** — a default would mean an app that never answered the question serves, correctly and silently, against another app's tenancy |
+| `uploads` | **where this app records its uploads** (2026-08-10, Phase 3). An `UploadLedger`: attribute a file to a workspace, and write the ledger row. `apps/issues` supplies `platformUploadLedger(db, APP_SLUG)`; `apps/sales` writes `sales.uploads`. **Required, with no platform default** — the cross-app delete gate asks an app whether a file is still in use, and an app writing its rows into another app's ledger would be asked the wrong question. **The STORE does not split**: one Blob store, one quota, one `platform.blob_references`. `apps/books` is the case the "required" part was written for: it serves no upload route at all, so it supplies a ledger whose two methods THROW rather than a `books.uploads` table with no writer — the honest answer in a field that will not let an app stay silent (`apps/books/lib/api.ts`) |
 | `resolveUser` | the browser half is app-specific (next-auth config) |
 | `resolveSessionUser?` | session-ONLY, for `/api/tokens`. A separate field because a bearer token minting a bearer token is privilege escalation; the routes that need it throw at mount time rather than falling back |
 | `manifest?` | `X-BK-Help` / `X-BK-Changelog`. Omitted by an app with no agent landing page — a breadcrumb pointing at a 404 is worse than none |
@@ -566,9 +566,36 @@ are documented in **`apps/issues/docs/backend.md`**, not here — root docs do n
 describe an app's internals (platform-architecture.md §7.5). The same goes for
 their status/priority vocabularies.
 
+`apps/sales` keeps its own in the **`sales`** schema and `apps/books` its own in
+**`books`** (`apps/books/docs/backend.md`).
+
 An app may FK into and query `platform.*` freely; it may not read or write
 another app's schema, and the per-app Postgres roles make that a database
 guarantee rather than a convention.
+
+#### `books.*` is the first schema where POSTGRES enforces the domain rules
+
+Worth knowing at root altitude because it changes what a route can assume, not
+because of anything about accounting. `apps/books` went to production
+2026-08-20 and puts its statutory invariants in **triggers** (migrations `0004`
+and `0016`) rather than in route code: an entry cannot be un-posted, a posted
+entry cannot be edited, an unbalanced entry cannot be posted, a posting cannot
+name an account the book's chart does not carry, and a closed year cannot be
+touched. Nothing is hard-deleted at all — art. 958f CO carries a ten-year
+retention duty and a trigger enforces it, so there is no soft-delete-then-purge
+path and **no trash verb for that app**.
+
+Two consequences for anyone touching a books route:
+
+- **A refusal can arrive at COMMIT, in Postgres's words.** Drizzle wraps it, so
+  the sentence sits on the CAUSE CHAIN and `e.message` says only "Failed query:
+  COMMIT". `apps/books/lib/db/queries/imports.ts` exports `sqlErrorText` for
+  exactly this; a route that does not use it answers a bare 500 where the
+  database said something useful. That is CLAUDE.md's *"check the catalog, not
+  the repo"* in its runtime form.
+- **The CLI is the only write door.** b/books' web surface reads and never
+  writes, so `lib/cli-parity.test.ts` is the difference between a capability
+  existing and a capability being reachable.
 ## Per-app access — REMOVED 2026-08-10 (multiAppFinalRefactor Phase 5)
 
 **Membership is the whole gate.** Two levels decide what a person can reach:
@@ -707,8 +734,8 @@ assert the positive, treat the refusals as the weaker half.
 ### What each app owes
 
 Full account closure stays **issues-only** — one place, one typed confirmation.
-Every other app serves the narrow half (`/api/me/footprint`, both methods) and
-supplies `AppContext.footprint`. `purge` must never touch `platform.users`,
+Every other app — `sales` and, since 2026-08-20, `books` — serves the narrow half
+(`/api/me/footprint`, both methods) and supplies `AppContext.footprint`. `purge` must never touch `platform.users`,
 `platform.api_tokens` or `platform.inbox_messages`: those are the ACCOUNT, and
 closing it is a separate, louder act.
 

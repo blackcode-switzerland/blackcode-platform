@@ -33,8 +33,22 @@ func newComplianceListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/compliance-rules"},
-		Short:       "List all 19 rules with severity, confidence and review state",
-		Args:        cobra.NoArgs,
+		Short:       "The statutory rules, with severity, confidence and review state",
+		Long: "Every statutory rule this app knows, with how hard it bites, where it came\n" +
+			"from, and whether a fiduciary has signed it off.\n\n" +
+			"THE RULES ARE THE APP'S, NOT A BOOK'S. There is no --entity here: the set is\n" +
+			"the same for every book, and APPLIES TO says which legal form each one bites on —\n" +
+			"`SA`, `RI` or `both`. A rule that does not apply to a book simply never fires\n" +
+			"against it.\n\n" +
+			"CONFIDENCE is provenance, not quality: `verified_fedlex` means the citation was\n" +
+			"checked against the federal text, `doctrine_inferred` means it was reasoned from\n" +
+			"practice and wants a human before it is trusted.\n\n" +
+			"STATE is the operational column. Everything starts `draft`; `bk books\n" +
+			"compliance review` moves it to approved or rejected, and an approved rule may\n" +
+			"carry the reviewer's corrected wording. Read one whole with `bk books\n" +
+			"compliance show <rule-id>` — the ids are words, not numbers.\n\n" +
+			"Filing a verdict against an ENTRY is a different verb: `bk books verdict`.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -79,7 +93,19 @@ func newComplianceShowCmd() *cobra.Command {
 		Use:         "show <rule-id>",
 		Annotations: map[string]string{"routes": "GET /api/compliance-rules/{rule}"},
 		Short:       "One rule, whole: trigger, logic, consequence, review trail",
-		Args:        cobra.ExactArgs(1),
+		Long: "One statutory rule in full: what triggers it, the check as written, what\n" +
+			"happens if it is breached, and who has signed it off.\n\n" +
+			"CONFIDENCE says where the rule came from. `verified_fedlex` means the citation\n" +
+			"was checked against the federal text; `doctrine_inferred` means it was reasoned\n" +
+			"from practice and is exactly the kind a fiduciary should read before it is\n" +
+			"trusted. It is not a quality score — it is a provenance label.\n\n" +
+			"REVIEW is the operational half. A rule is `draft` until somebody signs it off\n" +
+			"with `bk books compliance review`, and an `approved` rule may carry EDITED\n" +
+			"LOGIC — the reviewer's corrected wording, shown beside the original rather than\n" +
+			"replacing it.\n\n" +
+			"The argument is the rule id, which is a WORD (bk-001, ret-002, receipt-001) and\n" +
+			"never a number. `bk books compliance list` shows them.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -163,6 +189,10 @@ func newComplianceReviewCmd() *cobra.Command {
 			}
 			return output.Render(format, r, func(w io.Writer) error {
 				fmt.Fprintf(w, "%s is now %s (reviewed by %s)\n", r.RuleID, r.ReviewState, r.ReviewedBy)
+				// A review is a signature, and the trail is the point: `show`
+				// is where the reviewed logic and who signed it are read back.
+				nextStep(w, "bk books compliance show %s", r.RuleID)
+				also(w, "  what is still unreviewed: bk books compliance list")
 				return nil
 			})
 		},
@@ -222,9 +252,19 @@ func newVerdictCmd() *cobra.Command {
 					journal = "recettes-dépenses"
 				}
 				fmt.Fprintf(w, "verdict %s filed on entry #%d (%s), citing %s\n", verdict, r.Number, journal, strings.Join(ruleIDs, ", "))
+				// A verdict never corrects the record; `blocked` is the one
+				// with an enforced consequence, and it is enforced server side.
 				if verdict == "blocked" {
 					fmt.Fprintln(w, "this entry will refuse to post until a fresh verdict clears it")
+					if resolves != "" {
+						also(w, "  what clears it: %s", resolves)
+					}
+					nextStep(w, "bk books entry show %d", r.Number)
+					also(w, "  and once it is fixed, a FRESH verdict replaces this one (the old stays in history):")
+					also(w, "  bk books verdict %d --verdict accepted --rules %s", r.Number, strings.Join(ruleIDs, ","))
+					return nil
 				}
+				nextStep(w, "bk books entry post %d", r.Number)
 				return nil
 			})
 		},

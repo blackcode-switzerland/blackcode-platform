@@ -8,13 +8,17 @@ load-bearing summary.
 
 A **monorepo** (npm workspaces + Turborepo) of Blackcode's internal apps:
 
-**Two apps are in production**, on one database and one login —
-`issues.blackcode.ch` and `sales.blackcode.ch` (live 2026-08-10).
+**Three apps are in production**, on one database and one login —
+`issues.blackcode.ch` and `sales.blackcode.ch` (live 2026-08-10) and
+`books.blackcode.ch` (live 2026-08-20).
 
 - **`apps/issues`** — an AI-native, Linear-style issue tracker. The first app.
 - **`apps/sales`** — prospects, meetings, communications. The second app, and the
   reason the platform is shaped the way it is: it was the second question every
   shared thing had ever been asked.
+- **`apps/books`** — **b/books**, Swiss statutory bookkeeping. The third app, and
+  the first whose **web surface is read-only**: every write goes through
+  `bk books`, so the CLI is the product rather than a companion to it.
 - **`apps/_scaffold`** — the scaffold. A real, minimal app that builds and passes
   every guardrail. **Copy it to add an app; do not edit it in place.**
 
@@ -28,7 +32,7 @@ Run every command from the **repo root**; Turborepo delegates into the workspace
 nine, `platform-email` since 2026-08-11 and `platform-i18n` since 2026-08-20
 (the locale vocabulary, the one resolution order, the typed dictionary lookup —
 and **no product copy**; each app supplies its own strings). The database is `platform.*` + `issues.*` +
-`sales.*` (never `public`), one bounded role per app. Apps are real data
+`sales.*` + `books.*` (never `public`), one bounded role per app. Apps are real data
 (`platform.apps` is the address book). The CLI, guide, changelog, `bk meta` and
 docs are split per app; everything is addressable by URN; the blob STORE is
 shared and reference-counted across apps while each app keeps its own upload

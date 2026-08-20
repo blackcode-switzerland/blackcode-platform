@@ -101,6 +101,20 @@ func newRuleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rule",
 		Short: "Recognition rules — remembered judgments, keyed to the (source, counterparty) pair",
+		Long: "A rule is a judgment this app remembered so the next identical payment does not\n" +
+			"need one.\n\n" +
+			"THE MATCH KEY IS THE PAIR: the SOURCE a payment arrives through, and a fragment\n" +
+			"of its label. Never the name alone — the same merchant on an untracked card has\n" +
+			"to stay unexplained, because that is what keeps the completeness signal honest.\n\n" +
+			"RULES RUN AT IMPORT AND NEVER APPLY THEMSELVES. A match marks the line\n" +
+			"`inferred` and puts it on the worklist citing the rule; a human or an agent\n" +
+			"still resolves it. The machine suggests, and that is the whole of its authority.\n\n" +
+			"Most rules are TAUGHT by `bk books resolve --rule-counterparty …`, which records\n" +
+			"the teaching entry forever. `create` is for knowledge that arrives before the\n" +
+			"money — a signed lease, a subscription.\n\n" +
+			"Nothing here is deleted. `deactivate` stops a rule matching future imports; the\n" +
+			"entries it already explained keep it, because a posted entry may cite it for ten\n" +
+			"years. There is no reactivate.",
 	}
 	cmd.AddCommand(newRuleListCmd(), newRuleCreateCmd(), newRuleDeactivateCmd())
 	return cmd
@@ -112,7 +126,18 @@ func newRuleListCmd() *cobra.Command {
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/rules"},
 		Short:       "List a book's recognition rules",
-		Args:        cobra.NoArgs,
+		Long: "The judgments this book has remembered. A rule is keyed to the PAIR — the\n" +
+			"source a payment arrives through and a fragment of its label — never the\n" +
+			"merchant name alone, so the same name on an untracked card stays unexplained.\n\n" +
+			"TAUGHT BY names the entry the rule was learned from, and it is kept forever: a\n" +
+			"rule that is marking the wrong thing can be traced to the resolution that\n" +
+			"created it. A `—` means the rule was declared ahead of the money with `bk books\n" +
+			"rule create`.\n\n" +
+			"ACTIVE `no` means `bk books rule deactivate` has switched it off. The row stays:\n" +
+			"a posted entry may cite the rule for the ten years art. 958f keeps the entry, so\n" +
+			"a rule is never deleted and there is no reactivate.\n\n" +
+			"RULES ARE PER BOOK, NOT PER YEAR. --exercice is accepted and changes nothing.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -168,10 +193,11 @@ func newRuleCreateCmd() *cobra.Command {
 		Use:         "create --counterparty <fragment>",
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/rules"},
 		Short:       "Create a rule that predates its first matching entry",
-		Long: "Most rules are taught by resolving an entry (`bk books resolve --rule ...`),\n" +
-			"which records the teaching entry forever. This command is for knowledge that\n" +
-			"arrives BEFORE the money: a signed lease, a subscription — set --learned-from\n" +
-			"accordingly.\n\n" +
+		Long: "Most rules are taught by resolving an entry, which records the teaching\n" +
+			"entry forever:\n\n" +
+			"  bk books resolve <n> --explanation <text> --rule-counterparty <fragment>\n\n" +
+			"This command is for knowledge that arrives BEFORE the money: a signed lease,\n" +
+			"a subscription — set --learned-from accordingly.\n\n" +
 			"The match key is the PAIR: without --source the rule only matches sourceless\n" +
 			"entries. The same merchant on an untracked card must stay unrecognized, so a\n" +
 			"rule is never allowed to match on the name alone.",
@@ -199,8 +225,18 @@ func newRuleCreateCmd() *cobra.Command {
 				return err
 			}
 			return output.Render(format, r, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "created rule #%d: %s (%s)\n", r.Number, r.Pattern.Counterparty, r.LearnedFrom)
-				return err
+				if _, err := fmt.Fprintf(w, "created rule #%d: %s (%s)\n", r.Number, r.Pattern.Counterparty, r.LearnedFrom); err != nil {
+					return err
+				}
+				// A rule changes nothing that has already landed: rules run AT
+				// ARRIVAL, and only ever to mark a line `inferred`. Saying so is
+				// the point — a caller that expects the existing worklist to
+				// shrink will read the unchanged list as the rule not working.
+				also(w, "rules run at IMPORT and only suggest — nothing already imported changes:")
+				nextStep(w, "bk books source import <n> --file <statement.xml>   (bk books source list%s)",
+					entityFlag(req.Entity))
+				also(w, "  what it will match, and every other rule: bk books rule list%s", entityFlag(req.Entity))
+				return nil
 			})
 		},
 	}
@@ -225,8 +261,13 @@ func newResolveCmd() *cobra.Command {
 	var explanation, ruleCounterparty, ruleLearnedFrom, ruleInterval string
 	var ruleAmount, ruleTolerance float64
 	cmd := &cobra.Command{
-		Use:         "resolve <number> --explanation <text>",
-		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/entries/{number}/resolve"},
+		Use: "resolve <number> --explanation <text>",
+		// The GET is the state read behind the next-step line: whether the
+		// entry is still staged, and whether a `blocked` verdict stands. "Post
+		// it" is a refusal waiting to happen against a blocked entry, and the
+		// phase README is explicit that saying the state beats suggesting a
+		// call that will fail.
+		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/entries/{number}/resolve, GET /api/workspaces/{ws}/entries/{number}"},
 		Short:       "Say what the money was — the first write, and it keeps its history",
 		Long: "Resolve one worklist entry by its #number.\n\n" +
 			"The entry keeps its old state in history forever: a resolved row still shows\n" +
@@ -272,6 +313,13 @@ func newResolveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// THE NEXT STEP HERE DEPENDS ON STATE, and getting it wrong is
+			// worse than silence: "post it" is a refusal waiting to happen when
+			// a `blocked` verdict stands, and a no-op when the entry is already
+			// posted. The resolve response carries neither fact, so the entry
+			// is read back. Best effort — a failed read costs the tailored
+			// line, never the resolution, which has already landed.
+			after, afterErr := c.GetBooksEntry(ws, n, req.Entity)
 			return output.Render(format, r, func(w io.Writer) error {
 				line := fmt.Sprintf("resolved #%d -> %s", r.Number, r.Recognition)
 				if r.Direction != nil {
@@ -281,8 +329,29 @@ func newResolveCmd() *cobra.Command {
 					return err
 				}
 				if r.TaughtRule != nil {
-					_, err := fmt.Fprintf(w, "taught rule #%d — the next matching payment will suggest itself\n", *r.TaughtRule)
-					return err
+					if _, err := fmt.Fprintf(w, "taught rule #%d — the next matching payment will suggest itself\n", *r.TaughtRule); err != nil {
+						return err
+					}
+				}
+				if afterErr != nil {
+					nextStep(w, "bk books entry show %d", n)
+					return nil
+				}
+				if v, blocked, resolves := verdictState(after.Verdict); blocked {
+					also(w, "verdict %s: this entry will REFUSE to post, server side.", v)
+					if resolves != "" {
+						also(w, "  what clears it: %s", resolves)
+					}
+					nextStep(w, "bk books verdict %d --verdict accepted --rules <rule-ids> --worst-case <text>", n)
+					return nil
+				}
+				switch after.Status {
+				case "posted":
+					also(w, "the entry is already posted — interpretation is what you just changed; the lines are fixed.")
+					nextStep(w, "bk books entry show %d", n)
+				default:
+					nextStep(w, "bk books entry post %d", n)
+					also(w, "  what is still unjudged: bk books worklist%s", entityFlag(after.Entity))
 				}
 				return nil
 			})
@@ -294,7 +363,7 @@ func newResolveCmd() *cobra.Command {
 	cmd.Flags().StringVar(&req.Counterparty, "counterparty", "", "Counterparty, once identified")
 	cmd.Flags().StringVar(&req.Account, "account", "", "Account for the staged line that has none (refused on posted entries)")
 	cmd.Flags().StringVar(&req.Entity, "entity", "", "A SIMPLIFIED book's slug: resolve in its recettes-dépenses journal")
-	cmd.Flags().StringVar(&req.TvaRate, "tva-rate", "", "VAT rate as written on the invoice: 8.1, 3.8, 2.6 or 0 (frozen once posted)")
+	cmd.Flags().StringVar(&req.TvaRate, "tva-rate", "", "VAT rate as written on the invoice; run bk meta for the current ones (frozen once posted)")
 	cmd.Flags().StringVar(&req.TvaAmount, "tva-amount", "", "VAT in CHF (default: derived from the entry's amount at that rate)")
 	cmd.Flags().BoolVar(&req.TvaInputClaimed, "tva-input-claimed", false, "Claim the input tax (art. 28 LTVA; needs --evidence-tier full)")
 	cmd.Flags().StringVar(&req.EvidenceTier, "evidence-tier", "", "full, partial or bare — full means the pièce is on file")

@@ -34,9 +34,9 @@ Use a URL in any description or comment to embed the file inline:
   [name](url)    for any other file (video/audio player, or download card)
 
 This does NOT create a sidebar attachment record — it stores the file and
-returns its URL. Tip: you can also reference a LOCAL file path directly in
---description/--body (e.g. ![](./shot.png)) and the CLI will upload and embed it
-for you.`, cfg.App, cfg.App),
+returns its URL. Tip: you can also reference a LOCAL file path directly in any
+description or comment you write (e.g. ![](./shot.png)) and the CLI will upload
+and embed it for you.`, cfg.App, cfg.App),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)

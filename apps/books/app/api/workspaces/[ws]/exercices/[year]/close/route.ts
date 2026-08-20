@@ -10,50 +10,67 @@
 // the correction for something found afterwards is an entry in the CURRENT
 // year, not an edit to a filed one — the same doctrine that gives this app no
 // un-post and no delete. `already_closed` is therefore a wall, not a toggle.
-import { NextRequest, NextResponse } from 'next/server'
-import { Errors } from '@blackcode/platform-api'
-import { apiHandler, resolveWorkspace } from '@/lib/api'
-import { getEntityBySlug, listExercices } from '@/lib/db/queries/statutory'
-import { closeExercice, CloseRefused } from '@/lib/db/queries/close'
+import { NextRequest, NextResponse } from "next/server";
+import { Errors } from "@blackcode/platform-api";
+import { apiHandler, resolveWorkspace } from "@/lib/api";
+import { getEntityBySlug, listExercices } from "@/lib/db/queries/statutory";
+import { closeExercice, CloseRefused } from "@/lib/db/queries/close";
 
-interface Params { params: Promise<{ ws: string; year: string }> }
+interface Params {
+  params: Promise<{ ws: string; year: string }>;
+}
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
-  const { ws, year } = await params
-  const ctx = await resolveWorkspace(req, ws)
-  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
+  const { ws, year } = await params;
+  const ctx = await resolveWorkspace(req, ws);
+  const body = (await req.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
 
-  const y = Number(year)
+  const y = Number(year);
   if (!Number.isInteger(y)) {
-    throw Errors.badRequest('bad_year', `"${year}" is not a year`, 'bk books exercice close --year 2026')
+    throw Errors.badRequest(
+      "bad_year",
+      `"${year}" is not a year`,
+      "bk books exercice close --entity <book> --year 2026",
+    );
   }
 
-  const slug = typeof body?.entity === 'string' ? body.entity : ''
+  const slug = typeof body?.entity === "string" ? body.entity : "";
   if (!slug) {
     throw Errors.badRequest(
-      'missing_entity',
-      'closing is per book: a workspace may hold several, and they close separately',
-      'pass --entity <book slug>'
-    )
+      "missing_entity",
+      "closing is per book: a workspace may hold several, and they close separately",
+      "pass --entity <book slug>",
+    );
   }
-  const entity = await getEntityBySlug(ctx.workspace.id, slug)
-  if (!entity) throw Errors.notFound('entity_not_found', `no book with slug "${slug}"`, 'bk books entity list')
+  const entity = await getEntityBySlug(ctx.workspace.id, slug);
+  if (!entity)
+    throw Errors.notFound(
+      "entity_not_found",
+      `no book with slug "${slug}"`,
+      "bk books entity list",
+    );
 
-  const years = await listExercices(ctx.workspace.id, entity.id)
-  const exercice = years.find((x) => x.year === y)
+  const years = await listExercices(ctx.workspace.id, entity.id);
+  const exercice = years.find((x) => x.year === y);
   if (!exercice) {
     throw Errors.notFound(
-      'exercice_not_found',
+      "exercice_not_found",
       `book "${slug}" has no exercice ${y}`,
-      years.length ? `known years: ${years.map((x) => x.year).join(', ')}` : 'bk books exercice create first'
-    )
+      years.length
+        ? `known years: ${years.map((x) => x.year).join(", ")}`
+        : "bk books exercice create first",
+    );
   }
 
   try {
-    const r = await closeExercice(ctx.workspace.id, entity.id, exercice)
-    return NextResponse.json({ entity: entity.slug, ...r })
+    const r = await closeExercice(ctx.workspace.id, entity.id, exercice);
+    return NextResponse.json({ entity: entity.slug, ...r });
   } catch (e) {
-    if (e instanceof CloseRefused) throw Errors.badRequest(e.code, e.message, e.suggestion)
-    throw e
+    if (e instanceof CloseRefused)
+      throw Errors.badRequest(e.code, e.message, e.suggestion);
+    throw e;
   }
-})
+});

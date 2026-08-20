@@ -88,13 +88,13 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/entries/{number}",
-      "command": "bk books entry show",
+      "command": "bk books entry post, bk books entry show, bk books resolve",
       "app": "books"
     },
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/exercices",
-      "command": "bk books exercice list",
+      "command": "bk books exercice create, bk books exercice list",
       "app": "books"
     },
     {
@@ -148,7 +148,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/sources/{number}",
-      "command": "bk books source show",
+      "command": "bk books source import, bk books source show",
       "app": "books"
     },
     {

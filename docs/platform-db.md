@@ -22,6 +22,7 @@ neondb
 │                  shared. See docs/platform-architecture.md §2
 ├── issues.*       the issue tracker's own tables
 ├── sales.*        the sales app's own tables
+├── books.*        b/books' own tables — its tenancy, its books, its ledger
 └── scaffold.*     the scaffold's (apps/_scaffold — never deployed)
 ```
 
@@ -226,6 +227,37 @@ gate. What split is the LEDGER — which of an app's files exist —
 deliberately not touched.
 
 See `docs/2026-08-multi-app-refactor.md`.
+
+### `books.*` was built that way from the first migration (2026-08-20)
+
+`apps/books` went to production on 2026-08-20 as the **third** app, and it never
+had a `platform.*` tenancy to move: `books.*` carried its own `workspaces`,
+`workspace_members` and counters from migration `0001`, and nineteen migrations
+later it still reads nothing outside `platform.{users,apps,api_tokens,
+password_reset_otps,email_whitelist,blob_references}`. It is the first app to
+follow `docs/adding-an-app.md` end to end, which is the only evidence that
+checklist works.
+
+Its role is **`books_app`**, created by `docs/sql/app-role.sql` with the schema
+substituted — and per finding #15 in CLAUDE.md, run it AFTER the first migration
+has created the schema, never before: every grant names a schema the file does
+not create, and `psql` exits 0 having skipped them.
+
+Two things about `books.*` are worth knowing at root altitude, because they are
+unlike the other two apps:
+
+- **Postgres has the last word on the statutory invariants.** Migrations `0004`
+  and `0016` install triggers that refuse to un-post an entry, to edit a posted
+  one, to post an unbalanced one, to post to an account the book's chart does
+  not carry, and to touch a closed year. They raise from the database, so no
+  route and no direct write can go around them. Nothing is hard-deleted: art.
+  958f CO carries a ten-year retention duty, and a trigger enforces it.
+- **The web surface is read-only.** Every write is an `app/api/**` route reached
+  from `bk books`, which means the `cli-parity` guard is not a formality for this
+  app — a route with no command is a capability nobody can reach.
+
+How the statements are derived, what a `position` is and why an RI book has no
+bilan are **app internals** and live in `apps/books/docs/backend.md` (§7.5).
 
 ### `0004` mirrored ids rather than remapping them, and that has two consequences
 
