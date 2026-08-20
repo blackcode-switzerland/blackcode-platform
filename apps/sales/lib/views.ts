@@ -23,6 +23,7 @@
 //    rendering, never storage, and by the same argument never a wire format.
 
 import type { ProspectLabel, ProspectRow } from './db/queries/prospects'
+import { describeFile } from '@blackcode/platform-file-providers'
 import { entityUrnOrNull } from './entity-address'
 import { APP_SLUG } from './app'
 
@@ -31,6 +32,13 @@ export interface PublicProspect {
   name: string
   city: string | null
   sector: string | null
+  /** Migration 0008 — the identity card (#34). */
+  website: string | null
+  address: string | null
+  /** Migration 0010. The reusable segment (#37), by #number, and the angle for
+   *  THIS prospect on top of it (#35). */
+  strategy: number | null
+  game_plan: string | null
   stage: string
   value: string | null
   currency: string
@@ -60,6 +68,12 @@ export function publicProspect(row: ProspectRow, workspaceSlug: string): PublicP
     name: row.name,
     city: row.city,
     sector: row.sector,
+    website: row.website,
+    address: row.address,
+    // The strategy's #number, never its row id — `lib/views.ts`'s first rule.
+    // Resolved by the caller, which has it: `getProspectBySeq` joins it in.
+    strategy: row.strategy_seq ?? null,
+    game_plan: row.game_plan,
     stage: row.stage,
     value: row.value,
     currency: row.currency,
@@ -117,6 +131,9 @@ export function publicContact(c: {
   phone: string | null
   is_primary: boolean
   notes: string | null
+  /** Migration 0008 — sales #34 and #33. */
+  linkedin: string | null
+  decision_power: string | null
 }) {
   return {
     id: c.id,
@@ -124,8 +141,74 @@ export function publicContact(c: {
     role: c.role,
     email: c.email,
     phone: c.phone,
+    linkedin: c.linkedin,
+    // What this person can DO in the deal (#33's structured half). The
+    // freeform half is `notes`, which predates the issue.
+    decision_power: c.decision_power,
     is_primary: c.is_primary,
     notes: c.notes,
+  }
+}
+
+/**
+ * One research-log entry (#39).
+ *
+ * `id` rather than `number`, for `publicContact`'s reason directly above: a
+ * note is never addressed on its own, so a #number would advertise an identity
+ * `bk` cannot resolve. There is no `updated_at` because there is no update —
+ * see `schema.ts` at `prospectNotes`.
+ */
+/** One segment strategy (#37) — reusable reasoning, addressable by #number. */
+export function publicStrategy(
+  s: {
+    seq: number
+    name: string
+    vertical: string | null
+    area: string | null
+    rationale: string | null
+    case_studies: string | null
+    products: Array<{ number: number; name: string }>
+    prospect_count: number
+    created_at: Date
+    updated_at: Date
+    deleted_at: Date | null
+  },
+  workspaceSlug: string
+) {
+  return {
+    number: s.seq,
+    name: s.name,
+    vertical: s.vertical,
+    area: s.area,
+    rationale: s.rationale,
+    case_studies: s.case_studies,
+    products: s.products,
+    // How many live deals this segment covers. Served rather than derivable,
+    // because the one moment somebody needs it is before retiring a strategy —
+    // and at that moment they are looking at this record, not at the prospects.
+    prospect_count: s.prospect_count,
+    urn: entityUrnOrNull(workspaceSlug, 'strategy', s.seq),
+    created_at: iso(s.created_at)!,
+    updated_at: iso(s.updated_at)!,
+    deleted_at: iso(s.deleted_at),
+  }
+}
+
+export function publicProspectNote(n: {
+  id: number
+  body: string
+  kind: string | null
+  author_label: string | null
+  created_at: Date
+}) {
+  return {
+    id: n.id,
+    body: n.body,
+    kind: n.kind,
+    // WHO observed it. A research log you cannot attribute is one you cannot
+    // weigh, and most of these are written by an agent.
+    author: n.author_label,
+    created_at: iso(n.created_at)!,
   }
 }
 
@@ -290,6 +373,11 @@ export function publicProduct(
     pitch: string | null
     status_label: string | null
     refs: string[] | null
+    internal_price_min: string | null
+    internal_price_max: string | null
+    internal_price_note: string | null
+    reach: string
+    external_url: string | null
     deleted_at: Date | null
   },
   workspaceSlug: string
@@ -309,6 +397,19 @@ export function publicProduct(
     pitch: p.pitch,
     status_label: p.status_label,
     refs: p.refs ?? [],
+    // ── INTERNAL-ONLY (migration 0011, #27) ──────────────────────────────
+    // Served here because every consumer of this route today is authenticated
+    // into the workspace: `bk sales product show`, the internal web catalog.
+    // **When #26's public product pages are built they must NOT reuse this
+    // view.** A public renderer needs its own projection that omits these three
+    // — this is the exact function somebody would reach for, and the whole
+    // point of the field is that a customer never sees it.
+    internal_price_min: p.internal_price_min,
+    internal_price_max: p.internal_price_max,
+    internal_price_note: p.internal_price_note,
+    // How far our own site carries it (#29) — `internal | external`.
+    reach: p.reach,
+    external_url: p.external_url,
     urn: entityUrnOrNull(workspaceSlug, 'product', p.seq),
     deleted_at: iso(p.deleted_at),
   }
@@ -358,10 +459,29 @@ export function publicDocument(
     added_by_label: string | null
     prospect_numbers: number[]
     product_numbers: number[]
+    strategy_numbers: number[]
+    template_numbers: number[]
+    storage_provider: string | null
+    external_id: string | null
+    preview_status: string | null
+    preview_checked_at: Date | null
     deleted_at: Date | null
   },
   workspaceSlug: string
 ) {
+  // ── WHERE IT LIVES AND HOW TO SHOW IT (migration 0012, sales #40) ────────
+  // DERIVED on every read rather than read from a column, so improving the
+  // recogniser improves every existing row with no backfill. `storage_provider`
+  // IS a column, but only so `--provider` can be a query — the value served
+  // here is the derived one, which is why a row the migration could not
+  // classify still renders correctly.
+  const url = d.upload_url ?? d.external_url ?? ''
+  // `filename` is NOT the title. Passing it was a live bug: a document called
+  // "Probe test image (ours)" beat its own `…/probe-test.png` path and typed as
+  // `other`, so an image we host rendered as a download card. The title is a
+  // label a human wrote; the filename is in the url, and the provider reads it
+  // from there. Only the recorded `mime` is a better source than the path.
+  const file = describeFile(url, { mime: d.mime_type })
   return {
     number: d.seq,
     title: d.title,
@@ -378,6 +498,40 @@ export function publicDocument(
     added_by: d.added_by_label,
     prospects: d.prospect_numbers,
     products: d.product_numbers,
+    strategies: d.strategy_numbers,
+    // Read back at last (2026-08-17). `doc link --template` has written this
+    // since 0001 and nothing served it, so the link was unverifiable.
+    templates: d.template_numbers,
+    /**
+     * Everything a surface needs to SHOW the file, in one block.
+     *
+     * Nested rather than spread flat so a caller can hand `file` straight to a
+     * renderer, and so adding a field here cannot collide with a document
+     * column called the same thing.
+     */
+    file: {
+      provider: file.provider,
+      /** True when WE hold the bytes — the delete gate applies, and the UI
+       *  badge says so. */
+      internal: file.internal,
+      label: file.label,
+      external_id: file.external_id ?? d.external_id,
+      media_kind: file.media_kind,
+      embed_mode: file.embed.mode,
+      embed_url: file.embed.url,
+      thumbnail_url: file.thumbnail_url,
+      open_url: file.open_url,
+      /**
+       * `public | restricted | unknown | null`.
+       *
+       * NOT derivable — a probe result. `null` for our own files, which are
+       * always viewable by anyone who can see the record. A web surface must
+       * treat anything other than `public` as "do not embed": showing Google's
+       * request-access screen inside a customer record is worse than a card.
+       */
+      preview_status: d.preview_status,
+      preview_checked_at: iso(d.preview_checked_at),
+    },
     urn: entityUrnOrNull(workspaceSlug, 'document', d.seq),
     deleted_at: iso(d.deleted_at),
   }

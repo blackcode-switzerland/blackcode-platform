@@ -21,7 +21,7 @@
 // second copy to drift.
 
 import { Errors } from '@blackcode/platform-api'
-import { STAGE_VALUES } from './pipeline'
+import { DECISION_POWER_VALUES, STAGE_VALUES } from './pipeline'
 
 /** A trimmed non-empty string, or undefined. Blank and absent are the same. */
 export function str(v: unknown): string | undefined {
@@ -58,6 +58,26 @@ export function numberOr(raw: string | null): number | undefined {
   if (!raw) return undefined
   const n = Number(raw)
   return Number.isFinite(n) ? n : undefined
+}
+
+/**
+ * A finite number from a JSON **body** field — accepting the number a typed
+ * client sends and the string a hand-rolled one does.
+ *
+ * `numberOr(str(body?.x))` is the wrong pair here and it shipped a live bug
+ * (sales #38): `str()` returns undefined for anything that is not a string, so
+ * `{"product": 8}` — what `bk`'s Go `int` puts on the wire — read as absent and
+ * the route answered `400 missing_product` naming a product that exists.
+ *
+ * `numberOr` stays as it is because a QUERY parameter really is a string; this
+ * is its body-side counterpart. `true`, `[]` and `{}` are rejected rather than
+ * coerced: `Number(true)` is 1 and `Number([])` is 0, and a route that read a
+ * boolean as product #1 would be silently wrong forever.
+ */
+export function bodyNumber(v: unknown): number | undefined {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined
+  if (typeof v !== 'string') return undefined
+  return numberOr(v.trim() || null)
 }
 
 /**
@@ -123,21 +143,62 @@ export function requireMaxLength(value: string, max: number, field: string): voi
  * correct as browsers add schemes.
  */
 export function requireMeetingUrl(value: string): void {
+  requireHttpUrl(
+    value,
+    'meeting_url',
+    'a meeting link',
+    'pass the full join link including https:// — e.g. --link https://meet.google.com/abc-defg-hij'
+  )
+}
+
+/**
+ * The generic form of the above: anything the URL parser accepts, restricted to
+ * `http:` and `https:`.
+ *
+ * Extracted when migration 0008 added `prospects.website` and
+ * `contacts.linkedin` (#34), because those two need the SAME hard edge for the
+ * SAME reason and a copied validator is a validator that gets fixed in one
+ * place. The scheme check is the whole point: every one of these columns is
+ * rendered as `<a href={…}>` by the web app, and `javascript:alert(1)` is a
+ * perfectly well-formed URL — stored XSS wearing the shape of a link, typed by
+ * one member of a workspace and clicked by another.
+ *
+ * Allowing exactly two schemes also excludes `data:` and `vbscript:` without
+ * enumerating what is dangerous, which is the direction that stays correct as
+ * browsers add schemes.
+ *
+ * `code` is the field name, so the 400 an agent gets is `invalid_website`
+ * rather than a generic one it cannot branch on. `subject` is how the message
+ * refers to the value — "a company website", "a LinkedIn profile".
+ */
+export function requireHttpUrl(
+  value: string,
+  code: string,
+  subject: string,
+  hint: string
+): void {
   let parsed: URL
   try {
     parsed = new URL(value)
   } catch {
-    throw Errors.badRequest(
-      'invalid_meeting_url',
-      `${JSON.stringify(value)} is not a URL`,
-      'pass the full join link including https:// — e.g. --link https://meet.google.com/abc-defg-hij'
-    )
+    throw Errors.badRequest(`invalid_${code}`, `${JSON.stringify(value)} is not a URL`, hint)
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw Errors.badRequest(
-      'invalid_meeting_url',
-      `a meeting link must be http or https, got ${JSON.stringify(parsed.protocol)}`,
-      'pass the full join link including https://'
+      `invalid_${code}`,
+      `${subject} must be http or https, got ${JSON.stringify(parsed.protocol)}`,
+      hint
+    )
+  }
+}
+
+/** Reject a `contacts.decision_power` outside the vocabulary, naming `bk meta`. */
+export function requireDecisionPower(value: string): void {
+  if (!DECISION_POWER_VALUES.includes(value)) {
+    throw Errors.badRequest(
+      'unknown_decision_power',
+      `unknown decision power ${JSON.stringify(value)}`,
+      'run `bk meta` for the current values'
     )
   }
 }

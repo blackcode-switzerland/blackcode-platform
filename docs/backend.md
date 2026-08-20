@@ -47,6 +47,40 @@ describes them as they are today.
 **App docs:** [`apps/issues/docs/backend.md`](../apps/issues/docs/backend.md) ·
 [`apps/issues/docs/frontend.md`](../apps/issues/docs/frontend.md)
 
+## Where a file's bytes live (2026-08-17)
+
+Two places, and the difference has consequences beyond rendering:
+
+| | **Vercel Blob** (ours) | **an external provider** (Google Drive today) |
+|---|---|---|
+| how it arrives | `POST /api/upload` → `bk <app> upload` | a url the caller supplies |
+| who holds the bytes | we do | they do |
+| deletion | `platform.blob_references` + the cross-app delete gate | **never ours to delete** |
+| visible to | anyone who can see the record | whoever the provider says |
+| preview | always | only if the provider serves it anonymously |
+
+**The rule for which to use.** Blob for what the app produced or what must always
+render — pasted screenshots, avatars, logos, exports. An external provider for
+the company's real documents, which already live where sharing and permissions
+are managed and must not be copied into a second place that goes stale.
+
+`packages/platform-file-providers` is the shared mechanism: a pure,
+dependency-free recogniser that turns a url into `{ provider, internal,
+media_kind, embed, thumbnail, open_url }`. It is a **separate package from
+`platform-storage` on purpose** — a `"use client"` React tree imports it, and
+`platform-storage` pulls in the db `Executor` and the code path that can reach
+`del()`, which must never reach a browser bundle.
+
+Adding a provider is one file plus one registry line. Apps declare what they
+accept, and `/api/meta` serves that list (`apps.<slug>.file_providers`) so an
+agent discovers it without a CLI release.
+
+**A Drive url produces no `blob_references` row**, because
+`platform.is_uploaded_asset` returns false for it — which is correct and is the
+whole reason the two systems coexist without either knowing about the other. The
+delete gate must never believe it is responsible for a file in somebody else's
+Drive.
+
 ## Stack
 
 - **Next.js 16** App Router route handlers (`app/api/**/route.ts`).

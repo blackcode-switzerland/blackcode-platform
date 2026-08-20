@@ -125,6 +125,20 @@ type MetaApp struct {
 	Vocabulary json.RawMessage `json:"vocabulary,omitempty" yaml:"vocabulary,omitempty"`
 	Limits     json.RawMessage `json:"limits,omitempty" yaml:"limits,omitempty"`
 	Media      json.RawMessage `json:"media,omitempty" yaml:"media,omitempty"`
+
+	// A short fingerprint of everything above — sales #31. An agent polls this
+	// instead of re-reading the whole block and the `--help` tree behind it: if
+	// it has not moved since the last run, nothing in this app's contract has.
+	//
+	// Typed (unlike its neighbours) because `bk meta --contract-version` has to
+	// reach into it. That is safe here for the reason the others are not: this
+	// is one opaque string with no internal shape to be dropped, and the raw
+	// passthrough still carries it for `--json`.
+	//
+	// Empty against a server that predates it. `--contract-version` says so
+	// rather than printing nothing, because "" and "unchanged" must not look
+	// alike to a caller comparing two runs.
+	ContractVersion string `json:"contract_version,omitempty" yaml:"contract_version,omitempty"`
 }
 
 type MetaWorkspace struct {
@@ -238,11 +252,11 @@ type ProjectMember struct {
 }
 
 type Task struct {
-	ID              int     `json:"id" yaml:"id"`
-	ProjectID       int     `json:"project_id" yaml:"project_id"`
-	Name            string  `json:"name" yaml:"name"`
-	Description     *string `json:"description" yaml:"description"`
-	DueDate *string `json:"due_date" yaml:"due_date"`
+	ID          int     `json:"id" yaml:"id"`
+	ProjectID   int     `json:"project_id" yaml:"project_id"`
+	Name        string  `json:"name" yaml:"name"`
+	Description *string `json:"description" yaml:"description"`
+	DueDate     *string `json:"due_date" yaml:"due_date"`
 	// DERIVED from the task's issues, never stored: empty|active|done|cancelled.
 	// The server computes it (apps/issues/lib/db/queries/tasks.ts) precisely so
 	// that a client cannot arrive at a different answer by counting a page of

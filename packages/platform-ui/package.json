@@ -13,7 +13,8 @@
     "./image-lightbox": "./src/image-lightbox.tsx",
     "./voice-recorder-modal": "./src/voice-recorder-modal.tsx",
     "./file-attachment": "./src/file-attachment.ts",
-    "./utils": "./src/utils.ts"
+    "./utils": "./src/utils.ts",
+    "./media-lightbox": "./src/media-lightbox.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

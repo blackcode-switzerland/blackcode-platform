@@ -18,10 +18,18 @@ import { getDb } from '@/lib/db/client'
 import { resolveActor } from '@/lib/actor'
 import { createProspect, findUserIdByEmail, listProspects } from '@/lib/db/queries/prospects'
 import { publicProspect } from '@/lib/views'
-import { PROSPECT_NAME_MAX } from '@/lib/limits'
+import {
+  CONTACT_URL_MAX,
+  GAME_PLAN_MAX,
+  PROSPECT_ADDRESS_MAX,
+  PROSPECT_NAME_MAX,
+} from '@/lib/limits'
+import { resolveStrategy } from '@/lib/api/strategy-ref'
 import {
   numberOr,
   parseList,
+  bodyNumber,
+  requireHttpUrl,
   requireMaxLength,
   requireMoney,
   requireStage,
@@ -78,6 +86,23 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
 
   const ownerUserId = await resolveOwner(str(body?.owner), ctx.user.id)
 
+  // The identity card (#34). Both are optional and both are checked when given:
+  // `website` is rendered as an anchor by the web app, so it gets the same
+  // scheme edge `meeting_url` has — see `requireHttpUrl`.
+  const website = str(body?.website)
+  if (website) {
+    requireMaxLength(website, CONTACT_URL_MAX, 'website')
+    requireHttpUrl(website, 'website', 'a company website', 'pass the full url including https://')
+  }
+  const address = str(body?.address)
+  if (address) requireMaxLength(address, PROSPECT_ADDRESS_MAX, 'address')
+
+  // The segment this belongs to (#37), by its #number. Resolved to a row id
+  // here, because `strategy_id` is a serial and must never cross the wire.
+  const strategyId = await resolveStrategy(ctx.workspace.id, bodyNumber(body?.strategy))
+  const gamePlan = str(body?.game_plan)
+  if (gamePlan) requireMaxLength(gamePlan, GAME_PLAN_MAX, 'game_plan')
+
   const actor = await resolveActor(getDb(), req, ctx.user)
   const created = await createProspect({
     workspaceId: ctx.workspace.id,
@@ -91,6 +116,10 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     ownerUserId: ownerUserId ?? null,
     source: str(body?.source) ?? null,
     summary: str(body?.summary) ?? null,
+    website: website ?? null,
+    address: address ?? null,
+    strategyId: strategyId ?? null,
+    gamePlan: gamePlan ?? null,
   })
 
   return NextResponse.json(publicProspect(created, ctx.workspace.slug), { status: 201 })

@@ -20,15 +20,16 @@
 // library, filtered — never a parallel per-prospect store that drifts from it.
 // The Meetings and Communications tabs do the same with `?prospect=`.
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { ArrowUpRight, ExternalLink, Mail, Phone, Star } from 'lucide-react'
+import { ArrowUpRight, ExternalLink, Globe, Linkedin, Mail, Phone, Star, Target } from 'lucide-react'
 import {
   ChannelChip,
   MeetingTypeChip,
   ObjectionStatusChip,
   ObjectionTypeChip,
+  RecordNumber,
   StageChip,
   VocabDot,
 } from '@/components/chips'
@@ -36,7 +37,9 @@ import { BlockSkeleton, EmptyState, ErrorState } from '@/components/states'
 import { AgentOnly, WriteGate } from '@/components/forms'
 import {
   AddContactForm,
+  AddProspectNoteForm,
   EditContactForm,
+  RemoveProspectNoteButton,
   EditObjectionForm,
   EditProspectForm,
   MoveStageForm,
@@ -49,6 +52,12 @@ import {
   RemoveCommunicationButton,
 } from '@/components/ledgers/ledger-forms'
 import { MeetingLink } from '@/components/ledgers/ledger-pages'
+import {
+  FilePreviewModal,
+  PreviewFallback,
+  SourceBadge,
+  canPreview,
+} from '@/components/documents/file-preview'
 import { useCanWrite } from '@/lib/ui-mode'
 import { usePageTitle } from '@/components/sales-shell'
 import {
@@ -59,19 +68,26 @@ import {
   useMeetings,
   useObjections,
   useProspect,
+  useProspectNotes,
   type Communication,
   type JourneyStep,
 } from '@/lib/hooks'
 import { dateTimeShort, dayLabel, money, relativeDay } from '@/lib/format'
 import {
   commDirectionLabel,
+  decisionPowerColor,
+  decisionPowerLabel,
   nextActionTypeLabel,
   stageColor,
   stageEntryStatusColor,
   stageLabel,
 } from '@/lib/pipeline'
 
-const TABS = ['overview', 'communications', 'meetings', 'documents'] as const
+// `research` sits directly after `overview` on purpose: it is what you read
+// BEFORE a meeting, and the issue that produced it (#39) was filed by somebody
+// who had to walk into one with nothing. The ledger tabs are what you write
+// after.
+const TABS = ['overview', 'research', 'communications', 'meetings', 'documents'] as const
 type Tab = (typeof TABS)[number]
 
 export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
@@ -96,7 +112,13 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
       {/* The header: who they are, where the deal is, what it is worth. */}
       <header className="space-y-3">
         <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground">{p.name}</h2>
+          <h2 className="flex items-baseline gap-2 text-2xl font-semibold tracking-tight text-foreground">
+            {/* The address, where a human can read it off the screen and say
+                it — see `RecordNumber` for why this had to be everywhere. It is
+                what `bk sales prospect show` prints on the same line. */}
+            <RecordNumber n={p.number} className="text-sm" />
+            {p.name}
+          </h2>
           <StageChip value={p.stage} />
           {p.labels.map((l) => (
             <span
@@ -115,6 +137,41 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
           {[p.city, p.sector, p.source].filter(Boolean).map((v) => (
             <span key={v}>{v}</span>
           ))}
+          {p.address && <span>{p.address}</span>}
+          {/*
+            The website is a LINK and not a chip, because the whole complaint in
+            #34 was that a rep "can't look up their own contact without hunting
+            elsewhere" — a url rendered as text is the hunt.
+
+            `rel="noreferrer"` is not decoration on a field a prospect's own
+            staff can populate: without it the opened page gets `window.opener`
+            and can navigate this tab. The route already refuses any scheme but
+            http(s) (`requireHttpUrl`), so `javascript:` cannot reach here; this
+            is the second half of the same edge.
+          */}
+          {p.website && (
+            <a
+              href={p.website}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 text-primary hover:underline"
+            >
+              <Globe size={12} />
+              {p.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+            </a>
+          )}
+          {/* The segment this deal belongs to (#37). A LINK, because the
+              reasoning lives on the strategy and copying it here is how it goes
+              stale nine times — the whole argument for a separate record. */}
+          {p.strategy != null && (
+            <Link
+              href={`/dashboard/${ws}/strategies?focus=${p.strategy}`}
+              className="flex items-center gap-1 text-primary hover:underline"
+            >
+              <Target size={12} />
+              Strategy #{p.strategy}
+            </Link>
+          )}
           <span>Owner: {p.owner?.name ?? p.owner?.email ?? '—'}</span>
           {/*
             THE BARE URN CHIP IS GONE (2026-08-12).
@@ -136,6 +193,29 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
           */}
         </div>
         {p.summary && <p className="text-sm leading-relaxed text-foreground">{p.summary}</p>}
+
+        {/*
+          THE GAME PLAN SITS ABOVE THE FOLD, NOT IN A TAB (#35)
+          ------------------------------------------------------------------
+          The issue is about what a rep sees on the way INTO a meeting: "here
+          is the situation, here is the angle, here is what to say." A tab is
+          somewhere you click when you already know to look; this is the thing
+          that has to be in front of you when you did not.
+
+          `whitespace-pre-wrap`, like the research log: talking points are
+          written as a list and losing the breaks turns them into a paragraph
+          nobody can read live on a call.
+        */}
+        {p.game_plan && (
+          <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+              Game plan
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+              {p.game_plan}
+            </p>
+          </div>
+        )}
 
         {/*
           The two write affordances on the deal itself, and they are two buttons
@@ -217,6 +297,7 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
       </nav>
 
       {tab === 'overview' && <Overview ws={ws} n={n} journey={p.journey} />}
+      {tab === 'research' && <ResearchTab ws={ws} n={n} />}
       {tab === 'communications' && <CommunicationsTab ws={ws} n={n} />}
       {tab === 'meetings' && <MeetingsTab ws={ws} n={n} />}
       {tab === 'documents' && <DocumentsTab ws={ws} n={n} />}
@@ -338,17 +419,57 @@ function Overview({
                   {c.name}
                 </span>
                 {c.role && <span className="text-xs text-muted-foreground">{c.role}</span>}
-                {c.email && (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Mail size={12} />
-                    {c.email}
+                {/*
+                  What this person can DO in the deal (#33). A badge rather than
+                  another grey line: `champion` and `economic` are the two a rep
+                  scans for, and the difference between them decides whether the
+                  next meeting can close anything.
+                */}
+                {c.decision_power && (
+                  <span
+                    className="rounded px-1.5 py-0.5 text-[11px] font-medium"
+                    style={{
+                      backgroundColor: `${decisionPowerColor(c.decision_power)}22`,
+                      color: decisionPowerColor(c.decision_power),
+                    }}
+                  >
+                    {decisionPowerLabel(c.decision_power)}
                   </span>
                 )}
+                {/*
+                  #34 is titled "reps can't call, email, or look up their own
+                  contact". These were text. `mailto:`/`tel:` is the whole
+                  difference between a record of a phone number and a phone
+                  number you can ring from the page you are already on.
+                */}
+                {c.email && (
+                  <a
+                    href={`mailto:${c.email}`}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary hover:underline"
+                  >
+                    <Mail size={12} />
+                    {c.email}
+                  </a>
+                )}
                 {c.phone && (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <a
+                    href={`tel:${c.phone.replace(/[^+\d]/g, '')}`}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary hover:underline"
+                  >
                     <Phone size={12} />
                     {c.phone}
-                  </span>
+                  </a>
+                )}
+                {c.linkedin && (
+                  <a
+                    href={c.linkedin}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary hover:underline"
+                  >
+                    <Linkedin size={12} />
+                    Profile
+                  </a>
                 )}
                 {canWrite && (
                   <span className="ml-auto">
@@ -622,6 +743,88 @@ function RemoveCommWhenWritable({ ws, comm }: { ws: string; comm: Communication 
   return <RemoveCommunicationButton ws={ws} comm={comm} />
 }
 
+/**
+ * The research log (#39) — append-only, newest first.
+ *
+ * ---------------------------------------------------------------------------
+ * THERE IS NO EDIT AFFORDANCE, AND ITS ABSENCE IS THE FEATURE
+ * ---------------------------------------------------------------------------
+ * Every other block on this page has a pencil. This one does not, because the
+ * whole reason the tab exists is that `summary` — which does have one — was the
+ * only place to write research, and editing it destroyed what was there before.
+ * A pencil here would rebuild the bug in a nicer shape.
+ *
+ * Remove IS offered, for a note pasted onto the wrong prospect, and it goes
+ * through `useConfirm()` because the delete is hard: this table has no
+ * `deleted_at`, so there is no bin behind it.
+ */
+function ResearchTab({ ws, n }: { ws: string; n: number }) {
+  const notes = useProspectNotes(ws, n)
+  const canWrite = useCanWrite(ws)
+
+  return (
+    <div className="space-y-3">
+      <Section
+        title="Research & intelligence"
+        action={
+          <WriteGate ws={ws} note="The research log is written by the agent.">
+            <AddProspectNoteForm ws={ws} n={n} />
+          </WriteGate>
+        }
+      >
+        <p className="mb-2 px-1 text-xs text-muted-foreground">
+          Append-only. A note is never overwritten, so this reads as what was
+          known and when — unlike the summary above, which states the current
+          position and replaces itself.
+        </p>
+        {notes.isPending ? (
+          <BlockSkeleton rows={3} />
+        ) : notes.error ? (
+          <ErrorState error={notes.error} />
+        ) : notes.data.length === 0 ? (
+          <EmptyState
+            title="Nothing researched yet"
+            hint="Site audits, competitor notes, personnel details, timing signals — anything you would otherwise have to overwrite the summary to record."
+          />
+        ) : (
+          <ol className="space-y-2">
+            {notes.data.map((note) => (
+              <li
+                key={note.id}
+                className="rounded-xl border border-border bg-card px-4 py-3"
+              >
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  {note.kind && (
+                    <span className="rounded bg-muted px-1.5 py-0.5 font-medium text-foreground">
+                      {note.kind}
+                    </span>
+                  )}
+                  <span>{dateTimeShort(note.created_at)}</span>
+                  {/* WHO observed it. Most of these are agent-written and the
+                      page says so — a log you cannot attribute is one you
+                      cannot weigh. */}
+                  {note.author && <span>· {note.author}</span>}
+                  {canWrite && (
+                    <span className="ml-auto">
+                      <RemoveProspectNoteButton ws={ws} n={n} note={note} />
+                    </span>
+                  )}
+                </div>
+                {/* `whitespace-pre-wrap`: a site audit is written with line
+                    breaks and losing them turns a list of findings into one
+                    paragraph. */}
+                <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                  {note.body}
+                </p>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Section>
+    </div>
+  )
+}
+
 function DocumentsTab({ ws, n }: { ws: string; n: number }) {
   const docs = useDocuments(ws, { prospect: n })
   if (docs.isPending) return <BlockSkeleton rows={3} />
@@ -655,6 +858,118 @@ function DocumentsTab({ ws, n }: { ws: string; n: number }) {
 }
 
 /** Shared by this tab and the library page, so the two cannot render differently. */
+/**
+ * One row of the library: what it is, whose it is, and a preview on demand.
+ *
+ * THUMBNAIL BY DEFAULT, PLAYER ON REQUEST. #40 asks for "thumbnail/player", and
+ * the split is not just taste: a thumbnail is one `<img>`, while a player is an
+ * iframe to a third party. Ten of those on one page is ten round trips to
+ * Google before the page settles, for previews nobody asked to watch.
+ *
+ * The row is a `<div>` rather than the `<a>` it used to be, because an anchor
+ * may not contain a button or an iframe — nesting interactive content inside a
+ * link is invalid and browsers resolve it unpredictably.
+ */
+function DocumentRow({
+  doc,
+  first,
+  focused,
+}: {
+  doc: import('@/lib/hooks').SalesDocument
+  first: boolean
+  focused: boolean
+}) {
+  // The scroll ref is OWNED HERE, not passed in — this file's `DocumentList`
+  // header already records why: threading a ref across a component boundary
+  // hits two copies of `@types/react` disagreeing about `Ref`, and it does not
+  // compile. The row knows whether it is the focused one.
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (focused) ref.current?.scrollIntoView({ block: 'center' })
+  }, [focused])
+  const [open, setOpen] = useState(false)
+  // A thumbnail the browser refuses — see the render below. Falling back to the
+  // icon is the whole point; a broken-image glyph in a customer record is worse
+  // than no picture at all.
+  const [thumbFailed, setThumbFailed] = useState(false)
+  const f = doc.file
+  const hasPlayer = canPreview(doc)
+
+  return (
+    <div
+      ref={ref}
+      className={
+        'px-4 py-3 ' +
+        (first ? '' : 'border-t border-border') +
+        (focused ? ' bg-accent ring-1 ring-inset ring-primary' : '')
+      }
+    >
+      <div className="flex items-center gap-3">
+        <RecordNumber n={doc.number} />
+        {/* The thumbnail IS the recognisability #40 is about: a video that
+            looks like a video before you click anything. */}
+        {/*
+          Gated on the same rule as the player: a thumbnail we are not allowed
+          to fetch would render as a broken-image glyph.
+
+          `onError` hides it entirely rather than leaving the glyph, and it is
+          NOT belt-and-braces — it fires for real. A Google thumbnail is refused
+          by Opaque Response Blocking on an INSECURE origin, so this is exactly
+          what every developer sees on `http://localhost` while production
+          renders it fine. Without the fallback, local dev looks broken and
+          somebody "fixes" a thing that works — which is what happened once.
+        */}
+        {f.thumbnail_url && !thumbFailed && (f.internal || f.preview_status === 'public') && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={f.thumbnail_url}
+            alt=""
+            loading="lazy"
+            onError={() => setThumbFailed(true)}
+            className="h-9 w-14 shrink-0 rounded border border-border object-cover"
+          />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm text-foreground">{doc.title}</span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {[doc.kind, doc.added_by ? `added by ${doc.added_by}` : null, ...doc.tags]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        </span>
+        <SourceBadge doc={doc} />
+        {hasPlayer && (
+          <button
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-accent"
+          >
+            Preview
+          </button>
+        )}
+        <a
+          href={f.open_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+          aria-label={`Open ${doc.title}`}
+        >
+          <ArrowUpRight size={14} />
+        </a>
+      </div>
+      {/* The only thing that still renders INLINE: "this cannot be previewed,
+          and here is why". A reader needs that in the row; a preview does not
+          belong there and now opens full screen. */}
+      {!hasPlayer && (f.preview_status === 'restricted' || f.preview_status === 'unknown') && (
+        <div className="mt-2">
+          <PreviewFallback doc={doc} />
+        </div>
+      )}
+      {open && <FilePreviewModal doc={doc} onClose={() => setOpen(false)} />}
+    </div>
+  )
+}
+
 export function DocumentList({
   docs,
   focus = null,
@@ -665,49 +980,17 @@ export function DocumentList({
    * link and ⌘K both arrive at a document, which has no page of its own.
    * Optional because the prospect Documents tab has nothing to focus.
    *
-   * The scroll ref is OWNED HERE rather than passed in: the focused element is
-   * the `<a>` this component renders, and threading a ref for it through a prop
-   * crosses a file boundary where two copies of `@types/react` disagree about
-   * `Ref`. The list knows which row is focused; let it keep that.
+   * The scroll ref lives on the ROW (`DocumentRow`), not here: threading one
+   * across a component boundary hits two copies of `@types/react` disagreeing
+   * about `Ref` and does not compile. The row knows whether it is focused.
    */
   focus?: number | null
 }) {
-  const focusRef = useRef<HTMLAnchorElement>(null)
-  useEffect(() => {
-    if (focus != null) focusRef.current?.scrollIntoView({ block: 'center' })
-  }, [focus])
-
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
-      {docs.map((d, i) => {
-        const href = d.upload_url ?? d.external_url
-        const focused = d.number === focus
-        return (
-          <a
-            key={d.number}
-            ref={focused ? focusRef : undefined}
-            href={href ?? undefined}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={
-              'flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent ' +
-              (i > 0 ? 'border-t border-border' : '') +
-              (focused ? ' bg-accent ring-1 ring-inset ring-primary' : '') +
-              (href ? '' : ' pointer-events-none opacity-60')
-            }
-          >
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm text-foreground">{d.title}</span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {[d.kind, d.added_by ? `added by ${d.added_by}` : null, ...d.tags]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </span>
-            </span>
-            <ArrowUpRight size={14} className="shrink-0 text-muted-foreground" />
-          </a>
-        )
-      })}
+      {docs.map((d, i) => (
+        <DocumentRow key={d.number} doc={d} first={i === 0} focused={d.number === focus} />
+      ))}
     </div>
   )
 }

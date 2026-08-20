@@ -144,6 +144,13 @@ export interface ProspectPatch {
   name?: string
   city?: string | null
   sector?: string | null
+  /** Migration 0008 — the identity card (#34). */
+  website?: string | null
+  address?: string | null
+  /** Migration 0010. The segment's #NUMBER (#37) and this prospect's own angle
+   *  on top of it (#35). `null` unlinks the segment. */
+  strategy?: number | null
+  game_plan?: string | null
   value?: string | null
   currency?: string
   owner?: string | null
@@ -223,6 +230,74 @@ export function useRemoveContact(ws: string, n: number) {
     send: ({ id }) => apiSend('DELETE', wsPath(ws, `/prospects/${n}/contacts/${id}`)),
     invalidate: () => [['contacts', ws, n]],
     success: ({ name }) => `${name} removed`,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Strategies — the reusable segment reasoning (#37)
+// ---------------------------------------------------------------------------
+
+export interface StrategyInput {
+  name?: string
+  vertical?: string | null
+  area?: string | null
+  rationale?: string | null
+  case_studies?: string | null
+  /** Product #numbers. Omitted leaves the set alone; `[]` clears it. The route
+   *  REPLACES rather than merges — see its header. */
+  products?: number[]
+}
+
+export function useCreateStrategy(ws: string) {
+  return useRecordMutation<StrategyInput>(ws, {
+    send: (vars) => apiSend('POST', wsPath(ws, '/strategies'), vars),
+    invalidate: () => [['strategies', ws]],
+    success: (vars) => `${vars.name ?? 'Strategy'} created`,
+  })
+}
+
+export function useEditStrategy(ws: string) {
+  return useRecordMutation<{ number: number; patch: StrategyInput }>(ws, {
+    send: ({ number, patch }) => apiSend('PATCH', wsPath(ws, `/strategies/${number}`), patch),
+    invalidate: () => [['strategies', ws]],
+    success: () => 'Strategy updated',
+  })
+}
+
+export function useRemoveStrategy(ws: string) {
+  return useRecordMutation<{ number: number; name: string }>(ws, {
+    send: ({ number }) => apiSend('DELETE', wsPath(ws, `/strategies/${number}`)),
+    // Prospects carry `strategy`, so binning one changes what a prospect page
+    // shows — invalidate both or the link lingers on screen until a reload.
+    invalidate: () => [['strategies', ws], ['prospects', ws]],
+    success: ({ name }) => `${name} binned — restore from Trash`,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Research log — APPEND and DESTROY. There is deliberately no edit hook
+// ---------------------------------------------------------------------------
+// The log is append-only (see the route header). A `useEditProspectNote` here
+// would have no route to call, and adding one would undo the table: an editable
+// log answers "what do we think now", which `--summary` already answers.
+
+export function useAddProspectNote(ws: string, n: number) {
+  return useRecordMutation<{ body: string; kind?: string | null }>(ws, {
+    send: (vars) => apiSend('POST', wsPath(ws, `/prospects/${n}/notes`), vars),
+    invalidate: () => [['prospect-notes', ws, n]],
+    success: () => 'Note added',
+  })
+}
+
+export function useRemoveProspectNote(ws: string, n: number) {
+  return useRecordMutation<{ id: number }>(ws, {
+    // `?confirm=<id>` is what the route requires, and it is sent from HERE
+    // rather than typed by the user: a web click is already an explicit,
+    // interactive act, and the confirmation exists to stop a NON-interactive
+    // caller auto-approving. The dialog is the human-facing half.
+    send: ({ id }) => apiSend('DELETE', wsPath(ws, `/prospects/${n}/notes/${id}?confirm=${id}`)),
+    invalidate: () => [['prospect-notes', ws, n]],
+    success: () => 'Note destroyed',
   })
 }
 

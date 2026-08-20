@@ -34,6 +34,7 @@ import {
   prospectLabels,
   prospects,
   stageEntries,
+  strategies,
   users,
 } from '../schema'
 import type { Prospect } from '../schema'
@@ -60,6 +61,16 @@ export interface ActorRef {
 export interface ProspectRow extends Prospect {
   owner: ActorRef | null
   labels: ProspectLabel[]
+  /**
+   * The linked strategy's #NUMBER, resolved from `strategy_id` (migration 0010).
+   *
+   * `strategy_id` is a serial and must never leave this app — `lib/views.ts`'s
+   * first rule. Resolving it here rather than in the view is what makes that
+   * enforceable: the view has no database, so a serial reaching it would have
+   * nowhere to be turned into an address and would get served.
+   */
+  strategy_seq: number | null
+  strategy_name: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -179,6 +190,21 @@ async function decorate(rows: Prospect[]): Promise<ProspectRow[]> {
     for (const u of found) owners.set(u.id, u)
   }
 
+  // The linked strategy, by #number. One query for the page, like the two
+  // above — a per-row lookup here would make a 50-prospect listing 51 more
+  // round trips, which is invisible until the workspace is big.
+  const strategyIds = [
+    ...new Set(rows.map((r) => r.strategy_id).filter((v): v is number => v != null)),
+  ]
+  const strategyBySerial = new Map<number, { seq: number; name: string }>()
+  if (strategyIds.length) {
+    const found = await db
+      .select({ id: strategies.id, seq: strategies.seq, name: strategies.name })
+      .from(strategies)
+      .where(inArray(strategies.id, strategyIds))
+    for (const g of found) strategyBySerial.set(g.id, { seq: g.seq, name: g.name })
+  }
+
   const ids = rows.map((r) => r.id)
   const attached = await db
     .select({
@@ -197,11 +223,16 @@ async function decorate(rows: Prospect[]): Promise<ProspectRow[]> {
     byProspect.set(l.prospect_id, list)
   }
 
-  return rows.map((r) => ({
-    ...r,
-    owner: r.owner_user_id != null ? (owners.get(r.owner_user_id) ?? null) : null,
-    labels: byProspect.get(r.id) ?? [],
-  }))
+  return rows.map((r) => {
+    const strategy = r.strategy_id != null ? strategyBySerial.get(r.strategy_id) : undefined
+    return {
+      ...r,
+      owner: r.owner_user_id != null ? (owners.get(r.owner_user_id) ?? null) : null,
+      labels: byProspect.get(r.id) ?? [],
+      strategy_seq: strategy?.seq ?? null,
+      strategy_name: strategy?.name ?? null,
+    }
+  })
 }
 
 /** `platform.users.id` for an email, or null. Used to resolve `--owner`. */
@@ -231,6 +262,13 @@ export interface CreateProspectInput {
   ownerUserId?: number | null
   source?: string | null
   summary?: string | null
+  /** Migration 0008 — the identity card (#34). */
+  website?: string | null
+  address?: string | null
+  /** Migration 0010 — the segment this belongs to (#37) and the per-prospect
+   *  angle on top of it (#35). `strategyId: null` clears the link. */
+  strategyId?: number | null
+  gamePlan?: string | null
 }
 
 /**
@@ -262,6 +300,10 @@ export async function createProspect(input: CreateProspectInput): Promise<Prospe
         owner_user_id: input.ownerUserId ?? null,
         source: input.source ?? null,
         summary: input.summary ?? null,
+        website: input.website ?? null,
+        address: input.address ?? null,
+        strategy_id: input.strategyId ?? null,
+        game_plan: input.gamePlan ?? null,
         created_by: input.actor.userId,
       })
       .returning()
@@ -304,6 +346,13 @@ export interface UpdateProspectInput {
   ownerUserId?: number | null
   source?: string | null
   summary?: string | null
+  /** Migration 0008 — the identity card (#34). */
+  website?: string | null
+  address?: string | null
+  /** Migration 0010 — the segment this belongs to (#37) and the per-prospect
+   *  angle on top of it (#35). `strategyId: null` clears the link. */
+  strategyId?: number | null
+  gamePlan?: string | null
 }
 
 /**
@@ -342,6 +391,10 @@ export async function updateProspect(
     if (patch.currency !== undefined) set('currency', 'currency', patch.currency)
     if (patch.source !== undefined) set('source', 'source', patch.source)
     if (patch.summary !== undefined) set('summary', 'summary', patch.summary)
+    if (patch.website !== undefined) set('website', 'website', patch.website)
+    if (patch.address !== undefined) set('address', 'address', patch.address)
+    if (patch.gamePlan !== undefined) set('game_plan', 'game_plan', patch.gamePlan)
+    if (patch.strategyId !== undefined) set('strategy_id', 'strategy_id', patch.strategyId)
     if (patch.ownerUserId !== undefined) {
       set('owner_user_id', 'owner_user_id', patch.ownerUserId)
     }

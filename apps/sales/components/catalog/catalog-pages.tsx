@@ -20,6 +20,7 @@ import { toast } from 'sonner'
 import {
   DocumentKindChip,
   ProductCategoryChip,
+  RecordNumber,
   TemplateCategoryChip,
 } from '@/components/chips'
 import { BlockSkeleton, EmptyState, ErrorState } from '@/components/states'
@@ -34,12 +35,14 @@ import {
 } from '@/components/filters'
 import { AgentOnly } from '@/components/forms'
 import { DocumentList } from '@/components/prospects/prospect-detail'
-import { useDocuments, useProducts, useProspects, useTemplates } from '@/lib/hooks'
+import { useDocuments, useProducts, useProspects, useTemplates, type Product } from '@/lib/hooks'
 import { money } from '@/lib/format'
 import {
   DOCUMENT_KINDS,
   TEMPLATE_CATEGORIES,
   TEMPLATE_CHANNELS,
+  productReachColor,
+  productReachLabel,
   stageLabel,
   templateChannelLabel,
 } from '@/lib/pipeline'
@@ -59,6 +62,21 @@ function useFocus() {
   const params = useSearchParams()
   const raw = params?.get('focus')
   return raw ? Number(raw) : null
+}
+
+/**
+ * A one- or two-ended internal price range.
+ *
+ * A floor with no ceiling ("never below 8k") is a legitimate answer, so this
+ * must not render as "CHF 8'000 – " with nothing after the dash. Mirrors
+ * `internalRange` in `cli/internal/commands/sales/catalog.go`.
+ */
+function internalRange(p: Product): string {
+  const from = p.internal_price_min ? money(p.internal_price_min, p.currency) : null
+  const to = p.internal_price_max ? money(p.internal_price_max, p.currency) : null
+  if (from && to) return `${from} – ${to}`
+  if (from) return `from ${from}`
+  return `up to ${to}`
 }
 
 export function ProductsPage({ ws }: { ws: string }) {
@@ -90,6 +108,7 @@ export function ProductsPage({ ws }: { ws: string }) {
           }
         >
           <div className="flex flex-wrap items-center gap-2">
+            <RecordNumber n={p.number} />
             <ProductCategoryChip value={p.category} />
             <h3 className="text-sm font-medium text-foreground">{p.name}</h3>
             <span className="ml-auto text-sm tabular-nums text-foreground">
@@ -107,6 +126,61 @@ export function ProductsPage({ ws }: { ws: string }) {
           </div>
           {p.description && (
             <p className="mt-1.5 text-sm text-muted-foreground">{p.description}</p>
+          )}
+          {/*
+            An external product's own site (#29). The chip says which kind it is
+            because that changes what our page is FOR — a teaser that routes
+            onward, not a full description we would then have to keep in step
+            with somebody else's marketing.
+          */}
+          {p.reach === 'external' && (
+            <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+              <span
+                className="rounded px-1.5 py-0.5 font-medium"
+                style={{
+                  backgroundColor: `${productReachColor(p.reach)}22`,
+                  color: productReachColor(p.reach),
+                }}
+              >
+                {productReachLabel(p.reach)}
+              </span>
+              {p.external_url && (
+                <a
+                  href={p.external_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  {p.external_url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                </a>
+              )}
+            </p>
+          )}
+          {/*
+            ── INTERNAL PRICE GUIDANCE (#27) ──────────────────────────────
+            Labelled on screen every time, not merely stored under an
+            internal-sounding key. The one context where this number must not
+            be read out is the one where somebody forgot which field it came
+            from — so the field says so itself.
+
+            This page is behind workspace auth. If #26's public product pages
+            are built, they need their OWN component and their own projection:
+            reusing this one is exactly how the number ships to a customer.
+          */}
+          {(p.internal_price_min || p.internal_price_max || p.internal_price_note) && (
+            <div className="mt-2 rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Internal — not our published price
+              </p>
+              {(p.internal_price_min || p.internal_price_max) && (
+                <p className="mt-0.5 text-sm tabular-nums text-foreground">
+                  {internalRange(p)}
+                </p>
+              )}
+              {p.internal_price_note && (
+                <p className="mt-0.5 text-xs text-muted-foreground">{p.internal_price_note}</p>
+              )}
+            </div>
           )}
           {p.pitch && (
             <p className="mt-2 rounded-lg bg-muted px-3 py-2 text-sm text-foreground">
@@ -229,6 +303,7 @@ export function TemplatesPage({ ws }: { ws: string }) {
           }
         >
           <div className="flex flex-wrap items-center gap-2">
+            <RecordNumber n={t.number} />
             <TemplateCategoryChip value={t.category} />
             <h3 className="text-sm font-medium text-foreground">{t.name}</h3>
             <span className="text-xs text-muted-foreground">

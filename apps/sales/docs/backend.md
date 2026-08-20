@@ -80,7 +80,11 @@ it, plus every place the implementation departs from the plan's §5.
 
 ```
 prospects          the core object — company AND deal in one (D-5)
-contacts           decision makers at a prospect
+contacts           decision makers at a prospect — and where a PERSON's identity
+                   and intelligence live (0008: linkedin, decision_power)
+prospect_notes     the research log (0009) — APPEND-ONLY, no update route exists
+strategies         why a SEGMENT was chosen (0010) — reusable across prospects
+strategy_products  ⟩ which products a strategy leads with
 stage_entries      the deal journey — one row per stage, including the ones not reached
 meetings           the meetings LEDGER (not a calendar)
 communications     the multi-channel log
@@ -247,23 +251,38 @@ somebody was still using, with no undo.
 
 | Table | Columns | Mode |
 |---|---|---|
-| `prospects` | `summary`, `next_action_note`, `closed_reason` | scan |
+| `prospects` | `summary`, `next_action_note`, `closed_reason`, `address`, `game_plan` | scan |
+| `prospects` | `website` | **exact** |
 | `contacts` | `notes` | scan |
+| `contacts` | `linkedin` | **exact** |
+| `prospect_notes` | `body` | scan |
+| `strategies` | `rationale`, `case_studies` | scan |
 | `stage_entries` | `note` | scan |
 | `meetings` | `title`, `agenda`, `outcome` | scan |
 | `meetings` | `meeting_url` | **exact** |
 | `communications` | `subject`, `body` | scan |
 | `objections` | `spoken`, `real_fear`, `counter` | scan |
-| `products` | `description`, `pitch` | scan |
+| `products` | `description`, `pitch`, `internal_price_note` | scan |
+| `products` | `external_url` | **exact** |
 | `templates` | `subject`, `body` | scan |
 | `documents` | `upload_url`, `external_url` | **exact** |
 | `documents` | `title`, `description` | scan |
 | `matches` | `why` | scan |
 
-**Twenty-three columns across ten tables.** §5.4 of the plan lists thirteen while
-its own prose says fourteen; the rule above produces twenty-three, and the count
-is a consequence rather than a target. It was twenty-two until migration 0007
-added `meetings.meeting_url` (2026-08-12).
+**Thirty-four columns across twelve tables.** §5.4 of the plan lists thirteen
+while its own prose says fourteen; the rule above produces thirty-four, and the
+count is a consequence rather than a target. It was twenty-two until 0007 added
+`meetings.meeting_url` (2026-08-12), then twenty-three; 0008 added four
+(`prospects.address`/`website`, `contacts.linkedin`, and the identity-card
+work), 0009 added `prospect_notes.body`, 0010 added three
+(`strategies.rationale`/`case_studies`, `prospects.game_plan`) and 0011 added
+two (`products.internal_price_note`/`external_url`), all on 2026-08-17.
+
+**Three of those migrations REPLACE an existing trigger rather than adding one**
+— 0008 and 0010 on `prospects`, 0011 on `products` — because a table holds only
+one trigger of a given name and the new column has to enter both the `UPDATE OF`
+list and the function's argument list. Miss the `UPDATE OF` half and the column
+is scanned on insert and never again, which nothing would report.
 
 Four of the twenty-two are length-capped **labels** — `meetings.title`,
 `communications.subject`, `templates.subject`, `documents.title` — and they are
@@ -488,6 +507,8 @@ records is what is specific to this app.
 | `PATCH …/prospects/{n}/next-action` | `prospect next` |
 | `GET \| POST …/prospects/{n}/contacts` | `contact list \| add` |
 | `PATCH \| DELETE …/prospects/{n}/contacts/{cid}` | `contact edit \| rm` |
+| `GET \| POST …/prospects/{n}/notes` | `prospect note list \| add` (append-only) |
+| `DELETE …/prospects/{n}/notes/{noteId}` | `prospect note rm` — hard, confirm-guarded |
 | `GET \| POST …/prospects/{n}/journey` | `journey list \| add` |
 | `GET \| POST …/prospects/{n}/objections` | `objection list \| raise` |
 | `PATCH \| DELETE …/prospects/{n}/objections/{oid}` | `objection counter \| resolve \| rm` |
@@ -498,6 +519,8 @@ records is what is specific to this app.
 | `GET \| POST …/products`, `GET \| PATCH \| DELETE …/products/{n}` | `product …` |
 | `GET \| POST …/templates`, `GET \| PATCH \| DELETE …/templates/{n}` | `template …` |
 | `POST …/templates/{n}/render` | `template render` |
+| `GET \| POST …/strategies`, `GET \| PATCH \| DELETE …/strategies/{n}` | `strategy …` |
+| `POST …/documents/{n}/recheck` | `doc recheck <n\|all>` — re-probe an external file |
 | `GET \| POST …/documents`, `GET \| PATCH \| DELETE …/documents/{n}` | `doc …` |
 | `POST \| DELETE …/documents/{n}/links` | `doc link \| unlink` |
 | `GET \| POST …/labels`, `GET \| PATCH \| DELETE …/labels/{id}` | `label …` |

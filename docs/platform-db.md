@@ -346,6 +346,45 @@ directory against its own schema.
 > there rather than in production. `apps/_scaffold/drizzle.config.ts` is the
 > worked example.
 
+> ### A HAND-WRITTEN `.sql` NEEDS A JOURNAL ENTRY OR IT NEVER RUNS
+>
+> `drizzle-kit migrate` does not read the migrations DIRECTORY. It reads
+> `lib/db/migrations/meta/_journal.json`, and applies only what is listed there.
+> A `.sql` file on disk with no entry is **invisible to it**.
+>
+> `drizzle-kit generate` writes both. Migrations written **by hand** — which is
+> most of them in this repo, because the generator cannot express a trigger, a
+> backfill or a guarded DDL — write only the file, and the journal entry is a
+> manual step nothing used to remind you of.
+>
+> **This shipped, on 2026-08-17.** Five sales migrations (0008–0012) were
+> written, applied locally with `psql`, and verified by reading `pg_trigger` and
+> `pg_constraint`. All five were correct. None was in the journal. So production
+> migrated nothing, `postbuild` printed `✓ migrations applied.` and exited 0, and
+> the deploy served new code against the old schema — four routes 500'd at once
+> on `column "website" does not exist`.
+>
+> The verification was real and aimed at the wrong thing: **`psql` applies a
+> FILE; production applies the JOURNAL.** Proving the SQL proves nothing about
+> whether it will ever run.
+>
+> Adding one by hand, in the same commit as the `.sql`:
+>
+> ```jsonc
+> { "idx": 8, "version": "7", "when": 1786061220000,
+>   "tag": "0008_prospects_and_contacts_carry_an_identity_card",
+>   "breakpoints": true }
+> ```
+>
+> `tag` is the filename without `.sql`; `when` must be **greater than the
+> previous entry's**, because drizzle applies by timestamp and not by filename.
+>
+> `packages/platform-testing/test/migration-journal.test.ts` now fails the build
+> on all four ways this can be wrong — a file with no entry, an entry with no
+> file, a non-increasing `when`, and a non-sequential `idx` — across every app.
+> **Do not take a green suite as permission to skip the entry**; take it as the
+> thing that will tell you when you have.
+
 - **Rehearse on a Neon branch first**, including the rollback. Every phase of
   this migration did, and it caught a real bug in three of them.
 - **Expand → migrate → contract** for anything a running deployment reads. Add

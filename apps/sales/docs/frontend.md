@@ -263,9 +263,10 @@ not repeated here. Two things are this app's own:
 | `/dashboard/{ws}` | **Today** — §7.1 |
 | `/dashboard/{ws}/metrics` | pipeline funnel + performance KPIs — §7.2 |
 | `/dashboard/{ws}/prospects` | table ⇄ board, filter bar in the URL |
-| `/dashboard/{ws}/prospects/{n}` | four tabs, journey, contacts, objections, triangulation |
+| `/dashboard/{ws}/prospects/{n}` | five tabs, journey, contacts, research log, objections, triangulation |
 | `/dashboard/{ws}/meetings` · `/communications` | the two cross-prospect ledgers |
-| `/dashboard/{ws}/products` · `/templates` · `/documents` | the catalog |
+| `/dashboard/{ws}/products` · `/templates` · `/documents` | the catalog. Documents preview by type and badge their source — §7.9 |
+| `/dashboard/{ws}/strategies` | why a SEGMENT was chosen — §7.4, and reusable across prospects (2026-08-17) |
 | `/dashboard/{ws}/activity` | what changed and who changed it — §7.7 |
 | `/dashboard/{ws}/search` | grouped, faceted full search — §7.8 |
 | `/dashboard/{ws}/members` | your team, and who has been invited — §9.1 (was `/dashboard/settings/members` until 2026-08-11) |
@@ -461,6 +462,21 @@ communications log wins by length and the shape of the deal disappears under it.
 - The **Documents / Meetings / Communications tabs call the same routes as the
   standalone pages** with `?prospect=<n>`. That is what makes them filtered views
   rather than parallel stores (D-8).
+- **The Research tab is append-only, and its lack of a pencil is the feature**
+  (2026-08-17, #39). Every other block on this page has an edit affordance. This
+  one must not: the tab exists precisely because `summary` — which does have one
+  — was the only place to write research, and editing it destroyed what was
+  there before. A pencil here rebuilds the bug in a nicer shape. Remove IS
+  offered, for a note pasted onto the wrong prospect, and it goes through
+  `ConfirmDelete` because the delete is hard.
+- **The GAME PLAN sits above the fold, not in a tab** (#35). It is what a rep
+  reads on the way INTO a meeting; a tab is somewhere you click when you already
+  know to look. The ledgers below it are what you read afterwards.
+- **The #number is printed on every listing and on this header** (2026-08-17,
+  #30). It was on none of them, so the only way a human could name a row was by
+  its position in a list — and a position is not an address: it moves on a
+  rename, on an insert, and under any filter. `RecordNumber` in
+  `components/chips.tsx` carries the reasoning.
 
 ### 7.5 Trash
 
@@ -863,3 +879,41 @@ platform administration is, with a link built from the other app's registered
 `base_url` — the same reasoning as the password and account-deletion lines
 beside it. A control that is simply absent reads as a feature that does not
 exist.
+
+### 7.9 Documents — preview, and whose file it is (2026-08-17, #40)
+
+`components/documents/file-preview.tsx`. Two rules, and both are about not
+lying to the reader:
+
+- **Embed only on an explicit `public` verdict** for an external file. A Drive
+  `/preview` iframe renders the document for somebody signed in to Drive and
+  Google's request-access page for everybody else — inside our page, on a
+  customer record. We cannot tell those apart in the browser, so the server's
+  probe decides. Getting this backwards would not show up in testing: whoever
+  builds it is signed in to Drive, so every embed works for them.
+- **The badge says whose file it is.** `Blackcode storage` (filled) or
+  `Google Drive` (outlined), with the consequence on hover. They differ in who
+  can delete the file and who controls who sees it, and a listing that rendered
+  them identically — which this app did until now — hid both.
+
+**The preview is FULL SCREEN**, not inline. It expanded in the row at first and
+read badly — a player between two rows pushes the page around, competes with its
+own row for attention, and is stuck at the width of a list never meant to hold a
+video. `MediaLightbox` in `@blackcode/platform-ui` is the shared overlay; the
+only thing still rendered inline is the "cannot be previewed, and here is why"
+card, which is exactly what a reader needs in the row.
+
+**A Drive thumbnail renders in production and NOT on `http://localhost`**, and
+the difference is the whole story. Chrome's Opaque Response Blocking refuses
+Google's image for an `<img>` load from an INSECURE origin and permits it from a
+secure one — measured on both, same file, same url. It was briefly removed on
+the strength of the localhost result alone, which was wrong.
+
+So the url is emitted and the row carries an `onError` that falls back to the
+type icon. That fallback is not defensive padding: it is what every developer
+sees locally, and without it local dev looks broken and somebody "fixes" a thing
+that works.
+
+A folder never gets a preview and never gets a "Restricted" chip — it has no
+embed at any permission level, and saying "share it to preview it here" would
+advise a fix that changes nothing. That was a live bug, caught in the browser.

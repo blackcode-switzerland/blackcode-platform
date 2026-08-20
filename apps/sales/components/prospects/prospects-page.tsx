@@ -23,7 +23,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { LayoutGrid, Rows3 } from 'lucide-react'
 import { STAGES, nextActionTypeLabel } from '@/lib/pipeline'
-import { StageChip } from '@/components/chips'
+import { RecordNumber, StageChip } from '@/components/chips'
 import { BlockSkeleton, ErrorState } from '@/components/states'
 import {
   ClearFilters,
@@ -161,7 +161,10 @@ function Table({ ws, rows }: { ws: string; rows: PublicProspect[] }) {
             <tr key={p.number} className="group border-b border-border/60 hover:bg-accent/50">
               <td className="py-3 pr-3">
                 <Link href={`/dashboard/${ws}/prospects/${p.number}`} className="block">
-                  <span className="block font-medium text-foreground">{p.name}</span>
+                  <span className="flex items-baseline gap-1.5 font-medium text-foreground">
+                    <RecordNumber n={p.number} />
+                    {p.name}
+                  </span>
                   <span className="block text-xs text-muted-foreground">
                     {[p.city, p.sector].filter(Boolean).join(' · ') || '—'}
                   </span>
@@ -240,7 +243,10 @@ function Board({ ws, rows }: { ws: string; rows: PublicProspect[] }) {
                 href={`/dashboard/${ws}/prospects/${p.number}`}
                 className="block rounded-xl border border-border bg-card px-3 py-3 transition-colors hover:bg-accent"
               >
-                <span className="block text-sm font-medium text-foreground">{p.name}</span>
+                <span className="flex items-baseline gap-1.5 text-sm font-medium text-foreground">
+                  <RecordNumber n={p.number} />
+                  {p.name}
+                </span>
                 <span className="mt-1 block text-xs tabular-nums text-muted-foreground">
                   {money(p.value, p.currency)}
                 </span>
