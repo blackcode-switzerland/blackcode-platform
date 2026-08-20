@@ -71,6 +71,7 @@ export default function Page() {
         article={simplified ? 'art. 957 al. 2 CO' : undefined}
         bookName={scope.record?.name}
         exercice={scope.exercice}
+        exerciceStatus={scope.exerciceStatus}
       />
 
       <p className="mb-4 text-[12.5px] text-muted-foreground">

@@ -406,42 +406,113 @@ function EntitySwitcher({ scope }: { scope: ReturnType<typeof useScope> }) {
 }
 
 /**
- * Which fiscal year.
+ * Which fiscal year — and whether that year is still open.
  *
  * One option today and built anyway — see the header of this file. It is not
  * hidden when there is one year: unlike the book, the year is a fact the reader
  * needs on the screen (a balance sheet without its year is not a balance sheet),
  * so the single-value case renders it as a label rather than as nothing.
+ *
+ * ===========================================================================
+ * WHERE THE CLOSED-YEAR FACT IS SAID, AND WHERE IT DELIBERATELY IS NOT
+ * ===========================================================================
+ * `bk books exercice close` landed 2026-08-20 and **there is no reopen, by
+ * design**. A closed exercice is filed: nothing may be posted into it, and every
+ * figure a screen draws from it is final rather than in progress. Until now
+ * `lib/scope.ts` reduced the year list to `number[]` and the distinction was
+ * rendered as nothing anywhere in the product.
+ *
+ * **IT IS SAID HERE**, in both branches — the `<select>` and the single-year
+ * label — because this control is the thing on screen that NAMES the year, it is
+ * in the header of every book-scoped page, and a reader who can change the year
+ * is exactly the reader who needs to know which one they moved to. Saying it in
+ * one place that is always present beats saying it in eight that are not.
+ *
+ * **IT IS ALSO SAID ON THE THREE STATUTORY DOCUMENTS** — bilan, compte de
+ * résultat, patrimoine — through `<StatementHeading>`. Those pages are the ones
+ * a person prints, screenshots and sends to a fiduciary, and a statement of a
+ * filed year is a different document from a draft of the same numbers. The
+ * heading already carries "which document is this"; the status is part of that
+ * answer and not decoration on top of it.
+ *
+ * **IT IS DELIBERATELY NOT SAID** on the ledger, the worklist, recognition,
+ * documents, sources, analyses or management. Those are working screens, the
+ * header above them already carries the year and its status on every one, and a
+ * second badge per screen would be seven more wordings of one legal fact — with
+ * the one that goes stale being ours. That is the same reasoning
+ * `<SimplifiedBookNotice>` uses for printing the SERVER's sentence rather than a
+ * second copy of it.
+ *
+ * **The one thing that would change this decision** is a write affordance on a
+ * working screen. There is none today — every write into a book is CLI-only
+ * (phase-6 README §6) — but the moment a "post this entry" button exists on the
+ * ledger, that button must consult `scope.exerciceStatus` and say why it is not
+ * available, because a refusal the reader cannot predict is worse than a badge.
+ *
+ * ── `'closed'` IS TESTED FOR, NEVER `!== 'open'` ───────────────────────────
+ * `exerciceStatus` is `null` in three situations and none of them means open —
+ * the years have not arrived, the book has none, or two books disagree. See
+ * `lib/scope.ts`. A `!== 'open'` test would mark an unknown year as filed.
  */
 function ExerciceSwitcher({ scope }: { scope: ReturnType<typeof useScope> }) {
-  const { exercices, exercice, setExercice } = scope
+  const { exerciceOptions, exercice, exerciceStatus, setExercice } = scope
 
   if (exercice === null) return null
 
-  if (exercices.length <= 1) {
+  if (exerciceOptions.length <= 1) {
     return (
-      <span className="rounded-md px-2 py-1 text-[13px] tabular-nums text-muted-foreground">
+      <span className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] tabular-nums text-muted-foreground">
         {exercice}
+        {exerciceStatus === 'closed' && <ClosedYearChip />}
       </span>
     )
   }
 
   return (
-    <label className="relative flex min-w-0 shrink items-center">
-      <span className="sr-only">Fiscal year</span>
-      <select
-        value={exercice}
-        onChange={(e) => setExercice(Number(e.target.value))}
-        className="appearance-none rounded-md border border-border bg-card py-1 pl-2.5 pr-7 text-[13px] tabular-nums text-foreground outline-none hover:bg-accent focus:border-ring"
-      >
-        {exercices.map((y) => (
-          <option key={y} value={y}>
-            {y}
-          </option>
-        ))}
-      </select>
-      <ChevronDown size={13} className="pointer-events-none absolute right-2 text-muted-foreground" />
-    </label>
+    <span className="flex min-w-0 shrink items-center gap-1.5">
+      <label className="relative flex min-w-0 shrink items-center">
+        <span className="sr-only">Fiscal year</span>
+        <select
+          value={exercice}
+          onChange={(e) => setExercice(Number(e.target.value))}
+          className="appearance-none rounded-md border border-border bg-card py-1 pl-2.5 pr-7 text-[13px] tabular-nums text-foreground outline-none hover:bg-accent focus:border-ring"
+        >
+          {/* An `<option>` cannot hold the chip, so a closed year says so in
+              WORDS inside the list. The chip beside the control then repeats it
+              for the selected year — the list is only visible while it is open,
+              and the fact has to survive it closing. */}
+          {exerciceOptions.map((o) => (
+            <option key={o.year} value={o.year}>
+              {o.status === 'closed' ? `${o.year} — closed` : o.year}
+            </option>
+          ))}
+        </select>
+        <ChevronDown size={13} className="pointer-events-none absolute right-2 text-muted-foreground" />
+      </label>
+      {exerciceStatus === 'closed' && <ClosedYearChip />}
+    </span>
+  )
+}
+
+/**
+ * "CLOSED" beside a year.
+ *
+ * Muted rather than red or amber. A closed exercice is the NORMAL end state of a
+ * fiscal year — it is what filing looks like — and dressing it as a warning is
+ * how a reader learns to ignore the badges that are one. Same argument as
+ * `<Money>`'s note on negatives.
+ *
+ * The `title` carries the consequence, because the word alone does not say that
+ * it cannot be undone.
+ */
+function ClosedYearChip() {
+  return (
+    <span
+      className="rounded border border-border px-1 py-px text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground"
+      title="This fiscal year has been closed. Nothing can be posted into it, and there is no reopen."
+    >
+      closed
+    </span>
   )
 }
 

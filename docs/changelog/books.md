@@ -32,6 +32,41 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-20 — The monthly compte de résultat is on screen, and a closed year now says so
+
+**Web only. No route changed, no record changed, and no new write door.** Two
+gaps between what the backend could already say and what the screens could hear.
+
+**The monthly grid — ticket #64.** `/dashboard/{ws}/income-statement` has two
+readings now, chosen by `?view=month` in the address so a monthly view is
+shareable and Back undoes the switch. The grid draws one column per month of the
+exercice plus the year, the row order is taken once from the annual body and
+reused for every column, and the total column and every `résultat` come **off the
+wire**: nothing in the view adds a column up. It carries the note the ticket
+asked for — art. 959b defines the *annual* statement, a month is not a legal
+reporting period, and no column there is filable.
+
+The screen asks for `by=month` **on every load**, so the annual body and the
+months are one request and one cache entry. Switching reading does not refetch
+and cannot show two moments of one statement. A simplified book is refused before
+the breakdown, so it never sees the toggle — including at a bookmarked
+`?view=month`, which renders the same explanation the annual view does.
+
+**A closed exercice is now visible.** `bk books exercice close` landed earlier
+today and there is no reopen; until now the web reduced the fiscal-year list to
+bare numbers and threw `status` away, so a filed year and a live one rendered
+identically. The year switcher says it on every book-scoped screen (`2025 —
+closed` in the list, a `closed` chip beside the control), and the three statutory
+documents — bilan, compte de résultat, patrimoine — repeat it in their heading,
+because a statement of a filed year is a different document from a draft of the
+same numbers. The working screens deliberately do not; the reasoning is in
+`components/books-shell.tsx`.
+
+**For an agent, nothing changes.** `bk books cr --by-month` and
+`bk books exercice list` already served both facts. This entry is here because
+the two front doors are now in sync, which is the thing that was not true this
+morning.
+
 ## 2026-08-20 — The compte de résultat can be read month by month
 
 **One new query parameter and one new flag; no route, record or stored figure

@@ -66,6 +66,7 @@ export default function Page() {
         article={bilan.data ? 'art. 959a CO' : undefined}
         bookName={scope.record?.name}
         exercice={scope.exercice}
+        exerciceStatus={scope.exerciceStatus}
       />
 
       {/* F1: the statements exclude staged entries and said so nowhere, while

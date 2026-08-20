@@ -218,6 +218,81 @@ such; it is never resolved into a default.
 > name in the header. Nothing threw. Third payload to change shape under a merged
 > screen; assume there is a fourth.
 
+### A closed fiscal year is a fact, and it travels through `useScope`
+
+`bk books exercice close` landed 2026-08-20 and **there is no reopen, by
+design**. Until that day `lib/scope.ts` reduced the fiscal-year list to
+`number[]` and dropped `status`, so a filed year and a live one rendered
+identically on every screen in the product.
+
+| | |
+|---|---|
+| [`lib/exercice.ts`](../lib/exercice.ts) | the reducer: `exerciceOptions(rows)` and `statusOf(options, year)`. A separate module because `lib/scope.ts` is `'use client'` and the tests run in a `node` environment |
+| `useScope().exerciceOptions` | `{year, status}[]`, deduped and newest first |
+| `useScope().exerciceStatus` | the status of the year currently in scope |
+
+**`status` is `'open' | 'closed' | null`, and `null` is not "open".** It covers
+three real situations: the years have not arrived, the book has none, and — the
+one no browser will show you — an UNSCOPED year list in which two books' rows for
+the same year disagree. Picking the first row's status there would be a legal
+claim about somebody's books read off an array order. **Test for `=== 'closed'`,
+never for `!== 'open'`.**
+
+Where it is SAID is a deliberate, written-down decision, not an accident of which
+component had the value to hand:
+
+- the **year switcher**, in both its branches, because it is the control that
+  names the year and it is in the header of every book-scoped screen;
+- the **three statutory documents** — bilan, compte de résultat, patrimoine —
+  through `<StatementHeading exerciceStatus>`, because those are what a person
+  prints and sends to a fiduciary, and a statement of a filed year is a different
+  document from a draft of the same numbers;
+- **nowhere else.** The working screens have the header above them; a badge on
+  each would be seven more wordings of one legal fact. The full argument, and the
+  one change that would revisit it, is at `<ExerciceSwitcher>` in
+  `components/books-shell.tsx`.
+
+### The compte de résultat has two readings, and ONE request
+
+`/dashboard/{ws}/income-statement` draws the annual statement or a monthly grid,
+chosen by `?view=month` — in the URL, like the book, the year and the ledger's
+filters, so the reading is shareable and Back undoes it.
+
+`useCompteResultat` asks for `?by=month` **always**, so there is one query and
+one cache entry carrying the annual body and the twelve months together. The
+route's header is the reason: *"making it ask twice for two views of one
+statement would invite them to be read from different moments."* Switching
+reading does not refetch, and the total under the grid is the same object the
+annual view showed a second earlier.
+
+The three rules ticket #64 is actually about all live in
+[`lib/monthly-cr.ts`](../lib/monthly-cr.ts), not in the component — the row order
+comes once from the annual body and is reused for every column, a `pos` a month
+does not carry is an em dash and never `0.00`, and every total comes off the wire.
+They are a property of a transform, so `lib/monthly-cr.test.ts` can assert them;
+inside a `.tsx` render nothing in this app could.
+
+**The toggle is not offered where there is no statement.** Everything hangs off
+`cr.data`, which the `no_cr_for_simplified` path never produces — the same shape
+`/bilan` uses, not a third spelling. A bookmarked `?view=month` on a simplified
+book renders the refusal, verified in a browser.
+
+**That the hook still ASKS for `by=month` is itself guarded**, in
+`lib/wire-parity.test.ts` — added in review because it was the one link in the
+chain that nothing checked. `months` is optional on `CrResult` by design, so a
+hook that stops asking produces a valid payload, a page that renders the annual
+statement without complaint, and a monthly toggle that has silently vanished:
+515/515 green and `tsc` clean. The guard reads the hook's function BODY with
+comments stripped, because its docstring says `by=month` five times and a
+whole-file scan is satisfied by prose.
+
+**The year column is pinned to the right only from `sm` up.** Below 640px the
+left label column and a pinned year column together leave less clear width than
+one month column, so at 390×844 the reader landed on a grid where January's
+figure sat entirely underneath the year's — the wrong number in the month's
+place, not a missing one. Measured in review; the reasoning and both
+measurements are at the scroll wrapper in `components/monthly-cr-grid.tsx`.
+
 ### The word "workspace" must never appear in the UI
 
 It is platform tenancy. It names nothing in this product. The mockup has no team,
