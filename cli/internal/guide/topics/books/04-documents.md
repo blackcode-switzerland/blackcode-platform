@@ -55,6 +55,15 @@ re-scan, and only a person can tell them apart.
 `source.sha256`, when present, must be a real digest. A malformed hash is worse
 than none: it would sit on an entry as proof that proves nothing.
 
+**`file_id` and `web_view_link` are not interchangeable, and the door checks.**
+Drive hands back `id` and `webViewLink` side by side, both opaque strings, and
+only the second is a URL. Sent the wrong way round they used to ingest cleanly
+and leave the entry pointing at a reference that opens nothing — which is the
+one thing a pièce reference exists to avoid, since it is what somebody follows
+to the document years later. Send Drive's own values; the door will not build a
+URL out of an id, because it cannot check where that id actually leads. Having
+no link is fine — omit the field.
+
 ## Matching
 
 `piece match` says which entry the document proves. It writes the entry's pièce

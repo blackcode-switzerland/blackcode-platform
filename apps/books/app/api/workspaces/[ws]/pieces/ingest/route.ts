@@ -19,6 +19,7 @@ import { apiHandler, resolveWorkspace } from '@/lib/api'
 import { getEntityBySlug } from '@/lib/db/queries/statutory'
 import { ingestPiece, type IngestSource } from '@/lib/db/queries/pieces'
 import { structuralRefusal, type Extraction } from '@/lib/validate/extraction'
+import { driveSourceRefusal } from '@/lib/validate/drive'
 
 interface Params { params: Promise<{ ws: string }> }
 
@@ -36,6 +37,14 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   // than none — it would sit on an entry as proof that proves nothing.
   if (source.sha256 != null && !/^[0-9a-f]{64}$/i.test(String(source.sha256))) {
     throw Errors.badRequest('bad_sha256', 'source.sha256 is not a SHA-256 hex digest', '64 hex characters, lowercase or upper; omit the field if the worker did not hash the file')
+  }
+  // The id and the link are both opaque strings from the same Drive response,
+  // and only one of them is a URL. Delivered the wrong way round, the pièce
+  // ingests cleanly and the reference filed against the écriture opens nothing
+  // — see `lib/validate/drive.ts` for the case that prompted this.
+  const driveRefusal = driveSourceRefusal(source)
+  if (driveRefusal) {
+    throw Errors.badRequest(driveRefusal.code, driveRefusal.message, driveRefusal.suggestion)
   }
 
   const refusal = structuralRefusal(body)
