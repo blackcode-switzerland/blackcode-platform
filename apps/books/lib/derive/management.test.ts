@@ -141,10 +141,10 @@ describe('costBreakdown', () => {
 describe('vatPosition', () => {
   it('output on posted revenue, input only when CLAIMED, on top of the opening due', () => {
     const v = vatPosition(150000n, [
-      { status: 'posted', tva_amount: '81.00', tva_input_claimed: false, credits_revenue: true },
-      { status: 'posted', tva_amount: '29.90', tva_input_claimed: true, credits_revenue: false },
-      { status: 'posted', tva_amount: '12.00', tva_input_claimed: false, credits_revenue: false }, // evidence too weak to claim
-      { status: 'staged', tva_amount: '99.00', tva_input_claimed: true, credits_revenue: false },
+      { status: 'posted', tva_amount: '81.00', tva_input_claimed: false, revenue_movement: '1000.00' },
+      { status: 'posted', tva_amount: '29.90', tva_input_claimed: true, revenue_movement: '0.00' },
+      { status: 'posted', tva_amount: '12.00', tva_input_claimed: false, revenue_movement: '0.00' }, // evidence too weak to claim
+      { status: 'staged', tva_amount: '99.00', tva_input_claimed: true, revenue_movement: '0.00' },
     ])
     expect(v).toEqual({
       opening_due: '1500.00',
@@ -152,6 +152,27 @@ describe('vatPosition', () => {
       input_claimed_ytd: '29.90',
       net_due: '1551.10',
     })
+  })
+
+  // Bala's #65, with his exact figures: one ordinary sale and one credit note.
+  // The old boolean dropped the avoir's 404.63 in both directions and the
+  // position read 606.94 — "wrong by an amount that never appears".
+  it('a credit note REDUCES output VAT rather than vanishing (art. 41 LTVA)', () => {
+    const v = vatPosition(0n, [
+      { status: 'posted', tva_amount: '606.94', tva_input_claimed: false, revenue_movement: '8100.00' },
+      // The avoir: it DEBITS revenue, so the movement is negative.
+      { status: 'posted', tva_amount: '404.63', tva_input_claimed: false, revenue_movement: '-5400.00' },
+    ])
+    expect(v.output_ytd, '606.94 less the credit note').toBe('202.31')
+    expect(v.net_due).toBe('202.31')
+  })
+
+  it('a credit note is not mistaken for input tax', () => {
+    const v = vatPosition(0n, [
+      { status: 'posted', tva_amount: '404.63', tva_input_claimed: false, revenue_movement: '-5400.00' },
+    ])
+    expect(v.input_claimed_ytd, 'it is negative OUTPUT tax, not deductible input tax').toBe('0.00')
+    expect(v.output_ytd).toBe('-404.63')
   })
 })
 

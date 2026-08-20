@@ -494,11 +494,35 @@ export async function getTaxSnapshot(entity: BooksEntity, exercice: BooksExercic
         )
       )
       .limit(1)
+    // ── TWO FIXES OVER THE ONE LINE THIS REPLACED (2026-08-20, Bala's #65) ────
+    // It was:
+    //
+    //   bool_or(l.account_no = '3400' AND l.credit > 0) AS credits_revenue
+    //
+    // 1. SIGNED, NOT BOOLEAN. A credit note debits revenue, so `credit > 0` was
+    //    false and the entry fell through to the input branch, where
+    //    `tva_input_claimed` is false too — dropped in both directions. The sum
+    //    is credit-minus-debit so a sale is positive and an avoir negative, and
+    //    `vatPosition` follows that sign (art. 41 LTVA).
+    //
+    // 2. EVERY REVENUE ACCOUNT, NOT `3400`. The literal is the PME template's
+    //    one revenue account, and a book that adds another (`bk books account
+    //    create`, class 3) had its output VAT silently ignored on all of it.
+    //    Joining the chart and testing `class = 3` also makes this agree with
+    //    the post-time door, which demands a rate on ANY class 3 turnover —
+    //    two places asking the same question had to answer it the same way.
+    //
+    // The join is LEFT because an unresolved line carries no account, and such
+    // an entry contributes 0 rather than dropping the whole row.
     const entries = await getDb().execute(sql`
       SELECT e.status, e.tva_amount, e.tva_input_claimed,
-             bool_or(l.account_no = '3400' AND l.credit > 0) AS credits_revenue
+             COALESCE(SUM(
+               CASE WHEN a.class = 3 THEN l.credit - l.debit ELSE 0 END
+             ), 0) AS revenue_movement
         FROM books.entry e
         JOIN books.entry_line l ON l.entry_id = e.id
+        LEFT JOIN books.account a
+               ON a.entity_id = e.entity_id AND a.no = l.account_no
        WHERE e.entity_id = ${entity.id}
          AND e.exercice_id = ${exercice.id}
          AND e.deleted_at IS NULL
@@ -511,7 +535,7 @@ export async function getTaxSnapshot(entity: BooksEntity, exercice: BooksExercic
         status: String(r.status),
         tva_amount: r.tva_amount as string | null,
         tva_input_claimed: Boolean(r.tva_input_claimed),
-        credits_revenue: Boolean(r.credits_revenue),
+        revenue_movement: String(r.revenue_movement ?? '0'),
       })) as VatEntry[]
     )
   }

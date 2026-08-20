@@ -212,8 +212,29 @@ export interface VatEntry {
   status: string
   tva_amount: Money | null
   tva_input_claimed: boolean
-  /** Does a line credit the revenue account 3400? Output VAT rides on revenue. */
-  credits_revenue: boolean
+  /**
+   * This entry's SIGNED movement on revenue accounts, credit-positive: a sale
+   * is positive, a credit note (avoir) negative, a pure cost zero.
+   *
+   * ── IT WAS `credits_revenue: boolean` UNTIL 2026-08-20 ─────────────────────
+   * Bala's #65, from sweeping the taxes screen: a credit note declared with
+   *
+   *   --account 3400 --contra 1020 --tva-rate 8.1
+   *
+   * stored its 404.63 of VAT correctly and reduced the year's revenue
+   * correctly, and the output VAT position ignored it in BOTH directions. A
+   * credit note DEBITS revenue, so the old flag was false, and the entry fell
+   * through to the input branch — where `tva_input_claimed` is also false, and
+   * it was silently dropped. As the report put it: the figure was not wrong by
+   * a visible amount, it was wrong by an amount that never appeared.
+   *
+   * art. 41 al. 1 LTVA settles the bookkeeping question the report deliberately
+   * left open: when the consideration is reduced, the taxable person adjusts
+   * the output tax. A credit note reduces what the company owes, so the VAT
+   * follows the revenue's sign rather than a yes/no about which side it landed
+   * on. A boolean could never express that.
+   */
+  revenue_movement: Money | number
 }
 
 export interface VatPosition {
@@ -235,7 +256,12 @@ export function vatPosition(opening2200: bigint, entries: VatEntry[]): VatPositi
     if (e.status !== 'posted') continue
     const tva = toCentimes(e.tva_amount)
     if (tva === 0n) continue
-    if (e.credits_revenue) output += tva
+    const revenue = toCentimes(e.revenue_movement)
+    // The VAT takes the revenue's sign: a sale adds to what is owed, a credit
+    // note subtracts from it (art. 41 LTVA). Only an entry that moves no
+    // revenue at all is a candidate for input tax.
+    if (revenue > 0n) output += tva
+    else if (revenue < 0n) output -= tva
     else if (e.tva_input_claimed) input += tva
   }
   return {
