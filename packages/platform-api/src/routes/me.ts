@@ -20,6 +20,7 @@ import {
   updateUserProfile,
 } from '@blackcode/platform-db'
 import { isSuperAdmin } from '@blackcode/platform-auth'
+import { LOCALES, parseLocale } from '@blackcode/platform-i18n'
 import { accountCensus, purgeRemoteApp, stillHolds } from '../account-census'
 import type { AppContext } from '../app-context'
 import { Errors } from '../errors'
@@ -62,6 +63,16 @@ export function meRoute(app: AppContext) {
       // it here — it re-syncs on each Google sign-in.
       connected_google: !!fresh.google_id,
       avatar_editable: !fresh.google_id,
+      // ── NULL IS AN ANSWER HERE, AND IT IS NOT `'en'` ────────────────────────
+      // `platform.users.locale` is nullable and null means "never chosen"
+      // (migration 0048). Serving the resolved locale instead would tell every
+      // caller that a preference exists, which is what makes the settings page
+      // unable to show "follow my browser" as the state it is actually in — and
+      // what would stop `Accept-Language` from ever winning on the next
+      // request. `parseLocale` normalises rather than validates: a value the
+      // vocabulary no longer knows reads as null, the same way it does
+      // everywhere else.
+      locale: parseLocale(fresh.locale),
       via: authVia(req),
       is_super_admin: isSuperAdmin(fresh.email),
     })
@@ -76,7 +87,12 @@ export function meRoute(app: AppContext) {
       throw Errors.badRequest('invalid_body', 'expected JSON object')
     }
 
-    const patch: { name?: string | null; tagline?: string | null; avatar_url?: string | null } = {}
+    const patch: {
+      name?: string | null
+      tagline?: string | null
+      avatar_url?: string | null
+      locale?: string | null
+    } = {}
 
     if ('name' in body) {
       if (body.name !== null && typeof body.name !== 'string') {
@@ -109,6 +125,24 @@ export function meRoute(app: AppContext) {
       }
       patch.avatar_url = body.avatar_url
     }
+    if ('locale' in body) {
+      // ── `null` IS ACCEPTED, AND IT MEANS "GO BACK TO NOT HAVING CHOSEN" ────
+      // Not the same as choosing English. Writing null hands the reader back to
+      // the cookie / Accept-Language chain, which is the only way somebody who
+      // picked a language once can undo that rather than pick a different one.
+      // The settings page spells it "Follow my browser".
+      if (body.locale !== null && parseLocale(body.locale) === null) {
+        throw Errors.badRequest(
+          'invalid_locale',
+          `locale must be one of ${LOCALES.join(', ')}, or null`,
+          `send {"locale": "${LOCALES[0]}"} — or {"locale": null} to clear the preference`
+        )
+      }
+      // Normalised, not echoed: `fr-CH` and `FR` are stored as `fr`, so the
+      // column holds one spelling per language and no reader has to re-narrow
+      // what a writer happened to send.
+      patch.locale = body.locale === null ? null : parseLocale(body.locale)
+    }
 
     const updated = await updateUserProfile(app.db, user.id, patch)
     if (!updated) throw Errors.notFound('user')
@@ -118,6 +152,7 @@ export function meRoute(app: AppContext) {
       name: updated.name,
       tagline: updated.tagline,
       avatar_url: updated.avatar_url,
+      locale: parseLocale(updated.locale),
       active_workspace_id: updated.active_workspace_id,
     })
   })

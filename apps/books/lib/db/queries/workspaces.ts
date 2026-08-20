@@ -1,0 +1,358 @@
+// This app's workspaces and memberships — `books.workspaces`,
+// `books.workspace_members`.
+//
+// ---------------------------------------------------------------------------
+// COPY THIS FILE. IT IS THE SHAPE `AppContext.workspaces` EXPECTS.
+// ---------------------------------------------------------------------------
+// `packages/platform-api` owns the request layer — `apiHandler`, the error log,
+// the version headers, the 401/404/403 reasoning — and asks each app exactly one
+// question: where do YOUR workspaces live? The answer is a `WorkspaceSource`,
+// built in `lib/api.ts` out of the functions below.
+//
+// The field is REQUIRED and not optional, which is the property that matters
+// when you copy this app: an optional one defaulting to `platform.workspaces`
+// would mean the safe value is the one you have to remember, and forgetting it
+// fails SILENTLY — a new app serving, correctly, against another app's tenancy.
+// Required means your copy stops compiling until you have answered.
+//
+// ---------------------------------------------------------------------------
+// MEMBERSHIP IS THE WHOLE GATE
+// ---------------------------------------------------------------------------
+// There is no second check to write. `platform.workspace_apps` and
+// `platform.app_access` were dropped on 2026-08-10 along with
+// `requireAppAccess`: an app owns its workspaces, so a workspace belongs to
+// exactly one app, and "is this person a member?" answers "may they use this
+// app?" completely.
+
+import { and, asc, eq } from 'drizzle-orm'
+import type {
+  WorkspaceMemberRef,
+  WorkspaceMembershipRef,
+  WorkspaceRef,
+} from '@blackcode/platform-api'
+import { getDb } from '../client'
+import { booksWorkspaceMembers, booksWorkspaces, users } from '../schema'
+
+/**
+ * The five columns shared code reads. Projected explicitly, never `SELECT *`.
+ *
+ * `WorkspaceContext.workspace` is deliberately narrowed to the columns EVERY
+ * app's workspace table has. A route needing one of its own — issues reads
+ * `storage_limit_bytes` — reads the row itself rather than widening the shared
+ * interface with a field only one app has ever had.
+ */
+const WS_COLUMNS = {
+  id: booksWorkspaces.id,
+  name: booksWorkspaces.name,
+  slug: booksWorkspaces.slug,
+  owner_id: booksWorkspaces.owner_id,
+  updated_at: booksWorkspaces.updated_at,
+} as const
+
+/**
+ * One workspace by slug or numeric id, asserting the caller is a member.
+ *
+ * Null for "does not exist" AND for "you are not a member", deliberately: the
+ * two are one answer so the API cannot be used to confirm which workspaces
+ * exist. The route layer turns it into a 404 — never a 403, which would leak
+ * existence to somebody who has no business knowing.
+ */
+export async function getWorkspaceForUser(
+  slugOrId: string,
+  userId: number
+): Promise<WorkspaceMembershipRef | null> {
+  const numeric = /^\d+$/.test(slugOrId) ? Number(slugOrId) : null
+
+  const rows = await getDb()
+    .select({ ...WS_COLUMNS, member_role: booksWorkspaceMembers.role })
+    .from(booksWorkspaces)
+    .innerJoin(
+      booksWorkspaceMembers,
+      eq(booksWorkspaceMembers.workspace_id, booksWorkspaces.id)
+    )
+    .where(
+      and(
+        eq(booksWorkspaceMembers.user_id, userId),
+        numeric === null
+          ? eq(booksWorkspaces.slug, slugOrId)
+          : eq(booksWorkspaces.id, numeric)
+      )
+    )
+    .limit(1)
+
+  const row = rows[0]
+  if (!row) return null
+  // `role` is `varchar` in Postgres and therefore `string` to Drizzle; the CHECK
+  // constraint is what makes the narrowing true. Asserted rather than validated
+  // because a row that violated the constraint could not have been inserted.
+  const { member_role, ...ws } = row
+  return { ...ws, member_role: member_role as 'owner' | 'member' }
+}
+
+/** Every workspace this person belongs to, oldest first. */
+export async function listWorkspacesForUser(userId: number): Promise<WorkspaceMembershipRef[]> {
+  const rows = await getDb()
+    .select({ ...WS_COLUMNS, member_role: booksWorkspaceMembers.role })
+    .from(booksWorkspaces)
+    .innerJoin(
+      booksWorkspaceMembers,
+      eq(booksWorkspaceMembers.workspace_id, booksWorkspaces.id)
+    )
+    .where(eq(booksWorkspaceMembers.user_id, userId))
+    .orderBy(asc(booksWorkspaces.id))
+  return rows.map(({ member_role, ...ws }) => ({
+    ...ws,
+    member_role: member_role as 'owner' | 'member',
+  }))
+}
+
+/** The people in a workspace, with their platform identity. */
+export async function listWorkspaceMembers(workspaceId: number): Promise<WorkspaceMemberRef[]> {
+  return await getDb()
+    .select({
+      id: booksWorkspaceMembers.id,
+      workspace_id: booksWorkspaceMembers.workspace_id,
+      user_id: booksWorkspaceMembers.user_id,
+      role: booksWorkspaceMembers.role,
+      joined_at: booksWorkspaceMembers.joined_at,
+      email: users.email,
+      name: users.name,
+      avatar_url: users.avatar_url,
+      deleted_at: users.deleted_at,
+    })
+    .from(booksWorkspaceMembers)
+    .innerJoin(users, eq(users.id, booksWorkspaceMembers.user_id))
+    .where(eq(booksWorkspaceMembers.workspace_id, workspaceId))
+    .orderBy(asc(booksWorkspaceMembers.joined_at))
+}
+
+/** A workspace-safe slug from a person's name or email local part. */
+export function slugify(input: string): string {
+  const base = input
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32)
+  return base || 'workspace'
+}
+
+export interface EnsureWorkspaceResult {
+  workspace: WorkspaceMembershipRef
+  /** True when this call is what created it. */
+  created: boolean
+}
+
+/**
+ * The workspace a person lands in, created on their first sign-in if they have
+ * none. **The whole of this app's bootstrap, and its only writer of
+ * `books.workspaces`.**
+ *
+ * ---------------------------------------------------------------------------
+ * ONE TRANSACTION, AND IT IS THE POINT OF THE FUNCTION
+ * ---------------------------------------------------------------------------
+ * A workspace with no membership row locks its own owner out of their data:
+ * every read here goes through `getWorkspaceForUser`, which joins on membership.
+ * It is also exactly the shape a partial failure leaves behind. So the two
+ * writes are one transaction or they are a bug waiting for a bad night.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY IT IS SAFE TO CALL ON EVERY SIGN-IN
+ * ---------------------------------------------------------------------------
+ * It returns the existing workspace when there is one, so it is idempotent
+ * rather than "call it only for new accounts". That is not a convenience: the
+ * callers cannot both know. The Google provider learns `was_new` from
+ * `upsertUserFromOAuth`; the credentials provider has no equivalent and cannot
+ * tell a first sign-in from a thousandth.
+ *
+ * Keying on MEMBERSHIP rather than on account age is also what makes the
+ * invitation flow correct — somebody who accepted an invitation already belongs
+ * somewhere and must not be handed a second workspace of their own.
+ *
+ * ---------------------------------------------------------------------------
+ * IT MUST NOT THROW INTO A SIGN-IN
+ * ---------------------------------------------------------------------------
+ * `lib/auth.ts` wraps it in a try/catch, because a sign-in that fails because a
+ * workspace could not be minted is a person locked out of an account that
+ * exists. Idempotence is what makes that safe: the next sign-in retries.
+ *
+ * The cost of best-effort is that a bug in here is INVISIBLE from the response —
+ * `apps/sales` shipped a version whose transaction-internal re-check named an
+ * unjoined table, and every sign-up returned 201 while landing without a
+ * workspace. It was found by looking at the database after running the flow, not
+ * by a unit test, and not by the status code. Look at the rows.
+ */
+export async function ensureWorkspaceForUser(
+  userId: number,
+  name: string | null,
+  email: string
+): Promise<EnsureWorkspaceResult> {
+  const existing = await listWorkspacesForUser(userId)
+  if (existing[0]) return { workspace: existing[0], created: false }
+
+  const label = name?.trim() || email.split('@')[0]
+  const base = slugify(label)
+
+  return await getDb().transaction(async (tx) => {
+    // Re-check INSIDE the transaction. Two sign-ins racing — a browser tab and a
+    // `bk login` in the same second — would otherwise both see no membership and
+    // both mint a workspace, and the loser is a row nobody ever opens.
+    //
+    // Note the projection: `booksWorkspaceMembers.workspace_id`, NOT
+    // `booksWorkspaces.id`. This query does not join the workspaces table,
+    // and Drizzle throws at RUNTIME rather than at compile time when a
+    // projection names an unjoined table. tsc will not save you here.
+    const already = await tx
+      .select({ id: booksWorkspaceMembers.workspace_id })
+      .from(booksWorkspaceMembers)
+      .where(eq(booksWorkspaceMembers.user_id, userId))
+      .limit(1)
+    if (already[0]) {
+      const ws = await getWorkspaceForUser(String(already[0].id), userId)
+      if (ws) return { workspace: ws, created: false }
+    }
+
+    return { workspace: await mintWorkspace(tx, userId, `${label}'s workspace`, base), created: true }
+  })
+}
+
+/**
+ * The two writes that make a workspace exist — row and owner membership, one
+ * transaction, because a workspace without its membership row locks its own
+ * owner out (`ensureWorkspaceForUser`'s header tells the story; the seed
+ * shipped that exact bug once).
+ *
+ * Slug collision: `slug` is UNIQUE and two people called Anna would collide.
+ * The suffix comes from the attempt counter rather than a random string so
+ * the slug stays typeable — somebody has to be able to say it out loud.
+ */
+type Tx = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0]
+async function mintWorkspace(
+  tx: Tx,
+  userId: number,
+  name: string,
+  slugBase: string
+): Promise<WorkspaceMembershipRef> {
+  let slug = slugBase
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const clash = await tx
+      .select({ id: booksWorkspaces.id })
+      .from(booksWorkspaces)
+      .where(eq(booksWorkspaces.slug, slug))
+      .limit(1)
+    if (!clash[0]) break
+    slug = `${slugBase}-${attempt + 2}`
+  }
+
+  const [ws] = await tx
+    .insert(booksWorkspaces)
+    .values({ name, slug, owner_id: userId })
+    .returning(WS_COLUMNS)
+
+  await tx
+    .insert(booksWorkspaceMembers)
+    .values({ workspace_id: ws.id, user_id: userId, role: 'owner' })
+
+  return { ...ws, member_role: 'owner' as const }
+}
+
+export class WorkspaceRefused extends Error {
+  constructor(
+    public code: string,
+    message: string,
+    public suggestion: string
+  ) {
+    super(message)
+  }
+}
+
+/**
+ * ONE WORKSPACE PER PERSON, FOR NOW — the policy, in the one place that mints
+ * a workspace on request.
+ *
+ * ── WHY, AND WHY IT IS A POLICY RATHER THAN A MODEL CHANGE ─────────────────
+ * The tables are multi-workspace and stay that way: `books.workspaces` has
+ * owners and members, invitations exist, and every read is already scoped. What
+ * is NOT ready is the human half — there is no invitation-accept route mounted
+ * (`invite send` reports success on an invitation nobody can accept), and a
+ * second workspace is therefore a room only its creator can ever enter.
+ *
+ * It also caused real confusion on 2026-08-20: an agent creating its own
+ * workspace left the person's books in one workspace and their browser in
+ * another, and the dashboard showed nothing while `bk books entity list` showed
+ * everything. Nothing was wrong; there were simply two rooms and no sign
+ * saying which you were in.
+ *
+ * So this is deliberately ONE `if`, in ONE function, refusing with the reason.
+ * Lifting it when invitations land is deleting this block — not unpicking a
+ * constraint, a trigger, or a column that assumed singularity. Nothing else in
+ * this app was told that a person has one workspace, and nothing should be:
+ * `getDefaultForUser` still answers "the newest one you belong to", and
+ * `listForUser` still returns a list.
+ *
+ * ── WHAT IT DOES NOT TOUCH ─────────────────────────────────────────────────
+ * `ensureWorkspaceForUser` — sign-in — is untouched and already idempotent:
+ * it mints at most one, and returns the existing one forever after. That IS the
+ * default workspace this restriction leaves in place, so a person who has never
+ * created anything is unaffected and always has exactly one.
+ *
+ * `addMember` is untouched too. Somebody INVITED into another person's
+ * workspace legitimately belongs to two, and the day that flow works this rule
+ * must not have quietly become "one membership per person". The count below is
+ * of workspaces this person OWNS, for that reason.
+ */
+export async function createWorkspaceForUser(
+  userId: number,
+  name: string
+): Promise<WorkspaceMembershipRef> {
+  const mine = await listWorkspacesForUser(userId)
+  const owned = mine.filter((w) => w.member_role === 'owner')
+  if (owned.length > 0) {
+    const first = owned[0]
+    throw new WorkspaceRefused(
+      'one_workspace_per_person',
+      `you already have a workspace ("${first.name}", slug ${first.slug}) and b/books gives one per person for now`,
+      `work in it: \`bk books workspace use ${first.slug}\`. A workspace holds ANY number of books, so a second company is \`bk books entity create\` — not a second workspace. Sharing a workspace with somebody else needs the invitation flow, which is not open yet`
+    )
+  }
+
+  const trimmed = name.trim()
+  return getDb().transaction((tx) => mintWorkspace(tx, userId, trimmed, slugify(trimmed)))
+}
+
+/**
+ * Add somebody to a workspace, or leave them where they are.
+ *
+ * `ON CONFLICT DO NOTHING` against `uq_books_workspace_members_ws_user`
+ * rather than SELECT-then-INSERT: two clicks on the same accept link are a race,
+ * and the unique index is the only thing that can settle it.
+ */
+export async function addMember(
+  workspaceId: number,
+  userId: number,
+  role: 'owner' | 'member' = 'member'
+): Promise<void> {
+  await getDb()
+    .insert(booksWorkspaceMembers)
+    .values({ workspace_id: workspaceId, user_id: userId, role })
+    .onConflictDoNothing()
+}
+
+/** One membership row, or null. Used by the owner-only route gates. */
+export async function getMembership(
+  workspaceId: number,
+  userId: number
+): Promise<{ role: string } | null> {
+  const rows = await getDb()
+    .select({ role: booksWorkspaceMembers.role })
+    .from(booksWorkspaceMembers)
+    .where(
+      and(
+        eq(booksWorkspaceMembers.workspace_id, workspaceId),
+        eq(booksWorkspaceMembers.user_id, userId)
+      )
+    )
+    .limit(1)
+  return rows[0] ?? null
+}

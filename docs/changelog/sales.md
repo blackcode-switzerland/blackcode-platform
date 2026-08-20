@@ -22,7 +22,7 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
-## 2026-08-17 (later) — Drive files know their type, previews go full screen
+## 2026-08-17 — Drive files know their type, previews go full screen
 
 **Additive.** Three fixes on top of the file-provider work, all found by testing
 against real Google Drive files.

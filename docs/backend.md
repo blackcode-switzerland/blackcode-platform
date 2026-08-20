@@ -405,7 +405,7 @@ column types, indexes, and check constraints.
 
 | Table | Purpose / notable columns |
 |-------|---------------------------|
-| `users` | `email` (unique), `password_hash`, `google_id`, `avatar_url`, `tagline`, `active_workspace_id` (soft FK), `password_changed_at`, `deleted_at` (soft delete — email can be reused) |
+| `users` | `email` (unique), `password_hash`, `google_id`, `avatar_url`, `tagline`, `locale`, `active_workspace_id` (soft FK), `password_changed_at`, `deleted_at` (soft delete — email can be reused). **`locale` is NULLABLE and null means "never chosen", not "chose English"** — migration `0048`, and the reason is that `@blackcode/platform-i18n` resolves *user record → cookie → `Accept-Language` → default*, so a backfill would make the last two steps unreachable. Every app reads the same value |
 | `workspaces` | `name`, `slug` (unique), `owner_id`, `logo_url`, `deleted_at` |
 | `workspace_members` | `(workspace_id, user_id)` unique; `role` ∈ `owner` \| `member` |
 | `workspace_counters` | per-workspace sequence allocators: `last_issue_seq`, `last_project_seq`, `last_task_seq` (allocated in-transaction by `allocateNext*Seq`) |

@@ -1,7 +1,7 @@
 {
   "name": "blackcode-platform",
   "version": "1.0.0",
-  "description": "Blackcode internal app platform \u2014 monorepo. Apps live in apps/*, shared libraries in packages/*.",
+  "description": "Blackcode internal app platform — monorepo. Apps live in apps/*, shared libraries in packages/*.",
   "private": true,
   "packageManager": "npm@10.8.2",
   "workspaces": [
@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "turbo run dev --filter=issues",
     "dev:sales": "turbo run dev --filter=sales",
+    "dev:books": "turbo run dev --filter=books",
     "build": "turbo run build",
     "start": "turbo run start --filter=issues",
     "lint": "turbo run lint",
@@ -21,7 +22,10 @@
     "db:push:issues": "npm run db:push --workspace=issues",
     "db:studio:issues": "npm run db:studio --workspace=issues",
     "db:generate:sales": "npm run db:generate --workspace=sales",
-    "db:migrate:sales": "npm run db:migrate --workspace=sales"
+    "db:migrate:sales": "npm run db:migrate --workspace=sales",
+    "db:generate:books": "npm run db:generate --workspace=books",
+    "db:migrate:books": "npm run db:migrate --workspace=books",
+    "db:seed:books": "npm run db:seed --workspace=books"
   },
   "devDependencies": {
     "turbo": "^2.5.6"

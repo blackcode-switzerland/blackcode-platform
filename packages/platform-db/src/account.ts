@@ -32,6 +32,15 @@ export interface UpdateUserProfileInput {
   name?: string | null
   tagline?: string | null
   avatar_url?: string | null
+  /**
+   * The interface language, or null to go back to "never chosen".
+   *
+   * NOT typed as `Locale` here: `platform-db` must not depend on
+   * `platform-i18n` — the vocabulary is validated by the route that accepts it
+   * (`PATCH /api/me`) and re-validated on read by `parseLocale()`. A string is
+   * what the column holds, and this layer is the column.
+   */
+  locale?: string | null
 }
 
 export async function updateUserProfile(
@@ -43,6 +52,7 @@ export async function updateUserProfile(
   if (patch.name !== undefined) updates.name = patch.name
   if (patch.tagline !== undefined) updates.tagline = patch.tagline
   if (patch.avatar_url !== undefined) updates.avatar_url = patch.avatar_url
+  if (patch.locale !== undefined) updates.locale = patch.locale
   if (Object.keys(updates).length === 0) return getUserById(db, id)
   updates.updated_at = new Date()
   const [row] = await db.update(users).set(updates).where(eq(users.id, id)).returning()

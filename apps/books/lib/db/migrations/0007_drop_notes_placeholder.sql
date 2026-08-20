@@ -1,0 +1,31 @@
+-- b/books, migration 0007 — the placeholder goes.
+--
+-- `books.notes` and `books.note_counters` came from `apps/_scaffold` and were
+-- deliberately temporary: they kept the app buildable and the CLI-parity guard
+-- satisfied through phase 0, when there was no real entity to carry a route, a
+-- command and a guide topic.
+--
+-- The statutory core exists now, so the placeholder is removed along with its
+-- route (`app/api/workspaces/[ws]/notes/route.ts`), its two `bk books note`
+-- commands, and its schema declarations. All four go in the same commit: dropping
+-- the table while a route still selects from it turns a clean removal into a 500,
+-- and leaving the commands would make `bk` claim a route that no longer exists —
+-- which lib/cli-parity.test.ts would catch, but only after the fact.
+--
+-- ── THE BLOB TRIGGER GOES WITH IT, AND NOTHING REPLACES IT ──────────────────
+-- Migration 0002 put `trg_blob_refs` on `books.notes` because it was the only
+-- table with a prose column that could reference an uploaded file. Dropping the
+-- table drops the trigger.
+--
+-- **No books table replaces it, and that is permanent rather than pending.**
+-- Supporting documents in this app are Google Drive references
+-- (`entry.piece_drive_ref`), never uploads: nothing is ever stored in platform
+-- blob storage by b/books, so there are no references for the index to hold.
+--
+-- `platform.apps.maintains_blob_index` stays TRUE. It is a declaration that this
+-- app has indexed everything it holds, and holding nothing satisfies it
+-- vacuously. Setting it false would be the WRONG direction: an app that is
+-- `enabled` with the flag false makes blob deletion refuse platform-wide
+-- (docs/adding-an-app.md), so the safe value is the one that is also true.
+DROP TABLE IF EXISTS books.notes CASCADE;--> statement-breakpoint
+DROP TABLE IF EXISTS books.note_counters CASCADE;
