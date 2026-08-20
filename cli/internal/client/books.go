@@ -1046,6 +1046,18 @@ func (c *Client) CreateBooksCategory(ws string, req CreateBooksCategoryRequest) 
 	return &out, nil
 }
 
+// RetireBooksCategory stops a cost bucket counting, and frees the accounts it
+// held for a new one. One-way: there is no un-retire, because a bucket whose
+// meaning changed is a different bucket.
+func (c *Client) RetireBooksCategory(ws string, number int) (*BooksCategory, error) {
+	var out BooksCategory
+	body := map[string]any{"retired": true}
+	if err := c.patchJSON(fmt.Sprintf("/api/workspaces/%s/analytique/categories/%d", ws, number), body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 type BooksVatPosition struct {
 	OpeningDue      string `json:"opening_due"`
 	OutputYtd       string `json:"output_ytd"`

@@ -27,6 +27,7 @@ import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
 import { getDb } from '../client'
 import {
   booksAccount,
+  booksAnalytiqueCategory,
   booksCounters,
   booksEntity,
   booksEntry,
@@ -51,6 +52,7 @@ import {
   type PostingLine,
 } from '../../derive'
 import { PME_CHART } from '../../chart'
+import { DEFAULT_CATEGORIES, takesDefaultCategories } from '../../categories'
 
 // ---------------------------------------------------------------------------
 // Books and years
@@ -150,6 +152,28 @@ export async function createEntity(
         statement_position: a.statement_position,
       }))
     )
+
+    // The analytique's cost buckets, on the same argument as the chart above and
+    // in the same transaction: a book that starts with none reports an EMPTY
+    // breakdown from `bk books analytique` — not an error, just permanently
+    // blank, which is how it went unnoticed until 2026-08-20. See
+    // `lib/categories.ts`, and note the test is the REGIME: a simplified book
+    // carries its category on the entry and is refused an account mapping.
+    if (takesDefaultCategories(data.bookkeeping_regime)) {
+      for (const c of DEFAULT_CATEGORIES) {
+        await tx.insert(booksAnalytiqueCategory).values({
+          workspace_id: workspaceId,
+          entity_id: row.id,
+          // Categories are numbered per WORKSPACE, like every other #number in
+          // this app, so they share the workspace's `category` counter rather
+          // than restarting at 1 inside each book.
+          seq: await allocateSeq(tx, workspaceId, 'category'),
+          key: c.key,
+          label: c.label,
+          accounts: [...c.accounts],
+        })
+      }
+    }
 
     return row
   })

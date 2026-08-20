@@ -590,6 +590,62 @@ export function publicAnalysis({ analysis: a, entitySlug }: AnalysisWithEntity) 
   }
 }
 
+/**
+ * Retire a cost bucket, freeing the accounts it claimed.
+ *
+ * ── WHY THIS EXISTS, AND WHY IT HAD TO SHIP WITH THE TEMPLATE ──────────────
+ * `createCategory` already refused a duplicate key with the suggestion "retire
+ * the old one first if it is being replaced", and there was no door to do it —
+ * a refusal pointing at a verb the app does not have.
+ *
+ * That was survivable while a new book started with NO categories: the book
+ * built its own buckets and never needed to unmake one. From 2026-08-20
+ * `createEntity` installs the five in `lib/categories.ts`, and those five claim
+ * every cost account the PME chart carries. With "one franc, one bar" and no
+ * retire, a book could then never add a bucket of its own — the template would
+ * be permanent. So the template and this verb are one change.
+ *
+ * ── RETIRED, NOT DELETED, AND NOT FOR THE USUAL REASON ─────────────────────
+ * A category is CONFIGURATION, not a record: art. 958f is not what keeps this
+ * row. What keeps it is that a filed `books.analysis` may cite a breakdown that
+ * used it, and its `based_on` snapshot names the bucket. Deleting the row would
+ * leave a filed analysis citing something that never existed.
+ *
+ * `getAnalytique` already filters retired buckets out, and `createCategory`
+ * already skips them when working out which accounts are claimed — so a retired
+ * bucket's accounts are immediately available to a new one. Both were written
+ * before anything could set the flag.
+ *
+ * Retiring twice is not an error: the second call reports the same row. The
+ * verb describes a state, not an event.
+ */
+export async function retireCategory(
+  workspaceId: number,
+  seq: number
+): Promise<BooksAnalytiqueCategory> {
+  const db = getDb()
+  const [row] = await db
+    .select()
+    .from(booksAnalytiqueCategory)
+    .where(and(eq(booksAnalytiqueCategory.workspace_id, workspaceId), eq(booksAnalytiqueCategory.seq, seq)))
+    .limit(1)
+  if (!row) {
+    throw new ManagementRefused(
+      'category_not_found',
+      `no category #${seq} in this workspace`,
+      'bk books category list names them, with their numbers'
+    )
+  }
+  if (row.retired) return row
+
+  const [updated] = await db
+    .update(booksAnalytiqueCategory)
+    .set({ retired: true, updated_at: new Date() })
+    .where(eq(booksAnalytiqueCategory.id, row.id))
+    .returning()
+  return updated
+}
+
 export function publicCategory(c: BooksAnalytiqueCategory, entitySlug: string) {
   return {
     number: c.seq,
