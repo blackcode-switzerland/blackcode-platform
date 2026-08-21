@@ -1323,6 +1323,12 @@ export interface InboxPiece {
     file_name: string | null
     mime_type: string | null
     md5_checksum: string | null
+    /**
+     * The stronger checksum. Present when the worker hashed the bytes it
+     * captured; `md5_checksum` is Drive's own and may be the only one. A screen
+     * showing "the" checksum should prefer this one — `pieceHashOf` does.
+     */
+    sha256: string | null
     /** ISO **timestamp**. See `ManifestFile.created_time`. */
     created_time: string | null
     web_view_link: string | null

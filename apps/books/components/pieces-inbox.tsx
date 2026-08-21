@@ -367,8 +367,34 @@ function PieceDetail({
           <span className="break-all font-mono text-muted-foreground">{piece.source.file_id}</span>
         </Row>
         <Row label={t('inbox.checksum')}>
-          {piece.source.md5_checksum ? (
-            <span className="break-all font-mono text-muted-foreground">
+          {/* ── SHA-256 FIRST, BECAUSE THE SERVER DEDUPES ON IT FIRST ───────
+              This read `md5_checksum` alone, and `publicPiece` did not serve
+              `sha256` at all — so a pièce carrying a perfect SHA-256 rendered
+              the finding below, on a screen claiming duplicate detection could
+              not see a document `ingestPiece` was keying on. 76 of 334 pièces
+              locally, and every one of them ingested through the DOCUMENTED
+              path: `pieces/ingest` asks a worker for sha256, so the more
+              correct the client, the more certainly it looked broken.
+
+              Same precedence as `pieceHashOf`, which is what gets written onto
+              the entry — so the inbox and the ledger now name the same hash for
+              the same document instead of disagreeing about whether one exists.
+
+              Truncated because a 64-character digest does not fit this card;
+              `title` and `data-checksum` carry it whole, as `<DriveLink>` does. */}
+          {piece.source.sha256 ? (
+            <span
+              className="break-all font-mono text-muted-foreground"
+              title={`sha256:${piece.source.sha256}`}
+              data-checksum={`sha256:${piece.source.sha256}`}
+            >
+              sha256:{piece.source.sha256.slice(0, 16)}…
+            </span>
+          ) : piece.source.md5_checksum ? (
+            <span
+              className="break-all font-mono text-muted-foreground"
+              data-checksum={`md5:${piece.source.md5_checksum}`}
+            >
               md5:{piece.source.md5_checksum}
             </span>
           ) : (
