@@ -228,7 +228,7 @@ export function SourceRegister({
           colours, which is the one place a status colour may come from. */}
       {problems.length > 0 && (
         <div
-          className="mb-3 flex items-start gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2.5"
+          className="mx-4 mt-3 flex items-start gap-2 rounded-md border-l-[3px] border border-border border-l-primary bg-card px-3 py-2.5 shadow-sm"
           role="status"
           data-attention={problems.length}
         >
@@ -245,7 +245,7 @@ export function SourceRegister({
       )}
 
       {sources && sources.length > 0 && (
-        <div className="mb-3">
+        <div className="mx-4 mt-3">
           <TableSearch
             param="source"
             label={t('sources.searchLabel')}
@@ -257,6 +257,7 @@ export function SourceRegister({
         </div>
       )}
 
+      <div className="mt-3">
       <DataTable
         rows={shown}
         columns={columns}
@@ -276,6 +277,7 @@ export function SourceRegister({
           )
         }
       />
+      </div>
 
       {/* Freeform notes are the reason each source has its own page. Shown as a
           pointer, not inlined: they run to several sentences and would make the

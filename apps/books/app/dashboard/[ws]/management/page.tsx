@@ -53,11 +53,12 @@
 
 import { useParams } from 'next/navigation'
 import { useScope } from '@/lib/scope'
-import { useAnalytique, useAnalytiqueCategories } from '@/lib/hooks'
+import { useAnalytique, useAnalytiqueCategories, useBilan } from '@/lib/hooks'
 import { breakdownTotal, flowTotals } from '@/lib/analytique'
 import { useLabel } from '@/lib/use-label'
 import { useT } from '@/lib/i18n'
 import { ScreenFrame } from '@/components/screen-frame'
+import { Grid, Section, Surface } from '@/components/section'
 import { ErrorState, Loading } from '@/components/states'
 import { StatementHeading } from '@/components/statement-heading'
 import { NoExerciceNotice, isNoExerciceRefusal } from '@/components/no-exercice-notice'
@@ -70,6 +71,24 @@ export default function Page() {
   const scope = useScope()
   const base = `/dashboard/${params.ws}`
   const analytique = useAnalytique(params.ws, scope)
+  /**
+   * The bilan, read for ONE line: `pos === 'tresorerie'`.
+   *
+   * ── A SECOND REQUEST, AND WHY IT IS THE RIGHT ONE ────────────────────────
+   * `GET …/analytique` serves no cash figure, and the runway block was recorded
+   * as blocked on a route change because of it. It is not: the bilan already
+   * serves cash for this book and this exercice, so the figure exists and is
+   * one fetch away. Asking for a payload the app already caches on the balance
+   * sheet costs nothing a route change would not have cost more of.
+   *
+   * It carries its own refusals and this screen ignores all of them
+   * deliberately: a simplified book's bilan 400s (art. 957 al. 2) and
+   * `bilan.data` is simply undefined, which `cashFrom` turns into `null` and
+   * the runway tile renders as "this book has no bilan". A failure here must
+   * never put a red box on the management view — the management view is not
+   * about the bilan.
+   */
+  const bilan = useBilan(params.ws, scope)
   const config = useAnalytiqueCategories(params.ws, scope.entity)
   const t = useT()
   const label = useLabel()
@@ -95,11 +114,8 @@ export default function Page() {
         exercice={scope.exercice}
       />
 
-      <div
-        className="mb-4 flex items-start gap-2.5 rounded-lg border border-border bg-secondary px-3.5 py-2.5"
-        role="note"
-      >
-        <div className="min-w-0 text-[12.5px] text-muted-foreground">
+      <Surface role="note" className="mb-4">
+        <div className="min-w-0 max-w-[95ch] text-[12.5px] leading-relaxed text-muted-foreground">
           <span className="font-medium text-foreground">{t('mgmt.noticeLead')}</span>{' '}
           {t('mgmt.noticeBody')}
           {/* ── THE EXCLUSIONS ARE PER REGIME AND THE WRONG ONE IS A FALSE
@@ -119,7 +135,7 @@ export default function Page() {
             <> {t('mgmt.noticeNeutral')}</>
           )}
         </div>
-      </div>
+      </Surface>
 
       {analytique.isLoading && <Loading rows={8} label={t('mgmt.loading')} />}
 
@@ -139,31 +155,39 @@ export default function Page() {
       )}
 
       {data && totals && categoryTotal !== null && (
-        <div className="space-y-7">
-          <RunFigures totals={totals} journal={scope.journal} />
+        <div>
+          <RunFigures totals={totals} journal={scope.journal} bilan={bilan.data} />
 
-          <section>
-            <h2 className="mb-1 text-sm font-medium text-foreground">{t('mgmt.flowsTitle')}</h2>
-            {/* Two whole sentences rather than one with its first clause swapped
-                in: the difference between them is the SUBJECT of the sentence,
-                and French does not put the qualifier where English does. */}
-            <p className="mb-3 text-[12px] text-muted-foreground">
-              {scope.journal === 'grand_livre'
+          {/* ── THE TWO CHART BLOCKS SIT ON A SURFACE NOW (2026-08-21) ───────
+              They were bare `<section>`s with a plain `h2`, on the page ground —
+              the only screen in the app whose content was not on a card. Against
+              a neutral background a chart with no surface under it reads as
+              floating, and the whole view looked unfinished beside the ledger. */}
+          <Grid>
+          <Section
+            span={12}
+            label={t('mgmt.flowsTitle')}
+            /* Two whole sentences rather than one with its first clause swapped
+               in: the difference between them is the SUBJECT of the sentence,
+               and French does not put the qualifier where English does. */
+            note={
+              scope.journal === 'grand_livre'
                 ? t('mgmt.flowsLeadPosted')
-                : t('mgmt.flowsLeadAll')}
-            </p>
+                : t('mgmt.flowsLeadAll')
+            }
+          >
             <FlowsChart flows={data.monthly_flows} />
-          </section>
+          </Section>
 
-          <section>
-            <h2 className="mb-1 text-sm font-medium text-foreground">
-              {t('mgmt.breakdownTitle')}
-            </h2>
-            <p className="mb-3 text-[12px] text-muted-foreground">
-              {data.categories.length > 0 && data.categories[0].accounts === null
+          <Section
+            span={12}
+            label={t('mgmt.breakdownTitle')}
+            note={
+              data.categories.length > 0 && data.categories[0].accounts === null
                 ? t('mgmt.breakdownLeadRi')
-                : t('mgmt.breakdownLeadChart')}
-            </p>
+                : t('mgmt.breakdownLeadChart')
+            }
+          >
             <CostBreakdown
               categories={data.categories}
               total={categoryTotal}
@@ -202,9 +226,10 @@ export default function Page() {
                 .
               </div>
             )}
-          </section>
+          </Section>
+          </Grid>
 
-          <p className="border-t border-border pt-3 text-[12px] text-muted-foreground">
+          <p className="mt-4 max-w-[95ch] px-1 text-[12px] leading-relaxed text-muted-foreground">
             {t('mgmt.footnote')}
           </p>
         </div>

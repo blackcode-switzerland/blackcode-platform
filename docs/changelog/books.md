@@ -32,6 +32,59 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-21 — the web surface is re-laid-out: a neutral ground, a mono figure face, and the runway block
+
+**Web UI only. No route changed, no payload changed, no `bk` command changed.**
+Every figure on every screen is the same figure, from the same route, with the
+same wording. If you are an agent, nothing here is for you — this entry exists
+because the rule is that a user-facing change gets one.
+
+Two exceptions worth knowing about, both of which a `bk` user can also see:
+
+- **`GET …/entries` is now asked for `limit=500` by the ledger.** It sent no
+  limit, so `listEntries`' default of 100 applied and a book with more écritures
+  than that was served a hundred and rendered as though that were the journal —
+  no count on the wire, `next_cursor` always null, nothing anywhere saying the
+  list was short. `bk books entry list` has the same defect and still does; it is
+  a route ask, filed as F-1 in `booksFrontend/AfterDeploy/PLAN.md`.
+- **The ledger's result count stops disclaiming what it knows.** It printed "on
+  this page — what this page loaded, not a count of the journal" on all four
+  count strings unconditionally. That was inaccurate in three cases:
+  `listRiEntries` applies NO limit, so a recettes-dépenses count was always a
+  true total, and a grand livre short of the cap returned everything the filter
+  matched. The caveat prints at the cap and nowhere else.
+
+**What is new on screen, all of it derived from routes that already existed:**
+
+- the runway figure and its basis on the management view — cash from the bilan's
+  `tresorerie` line ÷ the burn per month served. It refuses in four named ways
+  rather than dividing blind
+- totals of the shown set on both journals: recettes / dépenses / résultat, and
+  what one account moved under `?account=`
+- an écriture's own magnitude on the transaction page
+- the audit and FTE columns on the overview, and the three work counts as
+  columns rather than as a line of grey text
+
+**What changed visually:** the page ground went from cream to a cool neutral so
+the amber has something to be an accent against; every figure is set in IBM Plex
+Mono; a row that needs a human carries a leading rule instead of another chip;
+and a CLOSED boolean — a bilan balances or it does not, a book is VAT-registered
+or it is not — is drawn as a green or destructive chip rather than as grey prose.
+
+That last one is not a new exception to the rule that vocabulary colours come
+from `/api/meta`: a boolean has two states and the server cannot grow a third
+without changing the type. It is why the screens that hold no served vocabulary
+read as colourless beside the ledger, which holds five. `apps/books/docs/frontend.md` §12 is the full design system, and
+`npm run contrast` re-measures every token pair against WCAG AA from the
+stylesheet itself.
+
+**One bug fixed that predates this work:** the ledger had lost its book and year
+switchers. `<BooksShell>` merged the settings-subtree title and a page-set title
+into one variable, and the topbar tested that variable to decide whether to draw
+the switchers — so the moment the ledger began naming its own document ("Grand
+livre" / "Recettes et dépenses", itself a correct fix), the one screen where
+switching book matters most lost both controls.
+
 ## 2026-08-21 — four mockup controls land on the web: two search boxes, a result count that will not claim a total, the extractor's confidence, and a tooltip on the cost chart
 
 **Web UI only. No route changed, no payload changed, no `bk` command changed** —

@@ -50,6 +50,7 @@ import { scopedHref } from '@/lib/nav'
 import { useLabel } from '@/lib/use-label'
 import { useT } from '@/lib/i18n'
 import { confidence, money } from '@/lib/format'
+import { Badge } from './badge'
 import { DateText } from './date-text'
 import { Money } from './money'
 import { EmptyState } from './states'
@@ -171,12 +172,21 @@ function PieceRow({
                 staged écriture waiting to post where there is a document
                 waiting for a judgment. Colours travel with values in this app;
                 borrowing one is the same fault as spelling it in CSS.
-                A backend request: serve a `piece_status` vocabulary. */}
-            <span className="font-mono uppercase tracking-wider" data-status={piece.status}>
-              {piece.status}
-            </span>
+                A backend request: serve a `piece_status` vocabulary.
+
+                ── IT TAKES THE CHIP SHAPE, NOT A CHIP COLOUR (2026-08-21) ──
+                It was bare mono text in a row of bare mono text, which read as
+                a stray fragment rather than as the row's state. `<Badge>` is
+                level 3 — the NEUTRAL qualifier, no colour at all — so the value
+                gets the shape every other value in the app has without
+                borrowing a meaning nobody served. The moment `piece_status`
+                exists, this becomes a `<VocabChip>` and the colour comes with
+                it. */}
+            <Badge className="font-mono normal-case tracking-wider">
+              <span data-status={piece.status}>{piece.status}</span>
+            </Badge>
             {piece.entity ? (
-              <span className="font-mono">{piece.entity}</span>
+              <span className="figure">{piece.entity}</span>
             ) : (
               // Attribution is the judgment this row is waiting for, so its
               // absence is stated rather than left blank.

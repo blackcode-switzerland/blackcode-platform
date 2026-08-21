@@ -39,8 +39,11 @@
 //        → "the keys this guards still exist" red.
 
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { LOCALES } from '@blackcode/platform-i18n'
 import { DICTIONARY } from './dictionary'
+import { LEDGER_LIMIT } from './hooks'
 
 /**
  * The ledger's result-count strings. Every one of them talks about a PAGE.
@@ -59,6 +62,16 @@ const PAGE_COUNTS = [
   'ledger.riCountOne',
   'ledger.riCountMany',
 ] as const
+
+/**
+ * The two caveats. Neither interpolates anything, and each is printed in
+ * exactly one state.
+ *
+ * `countNotTotal` was printed unconditionally until 2026-08-21 and
+ * `countAtCap` is new. See the file header for why the change made the page
+ * MORE honest rather than less.
+ */
+const CAVEATS = ['ledger.countNotTotal', 'ledger.countAtCap'] as const
 
 /** Every `{placeholder}` in a string. */
 function placeholders(s: string): string[] {
@@ -109,13 +122,44 @@ describe("the ledger's count claims no total", () => {
     ).toEqual([])
   })
 
-  it('the caveat beside it is still there and still says what it says', () => {
-    // Not a wording test — a presence test. `<ResultCount>` renders the count
-    // and this caveat together; the caveat is the half that stops the number
-    // reading as a total, so losing it is losing the feature.
+  it('both caveats are still there and still say something', () => {
+    // Not a wording test — a presence test. The caveat is the half that stops a
+    // number reading as a total, so losing one is losing the feature. Neither
+    // may interpolate: a caveat carrying a figure is a second count.
     for (const locale of LOCALES) {
-      expect(DICTIONARY[locale]['ledger.countNotTotal'].length).toBeGreaterThan(20)
-      expect(placeholders(DICTIONARY[locale]['ledger.countNotTotal'])).toEqual([])
+      for (const key of CAVEATS) {
+        expect(DICTIONARY[locale][key], `${locale}/${key} is gone or empty`).toBeTruthy()
+        expect(DICTIONARY[locale][key].length).toBeGreaterThan(20)
+        expect(
+          placeholders(DICTIONARY[locale][key]),
+          `${locale}/${key} grew a placeholder — a caveat carrying a figure is a second count`
+        ).toEqual([])
+      }
     }
+  })
+
+  it('the cap the ledger asks for is the cap the server clamps to', () => {
+    // ── THE ONE THING THAT CAN MAKE THE NEW WORDING LIE ────────────────────
+    // The count drops its caveat whenever `rows.length < LEDGER_LIMIT`, on the
+    // reasoning that a short answer means the server returned everything it
+    // matched. That reasoning holds only while `LEDGER_LIMIT` is what
+    // `listEntries` actually clamps to. Raise this constant above the clamp and
+    // a full page of 500 never equals 600, the caveat never prints, and a
+    // truncated ledger silently starts claiming to be complete again — which is
+    // the exact defect this whole file exists about, returning through the door
+    // that was opened to fix it.
+    //
+    // The clamp is `Math.min(Math.max(opts.limit ?? 100, 1), 500)` in
+    // `lib/db/queries/statutory.ts`, read here rather than restated.
+    expect(LEDGER_LIMIT).toBe(500)
+    const source = readFileSync(
+      join(__dirname, 'db/queries/statutory.ts'),
+      'utf8'
+    )
+    expect(
+      source,
+      'listEntries no longer clamps to 500. LEDGER_LIMIT must match the clamp, or the ' +
+        'ledger cannot tell a full page from a complete one.'
+    ).toMatch(/Math\.min\(Math\.max\(opts\.limit \?\? 100, 1\), 500\)/)
   })
 })

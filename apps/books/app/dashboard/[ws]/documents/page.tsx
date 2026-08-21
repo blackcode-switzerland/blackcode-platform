@@ -49,6 +49,9 @@ import { useMemo } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { usePieces } from '@/lib/hooks'
 import { ScreenFrame } from '@/components/screen-frame'
+import { PageHeader } from '@/components/page-header'
+import { Section } from '@/components/section'
+import { Stat, StatRow } from '@/components/stat'
 import { ErrorState, Loading } from '@/components/states'
 import { PiecesInbox } from '@/components/pieces-inbox'
 import { useScope } from '@/lib/scope'
@@ -87,76 +90,97 @@ export default function Page() {
 
   return (
     <ScreenFrame title={t('docs.uiName')}>
-      <div className="mb-4">
-        <h1 className="text-lg font-semibold text-foreground">
-          {t('docs.uiName')}
-          {t('docs.legalName') !== t('docs.uiName') && (
-            <span className="ml-2 text-sm font-normal text-muted-foreground">
-              {t('docs.legalName')}
-            </span>
-          )}
-        </h1>
-        <p className="mt-1 max-w-2xl text-[12.5px] text-muted-foreground">{t('docs.lead')}</p>
-        <p className="mt-1.5 max-w-2xl text-[12.5px] text-muted-foreground">
-          <span className="font-medium text-foreground">{t('docs.noBalanceLead')}</span>{' '}
-          {t('docs.noBalanceBody')}
-        </p>
-        {/* ── THE WRITE THAT WAS WITHHELD, AND IS NOT ANY MORE ────────────────
-            This screen carried a paragraph telling the reader that attaching a
-            document was switched off, and that `bk books piece match` "has the
-            same gap, so it is not a way round". Both sentences were true when
-            written on 2026-08-18 and **both were false by the end of that day**:
-            the backend landed the entity filter, the control went on, and the copy
-            did not follow. (The flag itself is gone since 2026-08-19 — it had
-            been permanently true, and a constant guarding nothing is not a
-            record of anything.)
+      <PageHeader
+        eyebrow={t('nav.documents')}
+        title={
+          <>
+            {t('docs.uiName')}
+            {t('docs.legalName') !== t('docs.uiName') && (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                {t('docs.legalName')}
+              </span>
+            )}
+          </>
+        }
+        lead={t('docs.lead')}
+      />
 
-            So for a day this page told a reader a working control did not work,
-            standing directly above the working control. Found by the phase-4A
-            review, which checked the sentence against the route rather than
-            against the flag — the route refuses a cross-book attach and accepts
-            a same-book one, both verified.
+      {/* ── THE WRITE THAT WAS WITHHELD, AND IS NOT ANY MORE ────────────────
+          This screen carried a paragraph telling the reader that attaching a
+          document was switched off, and that `bk books piece match` "has the
+          same gap, so it is not a way round". Both sentences were true when
+          written on 2026-08-18 and **both were false by the end of that day**:
+          the backend landed the entity filter, the control went on, and the copy
+          did not follow. (The flag itself is gone since 2026-08-19 — it had
+          been permanently true, and a constant guarding nothing is not a
+          record of anything.)
 
-            The lesson is narrow and worth keeping: **prose that describes a
-            defect is code that goes stale when the defect is fixed**, and
-            nothing compiles it. When a flag flips, grep for what the flag was
-            explained by. */}
-      </div>
+          So for a day this page told a reader a working control did not work,
+          standing directly above the working control. Found by the phase-4A
+          review, which checked the sentence against the route rather than
+          against the flag — the route refuses a cross-book attach and accepts
+          a same-book one, both verified.
 
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-[15px] font-semibold text-foreground">
-          {t('docs.inbox')}
-          {pieces.data && (
-            <span className="ml-2 text-[13px] font-normal text-muted-foreground">
-              {t('docs.counts', { toHandle, total: rows.length })}
-            </span>
-          )}
-        </h2>
-      </div>
+          The lesson is narrow and worth keeping: **prose that describes a
+          defect is code that goes stale when the defect is fixed**, and
+          nothing compiles it. When a flag flips, grep for what the flag was
+          explained by. */}
+
+      {/* ── THE COUNTS, AND WHY `toHandle` IS THE EMPHASISED ONE ───────────
+          A pièce inbox is a queue. "How many are there" is the smaller
+          question; "how many still need me" is the one a person opens this
+          screen to answer, and it was previously a parenthetical beside a
+          heading. */}
+      {pieces.data && (
+        <StatRow>
+          <Stat
+            caption={t('docs.toHandleCaption')}
+            value={toHandle}
+            emphasis={toHandle > 0}
+          />
+          <Stat caption={t('docs.totalCaption')} value={rows.length} />
+        </StatRow>
+      )}
 
       {pieces.isLoading && <Loading rows={4} label={t('docs.loading')} />}
       {pieces.error && <ErrorState error={pieces.error} title={t('docs.failed')} />}
       {pieces.data && (
-        <PiecesInbox
-          ws={params.ws}
-          pieces={rows}
-          entities={scope.entities}
-          base={base}
-          scope={scope}
-          highlight={highlight}
-        />
+        <Section
+          label={t('docs.inbox')}
+          bodyClassName=""
+          note={
+            <>
+              <span className="not-italic font-medium text-foreground">
+                {t('docs.noBalanceLead')}
+              </span>{' '}
+              {t('docs.noBalanceBody')}
+            </>
+          }
+        >
+          <PiecesInbox
+            ws={params.ws}
+            pieces={rows}
+            entities={scope.entities}
+            base={base}
+            scope={scope}
+            highlight={highlight}
+          />
+        </Section>
       )}
 
-      <section className="mt-6 rounded-lg border border-dashed border-border px-4 py-3.5">
-        <h2 className="text-sm font-medium text-foreground">{t('docs.howTitle')}</h2>
-        <p className="mt-1.5 text-[12.5px] text-muted-foreground">
-          {t('docs.how1a')}{' '}
-          <span className="font-medium text-foreground">{t('docs.how1b')}</span>
-          {t('docs.how1c')}
-        </p>
-        <p className="mt-1.5 text-[12.5px] text-muted-foreground">{t('docs.how2')}</p>
-        <p className="mt-1.5 text-[12.5px] text-muted-foreground">{t('docs.how3')}</p>
-      </section>
+      <div className="mt-4">
+        <Section label={t('docs.howTitle')}>
+          <div className="max-w-[95ch] space-y-2 text-[12.5px] leading-relaxed text-muted-foreground">
+            <p>
+              {t('docs.how1a')}{' '}
+              <span className="font-medium text-foreground">{t('docs.how1b')}</span>
+              {t('docs.how1c')}
+            </p>
+            <p>{t('docs.how2')}</p>
+            <p>{t('docs.how3')}</p>
+          </div>
+        </Section>
+      </div>
     </ScreenFrame>
   )
 }

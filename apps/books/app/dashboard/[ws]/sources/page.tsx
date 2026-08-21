@@ -58,6 +58,8 @@ import { useAccounts, useSources } from '@/lib/hooks'
 import { useLabel } from '@/lib/use-label'
 import { useLocale, useT } from '@/lib/i18n'
 import { ScreenFrame } from '@/components/screen-frame'
+import { PageHeader } from '@/components/page-header'
+import { Grid, Section } from '@/components/section'
 import { DataTable, type Column } from '@/components/data-table'
 import { AccountRef } from '@/components/account-ref'
 import { SourceRegister } from '@/components/source-register'
@@ -130,72 +132,91 @@ export default function Page() {
 
   return (
     <ScreenFrame title={t('nav.sources')}>
-      <div className="mb-4">
-        <h1 className="text-lg font-semibold text-foreground">
-          {t('sources.uiName')}
-          {t('sources.legalName') !== t('sources.uiName') && (
-            <span className="ml-2 text-sm font-normal text-muted-foreground">
-              {t('sources.legalName')}
-            </span>
-          )}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t('sources.subheading', { book: scope.record?.name ?? '—' })}
-        </p>
-      </div>
-
-      <p className="mb-3 text-[12.5px] text-muted-foreground">
-        {t('sources.chartLeadA')}{' '}
-        <span className="font-medium text-foreground">{t('sources.chartLeadB')}</span>{' '}
-        {t('sources.chartLeadC')}
-      </p>
-
-      <DataTable
-        rows={accounts.data}
-        columns={columns}
-        rowKey={(a) => a.no}
-        isLoading={accounts.isLoading}
-        error={accounts.error}
-        initialSort={{ key: 'no', direction: 'asc' }}
-        empty={t('sources.noAccounts')}
-      />
-
-      <section className="mt-8">
-        <div className="mb-3">
-          <h2 className="text-[15px] font-semibold text-foreground">
-            {t('sources.title')}
-            {sources.data && (
-              <span className="ml-2 text-[13px] font-normal text-muted-foreground">
-                {sources.data.length}
+      <PageHeader
+        eyebrow={t('nav.sources')}
+        title={
+          <>
+            {t('sources.uiName')}
+            {t('sources.legalName') !== t('sources.uiName') && (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                {t('sources.legalName')}
               </span>
             )}
-          </h2>
-          <p className="mt-1 max-w-2xl text-[12.5px] text-muted-foreground">
+          </>
+        }
+        lead={t('sources.subheading', { book: scope.record?.name ?? '—' })}
+      />
+
+      {/* ── THIS SCREEN IS HALF-SCOPED, AND THE LAYOUT NOW SAYS SO ──────────
+          The chart of accounts above is per BOOK — it is copied into each one at
+          creation. The register below is not: a source is a channel money
+          arrives through, `books.source.entity_id` is nullable, and one channel
+          feeds several books. `lib/nav.ts` keeps `scoped: true` for the chart's
+          sake and the copy names the split rather than hiding it.
+
+          Two sections rather than one column of four paragraphs makes the seam
+          visible: the book switcher changes the first and not the second, and a
+          reader can now see which is which without reading a disclaimer. */}
+      <Grid>
+        <Section
+          span={12}
+          label={t('sources.chartLabel')}
+          bodyClassName=""
+          note={
+            <>
+              {t('sources.chartLeadA')}{' '}
+              <span className="not-italic font-medium text-foreground">
+                {t('sources.chartLeadB')}
+              </span>{' '}
+              {t('sources.chartLeadC')}
+            </>
+          }
+        >
+          <DataTable
+            rows={accounts.data}
+            columns={columns}
+            rowKey={(a) => a.no}
+            isLoading={accounts.isLoading}
+            error={accounts.error}
+            initialSort={{ key: 'no', direction: 'asc' }}
+            empty={t('sources.noAccounts')}
+          />
+        </Section>
+
+        <Section
+          span={12}
+          label={
+            <>
+              {t('sources.title')}
+              {sources.data && <span className="ml-2 font-normal">{sources.data.length}</span>}
+            </>
+          }
+          bodyClassName=""
+          note={
+            <>
+              <span className="not-italic font-medium text-foreground">
+                {t('sources.notFilteredLead')}
+              </span>{' '}
+              {t('sources.notFilteredBody')} {t('sources.provisioned')}
+            </>
+          }
+        >
+          <p className="max-w-[95ch] px-4 pt-3 text-[12.5px] leading-relaxed text-muted-foreground">
             {t('sources.leadA')}{' '}
             <span className="font-medium text-foreground">{t('sources.leadB')}</span>
             {t('sources.leadC')}
           </p>
-          <p className="mt-1.5 max-w-2xl text-[12.5px] text-muted-foreground">
-            <span className="font-medium text-foreground">
-              {t('sources.notFilteredLead')}
-            </span>{' '}
-            {t('sources.notFilteredBody')}
-          </p>
-        </div>
-
-        <SourceRegister
-          sources={sources.data}
-          isLoading={sources.isLoading}
-          error={sources.error}
-          base={base}
-          scope={scope}
-        />
-
-        <p className="mt-2 text-[11.5px] text-muted-foreground">
-          {t('sources.provisioned')}
-        </p>
-      </section>
-
+          <div className="mt-3">
+            <SourceRegister
+              sources={sources.data}
+              isLoading={sources.isLoading}
+              error={sources.error}
+              base={base}
+              scope={scope}
+            />
+          </div>
+        </Section>
+      </Grid>
     </ScreenFrame>
   )
 }

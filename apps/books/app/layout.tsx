@@ -69,9 +69,29 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/*
+          IBM Plex Mono carries every FIGURE in this app — money, entry and
+          account numbers, dates, checksums, raw bank labels. Added 2026-08-21
+          (decision D-K).
+
+          It is not decoration and it is not a second brand face. A ledger whose
+          amount column is set in the same typeface as the sentence beside it has
+          no ledger in it: the reader has nothing but alignment telling them
+          "this is a figure, compare it downward". Plex Mono is the pair for a
+          UI sans rather than a random monospace — it was drawn as an
+          institutional face for a company whose business was records, and its
+          metrics sit on the same rhythm as the label beside it.
+
+          The UI face stays Google Sans. That is deliberate (D-K): the chrome
+          keeps the platform's family resemblance with issues and sales, and the
+          split of meaning lands entirely on the figures.
+
+          400 and 500 only — a figure is never bold. A total is marked by the
+          rule above it, the way a paper ledger does it, not by weight.
+        */}
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
         />
       </head>
       <body className="font-sans antialiased">

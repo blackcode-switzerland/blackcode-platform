@@ -39,6 +39,9 @@ import { useT } from '@/lib/i18n'
 import { scopedHref } from '@/lib/nav'
 import { ApiRequestError } from '@/lib/client'
 import { ScreenFrame } from '@/components/screen-frame'
+import { PageHeader } from '@/components/page-header'
+import { Grid, Section } from '@/components/section'
+import { Badge } from '@/components/badge'
 import { ErrorState, Loading } from '@/components/states'
 import { DataTable, type Column } from '@/components/data-table'
 import { DateText } from '@/components/date-text'
@@ -211,17 +214,23 @@ function Body({
 
   return (
     <>
-      <div className="mb-4">
-        <h1 className="text-lg font-semibold text-foreground">{source.name}</h1>
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <TermChip term={findTerm(meta, 'source_status', source.status)} value={source.status} />
-          <TermChip term={findTerm(meta, 'source_types', source.type)} value={source.type} />
-          {source.layer && (
-            <TermChip term={findTerm(meta, 'source_layers', source.layer)} value={source.layer} />
-          )}
-          <span className="font-mono text-[12px] text-muted-foreground">#{source.number}</span>
-        </div>
-        <p className="mt-2 max-w-2xl text-[12.5px] text-muted-foreground">
+      <PageHeader
+        eyebrow={t('nav.sources')}
+        title={source.name}
+        meta={
+          <>
+            <TermChip term={findTerm(meta, 'source_status', source.status)} value={source.status} />
+            <TermChip term={findTerm(meta, 'source_types', source.type)} value={source.type} />
+            {source.layer && (
+              <TermChip term={findTerm(meta, 'source_layers', source.layer)} value={source.layer} />
+            )}
+            <Badge>
+              <span className="figure">#{source.number}</span>
+            </Badge>
+          </>
+        }
+        lead={
+          <>
           {/* The verdict WITH the arithmetic behind it. A status nobody can
               check is a status nobody should believe — and this one is computed,
               so the check is available. */}
@@ -252,46 +261,41 @@ function Body({
             </>
           ) : (
             t('source.noCadenceVerdict')
-          )}
-        </p>
-        <p className="mt-1 text-[12.5px] text-muted-foreground">
-          {source.entity ? (
-            <>
-              {t('source.bookLabel')}{' '}
-              <span className="font-mono text-foreground">{source.entity}</span>
-            </>
-          ) : (
-            <>
-              <span className="font-medium text-foreground">
-                {t('source.notAttributedLead')}
-              </span>{' '}
-              {t('source.notAttributedBody')}
-            </>
-          )}
-        </p>
-      </div>
+            )}
+            <span className="mt-1 block">
+              {source.entity ? (
+                <>
+                  {t('source.bookLabel')}{' '}
+                  <span className="figure text-foreground">{source.entity}</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-medium text-foreground">
+                    {t('source.notAttributedLead')}
+                  </span>{' '}
+                  {t('source.notAttributedBody')}
+                </>
+              )}
+            </span>
+          </>
+        }
+      />
 
-      <section className="mb-6 rounded-lg border border-border px-4 py-3.5">
-        <h2 className="text-sm font-medium text-foreground">{t('source.notesTitle')}</h2>
+      <Grid>
+      <Section span={7} label={t('source.notesTitle')} note={t('source.notesNote')}>
         {notes ? (
-          <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">
+          <p className="max-w-[95ch] whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">
             {notes}
           </p>
         ) : (
           // "No notes yet" is a real answer for a source nobody has written up.
-          <p className="mt-1.5 text-[12.5px] italic text-muted-foreground">
+          <p className="text-[12.5px] italic text-muted-foreground">
             {t('source.noNotes')}
           </p>
         )}
-        <p className="mt-2 text-[11.5px] text-muted-foreground">
-          {t('source.notesNote')}
-        </p>
-      </section>
+      </Section>
 
-      <section className="mb-6">
-        <h2 className="mb-2 text-[15px] font-semibold text-foreground">
-          {t('source.ledgerAccounts')}
-        </h2>
+      <Section span={5} label={t('source.ledgerAccounts')}>
         {source.ledger_accounts.length === 0 ? (
           <p className="text-[12.5px] text-muted-foreground">
             {t('source.noLedgerAccounts')}
@@ -322,15 +326,14 @@ function Body({
             ))}
           </ul>
         )}
-      </section>
+      </Section>
 
       {source.runbook ? (
-        <div className="mb-6">
+        <div className="lg:col-span-12">
           <RunbookPanel runbook={source.runbook} source={source} />
         </div>
       ) : (
-        <section className="mb-6 rounded-lg border border-dashed border-border px-4 py-3.5">
-          <h2 className="text-sm font-medium text-foreground">{t('runbook.none')}</h2>
+        <Section span={12} label={t('runbook.none')}>
           {/* The consequence differs by source, so the sentence does. Written
               unconditionally first and caught in the browser: it told a reader
               looking at a RETIRED card that the steps live in somebody's head,
@@ -344,21 +347,22 @@ function Body({
             t('source.noRunbookNoCadence')
             )}
           </p>
-        </section>
+        </Section>
       )}
 
-      <section className="mb-6">
-        <h2 className="mb-1 text-[15px] font-semibold text-foreground">
-          {t('source.pullsTitle')}
-          {source.pulls.length > 0 && (
-            <span className="ml-2 text-[13px] font-normal text-muted-foreground">
-              {source.pulls.length}
-            </span>
-          )}
-        </h2>
-        <p className="mb-2 max-w-2xl text-[12.5px] text-muted-foreground">
-          {t('source.pullsLead')}
-        </p>
+      <Section
+        span={12}
+        label={
+          <>
+            {t('source.pullsTitle')}
+            {source.pulls.length > 0 && (
+              <span className="ml-2 font-normal">{source.pulls.length}</span>
+            )}
+          </>
+        }
+        bodyClassName=""
+        note={t('source.pullsLead')}
+      >
         <DataTable
           rows={source.pulls}
           columns={pullColumns}
@@ -375,15 +379,14 @@ function Body({
               : t('source.pullsEmpty')
           }
         />
-      </section>
+      </Section>
 
-      <section>
-        <h2 className="mb-1 text-[15px] font-semibold text-foreground">
-          {t('source.manifestTitle')}
-        </h2>
-        <p className="mb-2 max-w-2xl text-[12.5px] text-muted-foreground">
-          {t('source.manifestLead')}
-        </p>
+      <Section
+        span={12}
+        label={t('source.manifestTitle')}
+        bodyClassName=""
+        note={t('source.manifestLead')}
+      >
         <ManifestTable
           files={manifest.data?.files}
           isLoading={manifest.isLoading}
@@ -402,7 +405,8 @@ function Body({
             })}
           </p>
         )}
-      </section>
+      </Section>
+      </Grid>
     </>
   )
 }

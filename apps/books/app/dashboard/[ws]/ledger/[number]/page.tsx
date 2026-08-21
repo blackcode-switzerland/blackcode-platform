@@ -55,6 +55,12 @@ import { HistoryTrail, hasHistory } from '@/components/history-trail'
 import { PostEntryForm, PostedNotice } from '@/components/post-entry-form'
 import { VerdictPanel } from '@/components/verdict-panel'
 import { blocksPosting } from '@/lib/verdict'
+import { entryTotal } from '@/lib/ledger-totals'
+import { PageHeader } from '@/components/page-header'
+import { Grid, Section } from '@/components/section'
+import { Stat, StatRow } from '@/components/stat'
+import { Field, FieldGrid } from '@/components/field'
+import { Badge } from '@/components/badge'
 import type { PostResult } from '@/lib/mutations'
 
 export default function Page() {
@@ -82,6 +88,10 @@ export default function Page() {
    * one distinction the idempotent route was built to make.
    */
   const [posted, setPosted] = useState<PostResult | null>(null)
+
+  // The entry's own magnitude. `null` when it has no lines yet — see
+  // `entryTotal`, which refuses to call that `0.00`.
+  const total = entryTotal(entry.data?.lines)
 
   return (
     <ScreenFrame title={t('entry.transaction')}>
@@ -146,18 +156,22 @@ export default function Page() {
 
       {entry.data && scope.journal !== 'recettes_depenses' && (
         <article data-entry={entry.data.number}>
-          <header className="border-b border-border pb-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <VocabChip vocabulary="entry_status" value={entry.data.status} />
-              <VocabChip vocabulary="recognition" value={entry.data.recognition} />
-              <VocabChip vocabulary="evidence_tiers" value={entry.data.evidence_tier} withNote />
-              <span className="ml-auto font-mono text-[12px] text-muted-foreground">
-                #{entry.data.number}
-              </span>
-            </div>
-
-            {/* The bank's words, verbatim, at full size. */}
-            <h1 className="mt-2 text-lg font-semibold text-foreground">{entry.data.raw_label}</h1>
+          <PageHeader
+            eyebrow={t('nav.ledger')}
+            /* The bank's words, verbatim, at full size. */
+            title={entry.data.raw_label}
+            meta={
+              <>
+                <VocabChip vocabulary="entry_status" value={entry.data.status} />
+                <VocabChip vocabulary="recognition" value={entry.data.recognition} />
+                <VocabChip vocabulary="evidence_tiers" value={entry.data.evidence_tier} withNote />
+                <Badge title={t('entry.numberTitle')}>
+                  <span className="figure">#{entry.data.number}</span>
+                </Badge>
+              </>
+            }
+            lead={
+              <>
 
             {/* ── THE BOOK AND THE YEAR ARE NOT STATED, AND THAT IS THE FIX ──
                 This line read `{scope.record?.name} · exercice {scope.exercice}`
@@ -184,257 +198,302 @@ export default function Page() {
                 honest rendering is the record's own facts and a line saying the
                 switcher does not filter here, which is the same treatment
                 `lib/nav.ts` gives the half-scoped sources screen. */}
-            <p className="mt-1 text-sm text-muted-foreground">
-              <DateText value={entry.data.date} />
-              {entry.data.counterparty && <> · {entry.data.counterparty}</>}
-            </p>
-            <p className="mt-1 text-[11.5px] text-muted-foreground">
-              {t('entry.notScoped')}
-            </p>
-          </header>
+                <DateText value={entry.data.date} />
+                {entry.data.counterparty && <> · {entry.data.counterparty}</>}
+                <span className="mt-1 block text-[11.5px]">{t('entry.notScoped')}</span>
+              </>
+            }
+          />
+          {/* ── THE HEADLINE FIGURES, WHICH THIS PAGE NEVER SHOWED ──────────
+              "How much was it" is the first question anybody asks of an
+              écriture, and until 2026-08-21 the only way to answer it was to
+              read the lines and add them up — the amount appeared nowhere on
+              the page as a figure.
 
-          {/* ── THE COMPLIANCE VERDICT, ON EVERY ENTRY INCLUDING THE ONES
-              NOBODY HAS CHECKED ────────────────────────────────────────────
-              Rendered unconditionally, which is the opposite of how every other
-              optional block on this page works — and it is why `<VerdictPanel>`
-              exists. `verdict: null` means NEVER CHECKED, not clean, and a
-              section that simply disappeared for a null would let the absence
-              read as an accepted verdict. `lib/verdict.ts` holds the four states
-              where a test can reach them.
-
-              It sits ABOVE Posting deliberately: a blocked verdict is what stops
-              the write below it, and a reader has to meet the reason before the
-              button. */}
-          <section className="mt-4">
-            <H2>{t('entry.compliance')}</H2>
-            <div className="mt-1.5">
-              <VerdictPanel verdict={entry.data.verdict} base={base} scope={scope} />
-            </div>
-          </section>
-
-          {/* ── THE POSTING TRANSITION ────────────────────────────────────
-              Rendered only for a STAGED entry, and gone the moment it is
-              posted — there is nothing to offer on a posted one, and a disabled
-              button would invite somebody to wonder what is wrong with it. The
-              status chip in the header already says which it is.
-
-              `status === 'staged'` is POSITIVE. `!== 'posted'` would render this
-              on any third status added server-side, which is a write affordance
-              nobody wrote, on the one write that cannot be undone. */}
-          {entry.data.status === 'staged' && (
-            <section className="mt-4">
-              <H2>{t('entry.posting')}</H2>
-              <p className="mt-1 text-sm text-muted-foreground">{t('entry.stagedNote')}</p>
-              {/* ── THE FORM IS STILL OFFERED ON A BLOCKED ENTRY ─────────
-                  The refusal is the SERVER'S — `postEntry` raises
-                  `verdict_blocked` with the pass's own `resolves` text as the
-                  suggestion — and hiding the form would replace that sentence
-                  with this app's guess at it. What the reader gets instead is
-                  the verdict above the button and the route's own words after
-                  it, which is the same arrangement `<PostEntryForm>` uses for
-                  migration 0004's guard: the last word belongs to whoever
-                  actually refuses. */}
-              {blocksPosting(entry.data.verdict) && (
-                <p className="mt-1.5 text-[12px] text-muted-foreground">
-                  {t('entry.blockedNote')}
-                </p>
-              )}
-              {posted ? (
-                <PostedNotice result={posted} />
-              ) : (
-                <PostEntryForm ws={params.ws} entry={entry.data} onPosted={setPosted} />
-              )}
-            </section>
-          )}
-
-          {/* A post made in this session, still shown after the entry refetched
-              as `posted` — because `already` lives only in the response. */}
-          {entry.data.status === 'posted' && posted && (
-            <section className="mt-4">
-              <H2>{t('entry.posting')}</H2>
-              <PostedNotice result={posted} />
-            </section>
-          )}
-
-          {entry.data.explanation ? (
-            <section className="mt-4">
-              <H2>{t('entry.whatThisIs')}</H2>
-              <p className="mt-1 text-sm text-foreground">{label(entry.data.explanation)}</p>
-            </section>
-          ) : (
-            <section className="mt-4">
-              <H2>{t('entry.whatThisIs')}</H2>
-              {/* Not an em dash. An entry nobody has explained is the product's
-                  central object of work, and saying so is more useful than a
-                  blank that reads as a rendering gap. */}
-              <p className="mt-1 text-sm text-muted-foreground">{t('entry.nobodySaid')}</p>
-            </section>
-          )}
-
-          <section className="mt-5">
-            <H2>{t('entry.ecriture')}</H2>
-            <div className="mt-1.5">
-              <EntryLines lines={entry.data.lines} base={base} scope={scope} detailed />
-            </div>
-          </section>
-
-          {/* ── THE ORIGINAL CURRENCY, WHICH NOTHING RENDERED UNTIL 2026-08-18 ──
-              `fx` arrived with migration 0011, is in `publicEntry`, is declared
-              in `lib/types.ts` as **"display-only"** — and no screen displayed
-              it. A field whose entire purpose is to be shown, and which was not
-              shown, is the third bug class this phase's sweep was looking for:
-              the amounts on this page are CHF and correct, and a reader could
-              not tell that a CHF 43.70 line was USD 49.00 at the issuer's rate.
-
-              Rendered only when the entry has one, and field by field, because
-              the writer may omit any of the three — an em dash for a missing
-              `rate` would claim a rate was recorded and lost. Nothing computes
-              with these: they are free-text strings from the issuer, and
-              `lib/format.ts` never sees them.
-
-              No seeded entry carries `fx`, so this was verified by writing one
-              into `books.entry` #4 by hand and opening the page. */}
-          {entry.data.fx && (entry.data.fx.original || entry.data.fx.rate || entry.data.fx.source) && (
-            <section className="mt-5">
-              <H2>{t('entry.originalCurrency')}</H2>
-              <dl className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3">
-                {entry.data.fx.original && (
-                  <Fact label={t('entry.originalAmount')} value={entry.data.fx.original} />
-                )}
-                {entry.data.fx.rate && <Fact label={t('entry.rate')} value={entry.data.fx.rate} />}
-                {entry.data.fx.source && (
-                  <Fact label={t('entry.rateSource')} value={entry.data.fx.source} />
-                )}
-              </dl>
-              <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-                {t('entry.fxNote')}
-              </p>
-            </section>
-          )}
-
-          <section className="mt-5">
-            <H2>{t('entry.vat')}</H2>
-            {/* `tva` is ALWAYS an object on the wire; its FIELDS are what can be
-                null. A `rate` of null means no rate was recorded and renders an
-                em dash, which is not the same claim as 0%. */}
-            <dl className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-4">
-              <Fact label={t('entry.rate')} value={percent(entry.data.tva.rate)} />
-              <div>
-                <Dt>{t('entry.amount')}</Dt>
-                <dd className="num text-foreground">
-                  <Money value={entry.data.tva.amount} bare />
-                </dd>
-              </div>
-              <Fact
-                label={t('entry.inputClaimed')}
-                value={entry.data.tva.input_claimed ? t('entry.yes') : t('entry.no')}
+              `entryTotal` sums the lines. On a POSTED entry the two sides are
+              equal by migration 0004's deferred constraint, so one magnitude is
+              the whole truth; on a STAGED one they need not be, and the strip
+              says so rather than printing one side as though it were the
+              entry. An entry with no lines yet gets no strip at all, because a
+              `0.00` there would claim it moved nothing. */}
+          {total && (
+            <StatRow>
+              <Stat
+                caption={t('entry.amount')}
+                value={<Money value={total.debit} bare />}
+                emphasis
+                basis={total.balanced ? undefined : t('entry.unbalancedBasis')}
               />
-            </dl>
-            {entry.data.tva.note && (
-              <p className="mt-1.5 text-[12px] text-muted-foreground">
-                {label(entry.data.tva.note)}
-              </p>
-            )}
-            <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-              {t('entry.vatNote')}
-            </p>
-          </section>
-
-          <section className="mt-5">
-            <H2>{t('entry.supportingDocument')}</H2>
-            <div className="mt-1.5">
-              <DriveLink piece={entry.data.piece} withCaptured />
-            </div>
-            {entry.data.evidence_note && (
-              <p className="mt-1.5 text-[12px] text-muted-foreground">
-                {label(entry.data.evidence_note)}
-              </p>
-            )}
-          </section>
-
-          {entry.data.related_party && (
-            <section className="mt-5">
-              <H2>{t('entry.relatedParty')}</H2>
-              <dl className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3">
-                <Fact label={t('entry.counterpart')} value={entry.data.related_party.counterpart} />
-                <Fact label={t('entry.kind')} value={entry.data.related_party.kind} />
-                <Fact
-                  label={t('entry.mirrorEntry')}
-                  // A serial id, not a #number — the field name says so and this
-                  // app has no route that resolves one. Shown, never linked.
-                  value={
-                    entry.data.related_party.mirror_entry_id === null
-                      ? t('entry.notRecorded')
-                      : t('entry.idValue', { id: entry.data.related_party.mirror_entry_id })
-                  }
+              {!total.balanced && (
+                <Stat
+                  caption={t('entry.creditSide')}
+                  value={<Money value={total.credit} bare />}
+                  tone="attention"
+                  basis={t('entry.unbalancedNote')}
                 />
-              </dl>
-              {entry.data.related_party.justification ? (
-                <p className="mt-1.5 text-[12px] text-foreground">
-                  {label(entry.data.related_party.justification)}
-                </p>
-              ) : (
-                <p className="mt-1.5 text-[12px] text-destructive">
-                  {t('entry.noJustification')}
-                </p>
               )}
-            </section>
+              <Stat caption={t('entry.vat')} value={<Money value={entry.data.tva.amount} bare />} />
+              <Stat
+                caption={t('entry.journalNo')}
+                value={<span className="figure">{entry.data.entry_no}</span>}
+                basis={t('entry.journalNoBasis')}
+              />
+            </StatRow>
           )}
 
-          <section className="mt-5 border-t border-border pt-3">
-            <H2>{t('entry.provenance')}</H2>
-            <dl className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-4">
-              <Fact
-                label={t('entry.journalNo')}
-                // NOT NULL on the wire — every entry has one, staged included.
-                value={String(entry.data.entry_no)}
-              />
-              <Fact
-                label={t('entry.source')}
-                value={
-                  entry.data.source_id === null
-                    ? t('entry.notRecorded')
-                    : t('entry.idValue', { id: entry.data.source_id })
-                }
-              />
-              <Fact
-                label={t('entry.matchedRule')}
-                value={
-                  entry.data.matched_rule_id === null
-                    ? t('entry.none')
-                    : t('entry.idValue', { id: entry.data.matched_rule_id })
-                }
-              />
-              <Fact
-                label={t('entry.reverses')}
-                value={
-                  entry.data.reverses_entry_id === null
-                    ? t('entry.nothing')
-                    : t('entry.idValue', { id: entry.data.reverses_entry_id })
-                }
-              />
-            </dl>
-            {/* ── THIS RENDERED NOTHING UNTIL 2026-08-18 ──────────────────
-                It was `{en(entry.data.history)}`, because `lib/types.ts`
-                declared `history: Label | null`. The value `resolveEntry`
-                actually writes is an ARRAY: `en()` looks for `.en`, then `.fr`,
-                finds neither, and returns `''`. So the block was truthy,
-                rendered, and drew a blank — every entry resolved through the
-                phase-2 write path would have shown an EMPTY audit trail, with
-                nothing thrown and nothing logged. The type is a union now and
-                `<HistoryTrail>` handles all three shapes the column can hold. */}
-            {hasHistory(entry.data.history) && (
-              <div className="mt-1.5">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t('entry.history')}
-                </p>
-                <HistoryTrail history={entry.data.history} />
-              </div>
-            )}
-            <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-              {t('entry.provenanceNote')}
-            </p>
-          </section>
+          <Grid>
+            {/* ── THE MAIN COLUMN: THE RECORD, AND WHAT MAY BE DONE TO IT ──
+                The écriture first. A reader who opened an entry came to see the
+                entry, and the page used to put four sections above it. */}
+            <div className="space-y-4 lg:col-span-8">
+              <Section label={t('entry.ecriture')} span={12}>
+                <EntryLines lines={entry.data.lines} base={base} scope={scope} detailed />
+              </Section>
+
+              <Section
+                label={t('entry.whatThisIs')}
+                span={12}
+                note={entry.data.explanation ? null : undefined}
+              >
+                {entry.data.explanation ? (
+                  <p className="max-w-[95ch] text-sm leading-relaxed text-foreground">
+                    {label(entry.data.explanation)}
+                  </p>
+                ) : (
+                  // Not an em dash. An entry nobody has explained is the
+                  // product's central object of work, and saying so is more
+                  // useful than a blank that reads as a rendering gap.
+                  <p className="max-w-[95ch] text-sm text-muted-foreground">
+                    {t('entry.nobodySaid')}
+                  </p>
+                )}
+              </Section>
+
+              {/* ── THE COMPLIANCE VERDICT, ON EVERY ENTRY INCLUDING THE ONES
+                  NOBODY HAS CHECKED ────────────────────────────────────────
+                  Rendered unconditionally, which is the opposite of how every
+                  other optional block on this page works — and it is why
+                  `<VerdictPanel>` exists. `verdict: null` means NEVER CHECKED,
+                  not clean, and a section that simply disappeared for a null
+                  would let the absence read as an accepted verdict.
+                  `lib/verdict.ts` holds the four states where a test can reach
+                  them.
+
+                  It sits ABOVE Posting deliberately: a blocked verdict is what
+                  stops the write below it, and a reader has to meet the reason
+                  before the button. */}
+              <Section label={t('entry.compliance')} span={12}>
+                <VerdictPanel verdict={entry.data.verdict} base={base} scope={scope} />
+              </Section>
+
+              {/* ── THE POSTING TRANSITION ──────────────────────────────────
+                  Rendered only for a STAGED entry, and gone the moment it is
+                  posted — there is nothing to offer on a posted one, and a
+                  disabled button would invite somebody to wonder what is wrong
+                  with it. The status chip in the header already says which it
+                  is.
+
+                  `status === 'staged'` is POSITIVE. `!== 'posted'` would render
+                  this on any third status added server-side, which is a write
+                  affordance nobody wrote, on the one write that cannot be
+                  undone.
+
+                  **Elevation 2, and it is the only level-2 block on this page.**
+                  Posting is the single act here that leaves ring 2 and freezes
+                  a record for ten years; the accent rule is what stops it
+                  reading as one more section among nine. */}
+              {entry.data.status === 'staged' && (
+                <Section label={t('entry.posting')} span={12} tone="attention">
+                  <p className="mb-3 max-w-[95ch] text-sm text-muted-foreground">
+                    {t('entry.stagedNote')}
+                  </p>
+                  {/* ── THE FORM IS STILL OFFERED ON A BLOCKED ENTRY ────────
+                      The refusal is the SERVER'S — `postEntry` raises
+                      `verdict_blocked` with the pass's own `resolves` text as
+                      the suggestion — and hiding the form would replace that
+                      sentence with this app's guess at it. What the reader gets
+                      instead is the verdict above the button and the route's own
+                      words after it, which is the same arrangement
+                      `<PostEntryForm>` uses for migration 0004's guard: the last
+                      word belongs to whoever actually refuses. */}
+                  {blocksPosting(entry.data.verdict) && (
+                    <p className="mb-3 max-w-[95ch] text-[12px] text-muted-foreground">
+                      {t('entry.blockedNote')}
+                    </p>
+                  )}
+                  {posted ? (
+                    <PostedNotice result={posted} />
+                  ) : (
+                    <PostEntryForm ws={params.ws} entry={entry.data} onPosted={setPosted} />
+                  )}
+                </Section>
+              )}
+
+              {/* A post made in this session, still shown after the entry
+                  refetched as `posted` — because `already` lives only in the
+                  response. */}
+              {entry.data.status === 'posted' && posted && (
+                <Section label={t('entry.posting')} span={12} tone="attention">
+                  <PostedNotice result={posted} />
+                </Section>
+              )}
+            </div>
+
+            {/* ── THE SIDE COLUMN: WHAT IS ATTACHED TO THE RECORD ──────────
+                VAT, the document, the currency it arrived in, the related
+                party, and where it came from. Every one of these is a fact
+                ABOUT the écriture rather than the écriture itself, and on a
+                1400px page they fit beside it instead of pushing the provenance
+                two screens down. */}
+            <div className="space-y-4 lg:col-span-4">
+              <Section label={t('entry.vat')} span={12} note={t('entry.vatNote')}>
+                {/* `tva` is ALWAYS an object on the wire; its FIELDS are what
+                    can be null. A `rate` of null means no rate was recorded and
+                    renders an em dash, which is not the same claim as 0%. */}
+                <FieldGrid>
+                  <Field label={t('entry.rate')} figure>
+                    {percent(entry.data.tva.rate)}
+                  </Field>
+                  <Field label={t('entry.amount')} figure>
+                    <Money value={entry.data.tva.amount} bare />
+                  </Field>
+                  <Field label={t('entry.inputClaimed')}>
+                    {entry.data.tva.input_claimed ? t('entry.yes') : t('entry.no')}
+                  </Field>
+                </FieldGrid>
+                {entry.data.tva.note && (
+                  <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
+                    {label(entry.data.tva.note)}
+                  </p>
+                )}
+              </Section>
+
+              <Section label={t('entry.supportingDocument')} span={12}>
+                <DriveLink piece={entry.data.piece} withCaptured />
+                {entry.data.evidence_note && (
+                  <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
+                    {label(entry.data.evidence_note)}
+                  </p>
+                )}
+              </Section>
+
+              {/* ── THE ORIGINAL CURRENCY, WHICH NOTHING RENDERED UNTIL
+                  2026-08-18 ───────────────────────────────────────────────
+                  `fx` arrived with migration 0011, is in `publicEntry`, is
+                  declared in `lib/types.ts` as **"display-only"** — and no
+                  screen displayed it. A field whose entire purpose is to be
+                  shown, and which was not shown.
+
+                  Rendered only when the entry has one, and field by field,
+                  because the writer may omit any of the three — an em dash for a
+                  missing `rate` would claim a rate was recorded and lost.
+                  Nothing computes with these: they are free-text strings from
+                  the issuer, and `lib/format.ts` never sees them. */}
+              {entry.data.fx &&
+                (entry.data.fx.original || entry.data.fx.rate || entry.data.fx.source) && (
+                  <Section
+                    label={t('entry.originalCurrency')}
+                    span={12}
+                    note={t('entry.fxNote')}
+                  >
+                    <FieldGrid>
+                      {entry.data.fx.original && (
+                        <Field label={t('entry.originalAmount')} figure>
+                          {entry.data.fx.original}
+                        </Field>
+                      )}
+                      {entry.data.fx.rate && (
+                        <Field label={t('entry.rate')} figure>
+                          {entry.data.fx.rate}
+                        </Field>
+                      )}
+                      {entry.data.fx.source && (
+                        <Field label={t('entry.rateSource')}>{entry.data.fx.source}</Field>
+                      )}
+                    </FieldGrid>
+                  </Section>
+                )}
+
+              {entry.data.related_party && (
+                <Section
+                  label={t('entry.relatedParty')}
+                  span={12}
+                  /* A related-party entry with no justification is an art. 959a
+                     al. 4 disclosure that has not been made. It is drawn at
+                     level 2 with the destructive tone because it is a statutory
+                     gap in the record, not a missing nicety. */
+                  tone={entry.data.related_party.justification ? 'default' : 'problem'}
+                >
+                  <FieldGrid>
+                    <Field label={t('entry.counterpart')}>
+                      {entry.data.related_party.counterpart}
+                    </Field>
+                    <Field label={t('entry.kind')}>{entry.data.related_party.kind}</Field>
+                    <Field label={t('entry.mirrorEntry')} figure>
+                      {/* A serial id, not a #number — the field name says so and
+                          this app has no route that resolves one. Shown, never
+                          linked. */}
+                      {entry.data.related_party.mirror_entry_id === null
+                        ? t('entry.notRecorded')
+                        : t('entry.idValue', { id: entry.data.related_party.mirror_entry_id })}
+                    </Field>
+                  </FieldGrid>
+                  {entry.data.related_party.justification ? (
+                    <p className="mt-3 text-[12px] leading-relaxed text-foreground">
+                      {label(entry.data.related_party.justification)}
+                    </p>
+                  ) : (
+                    <p className="mt-3 text-[12px] leading-relaxed text-destructive">
+                      {t('entry.noJustification')}
+                    </p>
+                  )}
+                </Section>
+              )}
+
+              <Section label={t('entry.provenance')} span={12} note={t('entry.provenanceNote')}>
+                <FieldGrid>
+                  <Field label={t('entry.journalNo')} figure>
+                    {/* NOT NULL on the wire — every entry has one, staged
+                        included. */}
+                    {String(entry.data.entry_no)}
+                  </Field>
+                  <Field label={t('entry.source')} figure>
+                    {entry.data.source_id === null
+                      ? t('entry.notRecorded')
+                      : t('entry.idValue', { id: entry.data.source_id })}
+                  </Field>
+                  <Field label={t('entry.matchedRule')} figure>
+                    {entry.data.matched_rule_id === null
+                      ? t('entry.none')
+                      : t('entry.idValue', { id: entry.data.matched_rule_id })}
+                  </Field>
+                  <Field label={t('entry.reverses')} figure>
+                    {entry.data.reverses_entry_id === null
+                      ? t('entry.nothing')
+                      : t('entry.idValue', { id: entry.data.reverses_entry_id })}
+                  </Field>
+                </FieldGrid>
+                {/* ── THIS RENDERED NOTHING UNTIL 2026-08-18 ────────────────
+                    It was `{en(entry.data.history)}`, because `lib/types.ts`
+                    declared `history: Label | null`. The value `resolveEntry`
+                    actually writes is an ARRAY: `en()` looks for `.en`, then
+                    `.fr`, finds neither, and returns `''`. So the block was
+                    truthy, rendered, and drew a blank — every entry resolved
+                    through the phase-2 write path would have shown an EMPTY
+                    audit trail, with nothing thrown and nothing logged. The type
+                    is a union now and `<HistoryTrail>` handles all three shapes
+                    the column can hold. */}
+                {hasHistory(entry.data.history) && (
+                  <div className="mt-3">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                      {t('entry.history')}
+                    </p>
+                    <HistoryTrail history={entry.data.history} />
+                  </div>
+                )}
+              </Section>
+            </div>
+          </Grid>
         </article>
       )}
     </ScreenFrame>

@@ -37,6 +37,8 @@ import { useBilan, isSimplifiedRefusal } from '@/lib/hooks'
 import { bilanGroups } from '@/lib/statement-view'
 import { StatementTable } from '@/components/statement-table'
 import { ScreenFrame } from '@/components/screen-frame'
+import { Section } from '@/components/section'
+import { Stat, StatRow } from '@/components/stat'
 import { SimplifiedBookNotice } from '@/components/simplified-notice'
 import { NoExerciceNotice, isNoExerciceRefusal } from '@/components/no-exercice-notice'
 import { ErrorState, Loading } from '@/components/states'
@@ -116,6 +118,38 @@ export default function Page() {
 
       {bilan.data && (
         <>
+          {/* ── THE THREE FIGURES A READER OPENS A BILAN FOR ─────────────────
+              They are also rendered at the FOOT of the document below, and that
+              is deliberate duplication rather than an oversight. A bilan is a
+              statutory document somebody prints and sends to a fiduciary, and a
+              document's totals belong at its foot — moving them to the top would
+              be reformatting an art. 959a statement to suit a screen.
+
+              The strip is not the document. It is the summary of it, for the
+              reader who came to check one number and should not have to scroll
+              a full chart of accounts to reach it. Both read the same three
+              fields off `bilan.data`, so they cannot disagree.
+
+              `résultat` is emphasised because it is the figure the year is
+              about; the two sides are equal whenever the books are correct, and
+              `<BalanceCheck>` below says so in words. */}
+          <StatRow>
+            <Stat
+              caption={t('statements.totalActif')}
+              value={<Money value={bilan.data.totalActif} bare />}
+            />
+            <Stat
+              caption={t('statements.totalPassif')}
+              value={<Money value={bilan.data.totalPassif} bare />}
+            />
+            <Stat
+              caption={t('statements.resultat')}
+              value={<Money value={bilan.data.resultat} bare />}
+              emphasis
+              basis={t('statements.resultatNote')}
+            />
+          </StatRow>
+
           <BalanceCheck
             balanced={bilan.data.balanced}
             ecart={bilan.data.ecart}
@@ -123,6 +157,7 @@ export default function Page() {
             passif={bilan.data.totalPassif}
           />
 
+          <Section label={t('statements.bilanLegal')} bodyClassName="px-4 py-3.5">
           <StatementTable
             groups={bilanGroups(bilan.data, scope.meta)}
             base={base}
@@ -153,6 +188,7 @@ export default function Page() {
               <dd className="num"><Money value={bilan.data.resultat} /></dd>
             </div>
           </dl>
+          </Section>
         </>
       )}
     </ScreenFrame>

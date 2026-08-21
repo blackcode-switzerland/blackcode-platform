@@ -53,7 +53,13 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   const t = await serverT()
 
   const body = (
-    <div className="mx-auto max-w-3xl">
+    // ── THE PADDING IS THIS COMPONENT'S NOW ────────────────────────────────
+    // `<BooksShell>`'s `<main>` carried `px-4 py-5` until 2026-08-21, when it
+    // moved into `<PageShell>` so a screen owns its own width. Settings kept
+    // its `max-w-3xl` and lost the padding with it, so the tab bar sat flush
+    // against the sticky header. Horizontal was fine — `mx-auto` was doing
+    // that — which is why it read as "slightly off" rather than as broken.
+    <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6 lg:px-8">
       {/* The heading only when there is no frame. With the shell mounted, its
           sticky header already says "Settings" and a second one is noise. */}
       {ws === null && (
@@ -64,7 +70,10 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     </div>
   )
 
-  if (ws === null) return <div className="px-6 py-8">{body}</div>
+  // The frameless case already padded itself and still does — it is the one
+  // that renders with no shell at all, for somebody whose workspace bootstrap
+  // failed and who is exactly the person who needs their profile and tokens.
+  if (ws === null) return <div className="py-3">{body}</div>
 
   return (
     <BooksShell ws={ws} title={t('settings.title')}>

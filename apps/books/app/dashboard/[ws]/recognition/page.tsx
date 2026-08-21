@@ -35,6 +35,9 @@ import { useParams } from 'next/navigation'
 import { useScope } from '@/lib/scope'
 import { useRules, useWorklist } from '@/lib/hooks'
 import { ScreenFrame } from '@/components/screen-frame'
+import { PageHeader } from '@/components/page-header'
+import { Section } from '@/components/section'
+import { Stat, StatRow } from '@/components/stat'
 import { ErrorState, Loading } from '@/components/states'
 import { NoExerciceNotice, isNoExerciceRefusal } from '@/components/no-exercice-notice'
 import { Worklist, type ResolvedMap } from '@/components/worklist'
@@ -141,10 +144,11 @@ export default function Page() {
 
   return (
     <ScreenFrame title={t('rec.title')}>
-      <div className="mb-4">
-        <h1 className="text-lg font-semibold text-foreground">{t('rec.title')}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {/* ── THE BOOK THE SERVER ANSWERED FOR, RESOLVED TO ITS NAME ───────
+      <PageHeader
+        eyebrow={t('nav.recognition')}
+        title={t('rec.title')}
+        lead={t('rec.lead')}
+        /* ── THE BOOK THE SERVER ANSWERED FOR, RESOLVED TO ITS NAME ───────
               Reading `worklist.data.entity` rather than the URL is right and is
               kept: it is the only way to see that a request whose `?entity=`
               was dropped came back answered for a DIFFERENT book.
@@ -164,46 +168,40 @@ export default function Page() {
               book now reads as another COMPANY, which is a thing a reader
               notices. The raw slug is kept when it resolves to nothing — a book
               the list does not have is worth showing exactly as it arrived
-              rather than replaced by an em dash. */}
-          {t('rec.subheading', {
-            book: answeredBook,
-            year: worklist.data?.exercice ?? scope.exercice ?? '—',
-          })}
-        </p>
-        <p className="mt-2 max-w-2xl text-[12.5px] text-muted-foreground">{t('rec.lead')}</p>
-      </div>
+              rather than replaced by an em dash. */
+        meta={
+          <span className="text-[12.5px] text-muted-foreground">
+            {t('rec.subheading', {
+              book: answeredBook,
+              year: worklist.data?.exercice ?? scope.exercice ?? '—',
+            })}
+          </span>
+        }
+      />
 
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-[15px] font-semibold text-foreground">
-          {/* ── "NEEDS A HUMAN", NOT "TO EXPLAIN" ─────────────────────────────
-              This read "To explain" over the payload's whole count. The list
-              holds three kinds and only one of them CAN be explained: on the
-              seeded books it said "To explain 9" above three explainable
-              entries and six pièces, each of which says, in its own row,
-              "Explaining is not what it needs."
+      {/* ── THE SPLIT IS THE INSTRUCTION, NOT THE TOTAL ────────────────────
+          "Nine things need you" and "three to explain, six to match" are
+          different instructions, and the second is the one a person can act on.
+          The heading these replace read "To explain" over the whole count —
+          the count was right and the word was wrong, because the list holds
+          three kinds and only one of them CAN be explained.
 
-              The count was right and the word was wrong — the same defect Agent
-              1 fixed on the overview one screen away, from the other direction.
-              `bk books worklist` makes no such claim, and the page disagreeing
-              with the CLI is the test that condemned the overview's number.
-
-              The split is rendered rather than the total alone, because "nine
-              things need you" and "three to explain, six to match" are different
-              instructions. Cleanup review, 2026-08-18. */}
-          {t('rec.needsAHuman')}
-          {worklist.data && (
-            <span className="ml-2 text-[13px] font-normal text-muted-foreground">
-              {worklist.data.count}
-            </span>
-          )}
-        </h2>
-        {worklist.data && worklist.data.count > 0 && (
-          <p className="text-[12.5px] text-muted-foreground">
-            {t('rec.toExplain', { n: explainable })}
-            {documents > 0 && <> · {t('rec.awaitingMatch', { n: documents })}</>}
-          </p>
-        )}
-      </div>
+          `explainable` comes from `resolveTargetFor` with the SAME journal the
+          rows branch on, so the strip and the rows can never disagree about
+          which have a button. `documents` counts `kind === 'piece'` rather than
+          subtracting, because a subtraction announces that every row is a
+          document on the first frame, while the journal is still resolving. */}
+      {worklist.data && (
+        <StatRow>
+          <Stat
+            caption={t('rec.needsAHuman')}
+            value={worklist.data.count}
+            emphasis={worklist.data.count > 0}
+          />
+          <Stat caption={t('rec.toExplainCaption')} value={explainable} />
+          <Stat caption={t('rec.awaitingMatchCaption')} value={documents} />
+        </StatRow>
+      )}
 
       {worklist.isLoading && <Loading rows={4} label={t('rec.loading')} />}
 
@@ -234,19 +232,19 @@ export default function Page() {
         <ErrorState error={worklist.error} title={t('rec.failed')} />
       )}
       {worklist.data && (
-        <Worklist
-          ws={params.ws}
-          scope={scope}
-          journal={scope.journal}
-          base={base}
-          rows={rows}
-          rules={rules.data}
-          resolved={resolved}
-          onResolved={onResolved}
-        />
+        <Section label={t('rec.worklist')} note={t('rec.footnote')} bodyClassName="">
+          <Worklist
+            ws={params.ws}
+            scope={scope}
+            journal={scope.journal}
+            base={base}
+            rows={rows}
+            rules={rules.data}
+            resolved={resolved}
+            onResolved={onResolved}
+          />
+        </Section>
       )}
-
-      <p className="mt-2 text-[11.5px] text-muted-foreground">{t('rec.footnote')}</p>
 
       {/* The rules panel is suppressed under the same refusal rather than shown
           with its own red box: a book with no fiscal year has no rules to list
@@ -254,6 +252,7 @@ export default function Page() {
           against a scope the server refuses. One explanation above, not two
           errors. */}
       {!isNoExerciceRefusal(worklist.error) && (
+        <div className="mt-4">
         <RulesPanel
           ws={params.ws}
           scope={scope}
@@ -263,6 +262,7 @@ export default function Page() {
           isLoading={rules.isLoading}
           error={rules.error}
         />
+        </div>
       )}
     </ScreenFrame>
   )

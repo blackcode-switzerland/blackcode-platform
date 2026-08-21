@@ -68,6 +68,8 @@ import {
   severityRank,
 } from '@/lib/compliance'
 import { ScreenFrame } from '@/components/screen-frame'
+import { PageHeader } from '@/components/page-header'
+import { Section, Surface } from '@/components/section'
 import { ErrorState, Loading } from '@/components/states'
 import { DateText } from '@/components/date-text'
 import { TonePill } from '@/components/tone-pill'
@@ -109,23 +111,36 @@ export default function Page() {
           `— · exercice —`, which reads as a rendering gap rather than as the
           absence of two things that genuinely do not apply here. Caught in the
           browser, not in review. */}
-      <div className="mt-3 mb-4">
-        <h1 className="text-lg font-semibold text-foreground">
-          {t('compliance.uiName')}
-          {t('compliance.legalName') !== t('compliance.uiName') && (
-            <span className="ml-2 text-sm font-normal text-muted-foreground">
-              {t('compliance.legalName')}
-            </span>
-          )}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t('compliance.subheading')}</p>
-      </div>
-
-      <p className="mb-4 text-[12.5px] text-muted-foreground">
-        {t('compliance.leadA')}{' '}
-        <span className="text-foreground">{t('compliance.leadB')}</span>
-        {t('compliance.leadC')}
-      </p>
+      <PageHeader
+        eyebrow={t('nav.compliance')}
+        title={
+          <>
+            {t('compliance.uiName')}
+            {t('compliance.legalName') !== t('compliance.uiName') && (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                {t('compliance.legalName')}
+              </span>
+            )}
+          </>
+        }
+        lead={
+          <>
+            {t('compliance.leadA')}{' '}
+            <span className="text-foreground">{t('compliance.leadB')}</span>
+            {t('compliance.leadC')}
+          </>
+        }
+        /* `compliance.subheading` is a SCOPE fact — "every book · the articles
+           these rules cite" — not a sentence, and running it into the lead made
+           one long broken one. It sits where the other screens put the book and
+           the year, which is what it is the equivalent of: this register belongs
+           to no book and no year, and saying so is the point. */
+        meta={
+          <span className="text-[12.5px] text-muted-foreground">
+            {t('compliance.subheading')}
+          </span>
+        }
+      />
 
       {rules.isLoading && <Loading rows={8} label={t('compliance.loading')} />}
       {rules.error && <ErrorState error={rules.error} title={t('compliance.failed')} />}
@@ -134,10 +149,7 @@ export default function Page() {
         <>
           {/* ── THE RESTING STATE, SAID IN WORDS BEFORE ANY COLOUR ────────
               Nineteen drafts is not a backlog and must not read as one. */}
-          <div
-            className="mb-4 rounded-lg border border-border bg-secondary px-3.5 py-2.5 text-[12.5px] text-muted-foreground"
-            role="note"
-          >
+          <Surface role="note" className="mb-4 text-[12.5px] leading-relaxed text-muted-foreground">
             <span className="font-medium text-foreground">
               {t(drafts === 1 ? 'compliance.draftsOne' : 'compliance.draftsMany', {
                 n: drafts,
@@ -156,13 +168,13 @@ export default function Page() {
                   </span>
                 )
               })}
-          </div>
+          </Surface>
 
-          <div className="border-t border-border">
+          <Section label={t('compliance.registerLabel')} bodyClassName="">
             {sorted.map((rule) => (
               <RuleCard key={rule.rule_id} rule={rule} highlighted={rule.rule_id === highlighted} />
             ))}
-          </div>
+          </Section>
         </>
       )}
     </ScreenFrame>

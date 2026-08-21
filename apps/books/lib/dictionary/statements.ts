@@ -55,6 +55,7 @@ export const en = {
   'statements.totalActif': 'Total actif',
   'statements.totalPassif': 'Total passif',
   'statements.resultat': 'Résultat de l’exercice',
+  'statements.resultatBasis': 'exercice {year}, posted entries only',
   'statements.resultatNote': 'injected into equity from the income statement',
   'statements.crLead':
     'Each line lists the accounts feeding it. Follow one to see its postings in the general ledger. Amounts are magnitudes — the sign of each line is fixed by the article, and only the result at the foot is signed.',
@@ -163,6 +164,7 @@ export const fr: Record<keyof typeof en, string> = {
   'statements.totalActif': 'Total actif',
   'statements.totalPassif': 'Total passif',
   'statements.resultat': 'Résultat de l’exercice',
+  'statements.resultatBasis': 'exercice {year}, écritures comptabilisées seulement',
   'statements.resultatNote': 'reporté dans les fonds propres depuis le compte de résultat',
   'statements.crLead':
     'Chaque poste liste les comptes qui l’alimentent. Suivez-en un pour voir ses écritures dans le grand livre. Les montants sont des valeurs absolues — le sens de chaque poste est fixé par l’article, et seul le résultat en pied est signé.',

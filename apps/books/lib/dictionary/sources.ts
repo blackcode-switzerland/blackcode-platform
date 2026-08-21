@@ -4,6 +4,7 @@ export const en = {
   'sources.uiName': 'Chart of accounts',
   'sources.legalName': 'Plan comptable',
   'sources.subheading': '{book} · Swiss PME chart',
+  'sources.chartLabel': 'Chart of accounts',
   'sources.chartLeadA':
     'This book’s own accounts — copied when it was created, so editing one book’s chart cannot touch another’s.',
   'sources.chartLeadB': 'Legal line',
@@ -150,6 +151,7 @@ export const fr: Record<keyof typeof en, string> = {
   'sources.uiName': 'Plan comptable',
   'sources.legalName': 'Plan comptable',
   'sources.subheading': '{book} · plan comptable PME suisse',
+  'sources.chartLabel': 'Plan comptable',
   'sources.chartLeadA':
     'Les comptes propres à ce livre — copiés à sa création, de sorte que modifier le plan d’un livre ne peut pas toucher celui d’un autre.',
   'sources.chartLeadB': 'Poste légal',
