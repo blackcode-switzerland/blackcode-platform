@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors, jsonList } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace, appContext } from '@/lib/api'
+import { wholeNumber } from '@/lib/validate/query'
 import { listEntries, listRiEntries, publicEntry, publicRiEntry, resolveScope } from '@/lib/db/queries/statutory'
 import { declareEntry, DeclareRefused } from '@/lib/db/queries/declare'
 import { TvaRefused } from '@/lib/db/queries/tva'
@@ -35,22 +36,33 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
         'drop --status/--account; --recognition works on both journals'
       )
     }
+    // `listRiEntries` takes no limit, so this really is the whole journal and
+    // the null cursor below is the truth rather than #69's claim. The total is
+    // served all the same, so both journals answer the same question.
     let rows = await listRiEntries(scope.entity.id, scope.exercice.id)
     const rec = q.get('recognition')
     if (rec) rows = rows.filter((r) => r.recognition === rec)
     const names = { entity: scope.entity.slug, exercice: scope.exercice.year }
-    return jsonList(rows.map((r) => publicRiEntry(r, names)), null)
+    return jsonList(rows.map((r) => publicRiEntry(r, names)), null, { total: rows.length })
   }
 
-  const rows = await listEntries(scope.entity.id, scope.exercice.id, {
+  const page = await listEntries(scope.entity.id, scope.exercice.id, {
     status: q.get('status') ?? undefined,
     recognition: q.get('recognition') ?? undefined,
     account: q.get('account') ?? undefined,
-    limit: q.get('limit') ? Number(q.get('limit')) : undefined,
+    limit: wholeNumber(q.get('limit'), 'limit', 'limit is a count of entries, 1 to 500'),
+    cursor: wholeNumber(
+      q.get('cursor'),
+      'cursor',
+      'pass the next_cursor the previous page returned, or drop it to start at the beginning'
+    ),
   })
   const names = { entity: scope.entity.slug, exercice: scope.exercice.year }
-  return jsonList(rows.map((r) => publicEntry(r, names)), null)
+  return jsonList(page.rows.map((r) => publicEntry(r, names)), page.next_cursor, {
+    total: page.total,
+  })
 })
+
 
 export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws } = await params
