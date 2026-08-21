@@ -585,6 +585,18 @@ export function publicPiece(
       file_name: p.file_name,
       mime_type: p.mime_type,
       md5_checksum: p.md5_checksum,
+      /**
+       * The STRONGER checksum, and the one this app asks a worker for.
+       *
+       * `pieces/ingest` validates `source.sha256` (0015: the worker hashes the
+       * bytes it captured), `ingestPiece` dedupes on it BEFORE md5, and the
+       * uniqueness constraint is `COALESCE(sha256, md5_checksum, '')`. It was
+       * the one field the payload did not carry — so a pièce with a perfect
+       * SHA-256 reached the inbox screen looking unchecksummed, and the screen
+       * said "duplicate detection cannot see this document" about a document
+       * duplicate detection was keyed on. 76 of 334 pièces, found 2026-08-21.
+       */
+      sha256: p.sha256,
       created_time: p.drive_created_time,
       web_view_link: p.web_view_link,
     },

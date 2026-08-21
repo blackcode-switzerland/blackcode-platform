@@ -261,4 +261,54 @@ d('the pièces pipeline', () => {
     expect(m.piece.status).toBe('matched')
     expect(m.piece.entity_id, 'saying which entry it documents says whose it is').toBe(entityId)
   })
+
+  // ── THE CHECKSUM THE DOOR ASKS FOR MUST REACH THE SCREEN ─────────────────
+  // `pieces/ingest` validates `source.sha256` and `ingestPiece` dedupes on it
+  // BEFORE md5 — and `publicPiece` served only `md5_checksum`. So a pièce
+  // delivered the documented way arrived on the inbox screen looking
+  // unchecksummed, under the words "duplicate detection cannot see this
+  // document", about a document duplicate detection was keyed on. 76 of 334
+  // pièces in the dev database, every one of them ingested correctly.
+  it('serves the sha256 a worker sent, so the screen can stop calling it absent', async () => {
+    const { ingestPiece, publicPiece } = await import('./queries/pieces')
+    const { x } = payload()
+    const digest = 'a'.repeat(64)
+
+    const r = await ingestPiece(
+      ws,
+      entityId,
+      { file_id: 'test-sha-only', file_name: 'sha.pdf', sha256: digest, web_view_link: 'https://drive.google.com/file/d/test-sha-only' },
+      x,
+      REAL.received,
+      'test-worker'
+    )
+    expect(r.piece.sha256, 'stored, and always was').toBe(digest)
+    expect(r.piece.md5_checksum, 'this delivery carried no md5 — the realistic case').toBeNull()
+
+    const wire = publicPiece(r.piece, null, null)
+    expect(wire.source.sha256, 'the field the screen needs and the payload omitted').toBe(digest)
+    expect(
+      wire.source.sha256 ?? wire.source.md5_checksum,
+      'a screen reading either finds one — this is what "none recorded" was denying'
+    ).not.toBeNull()
+  })
+
+  // The other half: a pièce that genuinely has neither must still read as
+  // absent, or the fix would just be a guard that can no longer fail.
+  it('still reports nothing when a delivery really carries no checksum', async () => {
+    const { ingestPiece, publicPiece } = await import('./queries/pieces')
+    const { x } = payload()
+
+    const r = await ingestPiece(
+      ws,
+      entityId,
+      { file_id: 'test-no-checksum-at-all', file_name: 'bare.pdf' },
+      x,
+      REAL.received,
+      'test-worker'
+    )
+    const wire = publicPiece(r.piece, null, null)
+    expect(wire.source.sha256).toBeNull()
+    expect(wire.source.md5_checksum).toBeNull()
+  })
 })

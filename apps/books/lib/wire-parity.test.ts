@@ -787,7 +787,7 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
       ].sort()
     )
     expect(Object.keys(out.source).sort()).toEqual(
-      ['file_id', 'file_name', 'mime_type', 'md5_checksum', 'created_time', 'web_view_link'].sort()
+      ['file_id', 'file_name', 'mime_type', 'md5_checksum', 'sha256', 'created_time', 'web_view_link'].sort()
     )
   })
 
@@ -2529,6 +2529,7 @@ type _Scalars = [
   Mutual<PieceWire['source']['file_id'], InboxPiece['source']['file_id']>,
   Mutual<PieceWire['source']['file_name'], InboxPiece['source']['file_name']>,
   Mutual<PieceWire['source']['md5_checksum'], InboxPiece['source']['md5_checksum']>,
+  Mutual<PieceWire['source']['sha256'], InboxPiece['source']['sha256']>,
   Mutual<PieceWire['source']['web_view_link'], InboxPiece['source']['web_view_link']>,
 ]
 
@@ -2642,6 +2643,9 @@ const _scalars: _Scalars = [
   true, true, true, true, true, true, true, true, true, true, true, true,
   // the three nested `piece` fields
   true, true, true,
+  // the pièce source's sha256, added with #-sha256: the wire carries the
+  // stronger checksum now, so the screen can stop calling it absent
+  true,
   // phase 4A: the simplified journal's five scalars and its three nested
   // `piece` fields, then the post response's three
   true, true, true, true, true,
