@@ -45,6 +45,18 @@ export const en = {
   'run.revenue': 'Revenue',
   'run.charges': 'Charges',
   'run.net': 'Net',
+
+  // ── The runway, built 2026-08-21 from the bilan's trésorerie line ────────
+  // `lib/runway.ts` refuses in four distinct ways and each one is a sentence
+  // here, because *why there is no figure* is what the reader needs. None of
+  // them is an error: a profitable book simply has no runway.
+  'run.runway': 'Runway',
+  'run.runwayMonths': '{n} months',
+  'run.runwayBasis': 'CHF {cash} cash ÷ CHF {burn} a month, over {n} months served',
+  'run.runwayNoBilan': 'this book keeps no balance sheet, so it states no cash',
+  'run.runwayNoCash': 'the balance sheet carries no trésorerie position',
+  'run.runwayNoMonths': 'nothing has been posted this year, so there is no rate',
+  'run.runwayNotBurning': 'this book is not consuming cash — there is nothing to run out',
   'run.hintRiIn': 'recettes, cash basis',
   'run.hintRiOut': 'dépenses, cash basis',
   'run.hintRiNet': 'recettes − dépenses',
@@ -195,6 +207,16 @@ export const fr: Record<keyof typeof en, string> = {
   'run.revenue': 'Produits',
   'run.charges': 'Charges',
   'run.net': 'Net',
+
+  'run.runway': 'Autonomie',
+  'run.runwayMonths': '{n} mois',
+  'run.runwayBasis':
+    'CHF {cash} de trésorerie ÷ CHF {burn} par mois, sur {n} mois servis',
+  'run.runwayNoBilan': 'ce livre ne tient pas de bilan et n’indique donc aucune trésorerie',
+  'run.runwayNoCash': 'le bilan ne porte aucune position trésorerie',
+  'run.runwayNoMonths': 'rien n’a été comptabilisé cette année : il n’y a pas de rythme',
+  'run.runwayNotBurning':
+    'ce livre ne consomme pas de trésorerie — il n’y a rien qui puisse s’épuiser',
   'run.hintRiIn': 'recettes, base encaissement',
   'run.hintRiOut': 'dépenses, base décaissement',
   'run.hintRiNet': 'recettes − dépenses',

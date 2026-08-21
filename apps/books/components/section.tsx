@@ -54,7 +54,16 @@ export function PageShell({ children }: { children: ReactNode }) {
  * overflow.
  */
 export function Grid({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={'grid grid-cols-1 gap-4 lg:grid-cols-12 ' + className}>{children}</div>
+  // ── `items-start`, SO A SHORT SECTION STAYS SHORT ──────────────────────
+  // Grid items stretch to the row's height by default. On the analyse detail
+  // that drew a three-line answer as a 600px card with 500px of empty white
+  // under it, because the column beside it held two tables — which reads as
+  // content that failed to load rather than as content that is short.
+  return (
+    <div className={'grid grid-cols-1 items-start gap-4 lg:grid-cols-12 ' + className}>
+      {children}
+    </div>
+  )
 }
 
 /**

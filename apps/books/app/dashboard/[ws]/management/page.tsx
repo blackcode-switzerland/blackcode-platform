@@ -53,7 +53,7 @@
 
 import { useParams } from 'next/navigation'
 import { useScope } from '@/lib/scope'
-import { useAnalytique, useAnalytiqueCategories } from '@/lib/hooks'
+import { useAnalytique, useAnalytiqueCategories, useBilan } from '@/lib/hooks'
 import { breakdownTotal, flowTotals } from '@/lib/analytique'
 import { useLabel } from '@/lib/use-label'
 import { useT } from '@/lib/i18n'
@@ -70,6 +70,24 @@ export default function Page() {
   const scope = useScope()
   const base = `/dashboard/${params.ws}`
   const analytique = useAnalytique(params.ws, scope)
+  /**
+   * The bilan, read for ONE line: `pos === 'tresorerie'`.
+   *
+   * ── A SECOND REQUEST, AND WHY IT IS THE RIGHT ONE ────────────────────────
+   * `GET …/analytique` serves no cash figure, and the runway block was recorded
+   * as blocked on a route change because of it. It is not: the bilan already
+   * serves cash for this book and this exercice, so the figure exists and is
+   * one fetch away. Asking for a payload the app already caches on the balance
+   * sheet costs nothing a route change would not have cost more of.
+   *
+   * It carries its own refusals and this screen ignores all of them
+   * deliberately: a simplified book's bilan 400s (art. 957 al. 2) and
+   * `bilan.data` is simply undefined, which `cashFrom` turns into `null` and
+   * the runway tile renders as "this book has no bilan". A failure here must
+   * never put a red box on the management view — the management view is not
+   * about the bilan.
+   */
+  const bilan = useBilan(params.ws, scope)
   const config = useAnalytiqueCategories(params.ws, scope.entity)
   const t = useT()
   const label = useLabel()
@@ -140,7 +158,7 @@ export default function Page() {
 
       {data && totals && categoryTotal !== null && (
         <div className="space-y-7">
-          <RunFigures totals={totals} journal={scope.journal} />
+          <RunFigures totals={totals} journal={scope.journal} bilan={bilan.data} />
 
           <section>
             <h2 className="mb-1 text-sm font-medium text-foreground">{t('mgmt.flowsTitle')}</h2>

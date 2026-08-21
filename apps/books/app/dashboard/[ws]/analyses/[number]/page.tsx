@@ -52,6 +52,9 @@ import { scopedHref } from '@/lib/nav'
 import { speech } from '@/lib/label'
 import { analysisRows, bookToday, hasSnapshot, type DatedRow } from '@/lib/analysis'
 import { ScreenFrame } from '@/components/screen-frame'
+import { PageHeader } from '@/components/page-header'
+import { Grid, Section } from '@/components/section'
+import { Badge } from '@/components/badge'
 import { ErrorState, Loading } from '@/components/states'
 import { DateText } from '@/components/date-text'
 import { FiguresTable, NoSnapshotNotice } from '@/components/analysis-figures'
@@ -133,27 +136,27 @@ export default function Page() {
       )}
 
       {record && (
-        <article className="mt-3" data-analysis={record.number}>
-          <header className="border-b border-border pb-3">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-muted-foreground">
-              <span className="font-mono text-foreground">{record.agent}</span>
-              <span>·</span>
-              <DateText value={record.asked} />
-              <span>·</span>
-              <span>{t('analyses.askedBy', { who: record.asked_by })}</span>
-              <span>·</span>
-              {/* THE RECORD'S OWN BOOK. Not the scope's — see the header. */}
-              <span>{t('analysis.book', { slug: record.entity })}</span>
-              <span className="ml-auto font-mono">#{record.number}</span>
-            </div>
-
-            <h1 className="mt-2 text-lg font-semibold text-foreground">{speech(record.question)}</h1>
-            {record.scenario_label && (
-              <p className="mt-1 text-[12.5px] text-muted-foreground">
-                {speech(record.scenario_label)}
-              </p>
-            )}
-          </header>
+        <article data-analysis={record.number}>
+          <PageHeader
+            eyebrow={t('nav.analyses')}
+            title={speech(record.question)}
+            lead={record.scenario_label ? speech(record.scenario_label) : undefined}
+            meta={
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-muted-foreground">
+                <span className="figure text-foreground">{record.agent}</span>
+                <span>·</span>
+                <DateText value={record.asked} />
+                <span>·</span>
+                <span>{t('analyses.askedBy', { who: record.asked_by })}</span>
+                <span>·</span>
+                {/* THE RECORD'S OWN BOOK. Not the scope's — see the header. */}
+                <span>{t('analysis.book', { slug: record.entity })}</span>
+                <Badge>
+                  <span className="figure">#{record.number}</span>
+                </Badge>
+              </span>
+            }
+          />
 
           {/* ── THE URL ASKS ABOUT ONE BOOK AND THE RECORD IS ANOTHER'S ────
               The route resolves on `(workspace_id, seq)` alone, so following a
@@ -164,7 +167,7 @@ export default function Page() {
           {!sameBook && (
             <p
               role="alert"
-              className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12.5px] text-foreground"
+              className="mb-4 rounded-lg border border-l-[3px] border-border border-l-destructive bg-card px-3 py-2.5 text-[12.5px] text-foreground shadow-sm"
             >
               <span className="font-medium">{t('analysis.otherBookLead')}</span>{' '}
               {t('analysis.otherBookBody', {
@@ -175,33 +178,40 @@ export default function Page() {
             </p>
           )}
 
-          <section className="mt-4">
-            <H2>{t('analysis.theAnswer')}</H2>
-            <p className="mt-1 text-sm text-foreground">{speech(record.verdict)}</p>
-            {record.runway_after_months !== null && (
-              <p className="mt-1.5 text-[12px] text-muted-foreground">
-                {t('analysis.runwayUnder', { n: record.runway_after_months })}{' '}
-                {/* The mockup's gauges each draw a before against an after, and
-                    this payload has one side. Stating the absence is what stops
-                    a reader taking the figure for a delta. */}
-                {t('analysis.runwayNoDelta')}
-              </p>
-            )}
-          </section>
+          <Grid>
+          <Section
+            span={7}
+            label={t('analysis.theAnswer')}
+            note={
+              record.runway_after_months !== null ? (
+                <>
+                  {t('analysis.runwayUnder', { n: record.runway_after_months })}{' '}
+                  {/* The mockup's gauges each draw a before against an after,
+                      and this payload has one side. Stating the absence is what
+                      stops a reader taking the figure for a delta. */}
+                  {t('analysis.runwayNoDelta')}
+                </>
+              ) : undefined
+            }
+          >
+            <p className="max-w-[95ch] text-sm leading-relaxed text-foreground">
+              {speech(record.verdict)}
+            </p>
+          </Section>
 
-          <Figures label={t('analysis.figuresTitle')} value={record.figures} kind="figures" />
+          <div className="space-y-4 lg:col-span-5">
+            <Figures label={t('analysis.figuresTitle')} value={record.figures} kind="figures" />
 
-          <section className="mt-5">
-            <H2>{t('analysis.readTitle')}</H2>
-            <p className="mt-1 mb-2 text-[12px] text-muted-foreground">{t('analysis.readLead')}</p>
-            {hasSnapshot(record.based_on) ? (
-              <SnapshotRows value={record.based_on} />
-            ) : (
-              <NoSnapshotNotice present={false} />
-            )}
-          </section>
+            <Section span={12} label={t('analysis.readTitle')} note={t('analysis.readLead')}>
+              {hasSnapshot(record.based_on) ? (
+                <SnapshotRows value={record.based_on} />
+              ) : (
+                <NoSnapshotNotice present={false} />
+              )}
+            </Section>
+          </div>
 
-          <section className="mt-5">
+          <div className="lg:col-span-12">
             <BookTodayNotice
               asked={record.asked}
               today={today}
@@ -210,7 +220,8 @@ export default function Page() {
               journal={scope.journal}
               loading={entries.isLoading || riEntries.isLoading}
             />
-          </section>
+          </div>
+          </Grid>
 
           {/* ── SAY WHAT THIS SCREEN CAN KNOW, NOT WHAT THE DEPLOYMENT SHOULD BE
               This claimed "the app's database role holds no UPDATE or DELETE on
@@ -252,12 +263,9 @@ function Figures({
   const { rows, dropped } = analysisRows(value)
   if (rows.length === 0 && dropped === 0) return null
   return (
-    <section className="mt-5">
-      <H2>{label}</H2>
-      <div className="mt-1.5">
-        <FiguresTable rows={rows} dropped={dropped} kind={kind} />
-      </div>
-    </section>
+    <Section span={12} label={label}>
+      <FiguresTable rows={rows} dropped={dropped} kind={kind} />
+    </Section>
   )
 }
 

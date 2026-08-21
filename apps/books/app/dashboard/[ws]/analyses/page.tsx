@@ -52,6 +52,7 @@ import { scopedHref } from '@/lib/nav'
 import { speech } from '@/lib/label'
 import { analysisRows } from '@/lib/analysis'
 import { ScreenFrame } from '@/components/screen-frame'
+import { Section } from '@/components/section'
 import { EmptyState, ErrorState, Loading } from '@/components/states'
 import { StatementHeading } from '@/components/statement-heading'
 import { DateText } from '@/components/date-text'
@@ -77,34 +78,48 @@ export default function Page() {
         exercice={scope.exercice}
       />
 
-      <p className="mb-4 text-[12.5px] text-muted-foreground">
-        {t('analyses.leadA')}{' '}
-        <span className="text-foreground">{t('analyses.leadB')}</span>{' '}
-        {t('analyses.leadC')}
-      </p>
-
-      <p className="mb-4 text-[11.5px] text-muted-foreground">
-        {t('analyses.notFiltered', { book: scope.record?.name ?? t('rec.thisBook') })}
-      </p>
-
       {analyses.isLoading && <Loading rows={4} label={t('analyses.loading')} />}
 
       {analyses.error && (
         <ErrorState error={analyses.error} title={t('analyses.failed')} />
       )}
 
-      {analyses.data && analyses.data.length === 0 && (
-        <EmptyState title={t('analyses.empty')} icon={MessagesSquare}>
-          <p>{t('analyses.emptyBody')}</p>
-        </EmptyState>
-      )}
-
-      {analyses.data && analyses.data.length > 0 && (
-        <div className="border-t border-border">
-          {analyses.data.map((a) => (
-            <AnalysisRow key={a.number} analysis={a} base={base} scope={scope} />
-          ))}
-        </div>
+      {analyses.data && (
+        <Section
+          label={
+            <>
+              {t('analyses.uiName')}
+              <span className="ml-2 font-normal">{analyses.data.length}</span>
+            </>
+          }
+          bodyClassName=""
+          /* Both standing notes, as the section's footnote. The second is the
+             one that matters: this list is NOT filtered by the book switcher,
+             and a reader who assumes it is would read another book's questions
+             as this book's. */
+          note={
+            <>
+              {t('analyses.leadA')}{' '}
+              <span className="not-italic text-foreground">{t('analyses.leadB')}</span>{' '}
+              {t('analyses.leadC')}{' '}
+              {t('analyses.notFiltered', { book: scope.record?.name ?? t('rec.thisBook') })}
+            </>
+          }
+        >
+          {analyses.data.length === 0 ? (
+            <div className="px-4 py-3.5">
+              <EmptyState title={t('analyses.empty')} icon={MessagesSquare}>
+                <p>{t('analyses.emptyBody')}</p>
+              </EmptyState>
+            </div>
+          ) : (
+            <div>
+              {analyses.data.map((a) => (
+                <AnalysisRow key={a.number} analysis={a} base={base} scope={scope} />
+              ))}
+            </div>
+          )}
+        </Section>
       )}
     </ScreenFrame>
   )

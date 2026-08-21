@@ -39,6 +39,10 @@
 'use client'
 
 import { Money } from './money'
+import { Stat, StatRow } from './stat'
+import { runway, type RunwayResult } from '@/lib/runway'
+import { money } from '@/lib/format'
+import type { BilanResult } from '@/lib/types'
 import { useT } from '@/lib/i18n'
 import type { BooksKey } from '@/lib/dictionary'
 import type { FlowTotals } from '@/lib/analytique'
@@ -72,8 +76,26 @@ function hintKeys(journal: Journal | null): [BooksKey, BooksKey, BooksKey] {
   return ['run.hintUnknownIn', 'run.hintUnknownOut', 'run.hintUnknownNet']
 }
 
-export function RunFigures({ totals, journal }: { totals: FlowTotals; journal: Journal | null }) {
+export function RunFigures({
+  totals,
+  journal,
+  bilan,
+}: {
+  totals: FlowTotals
+  journal: Journal | null
+  /**
+   * The bilan payload, or undefined when the route refused or is in flight.
+   *
+   * The PAYLOAD and not the derived cash figure, because `runway()` has to be
+   * able to tell "this book keeps no balance sheet" (art. 957 al. 2, and the
+   * route refuses outright) from "the balance sheet has no trésorerie line".
+   * Those are two different sentences and passing a derived null collapsed them
+   * into the wrong one — see `lib/runway.ts`.
+   */
+  bilan: BilanResult | undefined
+}) {
   const t = useT()
+  const runwayResult = runway(bilan, totals)
   const [inHint, outHint, netHint] = hintKeys(journal)
   const figures: { key: string; label: string; value: string; hint: string }[] = [
     // The labels are the same for both regimes; the regime nuance rides in the
@@ -85,23 +107,35 @@ export function RunFigures({ totals, journal }: { totals: FlowTotals; journal: J
 
   return (
     <section aria-label={t('run.exerciceTotals')}>
-      <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3">
-        {/* Keyed on a STABLE id, not on the translated label: a React key that
-            changes with the language remounts the tile on a switch. */}
+      {/* `<StatRow>`/`<Stat>` since 2026-08-21, so this strip is the same object
+          every other headline figure in the app is. It was a hand-rolled copy of
+          the same grid; the only thing lost is the copy. Keyed on a STABLE id,
+          not on the translated label: a React key that changes with the language
+          remounts the tile on a switch. */}
+      <StatRow className="mb-2">
         {figures.map((f) => (
-          <div key={f.key} className="bg-card px-4 py-3">
-            <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              {f.label}
-            </dt>
-            {/* `<Money>` takes the STRING. Nothing on this row was parsed: each
-                value is `flowTotals`' exact centime sum rendered back out. */}
-            <dd className="mt-0.5 text-lg font-semibold text-foreground">
-              <Money value={f.value} />
-            </dd>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">{f.hint}</p>
-          </div>
+          <Stat
+            key={f.key}
+            caption={f.label}
+            /* `<Money>` takes the STRING. Nothing here was parsed: each value is
+               `flowTotals`' exact centime sum rendered back out. */
+            value={<Money value={f.value} bare />}
+            basis={f.hint}
+            emphasis={f.key === 'net'}
+          />
         ))}
-      </dl>
+        {/* ── THE RUNWAY, WHICH THIS COMPONENT USED TO SAY IT COULD NOT GIVE ──
+            The header below still records why it could not: `GET …/analytique`
+            serves no cash figure. That remains true and this is not a route
+            change — **the BILAN serves cash**, at `pos === 'tresorerie'`, for
+            the same book and the same exercice. `lib/runway.ts` does the
+            arithmetic and refuses in five distinct ways rather than dividing
+            blind; `<RunwayStat>` renders whichever refusal came back, in words.
+
+            A simplified book reaches none of this: its bilan route refuses
+            (art. 957 al. 2), so `cash` is null and the tile says so. */}
+        <RunwayStat result={runwayResult} />
+      </StatRow>
 
       <p className="mt-2 text-[12px] text-muted-foreground">
         {totals.months === 0 ? (
@@ -114,5 +148,53 @@ export function RunFigures({ totals, journal }: { totals: FlowTotals; journal: J
         )}
       </p>
     </section>
+  )
+}
+
+/**
+ * The runway tile, and its four refusals.
+ *
+ * ── IT NEVER RENDERS A NUMBER IT CANNOT DEFEND ────────────────────────────
+ * `runway()` returns a discriminated result and each branch is a sentence. The
+ * one that matters is `not_burning`: a book making money has no runway, and
+ * `cash / net` on a positive net produces a NEGATIVE month count — a figure
+ * that would read as "-14 months of cash" on a management screen.
+ *
+ * The month count is rounded to one decimal because it IS an estimate — a
+ * geometry rather than a figure, in `docs/frontend.md` §4bis's terms. The two
+ * exact strings it came from are printed beside it as the basis, so a reader
+ * can check the division rather than take it.
+ */
+function RunwayStat({ result }: { result: RunwayResult }) {
+  const t = useT()
+
+  if (result.kind === 'ok') {
+    return (
+      <Stat
+        caption={t('run.runway')}
+        value={t('run.runwayMonths', { n: result.months.toFixed(1) })}
+        basis={t('run.runwayBasis', {
+          cash: money(result.cash, ''),
+          burn: money(result.perMonth, ''),
+          n: result.over,
+        })}
+      />
+    )
+  }
+
+  const why: Record<Exclude<RunwayResult['kind'], 'ok'>, BooksKey> = {
+    no_bilan: 'run.runwayNoBilan',
+    no_cash_line: 'run.runwayNoCash',
+    no_months: 'run.runwayNoMonths',
+    not_burning: 'run.runwayNotBurning',
+  }
+  return (
+    <Stat
+      caption={t('run.runway')}
+      // An em dash: there is no figure. Never `0`, which would say the cash is
+      // gone — the one reading a reader must not be given by accident.
+      value={<span className="text-muted-foreground">—</span>}
+      basis={t(why[result.kind])}
+    />
   )
 }
