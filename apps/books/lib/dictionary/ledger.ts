@@ -43,6 +43,18 @@ export const en = {
   'ledger.colStatus': 'Status',
   'ledger.colNumber': '#',
 
+  // ── THE RESULT COUNT ─────────────────────────────────────────────────
+  // It counts the rows ON THIS PAGE and says so. `GET …/entries` serves no
+  // total and caps its answer, so "N of M" is a sentence this screen has no
+  // figure for — see the ledger page's own header. A second placeholder in any
+  // of these four is therefore a claim the wire cannot support, and
+  // `lib/count-honesty.test.ts` fails on one.
+  'ledger.countOne': '{n} entry on this page',
+  'ledger.countMany': '{n} entries on this page',
+  'ledger.riCountOne': '{n} movement on this page',
+  'ledger.riCountMany': '{n} movements on this page',
+  'ledger.countNotTotal': 'what this page loaded, not a count of the journal',
+
   'ledger.emptyFiltered': 'No entry matches these filters.',
   'ledger.emptyFilteredBody':
     'The book has entries; none of them satisfy every filter above at once.',
@@ -212,6 +224,12 @@ export const fr: Record<keyof typeof en, string> = {
   'ledger.colEvidence': 'Pièce',
   'ledger.colStatus': 'Statut',
   'ledger.colNumber': '#',
+
+  'ledger.countOne': '{n} écriture sur cette page',
+  'ledger.countMany': '{n} écritures sur cette page',
+  'ledger.riCountOne': '{n} mouvement sur cette page',
+  'ledger.riCountMany': '{n} mouvements sur cette page',
+  'ledger.countNotTotal': 'ce que cette page a chargé, et non un décompte du journal',
 
   'ledger.emptyFiltered': 'Aucune écriture ne correspond à ces filtres.',
   'ledger.emptyFilteredBody':

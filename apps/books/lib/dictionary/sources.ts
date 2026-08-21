@@ -18,6 +18,11 @@ export const en = {
     'This book has no accounts, which should not be possible — a chart is installed in the same transaction that creates a book.',
 
   'sources.title': 'Sources',
+  'sources.searchLabel': 'Search the register',
+  'sources.searchPlaceholder': 'name, type, book, method…',
+  'sources.searchEmpty': 'No source matches that search.',
+  'sources.searchEmptyBody':
+    'The search reads what this table shows: the name, the type and layer, the book, the import method, the cadence, the computed status, the ledger accounts and the freeform notes.',
   'sources.leadA':
     'Every channel money moves through: banks hold it, cards draw on banks, processors and SaaS spend sit on top. The risk this register exists for is a source that silently stops being imported — so',
   'sources.leadB': 'status is computed from cadence against the last import',
@@ -159,6 +164,11 @@ export const fr: Record<keyof typeof en, string> = {
     'Ce livre n’a aucun compte, ce qui ne devrait pas être possible — un plan comptable est installé dans la transaction même qui crée un livre.',
 
   'sources.title': 'Sources',
+  'sources.searchLabel': 'Rechercher dans le registre',
+  'sources.searchPlaceholder': 'nom, type, livre, méthode…',
+  'sources.searchEmpty': 'Aucune source ne correspond à cette recherche.',
+  'sources.searchEmptyBody':
+    'La recherche lit ce que ce tableau affiche : le nom, le type et la couche, le livre, la méthode d’import, la cadence, le statut calculé, les comptes du grand livre et les notes libres.',
   'sources.leadA':
     'Tous les canaux par lesquels l’argent transite : les banques le détiennent, les cartes tirent sur les banques, les processeurs et les dépenses SaaS se greffent au-dessus. Le risque pour lequel ce registre existe est celui d’une source dont l’import s’arrête silencieusement — donc',
   'sources.leadB': 'le statut est calculé d’après la cadence par rapport au dernier import',

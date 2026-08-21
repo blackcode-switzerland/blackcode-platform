@@ -91,6 +91,15 @@ export const en = {
 
   // ── <RulesPanel> ────────────────────────────────────────────────────────
   'rules.title': 'Recognition rules',
+  // ── THE SEARCH BOX ───────────────────────────────────────────────────
+  // The whole rules list is in hand, so "{n} of {total}" is a figure this
+  // screen actually has — unlike the ledger's count, which has no total on the
+  // wire. Both numbers are real here.
+  'rules.searchLabel': 'Search the rules',
+  'rules.searchPlaceholder': 'merchant, explanation, account…',
+  'rules.searchEmpty': 'No rule matches that search.',
+  'rules.searchEmptyBody':
+    'The search reads what this table shows: the merchant, the explanation and its note, the account, the origin, the source and the cadence. Nothing else is matched.',
   'rules.lead':
     'Inspectable data, not logic written into the app. The match key is the pair (source account, merchant) — never the merchant alone, so a familiar name on a source nobody tracks comes back to the list above rather than explaining itself.',
   'rules.colKey': 'Key: (source, merchant)',
@@ -214,6 +223,11 @@ export const fr: Record<keyof typeof en, string> = {
   'resolve.writeFirst': 'Écrivez d’abord l’explication — c’est elle qui est enregistrée.',
 
   'rules.title': 'Règles de reconnaissance',
+  'rules.searchLabel': 'Rechercher dans les règles',
+  'rules.searchPlaceholder': 'commerçant, explication, compte…',
+  'rules.searchEmpty': 'Aucune règle ne correspond à cette recherche.',
+  'rules.searchEmptyBody':
+    'La recherche lit ce que ce tableau affiche : le commerçant, l’explication et sa note, le compte, l’origine, la source et la cadence. Rien d’autre n’est comparé.',
   'rules.lead':
     'Des données inspectables, et non une logique écrite dans l’application. La clé de correspondance est le couple (compte source, commerçant) — jamais le commerçant seul, de sorte qu’un nom familier sur une source non suivie revient dans la liste ci-dessus au lieu de s’expliquer tout seul.',
   'rules.colKey': 'Clé : (source, commerçant)',

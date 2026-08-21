@@ -930,3 +930,77 @@ else that imports `apiSend`, under any alias. The test for which file something
 belongs in is one question: **does it touch `books.*`?** These do not.
 `useAccountWriteAt` exists because revoking a token needs a path known only when
 the row is clicked, and hooks cannot be called per row.
+
+## 11. Filtering a table, and counting what is on it (2026-08-21)
+
+Four of the mockup's controls landed on 2026-08-21 —
+`booksFrontend/MOCKUP-DIFF.md` lists them — and three of them are the same
+question wearing different clothes: **how do you say what a reader is looking
+at without claiming more than you know?**
+
+### 11.1 A search box writes to the URL and does not navigate
+
+`<TableSearch>` (`components/table-search.tsx`) sits over the recognition rules
+(`?rule=`) and the sources register (`?source=`). Both tables arrive whole —
+`GET …/rules` and `GET …/sources` serve their full list and neither takes a
+query — so the filter is arithmetic over rows in hand (`lib/search.ts`), not a
+request.
+
+Two decisions, both deliberate:
+
+- **The query goes in the URL**, like the ledger's `?account=` / `?status=` /
+  `?recognition=`. A filtered view is then linkable and a reload shows the same
+  thing. The parameter is named after its table, never `q`: `/sources` already
+  renders two tables and a bare `q` would be ambiguous the day the chart of
+  accounts grows one.
+- **It is `history.replaceState`, not `router.replace`.** The ledger's filters
+  change what the SERVER is asked for, so setting one is a navigation. These do
+  not, so a `router.replace` per keystroke would put an RSC round-trip behind
+  every letter for an answer it cannot give. The consequence is stated rather
+  than hidden: **Back leaves the screen; it does not undo the search.** Clearing
+  is the ✕.
+
+Which fields are searched is a VALUE (`ruleFields`, `sourceFields`), not a walk
+over the object, and `lib/search.test.ts` asserts each rendered column by name.
+A search that quietly reads fewer fields than the table shows returns a short
+list with nothing on screen to explain it.
+
+### 11.2 The ledger's count says "on this page", because that is all it knows
+
+`GET …/entries` serves `{ data, next_cursor }` with **no total of any kind**,
+and `listEntries` caps at `limit ?? 100` (clamped to 500) while the ledger sends
+no `limit`. So a book with more than a hundred écritures is served a hundred and
+nothing on the wire says so.
+
+The mockup's `f-count` prints `rows.length + ' entries'` and is honest there
+because that page holds the whole journal in an array. Here the only true
+sentence is about the page, so it is `11 entries on this page`, with the caveat
+printed beside it. `lib/count-honesty.test.ts` fails if any of those four
+strings grows a second placeholder in either language — a second number would be
+one nobody has.
+
+**A total is a backend ask**, and worth one: a silently truncated ledger is
+exactly the kind of confident short answer this app keeps finding in its own
+history. The rules and sources searches DO say "N of M", and legitimately —
+their list is complete in memory.
+
+### 11.3 An absent value and a derived zero are different claims
+
+`PieceExtraction.confidence` is optional and the pièces inbox now prints it on
+every row. `confidence()` in `lib/format.ts` is the one place that decides how:
+an em dash when nothing was reported (carrying a `title` that says so), `0%`
+only for a zero the extractor actually claimed. Every one of the 1430 pièces in
+the local database carries a confidence, which is precisely why a `?? 0` here
+would have shipped green.
+
+Same rule as `percent()` one function up, and the same rule `<SourceRegister>`
+follows when it prints "not attributed" instead of a blank cell.
+
+### 11.4 The cost chart's tooltip is a `title`, and it is on the track
+
+`<CostBreakdown>` draws no bar for a zero bucket, on purpose — so the tooltip
+hangs on the TRACK, which every row has, and a zero bucket says its zero in
+words. A native `title` rather than the mockup's floating `ch-tip` layer: it
+needs no pointer maths and it cannot widen the page, and the one hard layout
+rule here is that nothing scrolls horizontally. Checked at 390px on all five
+screens.

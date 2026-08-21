@@ -51,9 +51,12 @@ import { scopedHref } from '@/lib/nav'
 import { useLabel } from '@/lib/use-label'
 import { useT } from '@/lib/i18n'
 import { findTerm, useMeta } from '@/lib/hooks'
+import { filterRows, sourceFields } from '@/lib/search'
 import { DataTable, type Column } from './data-table'
 import { DateText } from './date-text'
 import { TermChip } from './chips'
+import { EmptyState } from './states'
+import { TableSearch, useTableSearch } from './table-search'
 import type { Source, SourceStatus } from '@/lib/types'
 
 /**
@@ -83,6 +86,21 @@ export function SourceRegister({
   const t = useT()
   const label = useLabel()
 
+  // `?source=` and not `?q=`: this screen carries TWO tables — the chart of
+  // accounts above and this register — so a bare `q` would be ambiguous the day
+  // the chart grows one of its own.
+  const [query, setQuery] = useTableSearch('source')
+  const shown = useMemo(
+    () => filterRows(sources, query, (s) => sourceFields(s, label)),
+    [sources, query, label]
+  )
+
+  // ── COUNTED OVER THE WHOLE REGISTER, NEVER OVER THE SEARCH ──────────────
+  // The banner's job is "do I have everything?", and a search is a question
+  // about this reader's attention rather than about the account. Filtering it
+  // would let a query hide a stale source — the one row this register exists
+  // to surface — and the banner would say nothing while looking like it had
+  // checked. Same reason the register is not filtered by book.
   const problems = useMemo(
     () => (sources ?? []).filter((s) => NEEDS_ATTENTION.includes(s.status)),
     [sources]
@@ -226,23 +244,46 @@ export function SourceRegister({
         </div>
       )}
 
+      {sources && sources.length > 0 && (
+        <div className="mb-3">
+          <TableSearch
+            param="source"
+            label={t('sources.searchLabel')}
+            placeholder={t('sources.searchPlaceholder')}
+            value={query}
+            onChange={setQuery}
+            matches={{ shown: shown?.length ?? 0, total: sources.length }}
+          />
+        </div>
+      )}
+
       <DataTable
-        rows={sources}
+        rows={shown}
         columns={columns}
         rowKey={(s) => s.number}
         isLoading={isLoading}
         error={error}
         initialSort={{ key: 'name', direction: 'asc' }}
-        empty={t('sources.registerEmpty')}
+        empty={
+          // "No sources are provisioned" over a table the reader just filtered
+          // to nothing would be a false statement about the account.
+          query.trim() !== '' ? (
+            <EmptyState title={t('sources.searchEmpty')}>
+              <p>{t('sources.searchEmptyBody')}</p>
+            </EmptyState>
+          ) : (
+            t('sources.registerEmpty')
+          )
+        }
       />
 
       {/* Freeform notes are the reason each source has its own page. Shown as a
           pointer, not inlined: they run to several sentences and would make the
           index unreadable. */}
-      {sources && sources.some((s) => s.notes_freeform) && (
+      {shown && shown.some((s) => s.notes_freeform) && (
         <p className="mt-2 text-[11.5px] text-muted-foreground">
           {t('sources.freeformNote', {
-            n: sources.filter((s) => label(s.notes_freeform)).length,
+            n: shown.filter((s) => label(s.notes_freeform)).length,
           })}
         </p>
       )}

@@ -258,3 +258,36 @@ export function percent(rate: string | number | null | undefined): string {
   const trimmed = t.includes('.') ? t.replace(/0+$/, '').replace(/\.$/, '') : t
   return `${trimmed === '' || trimmed === '-' ? '0' : trimmed}%`
 }
+
+/**
+ * The extractor's confidence in a pièce, as a percentage — or an em dash.
+ *
+ * ===========================================================================
+ * ABSENT AND ZERO ARE DIFFERENT CLAIMS AND MUST NOT LOOK ALIKE
+ * ===========================================================================
+ * `PieceExtraction.confidence` is OPTIONAL: the worker may report a number and
+ * may report nothing, and the seeded rows do both. `0` means *the extractor read
+ * this document and trusts none of it*; `undefined` means *nobody asked, or an
+ * older pipeline delivered it*. A screen that renders both as `0%` tells the
+ * reader the pipeline distrusts a document nothing has judged, and — because
+ * this column is one of the things a person triages the inbox by — that is a
+ * judgment invented on the display path.
+ *
+ * So an absent value is an em dash, the same mark `money()` and `percent()` use
+ * for a value that is not there, and a present `0` is `0%`. This is the same
+ * rule `percent()` above states from the other direction ("a rate this function
+ * does not recognise must look absent, never render as 0%").
+ *
+ * ── THE WIRE SENDS A JSON NUMBER IN 0…1, AND IT IS NOT MONEY ──────────────
+ * `extraction` is `jsonb`, so this is a float rather than a `numeric` string,
+ * and `Math.round` is fine on it: a confidence is not a figure in anybody's
+ * books, nothing is derived from it, and it is displayed to two significant
+ * digits. `lib/format.ts`'s no-`Number()` rule is about the MONEY path.
+ * A value outside 0…1 is not a confidence this app knows how to print, so it is
+ * an em dash rather than a percentage over 100.
+ */
+export function confidence(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—'
+  if (!Number.isFinite(value) || value < 0 || value > 1) return '—'
+  return `${Math.round(value * 100)}%`
+}

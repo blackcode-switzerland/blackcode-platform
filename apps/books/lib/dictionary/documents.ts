@@ -52,6 +52,12 @@ export const en = {
   'inbox.ticket': 'Ticket',
   'inbox.paidBy': 'Paid by',
   'inbox.confidence': 'Extractor confidence',
+  'inbox.confidenceShort': 'Confidence',
+  // The title on an ABSENT confidence. It has to say what the em dash means,
+  // because an absent confidence and a confidence of zero are different claims
+  // about the same document — see `confidence()` in `lib/format.ts`.
+  'inbox.confidenceAbsent':
+    'The extractor reported no confidence for this document. That is not the same as a confidence of zero.',
   'inbox.lines': 'Lines',
   'inbox.noLines':
     'None. The document carries a total with nothing itemised behind it — a card slip rather than a receipt. That is why the sum check below cannot pass.',
@@ -156,6 +162,9 @@ export const fr: Record<keyof typeof en, string> = {
   'inbox.ticket': 'Ticket',
   'inbox.paidBy': 'Payé par',
   'inbox.confidence': 'Confiance de l’extracteur',
+  'inbox.confidenceShort': 'Confiance',
+  'inbox.confidenceAbsent':
+    'L’extracteur n’a indiqué aucune confiance pour ce document. Ce n’est pas la même chose qu’une confiance nulle.',
   'inbox.lines': 'Lignes',
   'inbox.noLines':
     'Aucune. La pièce porte un total sans rien de détaillé derrière — un ticket de carte plutôt qu’un reçu. C’est pourquoi le contrôle de la somme ci-dessous ne peut pas passer.',

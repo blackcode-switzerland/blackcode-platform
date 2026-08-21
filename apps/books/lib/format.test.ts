@@ -22,7 +22,7 @@
 // the others green.
 
 import { describe, expect, it } from 'vitest'
-import { date, group, money, percent } from './format'
+import { confidence, date, group, money, percent } from './format'
 
 /**
  * The implementation as it stood in commit `24a6dd4`, kept only so the fix can be
@@ -241,5 +241,49 @@ describe('percent', () => {
     expect(percent('eight')).toBe('—')
     expect(percent('8,1')).toBe('—')
     expect(percent('1e1')).toBe('—')
+  })
+})
+
+// ===========================================================================
+// AN ABSENT CONFIDENCE AND A ZERO CONFIDENCE ARE DIFFERENT CLAIMS
+// ===========================================================================
+// `PieceExtraction.confidence` is optional. The pièces inbox prints it on every
+// row, so this function decides — for every document in the workspace — whether
+// "nobody scored this" looks the same as "the extractor trusts none of it".
+// They must not. `percent()` states the same rule for a VAT rate one suite up,
+// and the reason is the same: a screen that renders an unknown as a zero has
+// invented a judgment on the display path.
+//
+// ── MUTATIONS WATCHED, 2026-08-21 ────────────────────────────────────────
+//   a) `if (value === null || value === undefined) return '0%'`
+//        → "an absent confidence is an em dash" red on undefined AND on null.
+//   b) the `value < 0 || value > 1` guard removed
+//        → "a value outside 0…1 is not a confidence" red (1.5 rendered 150%).
+//   c) `Math.round` → `Math.floor`
+//        → "it rounds to whole percent" red on 0.965.
+describe('confidence — the absent one is not a zero', () => {
+  it('an absent confidence is an em dash', () => {
+    expect(confidence(undefined)).toBe('—')
+    expect(confidence(null)).toBe('—')
+  })
+
+  it('a REPORTED zero is 0%, because the extractor said so', () => {
+    // The pair that matters. If this and the case above ever render the same
+    // string, the inbox is claiming the pipeline distrusts every document
+    // nobody scored.
+    expect(confidence(0)).toBe('0%')
+    expect(confidence(0)).not.toBe(confidence(undefined))
+  })
+
+  it('rounds to whole percent', () => {
+    expect(confidence(0.96)).toBe('96%')
+    expect(confidence(0.965)).toBe('97%')
+    expect(confidence(1)).toBe('100%')
+  })
+
+  it('a value outside 0…1 is not a confidence this app knows how to print', () => {
+    expect(confidence(1.5)).toBe('—')
+    expect(confidence(-0.2)).toBe('—')
+    expect(confidence(NaN)).toBe('—')
   })
 })

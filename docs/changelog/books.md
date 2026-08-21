@@ -32,6 +32,39 @@ app. `bk changelog --app books` filters to this file.
 > reading `bk changelog --app books` is not left believing this app began at
 > phase 3.
 
+## 2026-08-21 — four mockup controls land on the web: two search boxes, a result count that will not claim a total, the extractor's confidence, and a tooltip on the cost chart
+
+**Web UI only. No route changed, no payload changed, no `bk` command changed** —
+every one of these filters, counts or formats data the routes already serve, so
+there is nothing new for an agent to call.
+
+- **Search over the recognition rules and over the sources register.** Both
+  tables are served whole (`GET …/rules`, `GET …/sources`), so the box filters
+  rows already in hand. The query is written into the URL — `?rule=` on
+  `/recognition`, `?source=` on `/sources` — so a filtered view is linkable and
+  survives a reload. It uses `history.replaceState`, which means **Back leaves
+  the screen rather than undoing the search**; clearing is the ✕. It reads every
+  column the table shows, in the reader's language: searching `loyer` in French
+  finds the rule whose French explanation says so.
+- **A result count on the ledger — and it says "on this page".** `GET …/entries`
+  serves no total and caps its answer at 100 rows (the route accepts `?limit=`,
+  clamped to 500; the web page sends none). So the line reads `11 entries on this
+  page — what this page loaded, not a count of the journal`, and never "N of M".
+  **A book with more than a hundred écritures is already being served a short
+  list, in the web UI and in `bk books entry list` alike, with nothing saying so.
+  If you need the whole journal, pass `--limit`.** Serving a real total is an
+  open backend request.
+- **The extractor's confidence is on every row of the pièces inbox**, and an
+  absent one renders as an em dash, never as `0%`. The field is optional: `0`
+  means the extractor read the document and trusts none of it, and nothing
+  reported means nobody scored it. Those are different claims and this screen no
+  longer draws them the same. The detail panel's row is now always shown too,
+  where it used to disappear.
+- **A tooltip on the management screen's cost chart**, carrying the category, the
+  amount and its share. It sits on the bar's track rather than on the bar, so a
+  zero bucket — which deliberately draws no mark — has one too and says its zero
+  in words.
+
 ## 2026-08-20 — books' help and guide topics name `bk meta --app-server books`, and there is deliberately no `bk books meta`
 
 **Not breaking.** Documentation and help text only; no route, payload or command

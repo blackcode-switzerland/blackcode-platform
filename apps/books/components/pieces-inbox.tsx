@@ -49,7 +49,7 @@ import { transactionOf } from '@/lib/hooks'
 import { scopedHref } from '@/lib/nav'
 import { useLabel } from '@/lib/use-label'
 import { useT } from '@/lib/i18n'
-import { money } from '@/lib/format'
+import { confidence, money } from '@/lib/format'
 import { DateText } from './date-text'
 import { Money } from './money'
 import { EmptyState } from './states'
@@ -185,6 +185,28 @@ function PieceRow({
               </span>
             )}
             <span>{piece.document_type}</span>
+            {/* ── THE EXTRACTOR'S CONFIDENCE, AND ITS ABSENCE ──────────────
+                `PieceExtraction.confidence` is OPTIONAL, so this cell has
+                three states and not two: a number, a genuine zero, and nothing
+                reported at all. `confidence()` in `lib/format.ts` is the one
+                place that decides how each looks — an em dash for the absent
+                one, `0%` only for a zero the worker actually claimed. A
+                document nobody scored must never read as one the pipeline
+                distrusts; the triage this row exists for is done by eye, and
+                the two would be the same glyph.
+
+                The em dash carries the explanation as a `title`, because an
+                em dash on its own is a shrug and this one has a meaning. */}
+            <span
+              data-confidence={piece.extraction.confidence ?? 'none'}
+              title={
+                piece.extraction.confidence === undefined
+                  ? t('inbox.confidenceAbsent')
+                  : undefined
+              }
+            >
+              {t('inbox.confidenceShort')} {confidence(piece.extraction.confidence)}
+            </span>
           </div>
 
           {/* ── THE TWO FLAGS, AS JUDGMENTS TO MAKE ────────────────────── */}
@@ -350,11 +372,18 @@ function PieceDetail({
         </Row>
         {tx?.ticket_number && <Row label={t('inbox.ticket')}>{tx.ticket_number}</Row>}
         {tx?.payment_method && <Row label={t('inbox.paidBy')}>{tx.payment_method}</Row>}
-        {typeof piece.extraction.confidence === 'number' && (
-          <Row label={t('inbox.confidence')}>
-            {Math.round(piece.extraction.confidence * 100)}%
-          </Row>
-        )}
+        {/* Always rendered, where it used to be hidden when absent. A row that
+            disappears says nothing; this one says which of the two absences it
+            is — see the summary line above and `confidence()`. */}
+        <Row label={t('inbox.confidence')}>
+          <span
+            title={
+              piece.extraction.confidence === undefined ? t('inbox.confidenceAbsent') : undefined
+            }
+          >
+            {confidence(piece.extraction.confidence)}
+          </span>
+        </Row>
       </dl>
 
       {/* ── THE LINES, AS THE WORKER READ THEM ────────────────────────── */}

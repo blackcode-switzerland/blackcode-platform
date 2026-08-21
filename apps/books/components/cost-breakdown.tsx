@@ -68,6 +68,7 @@ import { DateText } from './date-text'
 import { useLabel } from '@/lib/use-label'
 import { useT } from '@/lib/i18n'
 import { scopedHref } from '@/lib/nav'
+import { money } from '@/lib/format'
 import { accountsLabel, barLength, isZeroAmount, maxAmount, share } from '@/lib/analytique'
 import type { Journal } from '@/lib/journal'
 import type { AnalytiqueCategory } from '@/lib/types'
@@ -172,11 +173,40 @@ export function CostBreakdown({
                       identical to a small cost. The track carries a baseline and
                       the bar grows from it in the direction of the sign, so the
                       mark agrees with the figure printed beside it. */}
+                  {/* ── THE TOOLTIP SITS ON THE TRACK, NOT ON THE BAR ───────
+                      A zero bucket draws NO bar, deliberately (see the header:
+                      a 1px mark and no mark are the same pixel). Hanging the
+                      tooltip on the mark would therefore give every zero bucket
+                      nothing to hover — the rows most likely to make a reader
+                      ask "is this broken or is it really nothing?". The track
+                      is always there, so every row answers, and a zero says the
+                      zero in words rather than repeating the figure.
+
+                      A native `title` rather than the mockup's floating `ch-tip`
+                      layer: it needs no mouse-position maths, it cannot escape
+                      the viewport, and — the reason that decides it — it cannot
+                      widen the page. The one hard layout rule here is that
+                      nothing scrolls horizontally, and an absolutely-positioned
+                      tooltip measured against `window.innerWidth` is exactly
+                      what broke it once before.
+
+                      The amount goes through `money()`, off the wire string, so
+                      the tooltip and the figure beside it cannot disagree. */}
                   {(() => {
                     const len = barLength(c.amount, ceiling)
                     const negative = len < 0
+                    const name = label(c.label) || c.key
+                    const amount = money(c.amount)
+                    const tip = zero
+                      ? t('cost.barTipZero', { label: name, amount })
+                      : pct === null
+                        ? t('cost.barTipNoShare', { label: name, amount })
+                        : t('cost.barTip', { label: name, amount, pct })
                     return (
-                      <div className="relative h-2.5 w-full rounded-[3px] bg-secondary">
+                      <div
+                        className="relative h-2.5 w-full rounded-[3px] bg-secondary"
+                        title={tip}
+                      >
                         {negative && (
                           <span
                             className="absolute inset-y-0 left-1/2 w-px bg-border"

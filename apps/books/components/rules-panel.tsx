@@ -35,7 +35,7 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
 import { scopedHref } from '@/lib/nav'
@@ -45,9 +45,11 @@ import { useT } from '@/lib/i18n'
 import { ruleAmount } from '@/lib/format'
 import { useCanWrite, useCreateRule } from '@/lib/mutations'
 import { booksCacheFilter } from '@/lib/query-keys'
+import { filterRows, ruleFields } from '@/lib/search'
 import { DataTable, type Column } from './data-table'
 import { DateText } from './date-text'
 import { EmptyState } from './states'
+import { TableSearch, useTableSearch } from './table-search'
 import type { ReadScope } from '@/lib/hooks'
 import type { RecognitionRule } from '@/lib/types'
 
@@ -76,6 +78,11 @@ export function RulesPanel({
 }) {
   const t = useT()
   const label = useLabel()
+  // `?rule=` and not `?q=`: this page also carries the worklist, and a bare `q`
+  // is the parameter a second search would want. Naming it after its table
+  // means the day one is added the two do not collide silently.
+  const [query, setQuery] = useTableSearch('rule')
+  const shown = useMemo(() => filterRows(rules, query, (r) => ruleFields(r, label)), [rules, query, label])
   const columns: Column<RecognitionRule>[] = [
     {
       key: 'key',
@@ -227,18 +234,44 @@ export function RulesPanel({
         {t('rules.lead')}
       </p>
 
+      {/* The box is offered only once there is a table to search. Over an empty
+          list, a loading skeleton or an error it would be a control that cannot
+          do anything — and typing into it would replace the reason the table is
+          empty with "no rule matches that search", which is a different and
+          wrong explanation. */}
+      {rules && rules.length > 0 && (
+        <div className="mt-3">
+          <TableSearch
+            param="rule"
+            label={t('rules.searchLabel')}
+            placeholder={t('rules.searchPlaceholder')}
+            value={query}
+            onChange={setQuery}
+            matches={{ shown: shown?.length ?? 0, total: rules.length }}
+          />
+        </div>
+      )}
+
       <div className="mt-3">
         <DataTable
-          rows={rules}
+          rows={shown}
           columns={columns}
           rowKey={(r) => r.number}
           isLoading={isLoading}
           error={error}
           initialSort={{ key: 'key', direction: 'asc' }}
           empty={
-            <EmptyState title={t('rules.emptyTitle')}>
-              <p>{t('rules.emptyBody')}</p>
-            </EmptyState>
+            // Which emptiness it is. "No rules yet" over a table the READER
+            // just filtered to nothing would blame the book for the search.
+            query.trim() !== '' ? (
+              <EmptyState title={t('rules.searchEmpty')}>
+                <p>{t('rules.searchEmptyBody')}</p>
+              </EmptyState>
+            ) : (
+              <EmptyState title={t('rules.emptyTitle')}>
+                <p>{t('rules.emptyBody')}</p>
+              </EmptyState>
+            )
           }
         />
       </div>

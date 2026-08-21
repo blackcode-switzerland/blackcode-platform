@@ -125,6 +125,11 @@ export const en = {
   'piece.document': 'Document',
   'piece.noChecksum': 'no checksum',
   'table.nothingHere': 'Nothing here yet.',
+  // `<TableSearch>`'s own chrome — shared by every table that grows a search
+  // box, so the two screens that have one cannot word the same control
+  // differently. What is SEARCHED stays with each table.
+  'table.clearSearch': 'Clear the search',
+  'table.searchMatches': '{n} of {total} shown',
   'dashboard.notSetUp': 'Your account is not set up yet',
   'dashboard.notSetUpBody':
     'Signing in should have finished setting up your account. It is best-effort and idempotent, so signing out and back in retries it.',
@@ -226,6 +231,8 @@ export const fr: Record<keyof typeof en, string> = {
   'piece.document': 'Document',
   'piece.noChecksum': 'aucune empreinte',
   'table.nothingHere': 'Rien pour l’instant.',
+  'table.clearSearch': 'Effacer la recherche',
+  'table.searchMatches': '{n} sur {total} affichées',
   'dashboard.notSetUp': 'Votre compte n’est pas encore configuré',
   'dashboard.notSetUpBody':
     'La connexion aurait dû achever la configuration de votre compte. L’opération est au mieux et idempotente : vous déconnecter puis vous reconnecter la relance.',

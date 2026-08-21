@@ -92,6 +92,14 @@ export const en = {
   'cost.hide': 'Hide',
   'cost.detail': 'Detail',
   'cost.total': 'Total, categorised charges',
+  // ── THE BAR'S TOOLTIP ────────────────────────────────────────────────
+  // It sits on the TRACK, not on the bar, so a zero bucket — which draws no
+  // mark, deliberately — still has one. `cost.barTipZero` is what that bucket
+  // says, and it says the zero rather than leaving the reader hovering a bar
+  // that is not there.
+  'cost.barTip': '{label} — {amount}, {pct}% of categorised charges',
+  'cost.barTipNoShare': '{label} — {amount}',
+  'cost.barTipZero': '{label} — {amount}. Nothing was posted to it in this exercice.',
 
   // ── the analyses journal ────────────────────────────────────────────────
   'analyses.uiName': 'What your agents were asked',
@@ -232,6 +240,9 @@ export const fr: Record<keyof typeof en, string> = {
   'cost.hide': 'Masquer',
   'cost.detail': 'Détail',
   'cost.total': 'Total des charges catégorisées',
+  'cost.barTip': '{label} — {amount}, {pct}% des charges catégorisées',
+  'cost.barTipNoShare': '{label} — {amount}',
+  'cost.barTipZero': '{label} — {amount}. Rien n’y a été comptabilisé dans cet exercice.',
 
   'analyses.uiName': 'Ce que vos agents ont été chargés d’examiner',
   'analyses.legalName': 'Analyses',

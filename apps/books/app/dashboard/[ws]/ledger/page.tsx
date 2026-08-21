@@ -93,6 +93,55 @@ import type { Entry, RiEntry } from '@/lib/types'
 import type { BooksKey } from '@/lib/dictionary'
 
 /**
+ * The result count — "N entries on this page", and never "N of M".
+ *
+ * ===========================================================================
+ * THERE IS NO TOTAL ON THE WIRE, AND THE LIST IS CAPPED
+ * ===========================================================================
+ * The mockup's `f-count` prints `rows.length + ' entries'` and it is honest
+ * there because that mockup holds the whole journal in a JavaScript array. This
+ * screen does not:
+ *
+ *   · `GET …/entries` answers `{ data, next_cursor }` with `next_cursor` always
+ *     null, and **no count of any kind**. Nothing on the wire says how many
+ *     écritures the exercice has.
+ *   · `listEntries` caps at `limit ?? 100`, clamped to 500. This page sends no
+ *     `limit`, so a book with more than a hundred écritures is served a hundred
+ *     — the demo workspace has 115. The rows are real; the LIST is short.
+ *
+ * So the only true sentence available is about this page. `{n} entries on this
+ * page`, with the caveat printed beside it rather than left implied — a bare
+ * `115 entries` under a filter bar reads as a total to every reader who has
+ * ever seen one, which is the confident-wrong-answer shape this app keeps
+ * finding in its own history.
+ *
+ * **The count is taken from the rows the table was handed**, so it can never
+ * disagree with what is on screen — the same reason `<RulesPanel>` counts its
+ * own rows and the recognition screen does not.
+ *
+ * Serving a total is a backend ask, and it is one: a truncated ledger with
+ * nothing to say so is worth a route change. Until then this line is the
+ * honest half of it.
+ */
+function ResultCount({ n, journal }: { n: number; journal: Journal }) {
+  const t = useT()
+  const key: BooksKey =
+    journal === 'grand_livre'
+      ? n === 1
+        ? 'ledger.countOne'
+        : 'ledger.countMany'
+      : n === 1
+        ? 'ledger.riCountOne'
+        : 'ledger.riCountMany'
+  return (
+    <p className="mt-2 text-[11.5px] text-muted-foreground" data-result-count={n}>
+      <span className="text-foreground">{t(key, { n })}</span>{' '}
+      <span>— {t('ledger.countNotTotal')}</span>
+    </p>
+  )
+}
+
+/**
  * The reader-facing name of each filter, for the "this was dropped" sentence.
  *
  * The URL keys stay `account` / `status` / `recognition` — they are the route's
@@ -394,30 +443,33 @@ function GrandLivre({
   )
 
   return (
-    <DataTable
-      rows={rows}
-      columns={columns}
-      rowKey={(e) => e.number}
-      isLoading={isLoading}
-      error={error}
-      initialSort={{ key: 'date', direction: 'asc' }}
-      empty={
-        filtered ? (
-          <EmptyState title={t('ledger.emptyFiltered')}>
-            <p>{t('ledger.emptyFilteredBody')}</p>
-          </EmptyState>
-        ) : (
-          <EmptyState title={t('ledger.empty')}>
-            <p>
-              {t('ledger.emptyBody', {
-                book: scope.record?.name ?? t('rec.thisBook'),
-                year: scope.exercice ?? t('rec.thisYear'),
-              })}
-            </p>
-          </EmptyState>
-        )
-      }
-    />
+    <>
+      {rows && rows.length > 0 && <ResultCount n={rows.length} journal="grand_livre" />}
+      <DataTable
+        rows={rows}
+        columns={columns}
+        rowKey={(e) => e.number}
+        isLoading={isLoading}
+        error={error}
+        initialSort={{ key: 'date', direction: 'asc' }}
+        empty={
+          filtered ? (
+            <EmptyState title={t('ledger.emptyFiltered')}>
+              <p>{t('ledger.emptyFilteredBody')}</p>
+            </EmptyState>
+          ) : (
+            <EmptyState title={t('ledger.empty')}>
+              <p>
+                {t('ledger.emptyBody', {
+                  book: scope.record?.name ?? t('rec.thisBook'),
+                  year: scope.exercice ?? t('rec.thisYear'),
+                })}
+              </p>
+            </EmptyState>
+          )
+        }
+      />
+    </>
   )
 }
 
@@ -565,6 +617,7 @@ function RecettesDepenses({
 
   return (
     <>
+      {rows && rows.length > 0 && <ResultCount n={rows.length} journal="recettes_depenses" />}
       <DataTable
         rows={rows}
         columns={columns}
