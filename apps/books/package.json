@@ -9,6 +9,7 @@
     "postbuild": "node ./scripts/migrate-if-enabled.mjs",
     "start": "next start",
     "lint": "eslint . --ext .ts,.tsx",
+    "contrast": "node ./scripts/contrast.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",

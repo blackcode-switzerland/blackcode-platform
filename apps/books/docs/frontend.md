@@ -1004,3 +1004,138 @@ words. A native `title` rather than the mockup's floating `ch-tip` layer: it
 needs no pointer maths and it cannot widen the page, and the one hard layout
 rule here is that nothing scrolls horizontally. Checked at 390px on all five
 screens.
+
+---
+
+## 12. The design system (2026-08-21)
+
+**The whole web surface was re-laid-out over ten phases.** No figure changed, no
+route was retyped, and the per-page content inventories are in
+`booksFrontend/AfterDeploy/PLAN.md` §11. This section is what a next reader has
+to know before touching a screen.
+
+### 12.1 The ground is neutral. The amber is a mark
+
+`--background` and `--card` were both cream and three thousandths of a lightness
+step apart, so **the page and its content were one surface**. An accent needs
+something to be an accent against; with nothing to contrast, the amber had no job
+but to fill the screen, and a product whose entire purpose is reading figures was
+drawn on warm paper edge to edge.
+
+The palette is now the mockup's own light set — `#f7f8fb` ground, `#ffffff` card,
+`#e6e9ef` hairline — and its dark set. **The amber did not go anywhere.** Where it
+is allowed is written at `--sidebar` in `app/globals.css`: the nav rail, the
+active item, the entity chip, the focus ring, the section eyebrow, and a figure
+the page is about. It never fills a page again.
+
+**One of the mockup's values is deliberately NOT adopted.** Its `--pt-text-mute`
+(`#8893a5`) measures 2.92:1 and fails AA outright — it carries tiny captions in a
+mockup nobody audited, and here it would carry every label on every screen.
+`--muted-foreground` is `#656e82`.
+
+> **`npm run contrast` (from `apps/books`) re-measures every token pair, both
+> themes, from the stylesheet itself.** Run it after touching any colour. It parses the values out
+> of `globals.css` rather than restating them, so it cannot drift from what
+> shipped, and it exits non-zero on a failure.
+
+### 12.2 A figure is set in a different typeface from the prose
+
+IBM Plex Mono, 400/500, on every amount, entry number, account number, date and
+checksum. Google Sans stays the UI face (D-K), so the chrome keeps the platform's
+family resemblance with issues and sales and the split of meaning lands entirely
+on the figures.
+
+`.num` (a column: mono, tabular, right-aligned, size-compensated) and `.figure`
+(a figure not in a column: the same face, **no size**) are in `globals.css`.
+`<Money>` carries `.figure` and renders inside `.num` cells — setting a size on
+both compounds to 0.879em on every amount in every table.
+
+### 12.3 Four badge levels, and level 4 is not a badge
+
+| Level | Drawn as | What earns it |
+|---|---|---|
+| 1 · State | filled, SERVED colour | what the row IS — recognition, evidence tier, entry status |
+| 2 · Identity | outline, the book's accent | which book, which legal form |
+| 3 · Qualifier | quiet, no colour — `<Badge>` | a true fact that is not the row's state |
+| 4 · Attention | **a 3px leading rule on the row** | the row needs a human |
+
+**Level 4 is deliberately not a badge.** Badges say what a row is; a chip reading
+"needs a human" lands in a line of other chips where it has to be read like the
+rest of them. As a rule on the row's leading edge it is visible in peripheral
+vision, so the shape of the outstanding work is legible before a word is.
+
+It is an inset box-shadow, not a `border-left`: a border changes the cell's box
+and shifts every marked row 3px out of alignment with its neighbours, which turns
+a signal into a rendering fault. In a table of money a column that does not line
+up is the one thing that must never happen.
+
+**Caps: one level-1 badge and at most two level-3 chips per row.** No guard
+enforces it; it is a review question, and the busiest row of each screen is where
+to ask it.
+
+### 12.4 Three surfaces, and there is no fourth
+
+Ground (`--background`, nothing sits *at* it) · raised (`--card` + hairline,
+every section, the default) · marked (raised + a 3px accent rule, **the one thing
+on the page that is different**). `--muted` is a RECESS — table heads, inline
+code, raw bank labels — not a fourth surface.
+
+**A screen with two marked blocks has one too many.** On the transaction page the
+single marked block is Posting, because that is the one act that leaves ring 2
+and freezes a record for ten years.
+
+### 12.5 The primitives
+
+`components/section.tsx` (`<PageShell>`, `<Grid>`, `<Section>`, `<Surface>`),
+`page-header.tsx`, `stat.tsx`, `field.tsx`, `badge.tsx`. `<DataTable>` gained
+`attention`, `rowAttrs`, `footer`, a sticky recessed head and `py-2` rows.
+
+Three things about them that are load-bearing:
+
+- **`<Grid>` uses `items-start`.** Grid items stretch to the row height by
+  default, which drew a three-line answer as a 600px card with 500px of empty
+  white under it — content that is short reading as content that failed to load.
+- **`<StatRow>` is auto-fit, not a fixed column count.** A fixed four left an
+  empty cell on any three-stat row, and because the gaps are the container
+  showing through it rendered as a grey block — which on an accounting screen is
+  the worst thing a blank can be mistaken for.
+- **`SPAN` in `section.tsx` is an enumerated map, never a template string.**
+  Tailwind generates classes by scanning source: `lg:col-span-${n}` produces no
+  CSS at all and fails silently. Same mechanism as the `@source` directive.
+
+### 12.6 Derived figures live in tested modules
+
+Three landed with this work, all in bigint centimes, all with the mutations
+recorded in their test files:
+
+| Module | What |
+|---|---|
+| `lib/ledger-totals.ts` | RI totals by direction, an account's movement across the listed entries, one écriture's magnitude |
+| `lib/runway.ts` | cash off the bilan's `tresorerie` line, and how long it lasts |
+| `lib/rollup.ts`, `lib/analytique.ts` | the existing two, unchanged |
+
+**`lib/runway.ts` is the one to read before writing another.** A runway is a
+division and a division is where a screen invents a number, so it returns a
+discriminated result — `no_bilan`, `no_cash_line`, `no_months`, `not_burning`,
+`ok` — and the screen renders whichever refusal came back, in words. `cash / net`
+on a profitable book yields a NEGATIVE month count, and "−14 months of cash" is
+the most confidently wrong thing that screen could print.
+
+It also carries two lessons in its own test file: one mutation that does NOT go
+red (two guards overlap on a single value, so the assertion for it is inert — and
+that is recorded rather than hidden), and `no_bilan`, which was **declared and
+unreachable** while the branch beside it said the wrong thing in its place. Found
+by opening the RI book, not by a test.
+
+### 12.7 What the sweep checks, and what it cannot
+
+`/tmp` scripts are not committed, but the shape is worth keeping: 25 screens ×
+3 widths × 2 themes = 150 renders, asserting the platform's one hard layout rule
+(the page never scrolls horizontally) and naming the offending element when it
+does. It was watched to go red against a deliberately-wide element before being
+believed.
+
+**It cannot see whether a screen is right** — only whether it overflows, renders
+blank, or logs an unexplained error. Everything in §11's inventories was ticked
+by a person looking at the running app, and that is still the only check this
+repo has that can see a page.
