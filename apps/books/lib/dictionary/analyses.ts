@@ -128,6 +128,9 @@ export const en = {
   'analyses.emptyBody':
     'Ask your agent — Companion, or Claude Code, outside this app — and its answer lands here as a record. There is no way to write one from this screen, deliberately: the answer and the figures it rested on are filed together by whoever produced them.',
   'analyses.askedBy': 'asked by {who}',
+  'analyses.runwayAfterLabel': 'Runway after',
+  'analyses.runwayMonths': '{n} mo',
+  'analyses.inputsLabel': 'Inputs',
   'analyses.runwayAfter': 'runway after: {n} months',
   'analyses.inputsOne': '{n} recorded input',
   'analyses.inputsMany': '{n} recorded inputs',
@@ -280,6 +283,9 @@ export const fr: Record<keyof typeof en, string> = {
   'analyses.emptyBody':
     'Interrogez votre agent — Companion, ou Claude Code, hors de cette application — et sa réponse arrive ici sous forme d’enregistrement. Il n’y a délibérément aucun moyen d’en rédiger une depuis cet écran : la réponse et les chiffres sur lesquels elle reposait sont déposés ensemble par qui les a produits.',
   'analyses.askedBy': 'demandé par {who}',
+  'analyses.runwayAfterLabel': 'Autonomie après',
+  'analyses.runwayMonths': '{n} mois',
+  'analyses.inputsLabel': 'Entrées',
   'analyses.runwayAfter': 'autonomie après : {n} mois',
   'analyses.inputsOne': '{n} donnée enregistrée',
   'analyses.inputsMany': '{n} données enregistrées',

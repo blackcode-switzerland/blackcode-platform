@@ -137,7 +137,7 @@ export function RunFigures({
         <RunwayStat result={runwayResult} />
       </StatRow>
 
-      <p className="mt-2 text-[12px] text-muted-foreground">
+      <p className="mt-2 max-w-[95ch] px-1 text-[12px] leading-relaxed text-muted-foreground">
         {totals.months === 0 ? (
           t('run.emptyYear')
         ) : (

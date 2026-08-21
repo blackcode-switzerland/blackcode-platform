@@ -1056,8 +1056,27 @@ both compounds to 0.879em on every amount in every table.
 |---|---|---|
 | 1 · State | filled, SERVED colour | what the row IS — recognition, evidence tier, entry status |
 | 2 · Identity | outline, the book's accent | which book, which legal form |
+| 1b · Closed state | `<StateChip>`, green or destructive | a BOOLEAN with a good and a bad side |
 | 3 · Qualifier | quiet, no colour — `<Badge>` | a true fact that is not the row's state |
 | 4 · Attention | **a 3px leading rule on the row** | the row needs a human |
+
+**Level 1b is not an exception to the served-colour rule; it is the other half of
+it.** No vocabulary colour is ever spelled in this app, because a state added on
+the server must render with no frontend release. But `bilan.balanced` and
+`entity.vat.registered` are booleans — two states, and the server cannot grow a
+third without changing the type, at which point `tsc` says so.
+
+**The test before reaching for it: could the server add a third value?** If yes
+it is a vocabulary and the colour is served. If it cannot, it is a boolean and
+`--success` / `--destructive` are how it is drawn.
+
+This is what the plain screens were missing. The ledger and recognition look
+alive because they render five served vocabularies; the overview and the
+management view hold none, so every fact on them was grey prose — including "this
+balance sheet balances", which is the single thing the bilan exists to let
+somebody verify. **Colour follows meaning here, and where a screen has no state
+to report it gets STRUCTURE instead** — mono figures, qualifier chips, a card
+surface — rather than decoration standing in for a signal.
 
 **Level 4 is deliberately not a badge.** Badges say what a row is; a chip reading
 "needs a human" lands in a line of other chips where it has to be read like the

@@ -182,9 +182,33 @@
   --accent: #e8ebf2;
   --accent-foreground: #1a1f2e;
 
-  /* Feedback */
+  /* Feedback.
+
+     ── `--success` IS FOR A CLOSED BOOLEAN, AND NOTHING ELSE (2026-08-21) ───
+     This app has a hard rule that a vocabulary colour comes from `/api/meta`
+     with the value it belongs to, never from CSS — because a state added on the
+     server must render correctly with no frontend release, and a `switch` here
+     is a second copy nobody keeps in sync (`components/chips.tsx`).
+
+     That rule is about OPEN vocabularies. `bilan.balanced` and
+     `entity.vat.registered` are not vocabularies: they are booleans, they have
+     exactly two states, and the server cannot grow a third without changing
+     the type. A closed boolean may carry a semantic colour, and drawing one as
+     grey prose is why the screens that hold no served vocabulary — the overview,
+     the management view — read as colourless beside the ledger.
+
+     **The test before using this token: could the server add a third value?**
+     If yes it is a vocabulary and the colour is served. If it cannot, it is a
+     boolean and this is the colour.
+
+     `#0f6b46` is the deepest of the family the served green (#3fb27f) belongs
+     to, chosen because a chip is TEXT at a 15% tint and the served green
+     measures 2.10:1 there. Worst case 4.70:1 light, 5.54:1 dark — measured over
+     all three surfaces both as plain text and as a tinted chip.
+     `npm run contrast` re-checks it. */
   --destructive: oklch(0.55 0.21 27);
   --destructive-foreground: oklch(0.99 0 0);
+  --success: #0f6b46;
 
   /* Form chrome — a hairline, not a line. Every section is bounded by this and
      by nothing else; shadow is reserved for elevation 2. */
@@ -300,6 +324,8 @@
 
   --destructive: oklch(0.70 0.19 22);
   --destructive-foreground: oklch(0.985 0 0);
+  /* Lifted for the ink, the same way `--primary-strong` is. 5.54:1 worst. */
+  --success: #4cc38a;
 
   /* A real value, not a white overlay. An `oklch(1 0 0 / 10%)` hairline changes
      colour with whatever it happens to sit on, which is exactly what a hairline
@@ -347,6 +373,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

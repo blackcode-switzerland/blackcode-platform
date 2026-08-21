@@ -51,6 +51,57 @@ import type { ReactNode } from 'react'
 const SHAPE =
   'inline-flex items-center gap-1 rounded-full border px-2 py-[1px] text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap'
 
+/**
+ * `<StateChip>` — a CLOSED fact that has a good side and a bad side.
+ *
+ * ===========================================================================
+ * THIS IS NOT AN EXCEPTION TO THE SERVED-COLOUR RULE. IT IS THE OTHER HALF
+ * ===========================================================================
+ * `components/chips.tsx` says no vocabulary colour is ever spelled in this app,
+ * and it is right: recognition states, evidence tiers and source statuses arrive
+ * from `/api/meta` with their colours, so a value added on the server renders
+ * correctly with no frontend release. A `switch` here would be a second copy
+ * nobody keeps in sync, and it would go stale silently.
+ *
+ * **That rule is about OPEN vocabularies.** `bilan.balanced` and
+ * `entity.vat.registered` are booleans. They have exactly two states and the
+ * server cannot grow a third without changing the type — at which point `tsc`
+ * says so. Drawing them as grey prose is why the screens that happen to hold no
+ * served vocabulary read as colourless beside the ledger, which holds five.
+ *
+ * **The test before reaching for this: could the server add a third value?** If
+ * yes, it is a vocabulary — use `<VocabChip>` and let the colour be served. If
+ * it cannot, it is a boolean and this is how it is drawn.
+ *
+ * ── AND IT IS STILL A CHIP, NOT A BANNER ──────────────────────────────────
+ * Level 1 of the taxonomy above, at the same size and shape as every other. A
+ * balanced bilan is the ORDINARY case — the resting state of a correct set of
+ * books — so it is quiet green rather than a celebration, on exactly the
+ * reasoning `lib/compliance.ts` uses for `draft` being calm.
+ */
+export function StateChip({
+  tone,
+  children,
+  title,
+  className = '',
+}: {
+  /** `ok` and `bad` are the two sides of a boolean. Nothing else. */
+  tone: 'ok' | 'bad'
+  children: ReactNode
+  title?: string
+  className?: string
+}) {
+  const face =
+    tone === 'ok'
+      ? 'border-success/35 bg-success/10 text-success'
+      : 'border-destructive/35 bg-destructive/10 text-destructive'
+  return (
+    <span className={SHAPE + ' ' + face + ' ' + className} title={title}>
+      {children}
+    </span>
+  )
+}
+
 export function Badge({
   children,
   title,

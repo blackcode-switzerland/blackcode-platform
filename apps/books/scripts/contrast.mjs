@@ -60,6 +60,7 @@ for (const [theme, block] of [['LIGHT', root], ['DARK', dark]]) {
   const fg = grab(block,'foreground'), bg = grab(block,'background'),
         card = grab(block,'card'), muted = grab(block,'muted'),
         mutedFg = grab(block,'muted-foreground'), strong = grab(block,'primary-strong'),
+        success = grab(block,'success'),
         chipMix = parseFloat(grab(block,'chip-mix'))/100
   console.log(`\n${theme}  bg ${bg} card ${card} muted ${muted} fg ${fg}  chip-mix ${Math.round(chipMix*100)}%`)
   const checks = [
@@ -70,12 +71,27 @@ for (const [theme, block] of [['LIGHT', root], ['DARK', dark]]) {
     ['--muted-foreground on --muted', mutedFg, muted, 4.5],
     ['--primary-strong on --background', strong, bg, 4.5],
     ['--primary-strong on --card',   strong, card, 4.5],
+    // `--success` is drawn BOTH as plain text and as a chip at a 15% tint of
+    // itself. The tint is the harsher of the two and is the case that chose the
+    // value — the served green (#3fb27f) measures 2.10:1 there and could not be
+    // reused. See the token's own note in globals.css.
+    ['--success on --card',          success, card, 4.5],
+    ['--success on --background',    success, bg, 4.5],
+    ['--success on --muted',         success, muted, 4.5],
   ]
   for (const [what, a, b, min] of checks) {
     const r = ratio(hex(a), hex(b)); const ok = r >= min
     if (!ok) fail++
     console.log(`  ${ok?'ok  ':'FAIL'} ${what.padEnd(38)} ${r.toFixed(2)}:1`)
   }
+  // The success chip, at its own 15% tint — the treatment `<StateChip>` uses.
+  {
+    const r = ratio(hex(success), over(hex(success), hex(muted), 0.15))
+    const ok = r >= 4.5
+    if (!ok) fail++
+    console.log(`  ${ok?'ok  ':'FAIL'} ${'--success as a chip on --muted'.padEnd(38)} ${r.toFixed(2)}:1`)
+  }
+
   let worst = Infinity, who = ''
   for (const c of SERVED) for (const [sn, s] of [['card',card],['page',bg],['muted',muted]]) {
     const r = ratio(mix(hex(c), hex(fg), chipMix), over(hex(c), hex(s), 0.15))

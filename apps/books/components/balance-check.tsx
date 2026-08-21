@@ -47,11 +47,20 @@ export function BalanceCheck({
   const t = useT()
   if (balanced) {
     return (
+      // ── THE ORDINARY CASE IS STILL WORTH DRAWING (2026-08-21) ────────────
+      // This was grey prose with a grey tick, which is what "a correct set of
+      // books" looked like: nothing. The bilan balancing is the single fact this
+      // whole screen exists to let somebody verify, and a reader who cannot see
+      // at a glance that it holds has to read the sentence to find out.
+      //
+      // Quiet green, not a celebration — `--success` is for a closed boolean and
+      // this is the closed boolean. The tone is the one `lib/compliance.ts` uses
+      // for `draft`: a resting state is calm, not loud.
       <p
-        className="mb-4 flex items-center gap-1.5 text-[12px] text-muted-foreground"
+        className="mb-4 flex items-center gap-1.5 rounded-lg border border-success/30 bg-success/[0.06] px-3 py-2 text-[12px] text-muted-foreground"
         data-balanced="true"
       >
-        <Check size={13} className="shrink-0" />
+        <Check size={13} className="shrink-0 text-success" />
         {/* ── THE AMOUNT IS INTERPOLATED AS TEXT, NOT AS `<Money>` ───────────
             The comment that stood here warned that a line break before the comma
             turns into a text node beginning with a space and prints

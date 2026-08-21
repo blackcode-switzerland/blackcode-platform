@@ -55,7 +55,7 @@ import { Money } from '@/components/money'
 import { PageHeader } from '@/components/page-header'
 import { PageShell, Grid, Section } from '@/components/section'
 import { Stat, StatRow } from '@/components/stat'
-import { Badge } from '@/components/badge'
+import { Badge, StateChip } from '@/components/badge'
 import { DataTable, type Column } from '@/components/data-table'
 import type { Entity } from '@/lib/types'
 import { useT } from '@/lib/i18n'
@@ -243,13 +243,25 @@ function BooksTable({ books, base }: { books: BookRow[]; base: string }) {
     {
       key: 'regime',
       header: t('facts.regime'),
-      cell: (b) => regimeLabel(b.entity, t),
+      // A `<Badge>` rather than a `<StateChip>`: the regime is neither good nor
+      // bad, and `bookkeeping_regime` is an OPEN value — this app already
+      // renders a third one raw when it meets it. A qualifier, per the taxonomy.
+      cell: (b) => <Badge>{regimeLabel(b.entity, t)}</Badge>,
       sortValue: (b) => b.entity.bookkeeping_regime,
     },
     {
       key: 'vat',
       header: t('facts.vat'),
-      cell: (b) => vatLabel(b.entity, t),
+      // `registered` is a BOOLEAN, not a vocabulary — the server cannot grow a
+      // third value without changing the type. See `<StateChip>`. Registered is
+      // the ok side because it is a live obligation being met; not-registered is
+      // not a failure, so it is the neutral chip rather than the bad one.
+      cell: (b) =>
+        b.entity.vat.registered ? (
+          <StateChip tone="ok">{vatLabel(b.entity, t)}</StateChip>
+        ) : (
+          <Badge>{vatLabel(b.entity, t)}</Badge>
+        ),
       sortValue: (b) => String(b.entity.vat.registered),
     },
     {
@@ -347,11 +359,15 @@ function DoubleEntryTable({
     {
       key: 'balance',
       header: t('overview.balance'),
+      // The clearest closed boolean in the product: a bilan balances or it does
+      // not, and there is no third answer. It was grey prose on the good side
+      // and red prose on the bad, which meant the ordinary case — a correct set
+      // of books — looked like every other cell on the row.
       cell: (b) =>
         b.row?.bilan ? (
-          <span className={b.row.bilan.balanced ? 'text-foreground' : 'font-medium text-destructive'}>
+          <StateChip tone={b.row.bilan.balanced ? 'ok' : 'bad'}>
             {b.row.bilan.balanced ? t('overview.balances') : t('overview.doesNotBalance')}
-          </span>
+          </StateChip>
         ) : (
           EMDASH
         ),

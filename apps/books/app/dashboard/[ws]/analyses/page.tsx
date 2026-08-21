@@ -53,6 +53,7 @@ import { speech } from '@/lib/label'
 import { analysisRows } from '@/lib/analysis'
 import { ScreenFrame } from '@/components/screen-frame'
 import { Section } from '@/components/section'
+import { Badge, FigureBadge } from '@/components/badge'
 import { EmptyState, ErrorState, Loading } from '@/components/states'
 import { StatementHeading } from '@/components/statement-heading'
 import { DateText } from '@/components/date-text'
@@ -150,19 +151,25 @@ function AnalysisRow({
   const basedOn = analysisRows(analysis.based_on)
 
   return (
-    <div className="border-b border-border py-3" data-analysis={analysis.number}>
+    <div
+      className="border-b border-border px-4 py-3.5 last:border-b-0"
+      data-analysis={analysis.number}
+    >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-muted-foreground">
-        {/* The agent is a fact on the record and is rendered as text rather than
-            as a chip: it is free text (`varchar(120)`), not a vocabulary, so
-            there is no served colour and inventing one would be a map from a
-            value to a hue that goes stale the first time somebody files under a
-            new agent name. */}
-        <span className="font-mono text-foreground">{analysis.agent}</span>
-        <span>·</span>
+        {/* ── THE AGENT IS A QUALIFIER, NOT A STATE ────────────────────────
+            It is free text (`varchar(120)`), not a vocabulary, so there is no
+            served colour and inventing one would be a map from a value to a hue
+            that goes stale the first time somebody files under a new agent name.
+            A NEUTRAL chip is the honest treatment: it gives the row a shape the
+            eye can find without claiming the value means anything good or bad.
+            Level 3 of the taxonomy, exactly. */}
+        <Badge>{analysis.agent}</Badge>
         <DateText value={analysis.asked} />
         <span>·</span>
         <span>{t('analyses.askedBy', { who: analysis.asked_by })}</span>
-        <span className="ml-auto font-mono">#{analysis.number}</span>
+        <Badge className="ml-auto">
+          <span className="figure">#{analysis.number}</span>
+        </Badge>
       </div>
 
       <Link
@@ -174,19 +181,30 @@ function AnalysisRow({
 
       {scenario && <p className="mt-0.5 text-[12px] text-muted-foreground">{scenario}</p>}
 
-      {verdict && <p className="mt-1.5 text-[12.5px] text-foreground">{verdict}</p>}
+      {verdict && (
+        <p className="mt-1.5 max-w-[95ch] text-[12.5px] leading-relaxed text-foreground">
+          {verdict}
+        </p>
+      )}
 
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-muted-foreground">
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-muted-foreground">
         {/* `!== null` and not truthiness: a runway of 0 months is a real and
-            very interesting answer, and `0 && …` would hide it. */}
+            very interesting answer, and `0 && …` would hide it.
+
+            A `<FigureBadge>` so the number is set in the figure face like every
+            other number in the app — it was the one figure on this screen
+            rendered in the prose face, inside a grey sentence, which is why the
+            list read as a wall of text. */}
         {analysis.runway_after_months !== null && (
-          <span>{t('analyses.runwayAfter', { n: analysis.runway_after_months })}</span>
+          <FigureBadge
+            label={t('analyses.runwayAfterLabel')}
+            value={t('analyses.runwayMonths', { n: analysis.runway_after_months })}
+          />
         )}
-        <span>
-          {t(basedOn.rows.length === 1 ? 'analyses.inputsOne' : 'analyses.inputsMany', {
-            n: basedOn.rows.length,
-          })}
-        </span>
+        <FigureBadge
+          label={t('analyses.inputsLabel')}
+          value={String(basedOn.rows.length)}
+        />
         <Link
           href={scopedHref(base, `/analyses/${analysis.number}`, scope)}
           className="ml-auto inline-flex items-center gap-1 text-primary-strong hover:underline"

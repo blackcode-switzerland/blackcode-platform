@@ -67,8 +67,14 @@ Two exceptions worth knowing about, both of which a `bk` user can also see:
 
 **What changed visually:** the page ground went from cream to a cool neutral so
 the amber has something to be an accent against; every figure is set in IBM Plex
-Mono; and a row that needs a human carries a leading rule instead of another
-chip. `apps/books/docs/frontend.md` §12 is the full design system, and
+Mono; a row that needs a human carries a leading rule instead of another chip;
+and a CLOSED boolean — a bilan balances or it does not, a book is VAT-registered
+or it is not — is drawn as a green or destructive chip rather than as grey prose.
+
+That last one is not a new exception to the rule that vocabulary colours come
+from `/api/meta`: a boolean has two states and the server cannot grow a third
+without changing the type. It is why the screens that hold no served vocabulary
+read as colourless beside the ledger, which holds five. `apps/books/docs/frontend.md` §12 is the full design system, and
 `npm run contrast` re-measures every token pair against WCAG AA from the
 stylesheet itself.
 
