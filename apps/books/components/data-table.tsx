@@ -29,6 +29,24 @@
 // Platform convention (`docs/frontend.md`): no card wrapper around a listing, a
 // hairline between rows, no vertical rules. A ledger is a list, not a grid of
 // boxes.
+//
+// ── `attention`: LEVEL 4 OF THE BADGE TAXONOMY, AND IT IS NOT A BADGE ──────
+// A row that needs a human gets a 3px rule on its LEADING EDGE and nothing else.
+// The argument is in `components/badge.tsx`: badges say what a row is, and a
+// chip saying "needs a human" ends up in a line of other chips where it has to
+// be read like the rest of them. On the edge of the row it is visible in
+// peripheral vision, so the shape of the outstanding work is legible before a
+// single word is.
+//
+// It is drawn as an INSET BOX-SHADOW on the first cell rather than a
+// `border-left`. A border changes the cell's box and shifts every marked row 3px
+// out of alignment with the unmarked ones — which turns a signal into a
+// rendering fault, and in a table of money a column that does not line up is the
+// one thing that must never happen.
+//
+// **There is deliberately no zebra striping.** It would be a second reason for a
+// row to look different from its neighbour, competing with the only reason that
+// carries meaning.
 
 import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
@@ -67,6 +85,24 @@ export interface DataTableProps<T> {
   /** Column key to sort by on first render. */
   initialSort?: { key: string; direction: 'asc' | 'desc' }
   onRowClick?: (row: T) => void
+  /**
+   * Level 4: does this row need a human?
+   *
+   * `'work'` is the app's accent — something is outstanding. `'problem'` is
+   * destructive — something is wrong. Anything else, including omitting the
+   * prop, draws no rule.
+   *
+   * Return `'work'` sparingly. A table where every row is marked has marked
+   * nothing, and the caller is usually better off filtering.
+   */
+  attention?: (row: T) => 'work' | 'problem' | null | undefined
+  /**
+   * A totals row, rendered under the body with a rule above it.
+   *
+   * A ledger marks a total with a rule, not with bold — `num-total` in
+   * `globals.css` carries both halves of that convention.
+   */
+  footer?: React.ReactNode
 }
 
 export function DataTable<T>({
@@ -78,6 +114,8 @@ export function DataTable<T>({
   empty,
   initialSort,
   onRowClick,
+  attention,
+  footer,
 }: DataTableProps<T>) {
   const t = useT()
   const [sort, setSort] = useState(initialSort ?? null)
@@ -124,7 +162,10 @@ export function DataTable<T>({
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-[13px]">
-        <thead>
+        {/* The head is a RECESS (`--muted`), not a raised strip: it sits below
+            the card it is in. Sticky, because a table of money scrolled past its
+            own headers is a grid of unlabelled figures. */}
+        <thead className="sticky top-0 z-10 bg-muted">
           <tr className="border-b border-border">
             {columns.map((col) => {
               const sortable = Boolean(col.sortValue)
@@ -162,30 +203,43 @@ export function DataTable<T>({
           </tr>
         </thead>
         <tbody>
-          {sorted.map((row) => (
-            <tr
-              key={rowKey(row)}
-              onClick={onRowClick ? () => onRowClick(row) : undefined}
-              className={
-                'border-b border-border/60 ' +
-                (onRowClick ? 'cursor-pointer hover:bg-accent/50 ' : '')
-              }
-            >
-              {columns.map((col) => (
-                <td
-                  key={col.key}
-                  className={
-                    'px-3 py-1.5 align-top ' +
-                    (col.numeric ? 'num ' : '') +
-                    (col.className ?? '')
-                  }
-                >
-                  {col.cell(row)}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {sorted.map((row) => {
+            const mark = attention?.(row)
+            return (
+              <tr
+                key={rowKey(row)}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                className={
+                  'border-b border-border/70 last:border-b-0 ' +
+                  (onRowClick ? 'cursor-pointer hover:bg-muted/60 ' : '')
+                }
+              >
+                {columns.map((col, i) => (
+                  <td
+                    key={col.key}
+                    // The leading rule, on the FIRST cell only, as an inset
+                    // shadow — see the header for why not a border.
+                    style={
+                      i === 0 && mark
+                        ? {
+                            boxShadow: `inset 3px 0 0 var(--${mark === 'problem' ? 'destructive' : 'primary'})`,
+                          }
+                        : undefined
+                    }
+                    className={
+                      'px-3 py-2 align-top ' +
+                      (col.numeric ? 'num ' : '') +
+                      (col.className ?? '')
+                    }
+                  >
+                    {col.cell(row)}
+                  </td>
+                ))}
+              </tr>
+            )
+          })}
         </tbody>
+        {footer ? <tfoot>{footer}</tfoot> : null}
       </table>
     </div>
   )

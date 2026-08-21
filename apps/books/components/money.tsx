@@ -50,7 +50,11 @@ export function Money({
   return (
     <span
       className={
-        'tabular-nums ' + (negative ? 'text-destructive ' : '') + className
+        // `figure` is mono + tabular and sets NO size — the `.num` cell this
+        // often sits inside owns that, and setting both compounds. Added
+        // 2026-08-21 with the Plex Mono pairing; `tabular-nums` alone was doing
+        // half the job, aligning the digits of a face that still read as prose.
+        'figure ' + (negative ? 'text-destructive ' : '') + className
       }
       // The machine-readable original, unformatted and unrounded. An agent
       // reading the DOM — and the phase-1 parity check — gets the wire value

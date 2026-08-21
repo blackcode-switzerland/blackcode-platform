@@ -45,19 +45,34 @@
  * a product is, is a product decision. D-B settles it.
  *
  *   primary    #e8b84b  ledger gold   (issues: #007bd3 blue, sales: #10a37f emerald)
- *   neutrals   CREAM — hue 80, chroma 0.012, which is 2-6× sales' chroma
+ *   neutrals   COOL PAPER — the mockup's own #f7f8fb / #ffffff / #e6e9ef
  *   radius     0.5rem                 (issues: 0.5rem, sales: 0.75rem)
  *   density    tight — h-11 header, py-1.5 rows. Every screen is a table of money
  *
  * `#e8b84b` is `--pt-amber` in the mockup's own stylesheet
  * (`b-mockups/bbooks/assets/bbooks.css`) and the accent the blackcode SA book
- * already carries. It reads as ledger paper rather than as software.
+ * already carries.
  *
- * **The neutrals are why this does not look like sales in a different colour.**
- * Sales' warm off-white is a near-neutral with a cast (chroma 0.002–0.008);
- * this one is genuinely cream, and the dark theme is a warm ink-brown rather
- * than a charcoal. A brand hue is one accent on a page; the neutral hue is
- * every surface, border and muted label on it.
+ * ── THE NEUTRALS WERE CREAM UNTIL 2026-08-21, AND THAT WAS THE BUG ─────────
+ * This block used to read: *"the neutrals are why this does not look like sales
+ * in a different colour … this one is genuinely cream, and the dark theme is a
+ * warm ink-brown."* The reasoning was sound and the result was not.
+ *
+ * `--background` and `--card` were both cream and three thousandths of a
+ * lightness step apart, so **the page and its content were one surface.** With
+ * nothing to be an accent against, the amber had no job but to fill the screen,
+ * and a product whose entire purpose is reading figures was drawn on warm paper
+ * from edge to edge. It read as a theme rather than as a set of books.
+ *
+ * The ground is now cool and the card is white — three steps apart, so a section
+ * is legible as a raised surface with a hairline and no shadow. **The amber did
+ * not go anywhere; it acquired a contrast to be seen against.** Where it is
+ * allowed is written at `--sidebar` below: the rail, the active nav item, the
+ * entity chip, the focus ring, the section eyebrow, and one figure a screen is
+ * about. It never fills a page again.
+ *
+ * The palette is the mockup's own `body.app-light`, with one value rejected —
+ * see `--muted-foreground`, which fails AA as the mockup ships it.
  *
  * ── AMBER FAILS AA AS TEXT, AND THAT IS WHY THERE ARE TWO TOKENS ───────────
  * Measured, not assumed (WCAG relative luminance, computed 2026-08-17):
@@ -89,18 +104,40 @@
  */
 
 :root {
-  /* Surfaces — cream ledger paper, not white */
-  --background: oklch(0.988 0.012 85);
-  --foreground: oklch(0.19 0.012 75);
-  --card: oklch(0.997 0.006 85);
-  --card-foreground: oklch(0.19 0.012 75);
-  --popover: oklch(0.997 0.006 85);
-  --popover-foreground: oklch(0.19 0.012 75);
+  /*
+   * ── THE GROUND IS NEUTRAL. THE AMBER IS A MARK. (2026-08-21) ────────────
+   * These were cream: `--background` oklch(0.988 0.012 85) and `--card`
+   * oklch(0.997 0.006 85) — two values so close that the page and its content
+   * were ONE surface. An accent needs something to be an accent against, so the
+   * amber had nothing to do but fill the screen, and 1400px of warm paper read
+   * as a theme rather than as a set of books.
+   *
+   * The values below are the mockup's own light palette (`body.app-light` in
+   * `b-mockups/bbooks/assets/css/styles.css`) — the palette the mockup screens
+   * are actually drawn in. Ground and card are now three steps apart, so a
+   * section reads as a raised surface without a shadow.
+   *
+   * ONE OF THE MOCKUP'S VALUES IS NOT ADOPTED, AND IT IS A REAL DEFECT:
+   * its `--pt-text-mute` is `#8893a5`, which measures **2.92:1** on `#f7f8fb`
+   * and fails WCAG AA outright. It carries tiny captions in a mockup nobody
+   * audited; here it would carry every label on every screen. `--muted-foreground`
+   * below is `#656e82` instead — the nearest cool neutral that passes (4.82:1 on
+   * the page, 4.57:1 on `--muted`, its worst surface).
+   */
+  --background: #f7f8fb;
+  --foreground: #1a1f2e;
+  --card: #ffffff;
+  --card-foreground: #1a1f2e;
+  --popover: #ffffff;
+  --popover-foreground: #1a1f2e;
 
-  /* Brand — the fill, and the ink that sits on it */
+  /* Brand — the fill, and the ink that sits on it.
+     Unchanged by the 2026-08-21 ground change, but RE-MEASURED rather than
+     assumed to carry over: `#8a6410` was 5.19:1 on cream and is 5.06:1 on
+     `#f7f8fb`, 5.37:1 on `--card`. Still AA. */
   --primary: #e8b84b;
   --primary-foreground: #14110a;
-  /* Amber as TEXT on a light surface. 5.19:1 — see the block above. */
+  /* Amber as TEXT on a light surface. 5.06:1 — see the block above. */
   --primary-strong: #8a6410;
 
   /* ── HOW FAR A SERVED CHIP COLOUR IS PULLED TOWARD THE TEXT COLOUR ───────
@@ -114,24 +151,45 @@
      Lower means more foreground, means more contrast. 48% puts the worst
      colour at 5.8:1 by calculation and ~5.5:1 as the browser resolves it; 55%
      was the first ratio that passed and was rejected as too close to the line.
-     Dark mode keeps 62% — it was never the problem, at 8:1 and up. */
+     Dark mode keeps 62% — it was never the problem, at 8:1 and up.
+
+     ── RE-MEASURED 2026-08-21 AGAINST THE NEW GROUND, NOT ASSUMED ──────────
+     The mix pulls a served colour toward `--foreground`, and `--foreground`
+     moved (warm near-black → `#1a1f2e`), so every served chip's contrast moved
+     with it. All four served colours (#3fb27f, #f0b66b, #ef6f6f, #7a8595) were
+     re-run over all three surfaces a chip can sit on — `--card`, `--background`
+     and `--muted` — reproducing this file's `color-mix` in oklab exactly:
+
+       48%   worst 4.69:1   (amber on --muted)   PASS
+       49%   worst 4.58:1                        the ceiling on this ground
+
+     So 48% is kept because it was re-measured, not because it was already
+     here. The margin below the ceiling is deliberate. */
   --chip-mix: 48%;
 
-  /* Neutrals — cream (hue 80), chroma high enough to read as paper */
-  --secondary: oklch(0.955 0.014 85);
-  --secondary-foreground: oklch(0.24 0.012 75);
-  --muted: oklch(0.955 0.014 85);
-  --muted-foreground: oklch(0.48 0.014 75);
-  --accent: oklch(0.938 0.018 85);
-  --accent-foreground: oklch(0.24 0.012 75);
+  /* Neutrals — cool paper.
+
+     `--muted` is a RECESS, not an elevation: table heads, inline code, raw bank
+     labels, read-only inspector rows. The raised surface is `--card`. Three
+     surfaces exist in this app and there is no fourth. */
+  --secondary: #f0f2f7;
+  --secondary-foreground: #1a1f2e;
+  --muted: #f0f2f7;
+  /* NOT the mockup's own `--pt-text-mute` (#8893a5), which measures 2.92:1 on
+     this ground and fails AA outright — see the note at the top of `:root`.
+     This value is 4.82:1 on the page, 5.11:1 on --card, 4.57:1 on --muted. */
+  --muted-foreground: #656e82;
+  --accent: #e8ebf2;
+  --accent-foreground: #1a1f2e;
 
   /* Feedback */
   --destructive: oklch(0.55 0.21 27);
   --destructive-foreground: oklch(0.99 0 0);
 
-  /* Form chrome */
-  --border: oklch(0.898 0.014 85);
-  --input: oklch(0.898 0.014 85);
+  /* Form chrome — a hairline, not a line. Every section is bounded by this and
+     by nothing else; shadow is reserved for elevation 2. */
+  --border: #e6e9ef;
+  --input: #e6e9ef;
   --ring: #b8892a;
 
   /*
@@ -169,35 +227,57 @@
 
      Slots 3, 4 and 5 have never been measured and nothing uses them. Run them
      through the validator before the first chart that does — a palette that
-     exists and has not been checked reads as protection while giving none. */
+     exists and has not been checked reads as protection while giving none.
+
+     ── RE-CHECKED 2026-08-21, BECAUSE THE SURFACE UNDER THEM MOVED ─────────
+     The validation above was run against `--card` when it was #fffefa light /
+     #1a1713 dark. Both values changed with the ground, so the claim needed
+     re-earning rather than carrying over. Mark-vs-surface, the check that
+     depends on the surface:
+
+       light  #b8892a 3.16:1 · #3a94c4 3.38:1   against #ffffff   both PASS
+       dark   #b88a00 5.53:1 · #3b9ec9 5.74:1   against #161a23   both PASS
+
+     Slots 1 and 2 hold. The two series sit at the SAME lightness (L 0.660) on
+     purpose and are told apart by hue — gold against blue — so a luminance
+     ratio between them is not the test and reads alarmingly low if you run it.
+     The full validator pass, including the hue and lightness-band checks the
+     `dataviz` skill owns, is phase 6's; this is the surface check only. */
   --chart-1: #b8892a;
   --chart-2: #3a94c4;
   --chart-3: #3fb27f;
   --chart-4: #8b5cf6;
   --chart-5: #c2593f;
 
-  /* Sidebar — a shade deeper than the page, like a bound ledger's edge */
-  --sidebar: oklch(0.962 0.017 85);
-  --sidebar-foreground: oklch(0.19 0.012 75);
-  --sidebar-primary: #b8892a;
+  /* Sidebar — WHITE, and the amber lives here.
+     D-L: the ground went neutral so the amber could mean something. The nav
+     rail is the one place it is always on screen, so it carries the brand and
+     the active item; `--sidebar-accent` is the amber wash the active row sits
+     in, and `--sidebar-primary` is the amber-as-text on it. Everything to the
+     right of this rail is neutral until a value earns a colour. */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1a1f2e;
+  --sidebar-primary: #8a6410;
   --sidebar-primary-foreground: #14110a;
-  --sidebar-accent: oklch(0.925 0.022 85);
-  --sidebar-accent-foreground: oklch(0.19 0.012 75);
-  --sidebar-border: oklch(0.898 0.014 85);
+  --sidebar-accent: rgba(232, 184, 75, 0.16);
+  --sidebar-accent-foreground: #8a6410;
+  --sidebar-border: #e6e9ef;
   --sidebar-ring: #b8892a;
 
   --radius: 0.5rem;
 }
 
 .dark {
-  /* Warm ink: hue 75 held at low chroma, so it reads as a dark brown-black
-     rather than the charcoal issues uses or the warm grey sales uses. */
-  --background: oklch(0.165 0.008 75);
-  --foreground: oklch(0.96 0.008 85);
-  --card: oklch(0.205 0.009 75);
-  --card-foreground: oklch(0.96 0.008 85);
-  --popover: oklch(0.205 0.009 75);
-  --popover-foreground: oklch(0.96 0.008 85);
+  /* Cool ink, 2026-08-21 — the mockup's own dark set, and the mirror of the
+     light change above. This was a warm brown-black (hue 75) to match the cream
+     it sat beside; with the ground cool, a warm dark theme would be the only
+     surface in the app still carrying the old cast. */
+  --background: #0f1117;
+  --foreground: #e6e6ea;
+  --card: #161a23;
+  --card-foreground: #e6e6ea;
+  --popover: #161a23;
+  --popover-foreground: #e6e6ea;
 
   --primary: #e8b84b;
   --primary-foreground: #14110a;
@@ -205,23 +285,27 @@
      is invisible here. Same token, different requirement. */
   --primary-strong: #f0c96f;
 
-  /* Unchanged from the original. Every served chip colour measures 7:1 or better
-     against this background at this ratio; the light theme is the one that
-     needed moving. See the note beside the light value. */
+  /* Re-measured 2026-08-21 against the new ink, the same way the light value
+     was: all four served colours over `--card`, `--background` and `--muted`.
+     Worst 5.61:1 (grey on --muted). The ceiling here is 80%; 62% is kept
+     because it passed, not because it was already here. */
   --chip-mix: 62%;
 
-  --secondary: oklch(0.255 0.009 75);
-  --secondary-foreground: oklch(0.96 0.008 85);
-  --muted: oklch(0.255 0.009 75);
-  --muted-foreground: oklch(0.72 0.012 85);
-  --accent: oklch(0.255 0.009 75);
-  --accent-foreground: oklch(0.96 0.008 85);
+  --secondary: #1b2030;
+  --secondary-foreground: #e6e6ea;
+  --muted: #1b2030;
+  --muted-foreground: #9aa4b8;
+  --accent: #232a3b;
+  --accent-foreground: #e6e6ea;
 
   --destructive: oklch(0.70 0.19 22);
   --destructive-foreground: oklch(0.985 0 0);
 
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 14%);
+  /* A real value, not a white overlay. An `oklch(1 0 0 / 10%)` hairline changes
+     colour with whatever it happens to sit on, which is exactly what a hairline
+     must not do once there are three distinct surfaces under it. */
+  --border: #232a3b;
+  --input: #232a3b;
   --ring: #e8b84b;
 
   /* Same hue order, stepped for the dark surface. Slots 1 and 2 are the
@@ -233,13 +317,15 @@
   --chart-4: #a78bfa;
   --chart-5: #f0876b;
 
-  --sidebar: oklch(0.142 0.008 75);
-  --sidebar-foreground: oklch(0.96 0.008 85);
-  --sidebar-primary: #e8b84b;
+  /* The rail is a step DEEPER than the page here, where the light theme makes it
+     a step lighter. Both read the same way: the rail is a distinct plane. */
+  --sidebar: #0b0d12;
+  --sidebar-foreground: #e6e6ea;
+  --sidebar-primary: #f0c96f;
   --sidebar-primary-foreground: #14110a;
-  --sidebar-accent: oklch(0.235 0.009 75);
-  --sidebar-accent-foreground: oklch(0.96 0.008 85);
-  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-accent: rgba(232, 184, 75, 0.14);
+  --sidebar-accent-foreground: #f0c96f;
+  --sidebar-border: #232a3b;
   --sidebar-ring: #e8b84b;
 }
 
@@ -284,7 +370,11 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   --font-sans: "Google Sans", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  /* IBM Plex Mono is loaded in app/layout.tsx and carries every figure in the
+     app — see the note there for why the pairing rather than a system stack.
+     The system fallbacks stay: a figure must still be monospaced and tabular
+     during a font swap, or a column of amounts reflows as it loads. */
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 @layer base {
@@ -331,8 +421,10 @@
  * columns line up, not that everything does.
  */
 @utility num {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
+  font-size: 0.9375em;
   text-align: right;
   white-space: nowrap;
 }
@@ -342,12 +434,39 @@
 }
 
 @utility num-total {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
+  font-size: 0.9375em;
   text-align: right;
   white-space: nowrap;
-  font-weight: 600;
+  font-weight: 500;
   border-top: 1px solid var(--border);
+}
+
+/*
+ * `.figure` — a figure that is NOT in a column.
+ *
+ * `.num` right-aligns, because its whole job is that a column of amounts can be
+ * compared downward. A figure standing alone — in a stat tile, inline in a
+ * sentence, in a definition row — has no column to align to, and right-aligning
+ * it pushes it away from the label that names it.
+ *
+ * Same face, same tabular figures, no alignment claim.
+ *
+ * **It deliberately sets no `font-size`, and `.num` does.** Plex Mono runs
+ * optically larger than Google Sans at the same px, so the columns compensate
+ * with 0.9375em — but `<Money>` carries this class and `<Money>` renders INSIDE
+ * `.num` cells. Setting a size on both would compound to 0.879em on every
+ * amount in every table, which is the kind of thing that looks like a rendering
+ * bug and gets chased for an hour. The cell owns the size; the span owns the
+ * face.
+ */
+@utility figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  white-space: nowrap;
 }
 
 /* Toast bridge — sonner reads these via inline style on the <Toaster>. */
