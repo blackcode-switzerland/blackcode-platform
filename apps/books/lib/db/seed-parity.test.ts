@@ -304,8 +304,9 @@ d('the seeded database', () => {
   ifSeeded('numbers each journal from 1 within its own exercice', async () => {
     const [bc] = await q.listEntities(ws)
     const [x2026, x2025] = await q.listExercices(ws, bc.id)
-    const e25 = await q.listEntries(bc.id, x2025.id)
-    const e26 = await q.listEntries(bc.id, x2026.id)
+    // `.rows` since #69: the page states its own total and cursor now.
+    const e25 = (await q.listEntries(bc.id, x2025.id)).rows
+    const e26 = (await q.listEntries(bc.id, x2026.id)).rows
     expect(e25.map((r: { entry: { entry_no: number } }) => r.entry.entry_no)).toEqual([1, 2])
     expect(e26[0].entry.entry_no).toBe(1)
     // The journal is LIVE — a declare adds a row (an extourne did, 2026-08-19).

@@ -23,7 +23,7 @@
 // `entry_no` is exposed too and separately, because it is the statutory journal
 // number and a reader comparing against a filing needs it.
 
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gt, isNull, sql } from "drizzle-orm";
 import { getDb } from "../client";
 import {
   booksAccount,
@@ -380,6 +380,42 @@ export interface EntryWithLines {
   lines: (typeof booksEntryLine.$inferSelect)[];
 }
 
+/**
+ * One page of the grand livre, and how much of it there is.
+ *
+ * ===========================================================================
+ * A JOURNAL THAT STOPS AT 100 AND SAYS IT IS COMPLETE (#69)
+ * ===========================================================================
+ * This function returned a bare array capped at 100, and the route paired it
+ * with `next_cursor: null`. On this platform that pair MEANS "that is all of
+ * them" — so the response did not merely omit the tail, it asserted there was
+ * no tail. A client following the documented envelope correctly concluded it
+ * held the whole journal. `bala/northgate` has 115 entries; fifteen écritures
+ * were invisible with nothing on the wire to say so (found 2026-08-21).
+ *
+ * A statutory journal is the wrong place for a silent truncation. Every
+ * derived figure — bilan, compte de résultat, the VAT position — is computed
+ * over ALL the entries, so a reader comparing a complete-looking list against
+ * them is comparing against a number the list cannot explain.
+ *
+ * So the page now states its own limits: `total` is every entry matching the
+ * filters, and `next_cursor` is a real entry to resume from. `null` keeps its
+ * meaning and finally earns it.
+ */
+export interface EntryPage {
+  rows: EntryWithLines[];
+  /** Every entry matching the filters, not only the ones on this page. */
+  total: number;
+  /**
+   * The `entry_no` to resume after, or `null` when this page ends the journal.
+   *
+   * Keyset rather than offset: `UNIQUE (entity_id, exercice_id, entry_no)` and
+   * the `ORDER BY entry_no` below make it stable, and an entry posted while
+   * somebody pages cannot shift rows onto a page they have already read.
+   */
+  next_cursor: number | null;
+}
+
 export async function listEntries(
   entityId: number,
   exerciceId: number,
@@ -388,8 +424,10 @@ export async function listEntries(
     recognition?: string;
     account?: string;
     limit?: number;
+    /** Resume after this `entry_no` — the previous page's `next_cursor`. */
+    cursor?: number;
   } = {},
-): Promise<EntryWithLines[]> {
+): Promise<EntryPage> {
   const db = getDb();
   const conds = [
     eq(booksEntry.entity_id, entityId),
@@ -400,14 +438,52 @@ export async function listEntries(
   if (opts.recognition)
     conds.push(eq(booksEntry.recognition, opts.recognition));
 
-  const entries = await db
+  // The account filter belongs in SQL, and used to run in JS AFTER the limit —
+  // so `?account=1020` filtered the first 100 entries rather than the journal,
+  // and both `total` and the cursor would have inherited that. EXISTS keeps the
+  // "an entry is shown WHOLE" rule below: it selects ENTRIES that touch the
+  // account, and every line of those entries is still returned.
+  if (opts.account) {
+    conds.push(
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(booksEntryLine)
+          .where(
+            and(
+              eq(booksEntryLine.entry_id, booksEntry.id),
+              eq(booksEntryLine.account_no, opts.account),
+            ),
+          ),
+      ),
+    );
+  }
+
+  const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500);
+
+  const [{ n: total }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(booksEntry)
+    .where(and(...conds));
+
+  const pageConds = [...conds];
+  if (opts.cursor !== undefined)
+    pageConds.push(gt(booksEntry.entry_no, opts.cursor));
+
+  // One more than asked for: if it comes back, there is another page, and no
+  // second count is needed to know it.
+  const found = await db
     .select()
     .from(booksEntry)
-    .where(and(...conds))
+    .where(and(...pageConds))
     .orderBy(asc(booksEntry.entry_no))
-    .limit(Math.min(Math.max(opts.limit ?? 100, 1), 500));
+    .limit(limit + 1);
 
-  if (entries.length === 0) return [];
+  const hasMore = found.length > limit;
+  const entries = hasMore ? found.slice(0, limit) : found;
+  const next_cursor = hasMore ? entries[entries.length - 1].entry_no : null;
+
+  if (entries.length === 0) return { rows: [], total, next_cursor: null };
   const ids = entries.map((e) => e.id);
   const lines = await db
     .select()
@@ -422,14 +498,13 @@ export async function listEntries(
     byEntry.set(l.entry_id, list);
   }
 
-  let out = entries.map((e) => ({ entry: e, lines: byEntry.get(e.id) ?? [] }));
-  // Filtering by account is done here rather than in SQL because an entry is
-  // shown WHOLE: the grand livre lists every line of any entry that touches the
-  // account, not just the matching line.
-  if (opts.account) {
-    out = out.filter((r) => r.lines.some((l) => l.account_no === opts.account));
-  }
-  return out;
+  // Every line of every entry on this page: an entry is shown WHOLE, so a
+  // grand livre filtered by account still lists that entry's other side.
+  const rows = entries.map((e) => ({
+    entry: e,
+    lines: byEntry.get(e.id) ?? [],
+  }));
+  return { rows, total, next_cursor };
 }
 
 export async function getEntryByNumber(

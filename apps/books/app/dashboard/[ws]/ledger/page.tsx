@@ -106,12 +106,14 @@ import type { BooksKey } from '@/lib/dictionary'
  * there because that mockup holds the whole journal in a JavaScript array. This
  * screen does not:
  *
- *   · `GET …/entries` answers `{ data, next_cursor }` with `next_cursor` always
- *     null, and **no count of any kind**. Nothing on the wire says how many
- *     écritures the exercice has.
  *   · `listEntries` caps at `limit ?? 100`, clamped to 500. This page sends no
  *     `limit`, so a book with more than a hundred écritures is served a hundred
  *     — the demo workspace has 115. The rows are real; the LIST is short.
+ *   · Since #69 the wire DOES carry the missing figure: `GET …/entries` serves
+ *     a real `next_cursor` and a `total`. So "115 of 200" is now available and
+ *     true. It is deliberately not printed yet: a screen that shows a total
+ *     invites the reader to scroll to it, and this table still holds one page.
+ *     Paging the ledger is the frontend change that earns the fuller sentence.
  *
  * So the only true sentence available is about this page. `{n} entries on this
  * page`, with the caveat printed beside it rather than left implied — a bare

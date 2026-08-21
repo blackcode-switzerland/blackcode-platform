@@ -393,7 +393,10 @@ func newEntryListCmd() *cobra.Command {
 			"`--account` returns WHOLE entries that touch the account rather than only the\n" +
 			"matching line: the other side is what says where the money went.\n\n" +
 			"`--recognition unrecognized` is the worklist — money that moved with nobody\n" +
-			"having said yet what it was for.",
+			"having said yet what it was for.\n\n" +
+			"With no `--limit` this reads the WHOLE journal, following the server's cursor\n" +
+			"until it ends. Pass `--limit` for one page of that size, and the footer then\n" +
+			"says how many écritures it is not showing you.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -404,11 +407,12 @@ func newEntryListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			rows, err := c.ListBooksEntries(ws, scope, status, recognition, account, limit)
+			page, err := c.ListBooksEntries(ws, scope, status, recognition, account, limit)
 			if err != nil {
 				return err
 			}
-			return output.Render(format, rows, func(w io.Writer) error {
+			rows := page.Entries
+			return output.Render(format, page, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
 				// The route serves BOTH journals; an RI row carries a direction
 				// and no status. The caller named the book, so the shape is known.
@@ -433,6 +437,17 @@ func newEntryListCmd() *cobra.Command {
 				}
 				if len(rows) == 0 {
 					fmt.Fprintln(cmd.ErrOrStderr(), "(no entries)")
+					return nil
+				}
+				// Say what this is a count OF. Before #69 the list stopped at
+				// 100 and said nothing, so a short journal and a truncated one
+				// looked identical.
+				if page.Total > len(rows) {
+					fmt.Fprintf(cmd.ErrOrStderr(),
+						"showing %d of %d — drop --limit to read the whole journal\n",
+						len(rows), page.Total)
+				} else {
+					fmt.Fprintf(cmd.ErrOrStderr(), "%d entries\n", len(rows))
 				}
 				return nil
 			})

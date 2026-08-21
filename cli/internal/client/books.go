@@ -348,34 +348,92 @@ func (c *Client) ListBooksAccounts(ws string, s BooksScope) ([]BooksAccount, err
 	return resp.Data, nil
 }
 
+// BooksEntryPage is what `entry list` got back, and how much of the journal
+// that was. `Total` counts every écriture matching the filters, so a caller who
+// asked for fewer can SAY that rather than print a short list as a whole one.
+type BooksEntryPage struct {
+	Entries []BooksEntry
+	Total   int
+}
+
+// The server's page ceiling (`listEntries` clamps to 500). Used when walking
+// the journal, so the whole thing costs as few round trips as it can.
+const booksEntryPageMax = 500
+
 // ListBooksEntries reads the grand livre. `status`, `recognition` and `account`
 // are the same filters the web surface uses.
-func (c *Client) ListBooksEntries(ws string, s BooksScope, status, recognition, account string, limit int) ([]BooksEntry, error) {
-	q := s.query()
+//
+// WITH NO --limit IT FOLLOWS THE CURSOR TO THE END. Until issue #69 this read
+// one page of 100 and returned it as though it were the journal, because the
+// envelope's `next_cursor` was hardcoded null and this function did not look at
+// it. A statutory journal is the wrong thing to truncate in silence, and the
+// CLI is the surface an agent reads, so the default here is the WHOLE journal.
+//
+// A caller passing --limit is asking for exactly that many and gets one page;
+// `Total` then lets the command say what it is not showing.
+func (c *Client) ListBooksEntries(ws string, s BooksScope, status, recognition, account string, limit int) (*BooksEntryPage, error) {
+	base := s.query()
 	sep := "?"
-	if q != "" {
+	if base != "" {
 		sep = "&"
 	}
 	add := func(k, v string) {
 		if v == "" {
 			return
 		}
-		q += sep + k + "=" + v
+		base += sep + k + "=" + v
 		sep = "&"
 	}
 	add("status", status)
 	add("recognition", recognition)
 	add("account", account)
+
+	type page struct {
+		Data       []BooksEntry `json:"data"`
+		NextCursor *int         `json:"next_cursor"`
+		Total      int          `json:"total"`
+	}
+	fetch := func(extra string) (*page, error) {
+		var p page
+		if err := c.get(fmt.Sprintf("/api/workspaces/%s/entries%s%s", ws, base, extra), &p); err != nil {
+			return nil, err
+		}
+		return &p, nil
+	}
+
 	if limit > 0 {
-		q += sep + fmt.Sprintf("limit=%d", limit)
+		p, err := fetch(sep + fmt.Sprintf("limit=%d", limit))
+		if err != nil {
+			return nil, err
+		}
+		return &BooksEntryPage{Entries: p.Data, Total: p.Total}, nil
 	}
-	var resp struct {
-		Data []BooksEntry `json:"data"`
+
+	// `sep` is spent on `limit`, so everything after it joins with "&". Getting
+	// this wrong produced `?limit=500?cursor=100`, where the server read `limit`
+	// as garbage, fell back to 100, and the walk stalled on the same cursor.
+	out := &BooksEntryPage{}
+	page1 := sep + fmt.Sprintf("limit=%d", booksEntryPageMax)
+	cursor := ""
+	seen := -1
+	for {
+		p, err := fetch(page1 + cursor)
+		if err != nil {
+			return nil, err
+		}
+		out.Entries = append(out.Entries, p.Data...)
+		out.Total = p.Total
+		if p.NextCursor == nil {
+			return out, nil
+		}
+		// A cursor that does not move would spin forever. Stop and report what
+		// we have rather than hang: a wrong answer is better caught than looped.
+		if *p.NextCursor <= seen {
+			return out, fmt.Errorf("the journal stopped advancing at cursor %d — report this with the book slug", *p.NextCursor)
+		}
+		seen = *p.NextCursor
+		cursor = fmt.Sprintf("&cursor=%d", *p.NextCursor)
 	}
-	if err := c.get(fmt.Sprintf("/api/workspaces/%s/entries%s", ws, q), &resp); err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
 }
 
 // GetBooksEntry takes the workspace #number, never a row id.
@@ -550,15 +608,15 @@ func (c *Client) CreateBooksRule(ws string, req CreateBooksRuleRequest) (*BooksR
 type ResolveBooksEntryRequest struct {
 	// Entity names a SIMPLIFIED book to resolve in its recettes-dépenses
 	// journal; empty means the grand livre.
-	Entity       string         `json:"entity,omitempty"`
-	Explanation  map[string]any `json:"explanation"`
-	Recognition  string         `json:"recognition,omitempty"`
+	Entity      string         `json:"entity,omitempty"`
+	Explanation map[string]any `json:"explanation"`
+	Recognition string         `json:"recognition,omitempty"`
 	// Direction is a SIMPLIFIED book's side: recette, depense, or neutral for
 	// an own-account transfer. Refused on a double-entry entry, whose
 	// direction is carried by its lines.
-	Direction    string         `json:"direction,omitempty"`
-	Counterparty string         `json:"counterparty,omitempty"`
-	Account      string         `json:"account,omitempty"`
+	Direction    string `json:"direction,omitempty"`
+	Counterparty string `json:"counterparty,omitempty"`
+	Account      string `json:"account,omitempty"`
 	// TVA usually arrives HERE: a bank line lands with no rate, and the rate
 	// is known once somebody reads the invoice behind it.
 	TvaRate         string `json:"tva_rate,omitempty"`
@@ -580,8 +638,8 @@ type ResolveBooksEntryRequest struct {
 // BooksResolveResult is what changed, including the taught rule when there is
 // one, so an agent can report the whole consequence of its action.
 type BooksResolveResult struct {
-	Number      int            `json:"number"`
-	Recognition string         `json:"recognition"`
+	Number      int    `json:"number"`
+	Recognition string `json:"recognition"`
 	// Direction is served for a simplified book's row, null for a grand-livre
 	// entry. Read back so a caller can confirm what it set.
 	Direction   *string        `json:"direction"`

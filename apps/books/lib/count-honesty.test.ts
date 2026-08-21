@@ -3,11 +3,20 @@
 // ===========================================================================
 // WHY A TEST OVER COPY, AND NOT OVER CODE
 // ===========================================================================
-// `GET …/entries` serves `{ data, next_cursor }` and **no count of any kind**,
-// and `listEntries` caps its answer at `limit ?? 100` (clamped to 500) while the
-// ledger screen sends no `limit`. So on a book with more than a hundred
+// `listEntries` caps its answer at `limit ?? 100` (clamped to 500) and the
+// ledger screen sends no `limit`, so on a book with more than a hundred
 // écritures the page holds a page, and the only true sentence it can print is
 // about the page.
+//
+// ── #69 CHANGED HALF OF THIS, AND NOT THE HALF THAT MATTERS HERE ──────────
+// `GET …/entries` used to serve `{ data, next_cursor }` with the cursor always
+// null and **no count of any kind**. It now serves a real `next_cursor` and a
+// `total`, so a screen CAN say "115 of 200" truthfully where it could not
+// before. That makes the copy below a CHOICE rather than the only option — and
+// this test still guards it, because a screen that prints a total must also
+// fetch the rest, and the ledger has not been asked to page yet. Changing the
+// copy is a frontend decision; changing it silently, while the table still
+// holds one page, would be the same wrong answer wearing a real number.
 //
 // Nothing in the code can go wrong here — `rows.length` is `rows.length`. What
 // can go wrong is the WORDING, and it is one sentence away: "115 entries" reads
