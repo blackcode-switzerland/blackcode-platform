@@ -44,16 +44,51 @@ export const en = {
   'ledger.colNumber': '#',
 
   // ── THE RESULT COUNT ─────────────────────────────────────────────────
-  // It counts the rows ON THIS PAGE and says so. `GET …/entries` serves no
-  // total and caps its answer, so "N of M" is a sentence this screen has no
-  // figure for — see the ledger page's own header. A second placeholder in any
-  // of these four is therefore a claim the wire cannot support, and
+  // One number, never two. `GET …/entries` serves no total of any kind, so
+  // "N of M" is a sentence this screen has no figure for, and a second
+  // placeholder in any of these is a claim the wire cannot support.
   // `lib/count-honesty.test.ts` fails on one.
-  'ledger.countOne': '{n} entry on this page',
-  'ledger.countMany': '{n} entries on this page',
-  'ledger.riCountOne': '{n} movement on this page',
-  'ledger.riCountMany': '{n} movements on this page',
+  //
+  // ── THE CAVEAT IS NOW CONDITIONAL, AND IT WAS WRONG BEFORE (2026-08-21) ──
+  // Every one of these said "on this page" and printed
+  // `ledger.countNotTotal` beside it, unconditionally. That was over-cautious
+  // to the point of being inaccurate in three of the four cases:
+  //
+  //   · `listRiEntries` takes NO options and applies NO limit — the
+  //     recettes-dépenses journal is served WHOLE. Its count was always a
+  //     true total and the page disclaimed it anyway.
+  //   · the grand livre is capped, but the ledger now asks for `LEDGER_LIMIT`
+  //     and can SEE when it came back full. Under the cap, everything the
+  //     filter matched was returned and the count is true.
+  //
+  // A caveat printed on a figure that does not need one is not free: it
+  // teaches the reader to skip caveats, and this app prints several that
+  // genuinely matter. So it is printed when it is TRUE — at the cap — and the
+  // count stands alone otherwise.
+  'ledger.countOne': '{n} entry',
+  'ledger.countMany': '{n} entries',
+  'ledger.riCountOne': '{n} movement',
+  'ledger.riCountMany': '{n} movements',
   'ledger.countNotTotal': 'what this page loaded, not a count of the journal',
+  // Printed only when `rows.length === LEDGER_LIMIT`, which is the one state in
+  // which the list really is short and nothing on the wire says so.
+  'ledger.countAtCap':
+    'this is the most the server will serve at once — the journal may hold more',
+
+  // ── Section labels and the totals strip (2026-08-21) ────────────────────
+  'ledger.entriesLabel': 'Écritures',
+  'ledger.movementsLabel': 'Movements',
+  'ledger.totalDebit': 'Debit',
+  'ledger.totalCredit': 'Credit',
+  'ledger.totalNet': 'Net movement',
+  // What the figures above are OF. Every derived figure in this app says what
+  // it was computed from — `<RunFigures>` is the precedent.
+  'ledger.totalBasis': 'account {account}, {lines} lines on this page',
+  'ledger.totalRiBasis': 'the {n} movements listed below',
+  'ledger.totalNeutral': 'Neutral',
+  'ledger.totalNeutralBasis': 'in neither total — art. 957 al. 2, own-account transfers',
+  'ledger.unknownDirection':
+    '{n} movements carry a direction this page does not know, and are counted in no total above. They are listed below with the direction the server sent. This is a frontend that has fallen behind the data, not a problem with the records.',
 
   'ledger.emptyFiltered': 'No entry matches these filters.',
   'ledger.emptyFilteredBody':
@@ -99,6 +134,14 @@ export const en = {
   'entry.noSource': 'No source is recorded for this entry.',
   'entry.counterparty': 'Counterparty',
   'entry.journalNo': 'Journal n°',
+  // ── The headline strip (2026-08-21) ──────────────────────────────────
+  // "How much was it" is the first question anybody asks of an écriture, and
+  // this page could not answer it without the reader adding up the lines.
+  'entry.numberTitle': 'The entry’s address — what /ledger/{n} and bk books entry show take',
+  'entry.journalNoBasis': 'gapless within this book and year',
+  'entry.creditSide': 'Credit side',
+  'entry.unbalancedBasis': 'debit side — this entry does not balance yet',
+  'entry.unbalancedNote': 'a staged entry may be unbalanced; posting refuses until it is not',
   'entry.postedOn': 'Posted on',
   'entry.compliance': 'Compliance',
   'entry.transaction': 'Transaction',
@@ -225,11 +268,26 @@ export const fr: Record<keyof typeof en, string> = {
   'ledger.colStatus': 'Statut',
   'ledger.colNumber': '#',
 
-  'ledger.countOne': '{n} écriture sur cette page',
-  'ledger.countMany': '{n} écritures sur cette page',
-  'ledger.riCountOne': '{n} mouvement sur cette page',
-  'ledger.riCountMany': '{n} mouvements sur cette page',
+  'ledger.countOne': '{n} écriture',
+  'ledger.countMany': '{n} écritures',
+  'ledger.riCountOne': '{n} mouvement',
+  'ledger.riCountMany': '{n} mouvements',
   'ledger.countNotTotal': 'ce que cette page a chargé, et non un décompte du journal',
+  'ledger.countAtCap':
+    'c’est le maximum que le serveur renvoie d’un coup — le journal peut en contenir davantage',
+
+  'ledger.entriesLabel': 'Écritures',
+  'ledger.movementsLabel': 'Mouvements',
+  'ledger.totalDebit': 'Débit',
+  'ledger.totalCredit': 'Crédit',
+  'ledger.totalNet': 'Mouvement net',
+  'ledger.totalBasis': 'compte {account}, {lines} lignes sur cette page',
+  'ledger.totalRiBasis': 'les {n} mouvements listés ci-dessous',
+  'ledger.totalNeutral': 'Neutre',
+  'ledger.totalNeutralBasis':
+    'dans aucun des deux totaux — art. 957 al. 2, virements entre comptes propres',
+  'ledger.unknownDirection':
+    '{n} mouvements portent un sens que cette page ne connaît pas ; ils ne sont comptés dans aucun total ci-dessus. Ils figurent ci-dessous avec le sens envoyé par le serveur. C’est une interface en retard sur les données, et non un problème dans les enregistrements.',
 
   'ledger.emptyFiltered': 'Aucune écriture ne correspond à ces filtres.',
   'ledger.emptyFilteredBody':
@@ -275,6 +333,12 @@ export const fr: Record<keyof typeof en, string> = {
   'entry.noSource': 'Aucune source n’est enregistrée pour cette écriture.',
   'entry.counterparty': 'Contrepartie',
   'entry.journalNo': 'N° de journal',
+  'entry.numberTitle': 'L’adresse de l’écriture — ce que prennent /ledger/{n} et bk books entry show',
+  'entry.journalNoBasis': 'sans lacune dans ce livre et cet exercice',
+  'entry.creditSide': 'Côté crédit',
+  'entry.unbalancedBasis': 'côté débit — cette écriture ne s’équilibre pas encore',
+  'entry.unbalancedNote':
+    'une écriture en attente peut être déséquilibrée ; la comptabilisation refuse tant qu’elle l’est',
   'entry.postedOn': 'Comptabilisée le',
   'entry.compliance': 'Conformité',
   'entry.transaction': 'Transaction',

@@ -355,11 +355,19 @@ function scopeReady(scope: ReadScope): boolean {
 }
 
 /** `?entity=…&exercice=…`, built once so no hook can forget half of it. */
-function scopeQuery(scope: Scope, extra?: Record<string, string | undefined>): string {
+function scopeQuery(
+  scope: Scope,
+  extra?: Record<string, string | number | undefined>
+): string {
   const q = new URLSearchParams()
   if (scope.entity) q.set('entity', scope.entity)
   if (scope.exercice != null) q.set('exercice', String(scope.exercice))
-  for (const [k, v] of Object.entries(extra ?? {})) if (v) q.set(k, v)
+  // `if (v)` and not `if (v !== undefined)`, deliberately: an empty string is
+  // "no filter" everywhere in this app, and a `?account=` with nothing after it
+  // is a request for entries touching an account named "". A numeric 0 would
+  // also be dropped, which is correct for every parameter here — `limit=0` is
+  // not a request for nothing, it is a mistake.
+  for (const [k, v] of Object.entries(extra ?? {})) if (v) q.set(k, String(v))
   return q.toString()
 }
 
@@ -468,7 +476,36 @@ export interface EntryFilters {
   recognition?: string
   /** `?account=1020` — where the income statement's drill-down lands. */
   account?: string
+  /**
+   * How many écritures to ask for. `listEntries` clamps to `[1, 500]` and
+   * defaults to **100** when nothing is sent.
+   *
+   * ── SENDING ONE IS NOT AN OPTIMISATION. NOT SENDING ONE LOSES ROWS ──────
+   * The ledger sent no limit until 2026-08-21, so it was served a hundred
+   * écritures and rendered them as though they were the journal. The demo
+   * workspace's `northgate` has 115. There is no count on the wire and
+   * `next_cursor` is always null, so nothing anywhere said the list was short:
+   * the rows were real, the LIST was truncated, and the page looked complete.
+   *
+   * `LEDGER_LIMIT` below is what the ledger sends. It does not make the cap go
+   * away — it moves it to the clamp's own ceiling and makes the screen able to
+   * SEE it, which is what lets the count stop hedging on every book that is
+   * nowhere near it.
+   */
+  limit?: number
 }
+
+/**
+ * What the ledger asks for: the most `listEntries` will serve.
+ *
+ * A book with more écritures than this is still short-served, and the ledger
+ * says so when `rows.length === LEDGER_LIMIT` rather than leaving the reader to
+ * assume. The real fix is a total on the wire and a cursor that means something
+ * — a route change, recorded in `booksFrontend/AfterDeploy/PLAN.md` §10 as F-1
+ * because it changes the shared `jsonList` envelope and that is not one app's
+ * decision to take.
+ */
+export const LEDGER_LIMIT = 500
 
 /**
  * The grand livre. `GET …/entries`, for a DOUBLE-ENTRY book only.
@@ -522,6 +559,7 @@ export function useEntries(
           status: filters.status,
           recognition: filters.recognition,
           account: filters.account,
+          limit: filters.limit,
         })}`
       ).then((r) => r.data),
     // POSITIVE. `journal === 'grand_livre'`, never `!== 'recettes_depenses'` —

@@ -76,7 +76,8 @@ import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { X } from 'lucide-react'
 import { useScope, type ScopeState } from '@/lib/scope'
-import { useEntries, useRiEntries } from '@/lib/hooks'
+import { useEntries, useRiEntries, LEDGER_LIMIT } from '@/lib/hooks'
+import { accountTotals, riTotals } from '@/lib/ledger-totals'
 import { journalAccepts, JOURNAL_NAME, type Journal } from '@/lib/journal'
 import { scopedHref } from '@/lib/nav'
 import { useLabel } from '@/lib/use-label'
@@ -89,6 +90,9 @@ import { DateText } from '@/components/date-text'
 import { Money } from '@/components/money'
 import { VocabChip } from '@/components/chips'
 import { EntryLines } from '@/components/entry-lines'
+import { PageHeader } from '@/components/page-header'
+import { Section, Surface } from '@/components/section'
+import { Stat, StatRow } from '@/components/stat'
 import type { Entry, RiEntry } from '@/lib/types'
 import type { BooksKey } from '@/lib/dictionary'
 
@@ -133,11 +137,32 @@ function ResultCount({ n, journal }: { n: number; journal: Journal }) {
       : n === 1
         ? 'ledger.riCountOne'
         : 'ledger.riCountMany'
+
+  // ── THE CAVEAT IS PRINTED WHEN IT IS TRUE, AND NOT OTHERWISE ────────────
+  // It was printed on all four counts unconditionally until 2026-08-21, and in
+  // three of those cases it was over-cautious to the point of being wrong:
+  // `listRiEntries` applies no limit at all, and a grand livre that came back
+  // short of the cap returned everything the filter matched.
+  //
+  // `n === LEDGER_LIMIT` is the one state where the list really is short and
+  // nothing on the wire says so. It is an exact equality rather than `>=`
+  // because the server clamps — a full page is exactly the cap, and
+  // `lib/count-honesty.test.ts` pins `LEDGER_LIMIT` to the clamp so this
+  // comparison cannot quietly stop being reachable.
+  //
+  // A caveat on a figure that does not need one is not free: it teaches the
+  // reader to skip caveats, and this app prints several that matter.
+  const atCap = journal === 'grand_livre' && n === LEDGER_LIMIT
+
   return (
-    <p className="mt-2 text-[11.5px] text-muted-foreground" data-result-count={n}>
-      <span className="text-foreground">{t(key, { n })}</span>{' '}
-      <span>— {t('ledger.countNotTotal')}</span>
-    </p>
+    <span
+      className="text-[11.5px] text-muted-foreground"
+      data-result-count={n}
+      data-at-cap={atCap ? 'true' : undefined}
+    >
+      <span className="text-foreground">{t(key, { n })}</span>
+      {atCap && <span> — {t('ledger.countAtCap')}</span>}
+    </span>
   )
 }
 
@@ -214,6 +239,12 @@ export default function Page() {
     account: applied.account ?? undefined,
     status: applied.status ?? undefined,
     recognition: applied.recognition ?? undefined,
+    // Sent from 2026-08-21. Without it the route defaults to 100 and a book
+    // with more écritures than that was served a hundred and rendered as
+    // though that were the journal — no count on the wire, `next_cursor`
+    // always null, nothing anywhere saying the list was short. `northgate` has
+    // 115. See `EntryFilters.limit`.
+    limit: LEDGER_LIMIT,
   })
   const riEntries = useRiEntries(params.ws, scope, journal, {
     recognition: applied.recognition ?? undefined,
@@ -227,97 +258,90 @@ export default function Page() {
     router.replace(`${base}/ledger?${next.toString()}`, { scroll: false })
   }
 
+  const anyFilter = !!(applied.account || applied.status || applied.recognition)
+
   return (
     <ScreenFrame title={heading}>
-      <div className="mb-4">
-        <h1 className="text-lg font-semibold text-foreground">
-          {/* The statutory document's own name, which is French for both of them
-              — the same exception D-A carves out for the bilan's line labels.
-              It is read from the journal, never from the book's name: two books
-              of the same regime keep the same document. */}
-          {/* The document's name in the reader's language, with the LEGAL
-              French beneath — the same arrangement `<StatementHeading>` uses,
-              and the same test: identical strings mean the two are one, so only
-              one is rendered. `JOURNAL_NAME` carries both. */}
-          {name ? heading : '—'}
-          <span className="ml-2 text-sm font-normal text-muted-foreground">
-            {name
-              ? name.fr !== heading
-                ? name.fr
-                : null
-              : t('ledger.resolvingJournal')}
-          </span>
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t('ledger.subheading', {
-            book: scope.record?.name ?? '—',
-            year: scope.exercice ?? '—',
-          })}
-        </p>
-        {journal === 'recettes_depenses' && (
-          <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-            {t('ledger.riNoteBefore')}{' '}
-            <Link
-              href={scopedHref(base, '/patrimoine', scope)}
-              className="text-primary-strong hover:underline"
-            >
-              {t('ledger.riNoteLink')}
-            </Link>
-            {t('ledger.riNoteAfter')}
-          </p>
-        )}
-      </div>
+      {/*
+        The statutory document's own name, in the reader's language, with the
+        LEGAL French beneath — the same arrangement `<StatementHeading>` uses,
+        and the same test: identical strings mean the two are one word, so only
+        one is rendered. `JOURNAL_NAME` carries both.
 
-      {(applied.account || applied.status || applied.recognition) && (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            {t('ledger.filtered')}
-          </span>
-          {applied.account && (
-            <FilterPill
-              label={t('ledger.filterAccount', { value: applied.account })}
-              onClear={() => clearFilter('account')}
-            />
-          )}
-          {applied.status && (
-            <FilterPill
-              label={t('ledger.filterStatus', { value: applied.status })}
-              onClear={() => clearFilter('status')}
-            />
-          )}
-          {applied.recognition && (
-            <FilterPill
-              label={t('ledger.filterRecognition', { value: applied.recognition })}
-              onClear={() => clearFilter('recognition')}
-            />
-          )}
-          {applied.account && (
-            <span className="text-[11.5px] text-muted-foreground">
-              {t('ledger.accountFilterNote')}
+        It is read from the JOURNAL, never from the book's name: two books of the
+        same regime keep the same document.
+      */}
+      <PageHeader
+        eyebrow={t('nav.ledger')}
+        title={
+          <>
+            {name ? heading : EMDASH}
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              {name ? (name.fr !== heading ? name.fr : null) : t('ledger.resolvingJournal')}
             </span>
-          )}
-        </div>
-      )}
+          </>
+        }
+        lead={t('ledger.subheading', {
+          book: scope.record?.name ?? EMDASH,
+          year: scope.exercice ?? EMDASH,
+        })}
+        meta={
+          anyFilter ? (
+            <>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {t('ledger.filtered')}
+              </span>
+              {applied.account && (
+                <FilterPill
+                  label={t('ledger.filterAccount', { value: applied.account })}
+                  onClear={() => clearFilter('account')}
+                />
+              )}
+              {applied.status && (
+                <FilterPill
+                  label={t('ledger.filterStatus', { value: applied.status })}
+                  onClear={() => clearFilter('status')}
+                />
+              )}
+              {applied.recognition && (
+                <FilterPill
+                  label={t('ledger.filterRecognition', { value: applied.recognition })}
+                  onClear={() => clearFilter('recognition')}
+                />
+              )}
+              {applied.account && (
+                <span className="text-[11.5px] text-muted-foreground">
+                  {t('ledger.accountFilterNote')}
+                </span>
+              )}
+            </>
+          ) : null
+        }
+      />
 
       {/* ── A DROPPED FILTER IS SAID OUT LOUD ───────────────────────────────
           The URL asked for something this journal cannot answer. Sending it is
           a 400; dropping it quietly hands the reader a LONGER list than the one
           they asked for, with nothing on the page to say so — and a list that is
           wider than its own filter chip claims is the shape of every confident
-          wrong answer in this app's history. */}
+          wrong answer in this app's history.
+
+          Elevation 2, and this is what that level is for: the one thing on the
+          page that is different from the rest of it. */}
       {ignored.length > 0 && (
-        <p
-          role="status"
-          data-ignored-filters={ignored.join(',')}
-          className="mb-3 rounded-md border border-dashed border-border px-2.5 py-1.5 text-[11.5px] text-muted-foreground"
-        >
-          {t('ledger.ignoredLead', {
-            fields: ignored.map((k) => t(FILTER_NAME[k])).join(` ${t('ledger.and')} `),
-          })}{' '}
-          {journal === 'recettes_depenses'
-            ? t('ledger.ignoredRi')
-            : t('ledger.ignoredUnknown')}
-        </p>
+        <Surface tone="attention" role="status" className="mb-4">
+          <p
+            data-ignored-filters={ignored.join(',')}
+            className="max-w-[95ch] text-[12px] leading-relaxed text-muted-foreground"
+          >
+            {t('ledger.ignoredLead', {
+              fields: ignored.map((k) => t(FILTER_NAME[k])).join(` ${t('ledger.and')} `),
+            })}{' '}
+            {journal === 'recettes_depenses'
+              ? t('ledger.ignoredRi')
+              : t('ledger.ignoredUnknown')}
+          </p>
+        </Surface>
       )}
 
       {journal === null ? (
@@ -333,7 +357,8 @@ export default function Page() {
           error={entries.error}
           base={base}
           scope={scope}
-          filtered={!!(applied.account || applied.status || applied.recognition)}
+          filtered={anyFilter}
+          account={applied.account}
         />
       ) : (
         <RecettesDepenses
@@ -342,11 +367,17 @@ export default function Page() {
           error={riEntries.error}
           scope={scope}
           filtered={!!applied.recognition}
+          base={base}
         />
       )}
     </ScreenFrame>
   )
 }
+
+/**
+ * The em dash for an absent value. Never `0.00`, and `0.00` is never this.
+ */
+const EMDASH = '—'
 
 /**
  * The grand livre — one écriture per row, shown whole.
@@ -361,6 +392,7 @@ function GrandLivre({
   base,
   scope,
   filtered,
+  account,
 }: {
   rows: Entry[] | undefined
   isLoading: boolean
@@ -368,6 +400,8 @@ function GrandLivre({
   base: string
   scope: ScopeState
   filtered: boolean
+  /** The account currently filtered to, if any. Drives the totals strip. */
+  account: string | null
 }) {
   const t = useT()
   const columns = useMemo<Column<Entry>[]>(
@@ -442,33 +476,71 @@ function GrandLivre({
     [base, scope, t]
   )
 
+  // ── THE TOTALS STRIP, AND WHY ONLY UNDER AN ACCOUNT FILTER ─────────────
+  // A grand-livre row has no single amount — the money is in the lines, and an
+  // entry has at least two of them. Summing "the ledger" would mean summing
+  // every debit, which equals every credit, which is a true figure that tells a
+  // reader nothing they did not already know from the words "double entry".
+  //
+  // Under `?account=` there IS a question with an answer: this reader arrived
+  // from the income statement by clicking one account, and what they want is
+  // what that account moved. `accountTotals` walks into the LINES and counts
+  // only the ones naming it, because each listed entry also carries its other
+  // side — see that function's header.
+  const totals = account && rows ? accountTotals(rows, account) : null
+
   return (
     <>
-      {rows && rows.length > 0 && <ResultCount n={rows.length} journal="grand_livre" />}
-      <DataTable
-        rows={rows}
-        columns={columns}
-        rowKey={(e) => e.number}
-        isLoading={isLoading}
-        error={error}
-        initialSort={{ key: 'date', direction: 'asc' }}
-        empty={
-          filtered ? (
-            <EmptyState title={t('ledger.emptyFiltered')}>
-              <p>{t('ledger.emptyFilteredBody')}</p>
-            </EmptyState>
-          ) : (
-            <EmptyState title={t('ledger.empty')}>
-              <p>
-                {t('ledger.emptyBody', {
-                  book: scope.record?.name ?? t('rec.thisBook'),
-                  year: scope.exercice ?? t('rec.thisYear'),
-                })}
-              </p>
-            </EmptyState>
-          )
-        }
-      />
+      {totals && account && (
+        <StatRow>
+          <Stat caption={t('ledger.totalDebit')} value={<Money value={totals.debit} bare />} />
+          <Stat caption={t('ledger.totalCredit')} value={<Money value={totals.credit} bare />} />
+          <Stat
+            caption={t('ledger.totalNet')}
+            value={<Money value={totals.net} bare />}
+            emphasis
+            basis={t('ledger.totalBasis', { account, lines: totals.lines })}
+          />
+        </StatRow>
+      )}
+      <Section
+        label={t('ledger.entriesLabel')}
+        bodyClassName=""
+        tools={rows && rows.length > 0 ? <ResultCount n={rows.length} journal="grand_livre" /> : null}
+      >
+        <DataTable
+          rows={rows}
+          columns={columns}
+          rowKey={(e) => e.number}
+          isLoading={isLoading}
+          error={error}
+          initialSort={{ key: 'date', direction: 'asc' }}
+          // Level 4: an écriture nobody has explained yet. `unrecognized` and
+          // `inferred` are the two states `resolve` moves AWAY from, and they
+          // are exactly what the recognition screen lists — so the rule marks
+          // the same rows that screen would, and a reader scanning the ledger
+          // sees the shape of the outstanding work without filtering for it.
+          attention={(e) =>
+            e.recognition === 'unrecognized' || e.recognition === 'inferred' ? 'work' : null
+          }
+          empty={
+            filtered ? (
+              <EmptyState title={t('ledger.emptyFiltered')}>
+                <p>{t('ledger.emptyFilteredBody')}</p>
+              </EmptyState>
+            ) : (
+              <EmptyState title={t('ledger.empty')}>
+                <p>
+                  {t('ledger.emptyBody', {
+                    book: scope.record?.name ?? t('rec.thisBook'),
+                    year: scope.exercice ?? t('rec.thisYear'),
+                  })}
+                </p>
+              </EmptyState>
+            )
+          }
+        />
+      </Section>
     </>
   )
 }
@@ -516,12 +588,14 @@ function RecettesDepenses({
   error,
   scope,
   filtered,
+  base,
 }: {
   rows: RiEntry[] | undefined
   isLoading: boolean
   error: unknown
   scope: ScopeState
   filtered: boolean
+  base: string
 }) {
   const t = useT()
   const label = useLabel()
@@ -615,38 +689,98 @@ function RecettesDepenses({
     [t, label]
   )
 
+  // Totals of the SHOWN set, in centimes. Unlike the grand livre these are
+  // always available: a movement carries one amount, so a column of them has a
+  // meaningful sum. `neutral` is its own figure and is in neither of the other
+  // two — migration 0009, and the defect it fixed misstated somebody's income.
+  const totals = rows ? riTotals(rows) : null
+
   return (
     <>
-      {rows && rows.length > 0 && <ResultCount n={rows.length} journal="recettes_depenses" />}
-      <DataTable
-        rows={rows}
-        columns={columns}
-        rowKey={(r) => r.number}
-        isLoading={isLoading}
-        error={error}
-        initialSort={{ key: 'date', direction: 'asc' }}
-        empty={
-          filtered ? (
-            <EmptyState title={t('ledger.riEmptyFiltered')}>
-              <p>{t('ledger.riEmptyFilteredBody')}</p>
-            </EmptyState>
-          ) : (
-            <EmptyState title={t('ledger.riEmpty')}>
-              <p>
-                {t('ledger.riEmptyBody', {
-                  book: scope.record?.name ?? t('rec.thisBook'),
-                  year: scope.exercice ?? t('rec.thisYear'),
-                })}
-              </p>
-            </EmptyState>
-          )
-        }
-      />
-      {rows && rows.length > 0 && (
-        <p className="mt-2.5 text-[11.5px] text-muted-foreground">
-          {t('ledger.riFootnote', { neutral: 'neutral' })}
-        </p>
+      {totals && rows && rows.length > 0 && (
+        <StatRow>
+          <Stat caption={t('overview.recettes')} value={<Money value={totals.recettes} bare />} />
+          <Stat caption={t('overview.depenses')} value={<Money value={totals.depenses} bare />} />
+          <Stat
+            caption={t('overview.resultat')}
+            value={<Money value={totals.resultat} bare />}
+            emphasis
+            basis={t('ledger.totalRiBasis', { n: rows.length })}
+          />
+          {/* Rendered only when there IS one. A permanent `0.00` neutral tile on
+              every simplified book would be a fourth figure most readers never
+              have, competing with the three they always do. */}
+          {totals.neutral !== '0.00' && (
+            <Stat
+              caption={t('ledger.totalNeutral')}
+              value={<Money value={totals.neutral} bare />}
+              basis={t('ledger.totalNeutralBasis')}
+            />
+          )}
+        </StatRow>
       )}
+
+      {/* A direction this bundle does not know is COUNTED and SHOWN, never
+          folded into a total. Silently counting one as a dépense is exactly what
+          misstated Andrea's income before migration 0009 existed. */}
+      {totals && totals.unknown > 0 && (
+        <Surface tone="problem" role="status" className="mb-4">
+          <p className="max-w-[95ch] text-[12px] leading-relaxed text-muted-foreground">
+            {t('ledger.unknownDirection', { n: totals.unknown })}
+          </p>
+        </Surface>
+      )}
+
+      <Section
+        label={t('ledger.movementsLabel')}
+        bodyClassName=""
+        tools={
+          rows && rows.length > 0 ? <ResultCount n={rows.length} journal="recettes_depenses" /> : null
+        }
+        note={
+          rows && rows.length > 0 ? (
+            <>
+              {t('ledger.riFootnote', { neutral: 'neutral' })}{' '}
+              {t('ledger.riNoteBefore')}{' '}
+              <Link
+                href={scopedHref(base, '/patrimoine', scope)}
+                className="not-italic text-primary-strong hover:underline"
+              >
+                {t('ledger.riNoteLink')}
+              </Link>
+              {t('ledger.riNoteAfter')}
+            </>
+          ) : null
+        }
+      >
+        <DataTable
+          rows={rows}
+          columns={columns}
+          rowKey={(r) => r.number}
+          isLoading={isLoading}
+          error={error}
+          initialSort={{ key: 'date', direction: 'asc' }}
+          attention={(r) =>
+            r.recognition === 'unrecognized' || r.recognition === 'inferred' ? 'work' : null
+          }
+          empty={
+            filtered ? (
+              <EmptyState title={t('ledger.riEmptyFiltered')}>
+                <p>{t('ledger.riEmptyFilteredBody')}</p>
+              </EmptyState>
+            ) : (
+              <EmptyState title={t('ledger.riEmpty')}>
+                <p>
+                  {t('ledger.riEmptyBody', {
+                    book: scope.record?.name ?? t('rec.thisBook'),
+                    year: scope.exercice ?? t('rec.thisYear'),
+                  })}
+                </p>
+              </EmptyState>
+            )
+          }
+        />
+      </Section>
     </>
   )
 }

@@ -35,7 +35,18 @@ export function StatRow({ children, className = '' }: { children: ReactNode; cla
   return (
     <div
       className={
-        'mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3 lg:grid-cols-4 ' +
+        // ── AUTO-FIT, NOT A FIXED COLUMN COUNT ──────────────────────────────
+        // `lg:grid-cols-4` left an EMPTY CELL whenever a row had three stats,
+        // and because the gap is drawn by the container's background showing
+        // through (`gap-px` over `bg-border`), that empty cell rendered as a
+        // grey block on the right of the strip. It read as a figure that had
+        // failed to load, which on an accounting screen is the worst thing a
+        // blank can be mistaken for.
+        //
+        // Several of these rows are conditional — the ledger drops the neutral
+        // tile when there are no neutral movements — so the count genuinely
+        // varies at runtime and cannot be declared.
+        'mb-4 grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-px overflow-hidden rounded-lg border border-border bg-border ' +
         className
       }
     >
