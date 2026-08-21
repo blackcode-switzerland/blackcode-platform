@@ -98,6 +98,34 @@ bk books analyse record --entity acme --asked-by You --agent claude-code \
   --based-on '[{"label":"Trésorerie","value":"CHF 42 000","href":"..."}]'
 ```
 
+### File it as you answer. Do not ask permission first.
+
+**Answering an analytical question about a book and filing the analysis are one
+action, not two.** If somebody asks whether they can afford a hire, what the
+runway is, why a month looks wrong — you read the figures, you reach a verdict,
+and you `analyse record` it in the same breath as replying. Waiting to be asked
+is the mistake, and it is the common one.
+
+Two reasons it matters here specifically:
+
+- **An answer that lives only in a chat transcript is not in the book.** The web
+  surface is read-only; this door is the only way a conclusion becomes part of
+  the record a fiduciary or a future reader can find.
+- **`based_on` is what was READ at answer time.** Ask first, and by the time the
+  answer comes back the figures may have moved — so the snapshot would document a
+  different moment than the verdict it sits under. Filing late is not the same
+  record as filing then.
+
+The permanence below is not a reason to hold back. A superseded analysis is
+answered by filing a NEW one, and both stand — so nothing is lost by filing and
+something is lost by not filing.
+
+**What not to file:** a lookup. "What is account 1020 called", "how many entries
+are there" — those are reads, not judgments, and the register is for verdicts.
+File when you formed an opinion the book should carry.
+
+### The record
+
 This is the agent write-back door, and the record is **permanent**: no edit, no
 delete. Its `based_on` snapshot records what was READ at answer time and is
 never recomputed, because a stored answer that silently reflows is a different

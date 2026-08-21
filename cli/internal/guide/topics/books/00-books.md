@@ -23,6 +23,13 @@ automatically.
 So there is no chat here, no in-app assistant, and no scenario buttons. You read
 the data through these commands, reason outside, and write the conclusion back.
 
+**Writing it back is not optional and is not a thing to ask permission for.**
+When somebody asks you an analytical question about a book — runway, whether a
+hire is affordable, why a month looks wrong — you answer it AND file it with
+`bk books analyse record`, in one action. An answer that stays in a chat
+transcript is an answer the book does not have.
+→ `bk guide books/statements`
+
 ## The web surface is read-only
 
 Every screen in the browser reads. **Nothing in it writes.** Posting an entry,

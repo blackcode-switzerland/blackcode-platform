@@ -71,3 +71,10 @@ record. There is no upload route in this app at all.
 `based_on` snapshot is what was true when the answer was filed and is never
 recomputed. Re-ask and file a new record.
 → `bk guide books/statements`
+
+**13. Answering an analytical question and not filing it.** Asking whether to
+record the analysis is the wrong instinct — answering and filing are one action.
+The record being permanent is not a reason to hesitate: a superseded answer is
+answered with a new one and both stand (see 8). An answer left in a chat
+transcript is an answer the book does not have.
+→ `bk guide books/statements`
