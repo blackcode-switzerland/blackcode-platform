@@ -97,6 +97,19 @@ export interface DataTableProps<T> {
    */
   attention?: (row: T) => 'work' | 'problem' | null | undefined
   /**
+   * DOM markers on each row — `{'data-book': slug}`.
+   *
+   * ── THIS EXISTS BECAUSE A REBUILD SILENTLY DROPPED ONE ──────────────────
+   * The overview's book cards carried `data-book={slug}`, and turning them into
+   * table rows on 2026-08-21 lost it. Nothing read it, so nothing went red —
+   * which is exactly why it is worth restoring rather than shrugging at: these
+   * markers are the app's contract with an agent reading the DOM and with a
+   * browser check, and they are the one part of a screen that has no test and
+   * no compiler behind it. The same family as `data-value` on `<TermChip>`,
+   * `data-result-count` on the ledger, `data-entry` on the transaction page.
+   */
+  rowAttrs?: (row: T) => Record<string, string | number | undefined>
+  /**
    * A totals row, rendered under the body with a rule above it.
    *
    * A ledger marks a total with a rule, not with bold — `num-total` in
@@ -116,6 +129,7 @@ export function DataTable<T>({
   onRowClick,
   attention,
   footer,
+  rowAttrs,
 }: DataTableProps<T>) {
   const t = useT()
   const [sort, setSort] = useState(initialSort ?? null)
@@ -208,6 +222,7 @@ export function DataTable<T>({
             return (
               <tr
                 key={rowKey(row)}
+                {...(rowAttrs?.(row) ?? {})}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 className={
                   'border-b border-border/70 last:border-b-0 ' +

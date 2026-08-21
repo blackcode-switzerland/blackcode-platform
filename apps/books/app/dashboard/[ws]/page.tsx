@@ -285,6 +285,8 @@ function BooksTable({ books, base }: { books: BookRow[]; base: string }) {
       rows={books}
       columns={columns}
       rowKey={(b) => b.entity.slug}
+      // Restored 2026-08-21: the book cards this table replaced carried it.
+      rowAttrs={(b) => ({ 'data-book': b.entity.slug })}
       onRowClick={(b) =>
         // The mockup's own affordance: a book opens its grand livre.
         window.location.assign(
@@ -363,6 +365,7 @@ function DoubleEntryTable({
       rows={books}
       columns={columns}
       rowKey={(b) => b.entity.slug}
+      rowAttrs={(b) => ({ 'data-book': b.entity.slug })}
       attention={attentionFor}
       onRowClick={(b) =>
         window.location.assign(
@@ -428,6 +431,7 @@ function SimplifiedTable({
       rows={books}
       columns={columns}
       rowKey={(b) => b.entity.slug}
+      rowAttrs={(b) => ({ 'data-book': b.entity.slug })}
       attention={attentionFor}
       onRowClick={(b) =>
         window.location.assign(

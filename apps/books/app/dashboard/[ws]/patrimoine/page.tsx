@@ -46,6 +46,8 @@ import { useT } from '@/lib/i18n'
 import { ScreenFrame } from '@/components/screen-frame'
 import { ErrorState, Loading, EmptyState } from '@/components/states'
 import { StatementHeading } from '@/components/statement-heading'
+import { Grid, Section } from '@/components/section'
+import { Badge } from '@/components/badge'
 import { DateText } from '@/components/date-text'
 import { Money } from '@/components/money'
 
@@ -76,7 +78,7 @@ export default function Page() {
         exerciceStatus={scope.exerciceStatus}
       />
 
-      <p className="mb-4 text-[12.5px] text-muted-foreground">
+      <p className="mb-4 max-w-[95ch] text-[12.5px] leading-relaxed text-muted-foreground">
         {simplified ? t('patrimoine.leadSimplified') : t('patrimoine.leadDouble')}
       </p>
 
@@ -110,9 +112,11 @@ export default function Page() {
         </EmptyState>
       )}
 
-      {snapshots.map((snapshot) => (
-        <Snapshot key={snapshot.number} snapshot={snapshot} />
-      ))}
+      <Grid>
+        {snapshots.map((snapshot) => (
+          <Snapshot key={snapshot.number} snapshot={snapshot} />
+        ))}
+      </Grid>
 
       {snapshots.length > 1 && (
         <p className="mt-4 text-[11.5px] text-muted-foreground">{t('patrimoine.newestFirst')}</p>
@@ -125,24 +129,28 @@ function Snapshot({ snapshot }: { snapshot: PatrimoineView }) {
   const t = useT()
   const label = useLabel()
   return (
-    <section
-      className="mb-5 rounded-lg border border-border bg-card px-4 py-4"
-      data-patrimoine={snapshot.number}
-    >
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-border pb-2">
-        <h2 className="text-sm font-medium text-foreground">
-          {t('patrimoine.asOf')} <DateText value={snapshot.as_of} />
-        </h2>
-        <span className="text-[12px] text-muted-foreground">
+    <Section
+      span={6}
+      className="[&]:relative"
+      label={
+        <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="text-foreground">
+            {t('patrimoine.asOf')} <DateText value={snapshot.as_of} />
+          </span>
           {/* Two dates, deliberately. See this file's header. */}
-          {t('patrimoine.compiled')} <DateText value={snapshot.compiled} />
+          <span className="font-normal normal-case tracking-normal">
+            {t('patrimoine.compiled')} <DateText value={snapshot.compiled} />
+          </span>
         </span>
-        <span className="ml-auto font-mono text-[11px] text-muted-foreground">
-          #{snapshot.number}
-        </span>
-      </div>
-
-      <table className="mt-2 w-full border-collapse text-[13px]">
+      }
+      tools={
+        <Badge>
+          <span className="figure">#{snapshot.number}</span>
+        </Badge>
+      }
+    >
+      <div data-patrimoine={snapshot.number} />
+      <table className="w-full border-collapse text-[13px]">
         <tbody>
           {snapshot.items.length === 0 && (
             <tr>
@@ -177,10 +185,10 @@ function Snapshot({ snapshot }: { snapshot: PatrimoineView }) {
       <p className="mt-1.5 text-[11px] text-muted-foreground">{t('patrimoine.totalNote')}</p>
 
       {snapshot.note && (
-        <p className="mt-2 border-t border-border/60 pt-2 text-[12px] text-muted-foreground">
+        <p className="mt-2 border-t border-border/60 pt-2 text-[12px] leading-relaxed text-muted-foreground">
           {label(snapshot.note)}
         </p>
       )}
-    </section>
+    </Section>
   )
 }

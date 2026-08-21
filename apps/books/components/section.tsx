@@ -53,14 +53,21 @@ export function PageShell({ children }: { children: ReactNode }) {
  * fit wraps, so a `span` set wrongly produces a short row rather than an
  * overflow.
  */
-export function Grid({ children, className = '' }: { children: ReactNode; className?: string }) {
+export function Grid({
+  children,
+  className = '',
+  ...rest
+}: { children: ReactNode; className?: string } & Record<`data-${string}`, string | undefined>) {
   // ── `items-start`, SO A SHORT SECTION STAYS SHORT ──────────────────────
   // Grid items stretch to the row's height by default. On the analyse detail
   // that drew a three-line answer as a 600px card with 500px of empty white
   // under it, because the column beside it held two tables — which reads as
   // content that failed to load rather than as content that is short.
   return (
-    <div className={'grid grid-cols-1 items-start gap-4 lg:grid-cols-12 ' + className}>
+    <div
+      {...rest}
+      className={'grid grid-cols-1 items-start gap-4 lg:grid-cols-12 ' + className}
+    >
       {children}
     </div>
   )

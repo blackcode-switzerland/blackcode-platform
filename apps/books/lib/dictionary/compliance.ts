@@ -13,6 +13,7 @@ export const en = {
   'compliance.uiName': 'Compliance rules',
   'compliance.legalName': 'Règles de conformité',
   'compliance.subheading': 'Every book · art. 957 ff. CO and the tax and VAT statutes each rule cites',
+  'compliance.registerLabel': 'The rules',
   'compliance.leadA':
     'The statutory checks this product knows about, researched against Fedlex with the article each one rests on.',
   'compliance.leadB': 'They are the same for every book',
@@ -141,6 +142,7 @@ export const fr: Record<keyof typeof en, string> = {
   'compliance.legalName': 'Règles de conformité',
   'compliance.subheading':
     'Tous livres · art. 957 ss CO et les dispositions fiscales et TVA que chaque règle cite',
+  'compliance.registerLabel': 'Les règles',
   'compliance.leadA':
     'Les contrôles légaux que ce produit connaît, recherchés dans Fedlex avec l’article sur lequel chacun repose.',
   'compliance.leadB': 'Ils sont identiques pour tous les livres',

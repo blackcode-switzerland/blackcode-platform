@@ -73,6 +73,7 @@ import {
 import { ScreenFrame } from '@/components/screen-frame'
 import { ErrorState, Loading } from '@/components/states'
 import { StatementHeading } from '@/components/statement-heading'
+import { Grid, Section, Surface } from '@/components/section'
 import { NoExerciceNotice, isNoExerciceRefusal } from '@/components/no-exercice-notice'
 import { CitedFigure } from '@/components/cited-figure'
 import { Money } from '@/components/money'
@@ -168,33 +169,32 @@ function Snapshot({ data }: { data: TaxSnapshotResult }) {
   const settled = data.tax ? allConfirmed(params) : true
 
   return (
-    <div className="space-y-6" data-tax-snapshot={data.entity}>
+    <Grid data-tax-snapshot={data.entity}>
       {/* ── THE TWO FIGURES EVERYTHING ELSE IS COMPUTED FROM ────────────
           Not estimates and not cited: they are this book's own statements —
           `cr.resultat` and the bilan's capitaux propres — and their authority is
           art. 959a/959b, which those two screens carry. Citing them here would
           claim they were derived by this page. */}
-      <section>
-        <H2>{t('tax.theBook')}</H2>
-        <div className="mt-1.5 grid grid-cols-1 gap-x-6 sm:grid-cols-2">
+      <Section span={6} label={t('tax.theBook')} note={t('tax.bookNote')}>
+        <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
           <Fact label={t('tax.resultat')} value={data.profit} />
           <Fact label={t('tax.equity')} value={data.equity} />
         </div>
-        <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-          {t('tax.bookNote')}
-        </p>
-      </section>
+      </Section>
 
       {/* ── VAT: NULL IS "NOT REGISTERED", WHICH IS NOT ZERO ────────────── */}
-      <section>
-        <H2>{t('tax.tva')}</H2>
+      <Section
+        span={6}
+        label={t('tax.tva')}
+        note={data.vat === null ? undefined : t('tax.vatNote')}
+      >
         {data.vat === null ? (
-          <p className="mt-1.5 text-[12.5px] text-muted-foreground">
+          <p className="text-[12.5px] text-muted-foreground">
             {t('tax.notRegistered')}
           </p>
         ) : (
           <>
-            <div className="mt-1.5 border-t border-border">
+            <div className="border-t border-border">
               <Line label={t('tax.vatOpening')} value={data.vat.opening_due} />
               <Line label={t('tax.vatOutput')} value={data.vat.output_ytd} sign="+" />
               <Line
@@ -204,45 +204,40 @@ function Snapshot({ data }: { data: TaxSnapshotResult }) {
               />
               <Line label={t('tax.vatNet')} value={data.vat.net_due} strong />
             </div>
-            <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-              {t('tax.vatNote')}
-            </p>
           </>
         )}
-      </section>
+      </Section>
 
       {/* ── THE TWO ESTIMATES, OR THE HONEST ABSENCE OF THEM ────────────── */}
       {data.tax === null ? (
-        <section>
-          <H2>{t('tax.companyTaxes')}</H2>
-          <p className="mt-1.5 rounded-md border border-border bg-secondary px-3 py-2 text-[12.5px] text-muted-foreground">
+        <Section span={12} label={t('tax.companyTaxes')}>
+          <p className="max-w-[95ch] text-[12.5px] leading-relaxed text-muted-foreground">
             <span className="font-medium text-foreground">{t('tax.noParamsLead')}</span>{' '}
             {t('tax.noParamsBody')}
           </p>
-        </section>
+        </Section>
       ) : (
         <>
           {!settled && (
-            <p
-              className="rounded-md border border-border bg-secondary px-3 py-2 text-[12.5px] text-foreground"
-              role="note"
-            >
-              <span className="font-medium">{t('tax.unsettledLead')}</span>{' '}
-              {t('tax.unsettledBody')}
-            </p>
+            <div className="lg:col-span-12">
+              <Surface tone="attention" role="note">
+                <p className="max-w-[95ch] text-[12.5px] leading-relaxed text-foreground">
+                  <span className="font-medium">{t('tax.unsettledLead')}</span>{' '}
+                  {t('tax.unsettledBody')}
+                </p>
+              </Surface>
+            </div>
           )}
 
-          <section>
-            <H2>
-              {t('tax.profitTaxHeading', {
-                canton: data.tax.canton,
-                commune: data.tax.commune,
-              })}
-            </H2>
-            <p className="mt-1 text-[11.5px] text-muted-foreground">
-              {t('tax.cantonCommuneNote')}
-            </p>
-            <div className="mt-1.5">
+          <Section
+            span={12}
+            label={t('tax.profitTaxHeading', {
+              canton: data.tax.canton,
+              commune: data.tax.commune,
+            })}
+            note={t('tax.cantonCommuneNote')}
+          >
+            <div>
               <CitedFigure
                 label={t('tax.cantonal')}
                 value={data.tax.profit_tax.cantonal}
@@ -299,11 +294,10 @@ function Snapshot({ data }: { data: TaxSnapshotResult }) {
                 {t('tax.lossYear')}
               </p>
             )}
-          </section>
+          </Section>
 
-          <section>
-            <H2>{t('tax.capitalTax')}</H2>
-            <div className="mt-1.5">
+          <Section span={12} label={t('tax.capitalTax')} note={t('tax.capitalNote')}>
+            <div>
               <CitedFigure
                 label={t('tax.vatNet')}
                 value={data.tax.capital_tax.net_due}
@@ -322,17 +316,14 @@ function Snapshot({ data }: { data: TaxSnapshotResult }) {
                 </span>
               </CitedFigure>
             </div>
-            <p className="mt-2 text-[12px] text-muted-foreground">
-              {t('tax.capitalNote')}
-            </p>
-          </section>
+          </Section>
         </>
       )}
 
-      <p className="border-t border-border pt-3 text-[11.5px] text-muted-foreground">
+      <p className="px-1 text-[11.5px] text-muted-foreground lg:col-span-12">
         {t('tax.footnote', { command: `bk books tax --entity ${data.entity}` })}
       </p>
-    </div>
+    </Grid>
   )
 }
 
