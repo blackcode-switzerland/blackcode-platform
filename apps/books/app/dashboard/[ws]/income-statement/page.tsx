@@ -60,6 +60,9 @@ import { crGroups } from '@/lib/statement-view'
 import { StatementTable } from '@/components/statement-table'
 import { MonthlyCrGrid } from '@/components/monthly-cr-grid'
 import { ScreenFrame } from '@/components/screen-frame'
+import { Section } from '@/components/section'
+import { Money } from '@/components/money'
+import { Stat, StatRow } from '@/components/stat'
 import { SimplifiedBookNotice } from '@/components/simplified-notice'
 import { NoExerciceNotice, isNoExerciceRefusal } from '@/components/no-exercice-notice'
 import { ErrorState, Loading } from '@/components/states'
@@ -157,38 +160,56 @@ export default function Page() {
 
       {cr.data && (
         <>
-          {/* The toggle. Only when the payload actually carries months — see the
-              header of this file. Two buttons rather than a `<select>`: there
-              are two readings and both are worth naming on screen. */}
-          {months && (
-            <div
-              className="mb-3 flex items-center gap-1"
-              role="group"
-              aria-label={t('statements.reading')}
-            >
-              <ViewButton active={!monthly} onClick={() => setView('year')}>
-                {t('statements.viewYear')}
-              </ViewButton>
-              <ViewButton active={monthly} onClick={() => setView('month')}>
-                {t('statements.viewMonth')}
-              </ViewButton>
-            </div>
-          )}
+          {/* The figure the year is about, above the document that derives it.
+              The résultat is ALSO the statement's own footer line below — the
+              same deliberate duplication the bilan carries, for the same
+              reason: a compte de résultat is a statutory document and its total
+              belongs at its foot, while a reader checking one number should not
+              have to scroll a full chart of accounts to reach it. Both read
+              `cr.data.resultat`. */}
+          <StatRow>
+            <Stat
+              caption={t('statements.resultat')}
+              value={<Money value={cr.data.resultat} bare />}
+              emphasis
+              basis={t('statements.resultatBasis', { year: scope.exercice ?? '—' })}
+            />
+          </StatRow>
 
-          {monthly && months ? (
-            <MonthlyCrGrid cr={{ ...cr.data, months }} meta={scope.meta} />
-          ) : (
-            <>
-              <p className="mb-3 text-[12px] text-muted-foreground">{t('statements.crLead')}</p>
-
+          <Section
+            /* No label: `crGroups` gives the table its own "Compte de résultat"
+               group heading, and a section label above it would be the same
+               words twice under an H1 that already says them a third time. The
+               bilan keeps its label because its groups are ACTIF and PASSIF. */
+            bodyClassName={monthly && months ? '' : 'px-4 py-3.5'}
+            /* The toggle. Only when the payload actually carries months — see
+               the header of this file. Two buttons rather than a `<select>`:
+               there are two readings and both are worth naming on screen. */
+            tools={
+              months ? (
+                <div className="flex items-center gap-1" role="group" aria-label={t('statements.reading')}>
+                  <ViewButton active={!monthly} onClick={() => setView('year')}>
+                    {t('statements.viewYear')}
+                  </ViewButton>
+                  <ViewButton active={monthly} onClick={() => setView('month')}>
+                    {t('statements.viewMonth')}
+                  </ViewButton>
+                </div>
+              ) : null
+            }
+            note={monthly && months ? undefined : t('statements.crLead')}
+          >
+            {monthly && months ? (
+              <MonthlyCrGrid cr={{ ...cr.data, months }} meta={scope.meta} />
+            ) : (
               <StatementTable
                 groups={crGroups(cr.data, scope.meta)}
                 base={base}
                 scope={scope}
                 footer={{ label: t('statements.resultat'), amount: cr.data.resultat }}
               />
-            </>
-          )}
+            )}
+          </Section>
         </>
       )}
     </ScreenFrame>
