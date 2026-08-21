@@ -152,7 +152,35 @@ export function BooksShell({
   return (
     <WorkspaceSlugProvider value={ws}>
       <PageTitle.Provider value={setPageTitle}>
-        <ShellBody ws={ws} title={title ?? pageTitle ?? undefined}>
+        {/*
+          ── THE TWO TITLES ARE PASSED APART, AND MERGING THEM COST THE LEDGER
+             ITS BOOK SWITCHER (found 2026-08-21) ─────────────────────────────
+          This read `title={title ?? pageTitle ?? undefined}`, one merged value.
+          The topbar then tested `title === undefined` to decide whether to
+          render the switchers — a test written to mean *"this is the settings
+          subtree, which is the ACCOUNT and not a book, so a book switcher would
+          be a control with no effect."*
+
+          `usePageTitle` landed later and writes into the same variable. So from
+          the moment the ledger started naming its own document — "Grand livre"
+          over a double-entry book, "Recettes et dépenses" over a simplified one,
+          which was itself a correct fix — `title` stopped being `undefined`
+          there, and **the one screen in the app where switching book matters
+          most lost both switchers.** Nothing threw, no test could see it, and
+          the entry DETAIL page beside it kept them, so the app disagreed with
+          itself one click apart.
+
+          CLAUDE.md finding #10's mechanism exactly: a correct change silently
+          retargeted a correct condition, and the diff that broke the guard did
+          not touch the guard. The fix is to stop asking one variable two
+          questions — `subtree` answers "is this the account?" and `title`
+          answers "what does the header read?".
+        */}
+        <ShellBody
+          ws={ws}
+          title={title ?? pageTitle ?? undefined}
+          subtree={title !== undefined}
+        >
           {children}
         </ShellBody>
       </PageTitle.Provider>
@@ -176,10 +204,20 @@ function ShellBody({
    * specific claim. See the context above.
    */
   title,
+  /**
+   * Is this a SUBTREE the nav table cannot name — i.e. the account rather than
+   * a book?
+   *
+   * Separate from `title` because the two answer different questions and
+   * sharing one variable is what hid the ledger's switchers. See the note at
+   * the call site.
+   */
+  subtree,
   children,
 }: {
   ws: string
   title?: string
+  subtree: boolean
   children: React.ReactNode
 }) {
   const pathname = usePathname() ?? ''
@@ -307,7 +345,10 @@ function ShellBody({
             {/* Only on pages whose numbers actually change with the book. A
                 titled subtree (settings) is not one of them: it is the account,
                 not a book, so the switcher would be a control with no effect. */}
-            {title === undefined && (
+            {/* `subtree`, NOT `title`. A page that names its own document is
+                still a book page and still needs both controls; only the
+                settings subtree is the account. */}
+            {!subtree && (
               <>
                 {current?.scoped !== false && <EntitySwitcher scope={scope} />}
                 <ExerciceSwitcher scope={scope} />
