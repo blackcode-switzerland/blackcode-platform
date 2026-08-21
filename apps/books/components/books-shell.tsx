@@ -316,7 +316,16 @@ function ShellBody({
           </div>
         </header>
 
-        <main className="px-4 py-5 sm:px-6 lg:px-8">{children}</main>
+        {/*
+          The padding lives in `<PageShell>` (components/section.tsx), not here.
+          It was on this element AND on every screen's own wrapper, which is how
+          the app ended up with a 900px column of content and 500px of empty
+          ground beside it on any real monitor — the shell padded, then each
+          screen padded again inside its own `max-w-4xl`.
+
+          One owner: the screen decides its width, this decides nothing.
+        */}
+        <main>{children}</main>
       </div>
     </div>
   )

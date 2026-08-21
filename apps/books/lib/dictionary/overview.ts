@@ -35,6 +35,26 @@ export const en = {
   'overview.stagedCount': '{n} staged',
   'overview.taxLink': 'Statutory tax snapshot',
 
+  // ── The three tables (2026-08-21) ────────────────────────────────────────
+  // The books were three stacked cards of eight label-above-value fields each.
+  // They are rows now, and the figures split by REGIME rather than sharing one
+  // header, because a double-entry book and a simplified one do not have the
+  // same figures and a column head that is true for one row and false for the
+  // next is worse than two tables.
+  'overview.booksLabel': 'The books',
+  'overview.booksNote':
+    'Open a book to read its grand livre. What still needs explaining is on its recognition page.',
+  'overview.doubleEntryBooks': 'Double-entry books — this year',
+  'overview.simplifiedBooks': 'Simplified books — this year',
+  'overview.book': 'Book',
+  'overview.year': 'Year',
+  'overview.resultat': 'Résultat',
+  'overview.toResolve': 'To resolve',
+  'overview.staged': 'Staged',
+  'overview.noFiguresShort': 'No figures served',
+  'overview.noExerciceShort': 'No fiscal year open',
+  'overview.rollupFiguresLabel': 'The four totals',
+
   'overview.rollupTitle': 'Across all your books',
   'overview.rollupLead':
     'An informational aggregation over {books} books, and never a consolidation under art. 963 CO. Nothing is eliminated: a loan between two of your books is counted on both sides, because the question this answers is what you hold, not what a group balance sheet would say. It has no standing in any filing.',
@@ -125,6 +145,20 @@ export const fr: Record<keyof typeof en, string> = {
   'overview.toResolveCount': '{n} à traiter',
   'overview.stagedCount': '{n} en attente',
   'overview.taxLink': 'Aperçu fiscal légal',
+
+  'overview.booksLabel': 'Les livres',
+  'overview.booksNote':
+    'Ouvrez un livre pour lire son grand livre. Ce qui reste à expliquer se trouve sur sa page de reconnaissance.',
+  'overview.doubleEntryBooks': 'Livres en partie double — cet exercice',
+  'overview.simplifiedBooks': 'Livres simplifiés — cet exercice',
+  'overview.book': 'Livre',
+  'overview.year': 'Exercice',
+  'overview.resultat': 'Résultat',
+  'overview.toResolve': 'À traiter',
+  'overview.staged': 'En attente',
+  'overview.noFiguresShort': 'Aucun chiffre servi',
+  'overview.noExerciceShort': 'Aucun exercice ouvert',
+  'overview.rollupFiguresLabel': 'Les quatre totaux',
 
   'overview.rollupTitle': 'Tous livres confondus',
   'overview.rollupLead':

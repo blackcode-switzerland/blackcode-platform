@@ -21,6 +21,7 @@ import { useScope } from '@/lib/scope'
 import { useT } from '@/lib/i18n'
 import { ErrorState, FixtureNotice, Loading } from './states'
 import { NoBooks } from './no-books'
+import { PageShell } from './section'
 
 export function ScreenFrame({
   title,
@@ -32,25 +33,48 @@ export function ScreenFrame({
   const { isLoading, error, entities, entity, record, source } = useScope()
   const t = useT()
 
-  if (isLoading) return <Loading rows={5} label={t('state.loadingThing', { thing: title })} />
-  if (error) return <ErrorState error={error} title={t('state.errorTitleThing', { thing: title })} />
-  if (entities.length === 0) return <NoBooks />
+  // ── EVERY BRANCH IS PADDED, AND THAT USED TO BE SOMEBODY ELSE'S JOB ──────
+  // The page padding moved out of `<BooksShell>`'s `<main>` on 2026-08-21, so
+  // an early return that is not wrapped renders flush against the sidebar and
+  // the top bar. These four are the states a reader is MOST likely to be in on
+  // a bad day — the request failed, the book does not exist, there are no books
+  // at all — which makes them the worst four to let render broken.
+  if (isLoading)
+    return (
+      <PageShell>
+        <Loading rows={5} label={t('state.loadingThing', { thing: title })} />
+      </PageShell>
+    )
+  if (error)
+    return (
+      <PageShell>
+        <ErrorState error={error} title={t('state.errorTitleThing', { thing: title })} />
+      </PageShell>
+    )
+  if (entities.length === 0)
+    return (
+      <PageShell>
+        <NoBooks />
+      </PageShell>
+    )
 
   if (record === null) {
     return (
-      <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3.5" role="alert">
-        <p className="text-sm font-medium text-foreground">
-          {t('frame.noSuchBookTitle', { slug: entity ?? '' })}
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">{t('frame.noSuchBookBody')}</p>
-      </div>
+      <PageShell>
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3.5" role="alert">
+          <p className="text-sm font-medium text-foreground">
+            {t('frame.noSuchBookTitle', { slug: entity ?? '' })}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{t('frame.noSuchBookBody')}</p>
+        </div>
+      </PageShell>
     )
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <PageShell>
       <FixtureNotice source={source} />
       {children}
-    </div>
+    </PageShell>
   )
 }

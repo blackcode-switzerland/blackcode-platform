@@ -149,8 +149,13 @@ export function Section({
       )}
       <div className={bodyClassName || 'px-4 py-3.5'}>{children}</div>
       {note ? (
+        // `max-w-[95ch]`, and it is not cosmetic: this section is up to 1400px
+        // wide and these footnotes are whole legal sentences. A 200-character
+        // line is one the eye loses on the way back to the left margin, so the
+        // note that explains the figures is the one thing on the page nobody
+        // reads. The TABLE wants the full width; the prose about it does not.
         <div className="border-t border-border px-4 py-2.5 text-[12px] italic leading-relaxed text-muted-foreground">
-          {note}
+          <div className="max-w-[95ch]">{note}</div>
         </div>
       ) : null}
     </section>
