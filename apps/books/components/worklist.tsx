@@ -134,8 +134,17 @@ export function Worklist({
     )
   }
 
+  const hasPieces = rows.some((r) => r.kind === 'piece')
+
   return (
-    <ul className="divide-y divide-border border-y border-border">
+    <>
+      {/* Said ONCE, not once per pièce. See `<ReadOnlyReason>`. */}
+      {hasPieces && (
+        <p className="mx-4 mt-3 max-w-[95ch] rounded-md border border-dashed border-border px-3 py-2 text-[12px] leading-relaxed text-muted-foreground">
+          {t('rec.pieceLead')}
+        </p>
+      )}
+      <ul className="divide-y divide-border border-y border-border">
       {rows.map((row) => (
         <Row
           key={rowId(row)}
@@ -149,7 +158,8 @@ export function Worklist({
           onResolved={onResolved}
         />
       ))}
-    </ul>
+      </ul>
+    </>
   )
 }
 
@@ -379,13 +389,22 @@ function ReadOnlyReason({
   const t = useT()
   if (kind === 'piece') {
     return (
+      // ── THE INVARIANT HALF IS SAID ONCE, ABOVE THE LIST ──────────────
+      // This paragraph opened with `rec.pieceLead` — *"This is a document, not
+      // a transaction. Explaining is not what it needs…"* — on EVERY pièce row.
+      // On the seeded book that is the same 180 characters six times in a
+      // column, which is a wall a reader learns to skip, and skipping it is how
+      // they also miss the half that differs.
+      //
+      // The lead is now `<PieceLead>`, rendered once by `<Worklist>` when the
+      // list holds any pièce at all. What stays on the row is only what is TRUE
+      // OF THIS ROW: which entries it could match, or that nothing does.
       <p
         data-readonly="piece"
-        className="mt-2 inline-flex items-start gap-1.5 rounded-md border border-dashed border-border px-2.5 py-1.5 text-[12px] text-muted-foreground"
+        className="mt-2 inline-flex items-start gap-1.5 text-[12px] text-muted-foreground"
       >
         <FileText size={12} className="mt-0.5 shrink-0" />
         <span>
-          {t('rec.pieceLead')}{' '}
           {/* The candidates, as facts. Nothing here applies one, and the
               #numbers name whichever journal the pièce's own book keeps —
               `journalOf`, on the server. */}

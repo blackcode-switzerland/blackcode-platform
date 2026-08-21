@@ -14,6 +14,8 @@ export const en = {
   'rec.lead':
     'Money that moved without an agreed meaning waits here. Explaining a row is the whole product — and every explanation can teach a rule, so the next payment like it explains itself.',
   'rec.needsAHuman': 'Needs a human',
+  'rec.toExplainCaption': 'To explain',
+  'rec.awaitingMatchCaption': 'Awaiting a document',
   'rec.toExplain': '{n} to explain',
   'rec.awaitingMatch': '{n} awaiting a document match',
   'rec.loading': 'Loading the worklist',
@@ -40,10 +42,19 @@ export const en = {
   'rec.suggestionsHeading': 'A rule would explain this — nothing has applied it',
   'rec.useThisExplanation': 'use this explanation',
 
+  // ── THESE THREE WERE ONE SENTENCE ACROSS TWO PLACES, AND NOW ARE NOT ──
+  // `pieceLead` used to end on "and" and each ROW finished the sentence in
+  // lower case. It was rendered once per pièce, so the seeded book showed the
+  // same 180 characters six times down a column — a wall a reader learns to
+  // skip, and skipping it means missing the half that actually differs.
+  //
+  // The lead is now rendered ONCE above the list (`<Worklist>`), so it has to
+  // stand as a complete sentence, and the per-row halves have to start as one.
+  // The information is identical; only where it is said changed.
   'rec.pieceLead':
-    'This is a document, not a transaction. Explaining is not what it needs — a pièce is attached to the entry it proves, and',
-  'rec.pieceCould': 'this one could document {numbers}.',
-  'rec.pieceNoMatch': 'nothing in the books matches its amount and date yet.',
+    'This is a document, not a transaction. Explaining is not what it needs — a pièce is attached to the entry it proves.',
+  'rec.pieceCould': 'Could document {numbers}.',
+  'rec.pieceNoMatch': 'Nothing in the books matches its amount and date yet.',
   'rec.pieceLink': 'Open it in supporting documents',
   'rec.readOnlyUnknownJournal':
     'Read-only for now. Which journal this book keeps has not been established yet, and this row’s #number means one thing in the grand livre and another in a recettes-dépenses journal. Resolving before that is settled would be a write against a book chosen by a guess.',
@@ -148,6 +159,8 @@ export const fr: Record<keyof typeof en, string> = {
   'rec.lead':
     'L’argent qui a bougé sans signification convenue attend ici. Expliquer une ligne, c’est tout le produit — et chaque explication peut enseigner une règle, de sorte que le prochain paiement du même type s’explique tout seul.',
   'rec.needsAHuman': 'À traiter',
+  'rec.toExplainCaption': 'À expliquer',
+  'rec.awaitingMatchCaption': 'En attente d’une pièce',
   'rec.toExplain': '{n} à expliquer',
   'rec.awaitingMatch': '{n} en attente d’une pièce',
   'rec.loading': 'Chargement de la file',
@@ -174,9 +187,9 @@ export const fr: Record<keyof typeof en, string> = {
   'rec.useThisExplanation': 'utiliser cette explication',
 
   'rec.pieceLead':
-    'Ceci est un document, pas une transaction. L’expliquer n’est pas ce dont il a besoin — une pièce est rattachée à l’écriture qu’elle prouve, et',
-  'rec.pieceCould': 'celle-ci pourrait justifier {numbers}.',
-  'rec.pieceNoMatch': 'rien dans les livres ne correspond encore à son montant et à sa date.',
+    'Ceci est un document, pas une transaction. L’expliquer n’est pas ce dont il a besoin — une pièce est rattachée à l’écriture qu’elle prouve.',
+  'rec.pieceCould': 'Celle-ci pourrait justifier {numbers}.',
+  'rec.pieceNoMatch': 'Rien dans les livres ne correspond encore à son montant et à sa date.',
   'rec.pieceLink': 'Ouvrir dans les pièces justificatives',
   'rec.readOnlyUnknownJournal':
     'En lecture seule pour l’instant. Le type de journal tenu par ce livre n’est pas encore établi, et le #numéro de cette ligne désigne une chose dans le grand livre et une autre dans un journal de recettes-dépenses. Traiter avant que ce soit tranché serait écrire dans un livre choisi au hasard.',

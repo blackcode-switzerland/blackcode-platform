@@ -47,6 +47,7 @@ import { useCanWrite, useCreateRule } from '@/lib/mutations'
 import { booksCacheFilter } from '@/lib/query-keys'
 import { filterRows, ruleFields } from '@/lib/search'
 import { DataTable, type Column } from './data-table'
+import { Section } from './section'
 import { DateText } from './date-text'
 import { EmptyState } from './states'
 import { TableSearch, useTableSearch } from './table-search'
@@ -223,24 +224,21 @@ export function RulesPanel({
   ]
 
   return (
-    <section className="mt-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-[15px] font-semibold text-foreground">
+    <Section
+      span={12}
+      label={
+        <>
           {t('rules.title')}
-          {rules && <span className="ml-2 text-[13px] font-normal text-muted-foreground">{rules.length}</span>}
-        </h2>
-      </div>
-      <p className="mt-1 max-w-2xl text-[12.5px] text-muted-foreground">
-        {t('rules.lead')}
-      </p>
-
-      {/* The box is offered only once there is a table to search. Over an empty
-          list, a loading skeleton or an error it would be a control that cannot
-          do anything — and typing into it would replace the reason the table is
-          empty with "no rule matches that search", which is a different and
-          wrong explanation. */}
-      {rules && rules.length > 0 && (
-        <div className="mt-3">
+          {rules && <span className="ml-2 font-normal">{rules.length}</span>}
+        </>
+      }
+      /* The box is offered only once there is a table to search. Over an empty
+         list, a loading skeleton or an error it would be a control that cannot
+         do anything — and typing into it would replace the reason the table is
+         empty with "no rule matches that search", which is a different and
+         wrong explanation. */
+      tools={
+        rules && rules.length > 0 ? (
           <TableSearch
             param="rule"
             label={t('rules.searchLabel')}
@@ -249,8 +247,13 @@ export function RulesPanel({
             onChange={setQuery}
             matches={{ shown: shown?.length ?? 0, total: rules.length }}
           />
-        </div>
-      )}
+        ) : null
+      }
+      bodyClassName=""
+    >
+      <p className="max-w-[95ch] px-4 pt-3 text-[12.5px] leading-relaxed text-muted-foreground">
+        {t('rules.lead')}
+      </p>
 
       <div className="mt-3">
         <DataTable
@@ -276,8 +279,10 @@ export function RulesPanel({
         />
       </div>
 
-      <CreateRuleForm ws={ws} scope={scope} />
-    </section>
+      <div className="px-4 pb-3">
+        <CreateRuleForm ws={ws} scope={scope} />
+      </div>
+    </Section>
   )
 }
 

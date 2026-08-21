@@ -9,6 +9,8 @@ export const en = {
   'docs.noBalanceBody':
     'A document is not an écriture: it lands staged, it never posts, and no statement reads this table. This list is the whole inbox and is not filtered by book — a scanned receipt does not always say whose it is, and saying so is one of the judgments this screen is for.',
   'docs.inbox': 'Inbox',
+  'docs.toHandleCaption': 'Still need you',
+  'docs.totalCaption': 'In the inbox',
   'docs.counts': '{toHandle} to handle · {total} in all',
   'docs.loading': 'Loading the inbox',
   'docs.failed': 'The inbox could not be loaded',
@@ -118,6 +120,8 @@ export const fr: Record<keyof typeof en, string> = {
   'docs.noBalanceBody':
     'Une pièce n’est pas une écriture : elle arrive en attente, elle n’est jamais comptabilisée, et aucun état ne lit cette table. Cette liste est la boîte de réception entière et n’est pas filtrée par livre — un reçu scanné ne dit pas toujours à qui il appartient, et le dire est l’un des jugements auxquels cet écran sert.',
   'docs.inbox': 'Boîte de réception',
+  'docs.toHandleCaption': 'Encore à traiter',
+  'docs.totalCaption': 'Dans la boîte',
   'docs.counts': '{toHandle} à traiter · {total} au total',
   'docs.loading': 'Chargement de la boîte de réception',
   'docs.failed': 'Impossible de charger la boîte de réception',
