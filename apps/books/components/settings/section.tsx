@@ -16,10 +16,27 @@ export function Section({
   children: React.ReactNode
 }) {
   return (
-    <section className="rounded-lg border border-border bg-card px-5 py-4">
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-      {note && <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{note}</p>}
-      <div className="mt-3.5 space-y-3">{children}</div>
+    // The same card, the same hairline and the same small-caps label as
+    // `components/section.tsx` — settings is not a different visual language
+    // from the rest of the app, and it was drifting into one (a semibold
+    // foreground `h2` where every data screen uses a muted small-caps label).
+    // It stays a separate component because its BODY is a form: labelled
+    // inputs with their own rhythm, which `<Section>`'s `bodyClassName` would
+    // have to be told about on every call.
+    <section className="rounded-lg border border-border bg-card">
+      <div className="border-b border-border px-4 py-2.5">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+          {title}
+        </h2>
+      </div>
+      <div className="px-4 py-3.5">
+        {note && (
+          <p className="mb-3.5 max-w-[95ch] text-[13px] leading-relaxed text-muted-foreground">
+            {note}
+          </p>
+        )}
+        <div className="space-y-3">{children}</div>
+      </div>
     </section>
   )
 }
