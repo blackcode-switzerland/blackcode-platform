@@ -22,6 +22,24 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-08-31 — Filter and view prospects by strategy
+
+**Additive.** Prospects could already be linked to a segment strategy
+(`strategy_id`, migration 0010) but there was no way to filter a listing down
+to one strategy's prospects — you had to scan the whole workspace. Not
+breaking; every existing call keeps working unchanged with the filter absent.
+
+- `GET /api/workspaces/{ws}/prospects` accepts a new `strategy` query param —
+  a strategy's #number, resolved the same way the create/edit routes already
+  resolve `--strategy`. Unknown numbers 404, same as everywhere else this is
+  resolved.
+- `bk sales prospect list --strategy <n>` narrows to one strategy's prospects.
+- The web Prospects list gets a Strategy filter next to Stage, URL-driven
+  (`?strategy=<n>`) like every other filter on that page.
+- A strategy's prospect count on the Strategies page is now a link straight
+  into that filtered view, so following it from a strategy never lands on the
+  unsegmented global list.
+
 ## 2026-08-17 — Drive files know their type, previews go full screen
 
 **Additive.** Three fixes on top of the file-provider work, all found by testing

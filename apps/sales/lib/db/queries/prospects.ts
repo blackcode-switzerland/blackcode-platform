@@ -83,6 +83,9 @@ export interface ListProspectsFilter {
   stages?: string[]
   /** Deal owner, by `platform.users.id`. Resolved from an email by the route. */
   ownerUserId?: number
+  /** The linked strategy, by `sales.strategies.id`. Resolved from its #number
+   *  by the route's `resolveStrategy()` — never a serial on the wire. */
+  strategyId?: number
   /** Label NAME, matched case-insensitively — an agent has the name, not the id. */
   label?: string
   /** Substring match over the company name. `bk sales search` is the full-text one. */
@@ -114,6 +117,7 @@ export async function listProspects(filter: ListProspectsFilter): Promise<Prospe
   if (!filter.includeDeleted) where.push(isNull(prospects.deleted_at))
   if (filter.stages?.length) where.push(inArray(prospects.stage, filter.stages))
   if (filter.ownerUserId != null) where.push(eq(prospects.owner_user_id, filter.ownerUserId))
+  if (filter.strategyId != null) where.push(eq(prospects.strategy_id, filter.strategyId))
   if (filter.q?.trim()) where.push(ilike(prospects.name, `%${filter.q.trim()}%`))
   if (filter.cursor != null) where.push(sql`${prospects.seq} < ${filter.cursor}`)
   if (filter.label?.trim()) {

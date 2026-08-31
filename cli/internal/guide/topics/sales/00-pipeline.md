@@ -72,6 +72,7 @@ bk sales prospect list --q roches           # substring match on the COMPANY NAM
 bk sales prospect list --owner me           # what you are on the hook for
 bk sales prospect list --stage <stage>      # one stage; repeat or comma-separate for more
 bk sales prospect list --label <name>       # by label
+bk sales prospect list --strategy <n>       # only the prospects linked to that segment strategy
 ```
 
 `--q` matches the company name only — it is a substring filter on a listing, not

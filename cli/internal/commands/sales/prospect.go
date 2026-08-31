@@ -49,6 +49,7 @@ func newProspectListCmd() *cobra.Command {
 	var (
 		stages         []string
 		owner          string
+		strategy       int
 		label          string
 		query          string
 		limit          int
@@ -66,7 +67,9 @@ search. Finding a phrase INSIDE a record is a different thing: "bk sales search"
 reads the text columns and returns the snippet that matched.
 
 --owner takes an email, or the literal "me".
---stage may be repeated or comma-separated; run "bk meta" for the current values.`,
+--stage may be repeated or comma-separated; run "bk meta" for the current values.
+--strategy takes a segment strategy's #number (bk sales strategy list) and
+narrows the list to prospects linked to it.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -80,6 +83,7 @@ reads the text columns and returns the snippet that matched.
 			page, err := c.ListProspects(ws, client.ListProspectsOpts{
 				Stages:         splitAll(stages),
 				Owner:          owner,
+				Strategy:       strategy,
 				Label:          label,
 				Query:          query,
 				Limit:          limit,
@@ -119,6 +123,7 @@ reads the text columns and returns the snippet that matched.
 	}
 	cmd.Flags().StringSliceVar(&stages, "stage", nil, "Filter by pipeline stage — "+vocab("stages", "repeatable"))
 	cmd.Flags().StringVar(&owner, "owner", "", "Filter by deal owner: an email, or \"me\"")
+	cmd.Flags().IntVar(&strategy, "strategy", 0, "Filter by segment strategy's #number (bk sales strategy list)")
 	cmd.Flags().StringVar(&label, "label", "", "Filter by label name")
 	cmd.Flags().StringVar(&query, "q", "", "Substring match on the company name")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Max prospects to return (bk meta for the cap)")

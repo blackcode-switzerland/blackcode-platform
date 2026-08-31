@@ -129,6 +129,7 @@ type SalesDeleted struct {
 type ListProspectsOpts struct {
 	Stages         []string
 	Owner          string // an email, or the literal "me"
+	Strategy       int    // the segment strategy's #number; 0 means "no filter"
 	Label          string
 	Query          string
 	Limit          int
@@ -149,6 +150,9 @@ func (c *Client) ListProspects(slugOrID string, opts ListProspectsOpts) (*Prospe
 	}
 	if s := strings.TrimSpace(opts.Owner); s != "" {
 		q.Set("owner", s)
+	}
+	if opts.Strategy > 0 {
+		q.Set("strategy", strconv.Itoa(opts.Strategy))
 	}
 	if s := strings.TrimSpace(opts.Label); s != "" {
 		q.Set("label", s)

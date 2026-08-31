@@ -33,26 +33,38 @@ import {
   FilteredEmpty,
   useFilterParam,
 } from '@/components/filters'
-import { useProspects } from '@/lib/hooks'
+import { useProspects, useStrategies } from '@/lib/hooks'
 import { money, relativeDay } from '@/lib/format'
 import type { PublicProspect } from '@/lib/views'
 
 export function ProspectsPage({ ws }: { ws: string }) {
   const params = useSearchParams()
   const [stage, setStage] = useFilterParam('stage')
+  const [strategy, setStrategy] = useFilterParam('strategy')
   const [q, setQ] = useFilterParam('q')
   const [, setView] = useFilterParam('view')
 
   const view = params?.get('view') === 'board' ? 'board' : 'table'
 
-  const list = useProspects(ws, { stage: stage || undefined, q: q || undefined })
+  const strategies = useStrategies(ws)
+  const strategyOptions = (strategies.data ?? []).map((s) => ({
+    value: String(s.number),
+    label: s.name,
+  }))
+
+  const list = useProspects(ws, {
+    stage: stage || undefined,
+    strategy: strategy || undefined,
+    q: q || undefined,
+  })
   const rows = list.data?.data ?? []
-  const filtered = Boolean(q || stage)
+  const filtered = Boolean(q || stage || strategy)
 
   return (
     <div className="space-y-4">
-      {/* The filter bar. Stage and free text today; owner and date range arrive
-          with the ledgers, which are where a date range means something. */}
+      {/* The filter bar. Stage, strategy and free text today; owner and date
+          range arrive with the ledgers, which are where a date range means
+          something. */}
       <FilterBar>
         <FilterInput
           label="Company name"
@@ -69,6 +81,17 @@ export function ProspectsPage({ ws }: { ws: string }) {
           options={STAGES}
           allLabel="All stages"
         />
+        {/* Segment strategy (#37/#41) — never displayed when there are none to
+            filter by: an empty dropdown is worse than no dropdown. */}
+        {strategyOptions.length > 0 && (
+          <FilterSelect
+            label="Strategy"
+            value={strategy}
+            onChange={setStrategy}
+            options={strategyOptions}
+            allLabel="All strategies"
+          />
+        )}
 
         {/* `view` survives Clear: which layout you are looking at is not a
             filter, and clearing the filters used to silently throw a reader

@@ -49,11 +49,13 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   for (const s of stages) requireStage(s)
 
   const ownerUserId = await resolveOwner(str(q.get('owner')), ctx.user.id)
+  const strategyId = await resolveStrategy(ctx.workspace.id, numberOr(q.get('strategy')))
 
   const page = await listProspects({
     workspaceId: ctx.workspace.id,
     stages,
     ownerUserId: ownerUserId ?? undefined,
+    strategyId,
     label: str(q.get('label')),
     q: str(q.get('q')),
     includeDeleted: q.get('include_deleted') === 'true',

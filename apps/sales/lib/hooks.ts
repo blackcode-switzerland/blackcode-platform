@@ -134,6 +134,8 @@ export function useUpcomingMeetings(ws: string, take = 5) {
 /** The filters every list page shares. Absent/empty means "no filter". */
 export interface ProspectFilters {
   stage?: string
+  /** A strategy's #number (`sales.strategies.seq`), resolved server-side. */
+  strategy?: string
   label?: string
   q?: string
 }

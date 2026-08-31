@@ -168,3 +168,7 @@ what you read before a meeting rather than after one.
 `bk sales trash` and restores — and the prospects pointing at it are
 deliberately NOT unlinked, because a soft delete that detached them could not be
 undone. The command tells you how many deals are affected.
+
+Going the other way — every prospect one strategy is running against —
+`bk sales strategy show <n>` lists them, and `bk sales prospect list --strategy
+<n>` is the filtered listing (`bk guide sales/pipeline`).

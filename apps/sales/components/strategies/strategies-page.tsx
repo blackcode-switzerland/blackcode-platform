@@ -112,13 +112,18 @@ function StrategyCard({
             {v}
           </span>
         ))}
-        <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+        {/* Links straight into the prospects list, pre-filtered to this
+            strategy (#41) — never the unsegmented global list. Same link
+            style the products above use. Not inflected: `ledger-pages.tsx`
+            learned that a count pluralising the noun it did not choose
+            produces "1 prospects". The number and the noun, flat. */}
+        <Link
+          href={`/dashboard/${ws}/prospects?strategy=${s.number}`}
+          className="ml-auto flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline"
+        >
           <Users size={12} />
-          {/* Not inflected. `ledger-pages.tsx` learned this the hard way: a page
-              that pluralises a count it did not choose the noun for produces
-              "1 prospects". The number and the noun, flat. */}
           {s.prospect_count} prospect
-        </span>
+        </Link>
         {canWrite && <EditStrategyForm ws={ws} strategy={s} />}
       </div>
 
