@@ -581,10 +581,20 @@ two tiers.** `bk storage attachments` listed only ISSUE attachments, so it becam
 **An app declares which of these it serves** (`appverbs.Config`), and a verb it
 has no route for is ABSENT from its group rather than present and 404ing. This is
 D-36 one level down: a permanent subset is legitimate, an accidental one is a
-bug. `apps/sales` serves `workspace` without `create|edit|transfer|delete` (D-3 —
-a workspace is the company), `member` without `leave`, and no `inbox`, `storage`
-or `user` at all. Both directions are checked against `app/api/**` by that app's
-`lib/cli-parity.test.ts`.
+bug.
+
+> This paragraph used to end: *"`apps/sales` serves `workspace` without
+> `create|edit|transfer|delete` (D-3 — a workspace is the company), `member`
+> without `leave`, and no `inbox`, `storage` or `user` at all."*
+>
+> That was true until 2026-09-11. D-3 is reversed for the `workspace` verb:
+> `apps/sales` now serves `create`, `edit` (name only — its slug is immutable,
+> see `apps/sales/lib/db/queries/workspaces.ts`'s `updateWorkspace`),
+> `transfer` and `delete`, matching `apps/issues`. The rest of the sentence
+> still holds — `member` without `leave`, and no `inbox`, `storage` or `user`
+> at all — those are separate, unrelated capability decisions this change did
+> not touch. Both directions are checked against `app/api/**` by that app's
+> `lib/cli-parity.test.ts`.
 
 **The active workspace is per app**, keyed by slug in `~/.config/bk/config.json`.
 Two apps' workspace tables have overlapping ids by construction (migration 0004

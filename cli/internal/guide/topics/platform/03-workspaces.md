@@ -198,4 +198,4 @@ Three things to know before you call it:
 If you delete that app's active workspace, its active selection is cleared — run
 `bk <app> workspace use <slug>` before the next scoped command in that app.
 
-Related commands: `bk meta`, `bk issues workspace list|show|create|use|edit|transfer|delete`, `bk sales workspace list|show|use`, `bk app list|use`, `bk issues member list|remove|leave`, `bk issues invite send|list|revoke|pending|show|accept`
+Related commands: `bk meta`, `bk issues workspace list|show|create|use|edit|transfer|delete`, `bk sales workspace list|show|use|create|edit|transfer|delete`, `bk app list|use`, `bk issues member list|remove|leave`, `bk issues invite send|list|revoke|pending|show|accept`

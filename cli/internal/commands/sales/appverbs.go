@@ -44,9 +44,38 @@ var trashTypes = []string{"prospect", "meeting", "communication", "product", "te
 //	Workspace       yes — GET /api/workspaces and GET /api/workspaces/{ws} are
 //	                mounted, and `workspace use` is how a caller picks the
 //	                tenancy the rest of `bk sales …` runs in
-//	WorkspaceAdmin  NO  — D-3: a workspace is the COMPANY. Sales has no
+//	WorkspaceAdmin  YES, since 2026-09-11 — D-3 REVERSED. This table used to
+//	                read "NO — D-3: a workspace is the COMPANY. Sales has no
 //	                create-workspace flow, does not rename one, and must not be
-//	                a second implementation of the delete cascade
+//	                a second implementation of the delete cascade." That was
+//	                true on that date; the product decision reversing D-3 gives
+//	                sales the same capability `apps/issues` has —
+//	                `POST /api/workspaces`, `PATCH /api/workspaces/{ws}`,
+//	                `POST /api/workspaces/{ws}/transfer`,
+//	                `DELETE /api/workspaces/{ws}` are all real handlers now
+//	                (see `apps/sales/app/api/workspaces/**`). This flag is the
+//	                ENTIRE CLI-side change: `newWorkspaceCmd` in
+//	                `cli/internal/appverbs/workspace.go` already builds
+//	                create/edit/transfer/delete generically off it — do not
+//	                fork that file.
+//
+//	                ONE DELIBERATE ASYMMETRY WORTH READING TWICE: the shared
+//	                `bk <app> workspace edit` command carries a `--slug` flag
+//	                because it is shared by every app, and this app's slug is
+//	                IMMUTABLE — `sales.workspaces.slug` is embedded in
+//	                `sales.events.subject_urn` with no rename cascade, unlike
+//	                `apps/issues`' `platform.entities` projection (full
+//	                reasoning: `apps/sales/lib/db/queries/workspaces.ts`'s
+//	                `updateWorkspace`). `bk sales workspace edit --slug x` will
+//	                COMPILE AND SEND — the flag exists on the shared command —
+//	                and the SERVER rejects it with a 400 `slug_immutable` and a
+//	                suggestion. That is intentional: the alternative was either
+//	                forking a shared command for one flag, or silently dropping
+//	                the field server-side, which would read as "it worked" to
+//	                an agent that never re-fetched to check. Do not "fix" this
+//	                asymmetry by forking `newWorkspaceEditCmd` — the CLI-side
+//	                behaviour is correct as-is; the constraint is server-side by
+//	                design.
 //	Members         yes — /members and /members/{userId}
 //	MemberLeave     NO  — this app mounts no /leave route
 //	Invites         yes — the whole invitation surface is this app's own since
@@ -78,6 +107,7 @@ func appOwnedVerbs() []*cobra.Command {
 		Trash:            true,
 		Labels:           true,
 		Workspace:        true,
+		WorkspaceAdmin:   true,
 		Members:          true,
 		MemberRemove:     true,
 		Invites:          true,

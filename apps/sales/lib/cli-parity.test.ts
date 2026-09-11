@@ -120,31 +120,24 @@ const EXCLUDED_PATHS = new Map<string, string>([
  *
  * Kept honest by the staleness assertion at the bottom of this file: an entry
  * naming a path this app no longer mounts fails the suite.
+ *
+ * ---------------------------------------------------------------------------
+ * EMPTY AS OF 2026-09-11 — IT USED TO HOLD THREE ENTRIES
+ * ---------------------------------------------------------------------------
+ * `POST /api/workspaces`, `PATCH /api/workspaces/{ws}` and
+ * `DELETE /api/workspaces/{ws}` were all listed here under D-3 ("a workspace
+ * is the COMPANY; sales has no create-workspace flow, does not rename one, and
+ * must not be a second implementation of the delete cascade"). D-3 is
+ * reversed: this app now mounts real POST/PATCH/DELETE handlers on
+ * `app/api/workspaces/route.ts` and `app/api/workspaces/[ws]/route.ts`, so
+ * none of the three is "unserved" any more — removing them here is what makes
+ * `ownClaims` (the CLI's claim on those three routes, now real) pass the drift
+ * check below instead of being waved through by an exclusion that no longer
+ * describes anything. Left as an empty map rather than deleted, so the next
+ * genuine platform-mounted-but-unserved case has an obvious place to go and a
+ * worked example of the reasoning it needs.
  */
-const UNSERVED_OPERATIONS = new Map<string, string>([
-  [
-    'POST /api/workspaces',
-    'D-3 — a workspace is the COMPANY, and sales has no create-workspace flow: ' +
-      'you are granted access to one, you do not open one from a sales context. ' +
-      '`bk workspace create` is answered by the issues deployment. GET is mounted ' +
-      'beside it because `bk workspace use` cannot select a workspace without it, ' +
-      'which is what made the north-star script fail at its second command.',
-  ],
-  [
-    'PATCH /api/workspaces/{ws}',
-    'renaming a workspace is company-level administration and `updateWorkspace` is ' +
-      'still app-local to issues. Sales READS the workspace it works in (GET is ' +
-      'mounted — `bk workspace use` resolves a slug through it) and does not ' +
-      'administer it. `bk workspace edit` is answered by the issues deployment.',
-  ],
-  [
-    'DELETE /api/workspaces/{ws}',
-    'destroying a workspace carries a cascade with exactly one implementation, on ' +
-      'purpose. Two deployments able to run it is two places for that cascade to ' +
-      'diverge, and the failure would be unrecoverable. `bk workspace delete` is ' +
-      'answered by the issues deployment.',
-  ],
-])
+const UNSERVED_OPERATIONS = new Map<string, string>([])
 
 describe('CLI ↔ routes parity', () => {
   // There is no `hostsPlatformRoutes`, retired on 2026-08-07 — and this app is

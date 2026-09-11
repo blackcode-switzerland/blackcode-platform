@@ -152,10 +152,17 @@ right.
 - Nav: Today · Metrics · Prospects · Meetings · Communications · Activity, then
   **Catalog**: Products · Templates · Documents, then **Members · Trash**.
   Members arrived here on 2026-08-11 from `/dashboard/settings/members` — see §9.
-- **No workspace switcher and no create-workspace flow** (D-3). `/dashboard`
-  resolves the single sales workspace and redirects to `/dashboard/{ws}`; more
-  than one renders a picker rather than guessing, because landing somebody in the
-  wrong workspace is a silent failure.
+- **Workspace switcher, create-workspace flow, and workspace settings — all
+  three since 2026-09-11 (D-3 reversed).** This bullet used to read "No
+  workspace switcher and no create-workspace flow (D-3)." `WorkspaceSwitcher`
+  now always renders (it used to return `null` below two memberships — see its
+  own header for the full reasoning) and carries "Create workspace" and
+  "Manage workspace" rows; the latter opens `/dashboard/{ws}/settings`
+  (`components/settings/workspace-settings.tsx`) for rename, transfer and
+  delete. `/dashboard` itself is UNCHANGED: it still resolves the remembered
+  workspace and redirects to `/dashboard/{ws}`; more than one with nothing
+  remembered still renders a picker rather than guessing, because landing
+  somebody in the wrong workspace is a silent failure.
 - Header title defaults to the nav label for the page and is overridable with
   `usePageTitle()` — a prospect detail page's title is a company name and no
   static table can hold it.
@@ -271,6 +278,7 @@ not repeated here. Two things are this app's own:
 | `/dashboard/{ws}/search` | grouped, faceted full search — §7.8 |
 | `/dashboard/{ws}/members` | your team, and who has been invited — §9.1 (was `/dashboard/settings/members` until 2026-08-11) |
 | `/dashboard/{ws}/trash` | the bin, read-only in both modes |
+| `/dashboard/{ws}/settings` | rename, transfer ownership, delete this workspace — owner only, new 2026-09-11 with the D-3 reversal. Reached from the switcher's "Manage workspace" row, not from `/dashboard/settings/*` — see §9.2 |
 | `/dashboard/settings/{profile,account,tokens,preferences}` | §9 — inside the shell since 2026-08-11 |
 | `/dashboard/settings/members` | a redirect to `/dashboard/{ws}/members`, kept for bookmarks |
 | `/invitations/{token}` | where an invitation link lands — accept or decline |
@@ -795,10 +803,54 @@ they are sales RECORDS now.
 saying why: read-only is a browser display preference, and one that could stop
 somebody joining the app at all would be a permission over their account (D-7).
 
+### 9.2 Workspace settings — rename, transfer, delete (2026-09-11)
+
+`/dashboard/{ws}/settings` — **inside** the workspace segment, unlike the four
+pages above it in this section. The distinction §9's opening paragraph draws
+("about the blackcode account rather than about this workspace") is exactly
+why: a workspace's own name, its owner, and whether it continues to exist are
+properties of the WORKSPACE, not of the signed-in person's account, which is
+the same reasoning that moved Members out of `/dashboard/settings/members` in
+§9.1. Reached from the sidebar switcher's "Manage workspace" row — there is no
+other global workspaces-list page in this app the way `apps/issues` has one.
+
+Owner-only for the write affordances; a non-owner sees a read-only line naming
+the workspace and its owner. Three sections, mirroring
+`apps/issues/components/workspace-settings-view.tsx`'s shape minus two it does
+not need:
+
+- **No logo section.** `sales.workspaces` has no `logo_url` column.
+- **No storage-management link.** This app mounts no `/storage` route.
+- **Name** is the only editable field. The **slug is not shown as an editable
+  field at all** — it is immutable server-side (`PATCH` 400s `slug_immutable`)
+  because `sales.events.subject_urn` has no rename cascade the way
+  `apps/issues`' `platform.entities` projection does; see
+  `lib/db/queries/workspaces.ts`'s `updateWorkspace` for the full reasoning.
+  Rendering a disabled slug field would invite a bug report about a field that
+  was never going to work.
+- **Transfer ownership** and **Danger zone → Delete** are the same UX pattern
+  `apps/issues` uses: a `<select>` of other members for transfer, `useConfirm()`'s
+  `prompt()` requiring the workspace name typed back for delete.
+
+This is TENANCY administration, not a sales record — `components/settings/
+workspace-settings.tsx` calls `apiSend` directly, the same way `workspace-
+switcher.tsx` calls `POST /api/me/active-workspace` directly, and it is NOT
+routed through `lib/mutations.ts` / `useCanWrite()`. `lib/read-only.test.ts`
+declares it in `ACCOUNT_WRITERS` with `workspaceScoped` set — its writes target
+`/api/workspaces/{ws}...`, which looks like a shared sales-record path, and the
+declaration is what tells the guard it administers the workspace itself rather
+than a prospect or meeting inside it. Gating workspace deletion behind a
+display preference would make read-only mode a permission over the owner's
+account (D-7), the same misreading every other `ACCOUNT_WRITERS` entry guards
+against.
+
 Preferences is the exception: `ui_mode` is keyed on (user, workspace), so that
 page resolves the workspaces this person can reach and renders one block each.
-With one workspace (D-3) nobody notices; the plural branch exists so it is never
-"pick the first and hope".
+With one workspace nobody notices; the plural branch exists so it is never
+"pick the first and hope" — and plural is no longer only an invitation
+accident (D-3, historically): since 2026-09-11 anybody can create a second
+workspace from the sidebar switcher, so the plural branch is a path more
+people are expected to actually hit, not just a defensive one.
 
 **Three things the account page does not do, and it names where each is done.**
 Changing a password needs `passwordRequestOtpRoute`, whose second argument is an

@@ -241,6 +241,37 @@ func TestSalesSearchIsItsOwnCommandNotTheSharedOne(t *testing.T) {
 	}
 }
 
+// `bk sales workspace create|edit|transfer|delete` must ALL resolve, now that
+// `WorkspaceAdmin: true` in cli/internal/commands/sales/appverbs.go gives this
+// app the same workspace administration `apps/issues` has (D-3 reversed,
+// 2026-09-11).
+//
+// Mirrors `TestSalesSearchIsItsOwnCommandNotTheSharedOne` above: `root.Find`
+// against the real tree `NewRoot()` builds, not a re-implementation of the
+// Config check. `TestEachAppMountsExactlyWhatItDeclares` does not cover this —
+// it only asserts the top-level group `workspace` exists, which was already
+// true before this change (list/show/use are unconditional); the four admin
+// SUBcommands are what `WorkspaceAdmin` gates, and nothing above this test
+// looks one level down into them.
+//
+// WATCHED FAILING: with `WorkspaceAdmin` temporarily commented back out (i.e.
+// only `Workspace: true`), this test's four `root.Find` calls each returned a
+// non-nil error — "unknown command \"create\" for \"bk sales workspace\"" and
+// so on — confirming the assertion actually discriminates rather than passing
+// on a tree that would have had these commands anyway. Restored immediately
+// after; see the task's final report for confirmation this was run.
+func TestSalesWorkspaceAdminCommandsResolve(t *testing.T) {
+	root := NewRoot()
+	for _, verb := range []string{"create", "edit", "transfer", "delete"} {
+		t.Run(verb, func(t *testing.T) {
+			c, _, err := root.Find([]string{sales.Slug, "workspace", verb})
+			if err != nil || c.Name() != verb {
+				t.Fatalf("`bk sales workspace %s` does not resolve: %v", verb, err)
+			}
+		})
+	}
+}
+
 func findChild(parent *cobra.Command, name string) *cobra.Command {
 	for _, c := range parent.Commands() {
 		if c.Name() == name {

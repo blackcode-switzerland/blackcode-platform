@@ -1,36 +1,66 @@
 'use client'
 
-// The sidebar workspace switcher.
+// The sidebar workspace switcher — and, since 2026-09-11, the only reachable
+// entry point into creating or administering a workspace (there is no other
+// global workspaces-list page in this app, unlike `apps/issues`).
 //
-// ── WHY THIS EXISTS, HAVING BEEN DELIBERATELY ABSENT ────────────────────────
-// PLAN.md §1 and D-3 gave sales no switcher on a premise that has since become
-// false: one workspace per person. A person invited into somebody else's
-// workspace ends up in TWO — signing in mints their own (the bootstrap is keyed
-// on membership, and they have none until they accept), then accepting adds the
-// second. Measured 2026-08-11 by running the real sequence against a database.
+// ---------------------------------------------------------------------------
+// WHY THIS EXISTS, HAVING BEEN DELIBERATELY ABSENT — AND WHY IT NOW ALWAYS RENDERS
+// ---------------------------------------------------------------------------
+// This section used to read:
 //
-// Before this, `/dashboard` answered that with a full-page "Choose a workspace"
-// screen and the app offered no way back to it: every link in the shell is
-// `/dashboard/{ws}/…`, the logo included. You chose once, then you were stuck.
+//   > PLAN.md §1 and D-3 gave sales no switcher on a premise that has since
+//   > become false: one workspace per person. [...]
+//   >
+//   > IT RENDERS NOTHING FOR ONE WORKSPACE, AND THAT IS THE DESIGN
+//   >
+//   > D-3's actual goal was that a human working here sees a single-tenant
+//   > product, not that the capability be absent. With one membership —
+//   > everyone today — this returns null and the sidebar is unchanged. It
+//   > appears exactly when it has something to offer.
 //
-// ── IT RENDERS NOTHING FOR ONE WORKSPACE, AND THAT IS THE DESIGN ────────────
-// D-3's actual goal was that a human working here sees a single-tenant product,
-// not that the capability be absent. With one membership — everyone today —
-// this returns null and the sidebar is unchanged. It appears exactly when it
-// has something to offer.
+// That was true from 2026-08-11 (the switcher's own introduction, for the
+// invitation case) until 2026-09-11, when D-3 was reversed a second time:
+// sales gained the CAPABILITY to create an additional workspace, not just the
+// capability to be invited into one. "With one membership this offers
+// nothing" stopped being true the moment creating a second one became
+// something every user, not just an invitee, could do — a person with exactly
+// one workspace still needs a door to open a second, and a component that
+// renders null for the common case IS the absent door. So this now always
+// renders: current workspace name + chevron, a dropdown listing every
+// membership, a "Create workspace" row, and a "Manage workspace" row for the
+// one you are currently in (workspace ADMINISTRATION — rename, transfer,
+// delete — lives at `/dashboard/{ws}/settings`, see
+// `components/settings/workspace-settings.tsx`).
 //
-// ── SWITCHING WRITES THROUGH THE SERVER, NOT JUST THE URL ──────────────────
+// ---------------------------------------------------------------------------
+// SWITCHING WRITES THROUGH THE SERVER, NOT JUST THE URL
+// ---------------------------------------------------------------------------
 // `POST /api/me/active-workspace` is the same route `bk sales workspace use`
 // calls, so the web and the CLI agree about where you are, and the next
 // `/dashboard` opens there. Navigating without it would make the choice last
 // exactly one page load.
+//
+// ---------------------------------------------------------------------------
+// WHY THIS FILE CALLS `apiSend` DIRECTLY, UNGATED BY `useCanWrite()`
+// ---------------------------------------------------------------------------
+// Switching, creating, and reaching workspace administration are ACCOUNT /
+// TENANCY operations, not sales record writes — `lib/read-only.test.ts` has
+// carried this file in `ACCOUNT_WRITERS` since the switcher's introduction for
+// exactly that reason, and the create/manage affordances added here are the
+// same class of thing: a display preference that could stop somebody moving
+// between workspaces they belong to, creating one, or reaching its settings
+// would make read-only mode a permission over their ACCOUNT rather than over
+// the sales pipeline (D-7).
 
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Building2, Check, ChevronsUpDown, Loader2 } from 'lucide-react'
+import { Building2, Check, ChevronsUpDown, Loader2, Plus, Settings } from 'lucide-react'
 import { avatarColor } from '@blackcode/platform-ui/ui/member-avatar'
 import { toast } from 'sonner'
 import { apiSend } from '@/lib/client'
+import { WorkspaceCreateModal } from './workspace-create-modal'
 
 export interface SwitcherWorkspace {
   id: number
@@ -107,6 +137,7 @@ export function WorkspaceSwitcher({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   // Close on an outside click or Escape. Both, because a menu that traps the
@@ -127,10 +158,12 @@ export function WorkspaceSwitcher({
     }
   }, [open])
 
-  // NOTHING TO SWITCH BETWEEN → NO CONTROL. See the header.
-  if (workspaces.length < 2) return null
-
-  const active = workspaces.find((w) => w.slug === current) ?? workspaces[0]
+  // ALWAYS RENDERS NOW — see the header for why this changed on 2026-09-11.
+  // `workspaces` is empty only in the moment before the sign-in bootstrap has
+  // run (`components/no-workspace.tsx` covers that screen); guarded here
+  // rather than assumed, so this component degrades to "create your first
+  // workspace" instead of crashing on `workspaces[0]`.
+  const active = workspaces.find((w) => w.slug === current) ?? workspaces[0] ?? null
 
   async function choose(ws: SwitcherWorkspace) {
     if (ws.slug === current) {
@@ -168,8 +201,10 @@ export function WorkspaceSwitcher({
         aria-expanded={open}
         className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent/60"
       >
-        <Mark name={active.name} size={22} />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{active.name}</span>
+        {active ? <Mark name={active.name} size={22} /> : <NoWorkspaceMark />}
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+          {active?.name ?? 'No workspace'}
+        </span>
         <ChevronsUpDown size={14} className="shrink-0 text-muted-foreground" />
       </button>
 
@@ -178,44 +213,77 @@ export function WorkspaceSwitcher({
           role="listbox"
           className="absolute left-2.5 right-2.5 top-full z-50 mt-1 overflow-hidden rounded-lg border border-sidebar-border bg-sidebar shadow-lg"
         >
-          <p className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Workspaces
-          </p>
-          {workspaces.map((ws) => {
-            const isCurrent = ws.slug === current
-            return (
-              <button
-                key={ws.id}
-                type="button"
-                role="option"
-                aria-selected={isCurrent}
-                disabled={pending !== null}
-                onClick={() => choose(ws)}
-                className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-sidebar-accent/60 disabled:opacity-60"
+          {workspaces.length > 0 && (
+            <>
+              <p className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Workspaces
+              </p>
+              {workspaces.map((ws) => {
+                const isCurrent = ws.slug === current
+                return (
+                  <button
+                    key={ws.id}
+                    type="button"
+                    role="option"
+                    aria-selected={isCurrent}
+                    disabled={pending !== null}
+                    onClick={() => choose(ws)}
+                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-sidebar-accent/60 disabled:opacity-60"
+                  >
+                    <Mark name={ws.name} size={20} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px]">{ws.name}</span>
+                      {/* WHOSE it is — see `ownershipLine`. `truncate` is
+                          load-bearing here and was already needed for the name
+                          above it: this sidebar is narrow enough that
+                          "Balathanusan 1's worksp…" clips, so an owner line
+                          carrying a full name clips too, and it must degrade to
+                          an ellipsis rather than wrap the row to two lines. */}
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {ownershipLine(ws)}
+                      </span>
+                    </span>
+                    {pending === ws.slug ? (
+                      <Loader2 size={14} className="shrink-0 animate-spin text-muted-foreground" />
+                    ) : isCurrent ? (
+                      <Check size={14} className="shrink-0 text-primary" />
+                    ) : null}
+                  </button>
+                )
+              })}
+            </>
+          )}
+
+          {/* Two admin rows, below the list — the only reachable door into
+              either capability, since this app has no separate
+              workspaces-list page (unlike `apps/issues`). */}
+          <div className="border-t border-sidebar-border py-1">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                setCreateOpen(true)
+              }}
+              className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+            >
+              <Plus size={15} className="shrink-0" />
+              Create workspace
+            </button>
+            {active && (
+              <Link
+                href={`/dashboard/${active.slug}/settings`}
+                onClick={() => setOpen(false)}
+                className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
               >
-                <Mark name={ws.name} size={20} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px]">{ws.name}</span>
-                  {/* WHOSE it is — see `ownershipLine`. `truncate` is
-                      load-bearing here and was already needed for the name
-                      above it: this sidebar is narrow enough that
-                      "Balathanusan 1's worksp…" clips, so an owner line
-                      carrying a full name clips too, and it must degrade to an
-                      ellipsis rather than wrap the row to two lines. */}
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    {ownershipLine(ws)}
-                  </span>
-                </span>
-                {pending === ws.slug ? (
-                  <Loader2 size={14} className="shrink-0 animate-spin text-muted-foreground" />
-                ) : isCurrent ? (
-                  <Check size={14} className="shrink-0 text-primary" />
-                ) : null}
-              </button>
-            )
-          })}
+                <Settings size={15} className="shrink-0" />
+                Manage {active.name}
+              </Link>
+            )}
+          </div>
         </div>
       )}
+
+      <WorkspaceCreateModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   )
 }

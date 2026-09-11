@@ -2,12 +2,24 @@
 
 // The frame every dashboard page sits in: fixed left sidebar, content right.
 //
-// ── WHAT IS NOT HERE, AND WHY ───────────────────────────────────────────────
-// **No workspace switcher and no create-workspace flow** (D-3). Sales keeps
-// workspaces in the data model — every route is `/api/workspaces/{ws}/…`, every
-// URN embeds the slug — and takes them out of the UI. A human working here sees
-// a single-tenant product; the platform sees no change at all. `app/dashboard/
-// page.tsx` resolves the one workspace and redirects.
+// ── WHAT USED TO NOT BE HERE, AND WHY IT IS NOW ─────────────────────────────
+// This section used to read:
+//
+//   > **No workspace switcher and no create-workspace flow** (D-3). Sales
+//   > keeps workspaces in the data model — every route is
+//   > `/api/workspaces/{ws}/…`, every URN embeds the slug — and takes them out
+//   > of the UI. A human working here sees a single-tenant product; the
+//   > platform sees no change at all. `app/dashboard/page.tsx` resolves the
+//   > one workspace and redirects.
+//
+// D-3 is reversed (2026-09-11): sales now matches issues' capability — create,
+// rename, transfer ownership, delete a workspace. `WorkspaceSwitcher` below
+// always renders (it used to return `null` below two memberships) and carries
+// both the create-workspace and manage-workspace affordances, because this app
+// has no separate workspaces-list page the way `apps/issues` does — see that
+// component's own header for the full reasoning. `app/dashboard/page.tsx`'s
+// redirect logic is unaffected: it still sends a person to their remembered
+// workspace, or a picker when there is more than one and nothing remembered.
 //
 // **No AI, no chat box, no approve button** (§1.2 rule 1). The mockup shipped an
 // approval UI twice by accident and removed it twice; the shell is where such a
@@ -33,6 +45,7 @@ import {
   FileText,
   FolderOpen,
   History,
+  Landmark,
   LogOut,
   MessagesSquare,
   Moon,
@@ -90,9 +103,18 @@ const NAV_CATALOG: NavEntry[] = [
 // Members arrived here on 2026-08-11 from `/dashboard/settings/members`, where
 // it was filed beside four ACCOUNT pages while being the only workspace-scoped
 // one of the five. Above Trash: it is the one of the two people actually open.
+//
+// Settings arrived 2026-09-11 with the D-3 reversal (create/rename/transfer/
+// delete a workspace) — `Landmark` reads as "the institution itself" without
+// colliding with `SettingsIcon` (the account footer's `/dashboard/settings/*`,
+// a different, non-workspace-scoped destination) or any other icon already
+// meaning something in this file. Last in the list: it is reached far less
+// often than Members or Trash, and the workspace switcher's own "Manage
+// workspace" row is the door most people actually use.
 const NAV_UTILITY: NavEntry[] = [
   { seg: '/members', label: 'Members', icon: Users },
   { seg: '/trash', label: 'Trash', icon: Trash2 },
+  { seg: '/settings', label: 'Settings', icon: Landmark },
 ]
 
 /**

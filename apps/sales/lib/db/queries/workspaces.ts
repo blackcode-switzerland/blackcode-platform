@@ -15,15 +15,33 @@
 // is the only thing that does: one account, one password, one token, every app.
 //
 // ---------------------------------------------------------------------------
-// ONE WORKSPACE PER PERSON, AND THE UI NEVER SAYS THE WORD
+// MULTIPLE WORKSPACES PER PERSON, AND THE UI SAYS SO NOW (2026-09-11)
 // ---------------------------------------------------------------------------
-// PLAN.md §1: no switcher, no picker, no create-workspace page, no workspace
-// settings. The TABLES are fully multi-workspace — every row carries a
-// `workspace_id` — so making sales multi-workspace later is a UI change rather
-// than a migration. What is hidden is the offer, not the capability.
+// This section used to read:
 //
-// `ensureWorkspaceForUser` below is the whole of the bootstrap, and it is
-// deliberately the ONLY writer of `sales.workspaces`.
+//   > ONE WORKSPACE PER PERSON, AND THE UI NEVER SAYS THE WORD
+//   >
+//   > PLAN.md §1: no switcher, no picker, no create-workspace page, no
+//   > workspace settings. The TABLES are fully multi-workspace — every row
+//   > carries a `workspace_id` — so making sales multi-workspace later is a UI
+//   > change rather than a migration. What is hidden is the offer, not the
+//   > capability.
+//   >
+//   > `ensureWorkspaceForUser` below is the whole of the bootstrap, and it is
+//   > deliberately the ONLY writer of `sales.workspaces`.
+//
+// Both halves were true until this date. D-3 — "a workspace is the company;
+// you are granted into one, you do not open one from a sales context" — is
+// REVERSED here the same way it already was in `apps/issues`: this app gets
+// create, rename (name only — the slug stays immutable, see `updateWorkspace`
+// below for why), transfer-ownership and delete, with the same web + CLI +
+// route parity every other capability in this app carries.
+//
+// `ensureWorkspaceForUser` is no longer the only writer — `createWorkspace`,
+// `updateWorkspace` and `deleteWorkspace` below are the other three — but it
+// stays the ONLY writer reachable with no prior membership, i.e. the sign-in
+// bootstrap, and it now calls the same `pickAvailableSlug` helper
+// `createWorkspace` does rather than keeping its own copy of that loop.
 
 import { and, asc, eq, sql } from 'drizzle-orm'
 import type {
@@ -31,6 +49,7 @@ import type {
   WorkspaceMembershipRef,
   WorkspaceRef,
 } from '@blackcode/platform-api'
+import type { PlatformTx } from '@blackcode/platform-db'
 import { getDb } from '../client'
 import { salesUserSettings, salesWorkspaceMembers, salesWorkspaces, users } from '../schema'
 import { recordEvent } from './events'
@@ -375,7 +394,7 @@ export async function removeMember(
 }
 
 // ---------------------------------------------------------------------------
-// The bootstrap
+// Create, rename, transfer, delete — the D-3 reversal
 // ---------------------------------------------------------------------------
 
 /**
@@ -394,6 +413,300 @@ export function slugify(input: string): string {
     .slice(0, 32)
   return base || 'workspace'
 }
+
+/**
+ * Find an available slug starting from `base`, suffixing `-2`, `-3`, … on
+ * collision — the exact loop `ensureWorkspaceForUser` used to carry as its own
+ * inline copy, factored out here so it and `createWorkspace` share one
+ * implementation instead of two that can drift.
+ *
+ * MUST be called with a transaction handle, and the check-then-write MUST run
+ * inside the same transaction as the insert that claims the slug —
+ * `ensureWorkspaceForUser`'s header explains why: two writers racing on the
+ * same base would otherwise both see no collision and both try to claim it,
+ * and `slug` is UNIQUE, so the loser fails loudly instead of silently getting
+ * a different slug than the one this function told it was free.
+ *
+ * No `excludeId` parameter. `updateWorkspace` never calls this — the slug is
+ * immutable for a sales workspace (see that function's header) — so the only
+ * two callers that ever need a FRESH slug are minting a brand new row.
+ */
+async function pickAvailableSlug(tx: PlatformTx, base: string): Promise<string> {
+  let slug = base
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const clash = await tx
+      .select({ id: salesWorkspaces.id })
+      .from(salesWorkspaces)
+      .where(eq(salesWorkspaces.slug, slug))
+      .limit(1)
+    if (!clash[0]) break
+    slug = `${base}-${attempt + 2}`
+  }
+  return slug
+}
+
+export interface CreateWorkspaceInput {
+  name: string
+}
+
+/**
+ * Create a new sales workspace, owned by the caller.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS EXISTS — D-3 REVERSED (2026-09-11)
+ * ---------------------------------------------------------------------------
+ * Until this date `ensureWorkspaceForUser` was the only writer of
+ * `sales.workspaces`, minting exactly one workspace per person at sign-in. That
+ * matched D-3: "a workspace is the company, you are granted into one, you do
+ * not open one from a sales context." The product decision reversing D-3 is
+ * documented on `app/api/workspaces/route.ts` and `components/workspace-
+ * switcher.tsx`; what belongs here is the SHAPE, ported from
+ * `apps/issues/lib/db/queries/workspaces.ts`'s `createWorkspace` — insert the
+ * workspace, insert the owner membership, record both events, one transaction.
+ *
+ * No `sales.counters` row is inserted here, unlike issues' `workspace_counters`
+ * insert: this app's counters are upserted lazily, per (workspace, entity
+ * type), on first use (`lib/db/queries/counters.ts`'s `allocateSeq`), so there
+ * is nothing to pre-create.
+ *
+ * No `logo_url`: `sales.workspaces` has no such column (see `salesWorkspaces`
+ * in the schema file for why), so there is no field to accept here.
+ */
+export async function createWorkspace(
+  input: CreateWorkspaceInput,
+  actor: Actor
+): Promise<WorkspaceRef> {
+  return await getDb().transaction(async (tx) => {
+    const base = slugify(input.name)
+    const slug = await pickAvailableSlug(tx, base)
+
+    const [ws] = await tx
+      .insert(salesWorkspaces)
+      .values({ name: input.name, slug, owner_id: actor.userId })
+      .returning(WS_COLUMNS)
+    if (!ws) throw new Error('workspace insert returned nothing')
+
+    await tx.insert(salesWorkspaceMembers).values({
+      workspace_id: ws.id,
+      user_id: actor.userId,
+      role: 'owner',
+    })
+
+    // Both events, same shape `removeMember` above uses: `subjectUrn: null`,
+    // explicitly, rather than left to fall through to `resolveSubjectUrn`'s
+    // default derivation. A workspace and a membership are not numbered
+    // entities INSIDE a workspace — they ARE the workspace, or a fact about who
+    // is in it — so neither has a `bc:sales:{ws}/…` address of its own to
+    // derive. Leaving `subjectUrn` unset here would call `resolveSubjectUrn`,
+    // which does not recognise either type and would silently return null
+    // anyway — spelling it out says that is the correct answer, not an
+    // oversight.
+    await recordEvent(tx, {
+      workspaceId: ws.id,
+      actorUserId: actor.userId,
+      actorTokenId: actor.tokenId,
+      entityType: 'workspace',
+      entityId: ws.id,
+      action: 'created',
+      diff: { after: { name: ws.name, slug: ws.slug } },
+      subjectUrn: null,
+    })
+    await recordEvent(tx, {
+      workspaceId: ws.id,
+      actorUserId: actor.userId,
+      actorTokenId: actor.tokenId,
+      entityType: 'workspace_member',
+      entityId: actor.userId,
+      action: 'member_added',
+      meta: { user_id: actor.userId, role: 'owner', via: 'workspace_create' },
+      subjectUrn: null,
+    })
+
+    return ws
+  })
+}
+
+export interface UpdateWorkspaceInput {
+  name: string
+}
+
+/**
+ * Rename a workspace. NAME ONLY — there is no `slug` field on this input type,
+ * on purpose.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY SLUG IS IMMUTABLE HERE AND IS NOT IN `apps/issues`
+ * ---------------------------------------------------------------------------
+ * `apps/issues`' `updateWorkspace` renames the slug AND cascades that rename
+ * into `platform.entities` via `renameWorkspaceEntities` — a URN embeds the
+ * workspace slug, and that table is the denormalized index issues maintains so
+ * every app can resolve one. Sales has no such projection:
+ * multiAppFinalRefactor Phase 3 ended this app's write to `platform.entities`
+ * entirely (see this file's own header and `lib/db/queries/events.ts`).
+ *
+ * What sales DOES denormalize is `sales.events.subject_urn` — a plain text
+ * column, not an index with a rename cascade. A slug change would leave every
+ * historical event's `subject_urn` pointing at a slug that no longer resolves,
+ * and there is no reconciliation mechanism for that column: it is built once,
+ * at write time, from `sales.*`, and never touched again (see
+ * `resolveSubjectUrn`'s header). Building one is a real project of its own — it
+ * touches every row in `sales.events`, not just the renamed workspace's — and
+ * nothing in this change asked for it. Making the slug immutable avoids
+ * inventing a cascade nobody requested rather than shipping one that is
+ * subtly wrong.
+ *
+ * The CLI's shared `bk <app> workspace edit --slug` flag still exists (it is
+ * one command shared by every app, in `cli/internal/appverbs/workspace.go`) and
+ * will happily send `{"slug": "…"}` here. The ROUTE rejects it with a 400
+ * `slug_immutable` and a suggestion naming the reason — see
+ * `app/api/workspaces/[ws]/route.ts`. Do not "fix" this by forking the shared
+ * CLI command; the asymmetry is intentional and documented in two places on
+ * purpose (that route, and `cli/internal/commands/sales/appverbs.go`).
+ */
+export async function updateWorkspace(
+  workspaceId: number,
+  patch: UpdateWorkspaceInput,
+  actor: Actor
+): Promise<WorkspaceRef | null> {
+  return await getDb().transaction(async (tx) => {
+    const beforeRows = await tx
+      .select(WS_COLUMNS)
+      .from(salesWorkspaces)
+      .where(eq(salesWorkspaces.id, workspaceId))
+      .limit(1)
+    const before = beforeRows[0]
+    if (!before) return null
+
+    const [row] = await tx
+      .update(salesWorkspaces)
+      .set({ name: patch.name, updated_at: new Date() })
+      .where(eq(salesWorkspaces.id, workspaceId))
+      .returning(WS_COLUMNS)
+    if (!row) return null
+
+    await recordEvent(tx, {
+      workspaceId,
+      actorUserId: actor.userId,
+      actorTokenId: actor.tokenId,
+      entityType: 'workspace',
+      entityId: workspaceId,
+      action: 'updated',
+      diff: { before: { name: before.name }, after: { name: row.name } },
+      // See `createWorkspace` above for why this is explicit rather than left
+      // to `resolveSubjectUrn`'s default derivation.
+      subjectUrn: null,
+    })
+    return row
+  })
+}
+
+/**
+ * Permanently delete a workspace and everything this app holds in it.
+ *
+ * No event is recorded — ported from `apps/issues`' `deleteWorkspace`, which
+ * carries the same absence. There is nothing left to attach an event to once
+ * the workspace row is gone: `sales.events.workspace_id` has a foreign key on
+ * `sales.workspaces.id` `ON DELETE CASCADE` (migration 0004), so a "deleted"
+ * event recorded in the same transaction would be destroyed by the very
+ * statement it is describing.
+ *
+ * The cascade is the whole of the safety here, and it is the reason this
+ * function is one statement: every content table's `workspace_id` foreign key
+ * was swapped from `platform.workspaces` to `sales.workspaces`, `ON DELETE
+ * CASCADE`, in migration `0004_sales_owns_its_workspaces.sql` — verify that
+ * migration's twelve `ALTER TABLE … ADD CONSTRAINT` statements before touching
+ * this function, NOT the Drizzle schema file's `.references()` calls, which
+ * still point every one of those tables' `workspace_id` at
+ * `.references(() => workspaces.id, …)` — the PLATFORM table. That is stale
+ * TypeScript metadata left over from before Phase 2's constraint swap
+ * (CLAUDE.md finding #20's lesson exactly: "check the catalog, not the repo").
+ * It is a pre-existing mismatch this change did not introduce; flagged rather
+ * than fixed here, because correcting a dozen `.references()` calls is a
+ * project of its own and nothing in this change depends on them being right —
+ * the migrations are hand-written SQL, not generated from this schema file.
+ */
+export async function deleteWorkspace(id: number): Promise<boolean> {
+  const result = await getDb().delete(salesWorkspaces).where(eq(salesWorkspaces.id, id))
+  return (result.rowCount ?? 0) > 0
+}
+
+/**
+ * Transfer ownership: bumps the current owner to 'member', promotes the target
+ * to 'owner', updates `sales.workspaces.owner_id`. The target must already be a
+ * member — throws `not_a_member` if not, `workspace_not_found` if the workspace
+ * is gone. Ported from `apps/issues`' `transferOwnership`; there is no
+ * `app_access` role to keep in sync here — that table never existed for sales,
+ * membership was always the whole grant (Phase 5's point, for every app).
+ */
+export async function transferOwnership(
+  workspaceId: number,
+  newOwnerUserId: number,
+  actor: Actor
+): Promise<void> {
+  await getDb().transaction(async (tx) => {
+    const wsRows = await tx
+      .select({ id: salesWorkspaces.id, owner_id: salesWorkspaces.owner_id })
+      .from(salesWorkspaces)
+      .where(eq(salesWorkspaces.id, workspaceId))
+      .limit(1)
+    if (!wsRows[0]) throw new Error('workspace_not_found')
+
+    const memberRow = await tx
+      .select({ id: salesWorkspaceMembers.id })
+      .from(salesWorkspaceMembers)
+      .where(
+        and(
+          eq(salesWorkspaceMembers.workspace_id, workspaceId),
+          eq(salesWorkspaceMembers.user_id, newOwnerUserId)
+        )
+      )
+      .limit(1)
+    if (!memberRow[0]) throw new Error('not_a_member')
+
+    if (wsRows[0].owner_id === newOwnerUserId) return
+
+    const previousOwner = wsRows[0].owner_id
+
+    await tx
+      .update(salesWorkspaceMembers)
+      .set({ role: 'member' })
+      .where(
+        and(
+          eq(salesWorkspaceMembers.workspace_id, workspaceId),
+          eq(salesWorkspaceMembers.user_id, previousOwner)
+        )
+      )
+    await tx
+      .update(salesWorkspaceMembers)
+      .set({ role: 'owner' })
+      .where(
+        and(
+          eq(salesWorkspaceMembers.workspace_id, workspaceId),
+          eq(salesWorkspaceMembers.user_id, newOwnerUserId)
+        )
+      )
+    await tx
+      .update(salesWorkspaces)
+      .set({ owner_id: newOwnerUserId, updated_at: new Date() })
+      .where(eq(salesWorkspaces.id, workspaceId))
+
+    await recordEvent(tx, {
+      workspaceId,
+      actorUserId: actor.userId,
+      actorTokenId: actor.tokenId,
+      entityType: 'workspace',
+      entityId: workspaceId,
+      action: 'ownership_transferred',
+      meta: { previous_owner_user_id: previousOwner, new_owner_user_id: newOwnerUserId },
+      // See `createWorkspace` above for why this is explicit.
+      subjectUrn: null,
+    })
+  })
+}
+
+// ---------------------------------------------------------------------------
+// The bootstrap
+// ---------------------------------------------------------------------------
 
 export interface EnsureWorkspaceResult {
   workspace: WorkspaceMembershipRef
@@ -469,18 +782,12 @@ export async function ensureWorkspaceForUser(
     }
 
     // Slug collision: `slug` is UNIQUE, and two people called Anna would
-    // collide. Suffix from the sequence rather than a random string so the slug
-    // stays typeable — a person has to be able to say it out loud to a colleague.
-    let slug = base
-    for (let attempt = 0; attempt < 25; attempt++) {
-      const clash = await tx
-        .select({ id: salesWorkspaces.id })
-        .from(salesWorkspaces)
-        .where(eq(salesWorkspaces.slug, slug))
-        .limit(1)
-      if (!clash[0]) break
-      slug = `${base}-${attempt + 2}`
-    }
+    // collide. `pickAvailableSlug` — the same helper `createWorkspace` uses —
+    // suffixes from the sequence rather than a random string so the slug stays
+    // typeable, a person has to be able to say it out loud to a colleague. This
+    // used to be its own inline copy of that loop; factored out 2026-09-11 so
+    // the two writers of `sales.workspaces` cannot drift apart on it.
+    const slug = await pickAvailableSlug(tx, base)
 
     const [ws] = await tx
       .insert(salesWorkspaces)

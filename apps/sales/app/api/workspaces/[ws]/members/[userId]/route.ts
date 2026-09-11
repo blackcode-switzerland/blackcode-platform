@@ -33,14 +33,19 @@ export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) =>
 
   // The owner cannot be removed, for the reason the platform route gives: they
   // are the only person who can grant anything back, and this route is behind a
-  // check they would have just deleted. Sales has no `bk workspace transfer`,
-  // so the suggestion names the one route out rather than a command that would
-  // 404 against this host.
+  // check they would have just deleted.
+  //
+  // The suggestion below named "a super admin can move it in the database"
+  // until 2026-09-11, when `bk sales workspace transfer` / `POST
+  // /api/workspaces/{ws}/transfer` arrived and made that no longer true — see
+  // `lib/db/queries/workspaces.ts`'s `transferOwnership`. Rewritten rather than
+  // left, per this repo's docs-sync rule: a stale suggestion is worse than none,
+  // because the reader acts on it before finding out it is wrong.
   if (targetId === ctx.workspace.owner_id) {
     throw Errors.badRequest(
       'cannot_remove_owner',
       'The workspace owner cannot be removed — nobody else could invite them back.',
-      'Ownership transfer is not offered in b/sales; a super admin can move it in the database.'
+      'Transfer ownership first: bk sales workspace transfer --to <user>'
     )
   }
 
