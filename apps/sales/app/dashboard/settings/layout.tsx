@@ -8,7 +8,9 @@
 // Preferences is the exception and it says so on its own page: `ui_mode` is
 // keyed on (user, workspace), so that page resolves the workspaces this person
 // can reach and renders one block per workspace rather than pretending there is
-// a single global setting. In practice there is one (D-3), which is exactly why
+// a single global setting. One workspace is still the common case, but it is no
+// longer only what D-3 defaulted everyone to — since 2026-09-11 a second
+// workspace is one click away from the sidebar switcher — which is exactly why
 // the plural branch must not be "pick the first and hope".
 //
 // ── THE SIDEBAR WAS MISSING HERE UNTIL 2026-08-11 ───────────────────────────
@@ -29,10 +31,11 @@
 // takes the first membership — and unlike `app/dashboard/page.tsx`, which
 // refuses to guess a DESTINATION and shows a picker, guessing is acceptable for
 // CHROME: every link points at a workspace this person is a member of (nothing
-// leaks, nothing 404s), the ordering is deterministic, and in this app there is
-// exactly one (D-3). The plural case costs a person one click through the
-// picker at `/dashboard`, which is a different failure from landing silently in
-// the wrong pipeline.
+// leaks, nothing 404s), the ordering is deterministic, and the common case is
+// still one workspace even though a second is now self-serve rather than
+// invitation-only (D-3, historically). The plural case costs a person one click
+// through the picker at `/dashboard`, which is a different failure from landing
+// silently in the wrong pipeline.
 //
 // ── AND WITH NO WORKSPACE AT ALL, SETTINGS STILL RENDERS ────────────────────
 //

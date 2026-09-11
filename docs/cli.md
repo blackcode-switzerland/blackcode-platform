@@ -39,11 +39,14 @@
 >
 > **`appverbs.Config` declares what each app SERVES**, verb by verb. That is
 > D-36's rule one level down: a permanent subset is legitimate, an accidental one
-> is a bug. `apps/sales` gets `workspace` without `create/edit/delete` (D-3),
-> `member` without `leave`, and no `inbox`, `storage` or `user` at all — because
-> it mounts no route for them, and a command that could only 404 is a dead end
-> with a help page. Both directions are checked by each app's
-> `lib/cli-parity.test.ts` against the filesystem.
+> is a bug. As of 2026-09-11, `apps/sales` gets the FULL `workspace` group —
+> `create/edit/transfer/delete`, not just `list/show/use` — matching
+> `apps/issues` (D-3 reversed; this line used to read "`apps/sales` gets
+> `workspace` without `create/edit/delete` (D-3)"). What is still absent is
+> `member leave`, and `inbox`, `storage`, `user` entirely — because it mounts no
+> route for them, and a command that could only 404 is a dead end with a help
+> page. Both directions are checked by each app's `lib/cli-parity.test.ts`
+> against the filesystem.
 >
 > **The active workspace is PER APP** (`config.ActiveWorkspaces`, keyed by slug).
 > One field was correct while every app read one workspace table; since Phase 2

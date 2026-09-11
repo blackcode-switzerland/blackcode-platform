@@ -202,7 +202,27 @@ const ACCOUNT_WRITERS = new Map<string, AccountWriter>([
         'make it a permission over their account instead (D-7) — the same reasoning ' +
         'accept-invitation.tsx and account-settings.tsx carry. The route is ' +
         '/api/me/*, not /api/workspaces/*: it writes a pointer in sales.user_settings, ' +
-        'not a record inside a workspace',
+        'not a record inside a workspace. Since 2026-09-11 this file also hosts the ' +
+        '"Create workspace" and "Manage workspace" entry points (D-3 reversed) — ' +
+        'neither is a fetch/apiSend call from THIS file (creation is ' +
+        'workspace-create-modal.tsx, its own entry below; "Manage" is a plain ' +
+        '<Link> to /dashboard/{ws}/settings), so nothing new to declare here beyond ' +
+        'the reasoning already carried: tenancy navigation and tenancy creation are ' +
+        'both account-layer, not record-layer',
+    },
+  ],
+  [
+    'components/workspace-create-modal.tsx',
+    {
+      why:
+        'creating a new workspace — POST /api/workspaces (create — no trailing slash, ' +
+        'so this does not match WORKSPACE_PATH below) and POST ' +
+        '/api/me/active-workspace to select it, added 2026-09-11 with the D-3 ' +
+        'reversal. Same reasoning as workspace-switcher.tsx immediately above: ' +
+        'creating and choosing a workspace are ACCOUNT/TENANCY operations, not ' +
+        'sales-record writes, and a read-only display preference that could stop ' +
+        'somebody creating a workspace they will own would be a permission over ' +
+        'their account (D-7)',
     },
   ],
   [
@@ -253,6 +273,26 @@ const ACCOUNT_WRITERS = new Map<string, AccountWriter>([
         'workspace-scoped while being the caller\'s own setting rather than a ' +
         'shared record. Declared here because the path rule below cannot tell the ' +
         'two apart, and an undeclared workspace-scoped write must fail.',
+    },
+  ],
+  [
+    'components/settings/workspace-settings.tsx',
+    {
+      why:
+        'renaming, transferring or deleting the WORKSPACE ITSELF — PATCH/DELETE ' +
+        'wsPath(ws, \'\') and POST wsPath(ws, \'/transfer\'), added 2026-09-11 with ' +
+        'the D-3 reversal (create/rename/transfer/delete parity with apps/issues). ' +
+        'This is tenancy administration, not a sales record: a read-only display ' +
+        'preference that could stop an owner renaming or deleting their own ' +
+        'workspace would be a permission over the account (D-7), the same reasoning ' +
+        'every other entry in this map carries.',
+      workspaceScoped:
+        'every write in this file targets /api/workspaces/{ws}[...] via wsPath(), ' +
+        'which LOOKS like a shared sales record path — the exact shape the path ' +
+        'rule below exists to catch — but administers the workspace/tenancy ' +
+        'itself rather than a prospect, meeting or other record inside it. ' +
+        'Declared here because the path rule cannot tell the two apart on the URL ' +
+        'alone, and an undeclared workspace-scoped write must fail.',
     },
   ],
 ])

@@ -22,6 +22,45 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-09-11 — You can now create, rename, transfer, and delete b/sales workspaces
+
+**Not breaking**; every existing route, command and stored workspace keeps
+working unchanged. This reverses D-3 ("a workspace is the company, and you are
+granted one rather than opening one from a sales context"), recorded as it was
+written in this file's own **2026-08-10** entry ("every b/sales verb names the
+app") below — that entry stays exactly as it was written, since it was true on
+that date, and this one supersedes it going forward rather than rewriting it.
+
+- `POST /api/workspaces` creates a new sales workspace owned by the caller.
+- `PATCH /api/workspaces/{ws}` renames a workspace. **Name only** — a body
+  carrying `slug` gets a 400 `slug_immutable`. Unlike `apps/issues`, a sales
+  workspace's slug can never change: `sales.events.subject_urn` denormalizes
+  the slug into every historical event with no rename cascade, and inventing
+  one was out of scope for this change. The shared CLI's `bk sales workspace
+  edit --slug` flag still exists (it is one command shared by every app) and
+  will send the field; the server is what refuses it.
+- `POST /api/workspaces/{ws}/transfer` hands ownership to another member
+  (`new_owner_user_id` or `new_owner_email`).
+- `DELETE /api/workspaces/{ws}` permanently deletes a workspace and everything
+  in it — prospects, meetings, communications, products, templates, documents,
+  members. Owner only, not the Trash, no restore.
+- `bk sales workspace create|edit|transfer|delete` — the CLI side of all four,
+  from the shared `cli/internal/appverbs/workspace.go` factory. Nothing new to
+  learn if you already use `bk issues workspace …`; the verbs are identical.
+- **Web**: the sidebar workspace switcher (`components/workspace-switcher.tsx`)
+  now always renders, even with exactly one workspace — it used to hide itself
+  below two memberships. Its dropdown gained a "Create workspace" row (opens a
+  modal, name only — no logo field, this app has none) and a "Manage
+  workspace" row pointing at the new `/dashboard/{ws}/settings` page (rename,
+  transfer, danger-zone delete; owner-only, read-only view for members).
+
+If a client already special-cased sales as "workspace-immutable" — refusing to
+even offer create/rename/delete UI, or hardcoding the old 404/400 — that
+special case can be dropped, except for the slug: it is still, and will remain,
+immutable here.
+
+---
+
 ## 2026-08-31 — Filter and view prospects by strategy
 
 **Additive.** Prospects could already be linked to a segment strategy

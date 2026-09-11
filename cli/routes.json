@@ -945,6 +945,12 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk sales workspace delete",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/communications/{n}",
       "command": "bk sales comm rm",
       "app": "sales"
@@ -1269,6 +1275,12 @@
     },
     {
       "method": "PATCH",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk sales workspace edit",
+      "app": "sales"
+    },
+    {
+      "method": "PATCH",
       "path": "/api/workspaces/{ws}/documents/{n}",
       "command": "bk sales doc edit",
       "app": "sales"
@@ -1361,6 +1373,12 @@
       "method": "POST",
       "path": "/api/upload/blob",
       "command": "bk sales upload",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces",
+      "command": "bk sales workspace create",
       "app": "sales"
     },
     {
@@ -1475,6 +1493,12 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/templates/{n}/render",
       "command": "bk sales template render",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/transfer",
+      "command": "bk sales workspace transfer",
       "app": "sales"
     },
     {

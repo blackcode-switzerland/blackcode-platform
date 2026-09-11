@@ -1062,8 +1062,21 @@ the shared session cookie), and the prospect page's **Related** block links to
 
 An app serving a SUBSET of the platform surface is permanent and legitimate
 (D-36 as amended: a permanent subset is fine, an accidental one is a bug, and
-the test is whether every bare verb has a host). Sales now serves 27 of the 54;
-the rest, and why:
+the test is whether every bare verb has a host).
+
+> **This count moved on 2026-09-11.** It read "Sales now serves 27 of the 54"
+> and the table below carried two rows — `workspace edit | delete | transfer`
+> and `workspace create` — for the four verbs D-3 kept off this app. D-3 is
+> reversed: `POST /api/workspaces`, `PATCH /api/workspaces/{ws}`,
+> `DELETE /api/workspaces/{ws}` and `POST /api/workspaces/{ws}/transfer` are
+> all real, served routes now (`apps/sales/app/api/workspaces/**`), so the
+> count moves to **31 of the 54** and both rows are removed from the table
+> below. Recompute against `lib/cli-parity.test.ts` / `bk __routes` rather than
+> trusting this arithmetic blindly if it matters for a decision — this is a
+> hand count, not a generated one, and it is exactly the kind of number this
+> repo's `bk meta` doctrine exists to keep out of prose. `member leave` — the
+> other half of the old combined row — is unaffected by this change and stays
+> in the table below on its own.
 
 | Verb | Why not here |
 |---|---|
@@ -1072,8 +1085,7 @@ the rest, and why:
 | `storage list \| rm` | No route. The delete path reaches blob deletion, which has exactly one implementation. D-28's old reason ("one ledger, same rows from issues") expired in Phase 3. |
 | `user` | **Route removed 2026-08-10 (Phase 4).** `getVisibleUsers` joins `platform.workspace_members`, so on this deployment it listed people who are in NO sales workspace — measured. `bk sales member list` is the question this app has. |
 | the bare `search`, `link` | **Unmounted 2026-08-10 (Phase 3), removed as bare verbs in Phase 4.** Both read `platform.entities` scoped by a workspace id resolved from `sales.workspaces` — two tenancies that share ids and not members. See §7.2.2 for the measurement. `link` is gone outright; `bk sales search` is this app's own. |
-| `workspace edit \| delete \| transfer`, `member leave` | No route: the queries are still app-local to issues, and the workspace delete cascade has one implementation on purpose. `GET` on a workspace IS served, because `bk sales workspace use` resolves a slug through it. |
-| `workspace create` | D-3: a workspace is the company; sales has no create-workspace flow. |
+| `member leave` | No route: this app mounts no `/leave` endpoint. |
 
 **Since Phase 4 these are ABSENT from `bk sales --help` rather than present and
 404ing.** `appverbs.Config` declares what this app serves, so a verb it has no

@@ -14,9 +14,11 @@
 // and the same argument applies one layer up.
 //
 // ── EVERY KEY CARRIES THE WORKSPACE ─────────────────────────────────────────
-// `['today', ws]`, never `['today']`. This app shows one workspace and the
-// picker is a branch almost nobody sees (D-3), which is exactly why a cache key
-// that ignored the workspace would be wrong in a way nobody would reproduce.
+// `['today', ws]`, never `['today']`. One workspace is still the common case,
+// but "second workspace" is now a real, self-serve path (create it from the
+// sidebar switcher) rather than only an invitation accident — either way, a
+// cache key that ignored the workspace would be wrong in a way nobody would
+// reproduce.
 
 import { useQuery } from '@tanstack/react-query'
 import type { EventListItem } from '@blackcode/platform-db'
