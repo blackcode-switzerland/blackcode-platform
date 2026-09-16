@@ -276,8 +276,8 @@ issuer block comes from the `company` row. Document all three in
 Two billing systems rounding differently is the oldest integration bug there
 is. `POST …/invoices` accepts an optional `expected_total` (a string, like every
 amount). If it is present and differs from the derived total, the create is
-refused with `409 total_mismatch` carrying both numbers and nothing is
-allocated. One field, one test, and the customer's system learns about a
+refused with `409 total_mismatch` carrying both numbers, the company's rounding policy and its price mode, and
+nothing is allocated. One field, one test, and the customer's system learns about a
 rounding disagreement on the first bill rather than on the first complaint.
 
 ### 7. Tokens for a service, and what scopes are today

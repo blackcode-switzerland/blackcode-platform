@@ -121,7 +121,7 @@ quiet border and the 7 × 7 mm Swiss cross centred on top. Do not use a PNG — 
 raster at 46 mm is either heavy or soft, and the spec says scale from vector.
 
 **`invoice.ts`** draws the A4 body above it in the **document's** language:
-issuer block, client block, the line table, subtotal / VAT / total, the payment
+issuer block, client block, the line table, subtotal, one VAT line per distinct rate (`dont TVA …` when prices include VAT), an `Arrondi` line when the rounding policy produces one, total, the payment
 message, the footer. A non-CHF/EUR invoice gets the body and **no payment part** —
 that is a valid Swiss invoice, just not a payable slip.
 

@@ -109,7 +109,9 @@ Multi-entity by design: a new company is a row, never a code change.
 | `qr_iban` | `varchar(21)` nullable | **borrowed ⇠ b/books.** QR-IID 30000–31999. NULL means QRR is impossible for this company. |
 | `vat_registered` | `boolean` | `false` means VAT is **omitted entirely** from its invoices — no rate, no 0%, no block. |
 | `uid`, `vat_number` | `varchar(32)` nullable | ⚠ placeholders until P2 |
-| `default_currency`, `default_language`, `default_ref_type` | `varchar` | prefill for new invoices only. Never read at render time. |
+| `default_currency`, `default_language`, `default_ref_type`, `default_vat_rate` | `varchar` / `numeric(5,2)` nullable | prefill for new invoices and their lines only. Never read at render time. |
+| `default_prices_include_vat` | `boolean NOT NULL DEFAULT false` | prefill for `invoice.prices_include_vat`. The first external customer's prices include VAT ([D-B7](README.md)). |
+| `rounding` | `varchar(12) NOT NULL DEFAULT 'line_0_05'` | **the rounding policy, read at derivation time.** `line_0_05`: each line total and each VAT amount to five rappen, so printed sums are exact (the mockup's). `total_0_05`: lines and VAT to the rappen, the payable total to five, the difference printed as an `Arrondi` line. `none`: everything to the rappen. Position P8, per company since D-B7. |
 | `number_format` | `varchar(40)` | `BC-{YYYY}-{SEQ4}`, `AL-{SEQ4}`. Two tokens, both optional. |
 | `next_seq` | `integer NOT NULL DEFAULT 1` | **the allocator.** See below. |
 | `payment_terms_days` | `integer` | `due_date` prefill |
@@ -135,7 +137,8 @@ Multi-entity by design: a new company is a row, never a code change.
 | `ref_type` | `varchar(4)` | `QRR` / `SCOR` / `NON` |
 | `ref_body` | `varchar(26)` nullable | the reference **without** its check digit. NULL for NON. |
 | `client` | `jsonb NOT NULL` | `{name, street, building, postal_code, city, country}`. **One self-contained object** — nothing else on the invoice may depend on its internals, which is what makes the later b/clients swap a data-source change. |
-| `vat_rate` | `numeric(5,2)` **nullable** | NULL means VAT omitted (company not registered). `0` is a **valid rate** (export, reverse charge) and is not NULL. The distinction is load-bearing. |
+| `vat_rate` | `numeric(5,2)` **nullable** | **the rate prefilled onto new lines, and nothing else.** Every line carries its own rate (below) and the totals read the lines, never this column. Kept on the invoice so the wire shape the mockup serves survives. |
+| `prices_include_vat` | `boolean NOT NULL DEFAULT false` | `true` means each line's `unit_price` already contains its VAT, the VAT block reads `dont TVA`, and the total is the sum of the lines. Part of the document: frozen by G2. [D-B7](README.md). |
 | `message` | `varchar(140)` | the unstructured payment message. Shares a 140-character budget with billing information, enforced from day one even though we emit none. |
 | `void` | `jsonb` nullable | `{ts, by, reason: {fr, en}}`. A void is a record, never a deletion. |
 | `created_by` | FK `platform.users` | |
@@ -156,10 +159,13 @@ Multi-entity by design: a new company is a row, never a code change.
 | `qty` | `numeric(12,3)` | 12 days, 0.5 hours, 48 pieces |
 | `unit` | `varchar(24)` | display-only text. Not a vocabulary. |
 | `unit_price` | `numeric(14,2)` | |
+| `vat_rate` | `numeric(5,2)` **nullable** | NULL means **this line carries no VAT**: the medical act of a VAT-exempt practitioner, or a company that is not registered at all. `0` is a **valid rate** (export, reverse charge) and prints `TVA 0%`. The null-versus-zero distinction (I3) lives here now, per line. Write door: a company with `vat_registered = false` may not carry a non-null rate on any line. |
 
-No `product_id` and no per-line `vat_rate` in v1 — the catalogue is b/sales and
-the mockup carries one rate per invoice. The table is what makes a per-line rate
-a column later rather than a rewrite of every row.
+No `product_id` in v1 — the catalogue is b/sales. **A per-line `vat_rate` IS in
+v1**, changed 2026-09-16 ([D-B7](README.md)): the first external customer's
+invoices put a VAT-exempt medical act and a taxable product on one document,
+with a per-line taxable flag on their side. Before the first row exists that is
+a column; after it, a rewrite of every row and of every total ever derived.
 
 #### `billing.audit` — append-only
 
@@ -260,7 +266,7 @@ migration, a console session and a second deployment.
 | # | Guard | Mechanism |
 |---|---|---|
 | **G1** | **The number is permanent.** `number`, `seq_no`, `company_id` and `seq` cannot change after insert. | `BEFORE UPDATE` trigger, comparing `OLD` to `NEW` per column, raising with a message that names the correction path. |
-| **G2** | **A sent document is frozen.** Once `status <> 'draft'`: `currency`, `ref_type`, `ref_body`, `client`, `vat_rate`, `issue_date` and the invoice's lines are immutable. `message`, `due_date`, `paid_date`, `status` and `void` stay writable. | Two triggers, one on `invoice` and one on `invoice_line` — the lines of a sent invoice **are** the document. **Column-scoped, and that is stronger than a table-level revoke, not weaker:** a revoke cannot tell an amount from a payment message, and only one of those is a legal fact. This is position P9; see the README. |
+| **G2** | **A sent document is frozen.** Once `status <> 'draft'`: `currency`, `ref_type`, `ref_body`, `client`, `prices_include_vat`, `issue_date` and the invoice's lines, each line's `vat_rate` included, are immutable. `message`, `due_date`, `paid_date`, `status` and `void` stay writable. | Two triggers, one on `invoice` and one on `invoice_line` — the lines of a sent invoice **are** the document. **Column-scoped, and that is stronger than a table-level revoke, not weaker:** a revoke cannot tell an amount from a payment message, and only one of those is a legal fact. This is position P9; see the README. |
 | **G3** | **The status machine.** `draft → sent → paid`, anything → `void`, and nothing else. `void` requires the `void` object. `paid` requires `paid_date`. | A `CHECK` for the vocabulary and the field dependencies; a `BEFORE UPDATE` trigger for the transitions, because a `CHECK` cannot see the old row. |
 | **G4** | **The Swiss combination matrix.** `QRR` implies `currency = 'CHF'` and a 26-digit numeric `ref_body`. `NON` implies `ref_body IS NULL`. `SCOR` implies a non-empty `ref_body`. | `CHECK` constraints. The remaining half of the matrix — QRR requires the company to *have* a `qr_iban` — needs the company row, so it is enforced at the write door and asserted in a test. |
 | **G5** | **Nothing is ever deleted.** No `DELETE` on `invoice`, `invoice_line` or `audit`. | `BEFORE DELETE` trigger raising, **plus** the revokes in 0006. Both deliberately: the trigger stops anything running as owner, the revoke stops the app before the statement is attempted and shows up in `\dp` where a reviewer sees it. |
@@ -290,7 +296,9 @@ deleted.
 Pure functions. Never store a result. Every amount is an **integer count of
 rappen** inside these functions and a **string** at both ends.
 
-**`totals.ts`**
+**`totals.ts`** — per line, per rate, in one of two price modes, under one of
+three rounding policies. Changed 2026-09-16 for the first external customer
+([D-B7](README.md)); the earlier shape had one rate per invoice and one constant.
 
 ```
 lineTotal(qty, unit_price)  → rappen
@@ -298,24 +306,55 @@ lineTotal(qty, unit_price)  → rappen
     unit_price is numeric(14,2) → parse to an integer count of rappen
     product = qty_milli × price_rappen        (scaled by 1000)
     lineTotal = round_half_away(product / 1000)   → rappen
+    policy line_0_05 only: lineTotal = round_to_step(lineTotal, 5)
 
-computeTotals(lines, vat_rate) → { subtotal, hasVat, vat_rate, vat, total }
-    subtotal = Σ lineTotal                     → rappen
-    hasVat   = vat_rate !== null               ← NOT `vat_rate > 0`
-    vat      = hasVat
-                 ? round_to_step(round_half_away(subtotal × rate_bp / 10000), 5)
-                 : 0                            → rappen
-    total    = subtotal + vat
+computeTotals(lines, prices_include_vat, rounding)
+  → { subtotal, vat: [{rate, base, amount}], vat_total, rounding, total }
+
+    subtotal = Σ lineTotal over every line                      → rappen
+    group the lines whose vat_rate is not null by rate;
+    exempt lines (null) are in subtotal and in no group
+
+    exclusive (prices_include_vat = false):
+        base(r)   = Σ lineTotal over the group
+        amount(r) = round_half_away(base × rate_bp / 10000)
+        total     = subtotal + Σ amount
+
+    inclusive (prices_include_vat = true):
+        base(r)   = Σ lineTotal over the group          (already contains VAT)
+        amount(r) = round_half_away(base × rate_bp / (10000 + rate_bp))
+        total     = subtotal                             (nothing is added)
+
+    rounding policy:
+        line_0_05  : amount(r) = round_to_step(amount(r), 5); rounding = 0
+        total_0_05 : rounding  = round_to_step(total, 5) − total; total += rounding
+        none       : rounding  = 0
 ```
 
 `rate_bp` is the rate in basis points (`8.1%` → `810`), parsed from the
-`numeric(5,2)` string. `VAT_ROUNDING_STEP = 5` rappen lives in `lib/limits.ts`
-and nowhere else — this is position P8 and it is one constant to flip.
+`numeric(5,2)` string. There is no `hasVat` any more: a document has a VAT block
+when at least one line carries a non-null rate, and the block has one line per
+distinct rate, printed `TVA 8.1% sur CHF 1 200.00` in exclusive mode and
+`dont TVA 8.1%` in inclusive mode. A non-zero `rounding` prints as its own
+`Arrondi` line in the total block. The three policies are a closed vocabulary in
+`lib/vocabularies.ts`, served by `/api/meta`. **There is no `VAT_ROUNDING_STEP`
+constant.**
+
+**Why three policies and not one constant.** The mockup rounds every line and
+every VAT amount to five rappen so the printed sums are exact without a rounding
+line; that is `line_0_05`, the default, and the phase-6 parity test holds it to
+the mockup to the rappen. The first external customer rounds VAT to the rappen
+and only the payable total to five, with the difference shown; that is
+`total_0_05`, and their totals must match ours to the rappen or their
+`expected_total` check refuses every bill. A bank-transfer bill needs no
+five-rappen rounding at all; that is `none`. **A policy is a company setting,
+never a deployment setting**, because two companies in one workspace may keep
+different books.
 
 **Two decisions inside that specification, both assumptions to confirm with the
-fiduciary:** each line total is rounded to the rappen before the subtotal is
-summed, and VAT is computed on the rounded subtotal rather than per line. Say so
-in the code, not only here.
+fiduciary:** each line total is rounded to the rappen before anything is summed,
+and VAT is computed on the summed base per rate rather than per line. Say so in
+the code, not only here.
 
 **No `Number` is constructed on the display path.** `apps/books/lib/format.ts` is
 the worked example and its header records why: the old path went string → float64
@@ -395,6 +434,13 @@ Every `POST` that allocates a number honours `Idempotency-Key` (§2 there), and
 when it disagrees with the derived total. The routes in this table that appear
 in `lib/integration.ts`'s `PUBLIC_ROUTES` are the public surface from this phase
 on; the declaration, its readers and its test are §1 there.
+
+Line commands take `--vat-rate <rate|none>`; `invoice create` takes
+`--prices-include-vat`; `company create` and `company edit` take
+`--prices-include-vat` and `--rounding <line_0_05|total_0_05|none>`. The
+`derived.totals` block on every invoice response carries `vat` as an array,
+one entry per rate, and `rounding`, so a caller can check its own arithmetic
+against ours line by line.
 Lists return `{data, next_cursor}` through `jsonList`; single resources are bare;
 create returns 201.
 
@@ -475,8 +521,13 @@ workspace. Not a blank panel: say what the page is for and what would fill it.
       contiguous numbers, no gap and no duplicate
 - [ ] A void, then a create, shows the voided number still consumed and the new
       one following it
-- [ ] `vat_rate: null` renders **no VAT block at all**; `vat_rate: 0` renders
-      `TVA 0%`. Both asserted.
+- [ ] A line with `vat_rate: null` contributes nothing to the VAT block; a line
+      at `0` prints `TVA 0%`; an invoice mixing an exempt line and an 8.1% line
+      prints one VAT line on the taxable base only; in inclusive mode the block
+      reads `dont TVA` and the total equals the sum of the lines. All four
+      asserted
+- [ ] The three rounding policies each asserted on one fixture where they
+      differ, and `total_0_05` prints its `Arrondi` line
 - [ ] Every write path has left exactly the audit rows expected, including one
       row per changed line path
 - [ ] The combination matrix refuses QR-IBAN + SCOR, IBAN + QRR, and EUR + QRR
@@ -495,7 +546,8 @@ workspace. Not a blank panel: say what the page is for and what would fill it.
 - [ ] **These were watched failing, then restored:** the allocator replaced with
       `MAX(seq_no)+1` outside the transaction (duplicate appears); `appendAudit`
       dropped from `updateInvoice`; G1 disabled and `number` patched; G2 disabled
-      and a sent invoice's `unit_price` patched; `VAT_ROUNDING_STEP` changed to 1;
+      and a sent invoice's `unit_price` patched; the inclusive formula given the
+      exclusive divisor;
       a `fetch` added to a component; a `queryKey` written by hand
 - [ ] Every page opened in a browser, **per page**, in FR and EN on a string that
       differs between them, including the detail page **with no `?ref` at all**
@@ -515,12 +567,12 @@ swap is a data-source change; spreading it into six columns on `invoice` would
 make it a migration plus every read site. It holds no money, so `jsonb` costs
 nothing here.
 
-**`vat_rate: null` is not `0`, at every layer.** A company that is not registered
-for VAT omits the block entirely — not a zero line. A registered company may
-legitimately invoice at 0% (export, reverse charge) and that must print. The
-mockup demonstrates both: Aurora Labs has `null` throughout, and BC-2026-0035 is
-an EUR export at `0`. `hasVat` is `vat_rate !== null` and must never be written
-as a truthiness check.
+**`vat_rate: null` is not `0`, at every layer, and since D-B7 the layer is the
+line.** A company that is not registered for VAT has null on every line and
+omits the block entirely, not a zero line. A registered company may carry an
+exempt medical act at null beside a product at `8.1` on one document, or an EUR
+export at `0`. The test is `vat_rate !== null` per line and must never be
+written as `> 0`.
 
 **Per-currency sums are never merged.** The dashboard shows `CHF x + EUR y`.
 There is no converted total, conversion is not this app's business, and if you

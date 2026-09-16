@@ -180,19 +180,21 @@ drafts, and a draft with no way to leave `draft` is not worth generating.
 
 ## Decisions taken, 2026-09-16
 
-Six questions. The first four were decided before writing this plan; D-B5 and
-D-B6 were added the same day, after the requirement that b/billing also serve a
-second company as a standalone service. They are recorded here so nobody
-re-litigates them from the mockup, which predates all six.
+Seven questions. The first four were decided before writing this plan; D-B5,
+D-B6 and D-B7 were added the same day, after the requirement that b/billing also
+serve a second company as a standalone service and a first reading of that
+company's code. They are recorded here so nobody re-litigates them from the
+mockup, which predates all seven.
 
 | # | Decision | Answer | Why |
 |---|---|---|---|
 | **D-B1** | Who writes through the web UI? | **Full write parity.** Every field editable in the browser, and the same field editable by `bk`. | The mockup's whole invoice-detail page is an editor, and the brief says every field is exposed. b/books' read-only web surface is a different product decision for a different app: bookkeeping is posted once, an invoice is drafted and corrected. **Consequence: this app does NOT copy `apps/books/lib/read-only.test.ts` as a read-only guard.** It copies its module-graph half — one `fetch`, one place writes are sent from — and drops the read-only assertion. See phase 1. |
 | **D-B2** | How is the PDF and the QR code produced? | **In-house.** Our own payload serializer, validators and check digits; `qrcode` for the module matrix; `pdf-lib` + `@pdf-lib/fontkit` with Liberation Sans for the page and the payment part. | The spec's own §6 checklist is the acceptance test, and it is only an acceptance test if the bytes are ours to read. A library may draw; it may not decide. Liberation Sans is one of the four fonts the standard permits (`qr-bill.md` §4) and is freely redistributable. |
 | **D-B3** | How does an invoice reach a client? | **Resend, through `packages/platform-email`, extended with attachment support.** | The brief says "PDF attached to a Gmail send". There is no Google credential anywhere on this platform and `apps/sales` explicitly ruled that integration out of scope; acquiring one to send mail is a security surface the platform does not have. Resend is already the transport for every other message this platform sends, on the verified apex domain. **This is a recorded deviation from OPEN-DECISIONS R9** and the reason is in phase 3. |
-| **D-B4** | Are line items a column or a table? | **A table, `billing.invoice_line`.** The wire shape stays `items: [...]`, exactly as the mockup serves it. | The mockup embeds them, and for a static JS file that is right. In Postgres it is not: a money value inside `jsonb` is a JSON number, therefore a float64, and this repo's money rule is that an amount is `numeric(14,2)` and a string on the wire. It also makes a per-line VAT rate a column rather than a rewrite, which mixed-rate invoices will eventually want. See phase 1. |
+| **D-B4** | Are line items a column or a table? | **A table, `billing.invoice_line`.** The wire shape stays `items: [...]`, exactly as the mockup serves it. | The mockup embeds them, and for a static JS file that is right. In Postgres it is not: a money value inside `jsonb` is a JSON number, therefore a float64, and this repo's money rule is that an amount is `numeric(14,2)` and a string on the wire. It is also what let a per-line VAT rate become a column the same day the first external customer needed one (D-B7), rather than a rewrite. See phase 1. |
 | **D-B5** | Can another company's system plug into b/billing over HTTP? | **Yes, through a declared public subset of routes**, served from one declaration that `/api/meta` carries, the contract hash covers, a page renders and a test checks. Every other route stays private. | This amends the platform rule that the HTTP API has no public contract (`docs/backend.md:20`). The alternative, integrating through `bk`, was weighed and lost. What the rule protects, a route and its command changing together without breaking anybody, is kept for every route outside the subset and made explicit for the routes inside it. See [`integration-surface.md`](integration-surface.md). |
 | **D-B6** | How does a second company get b/billing as its own product? | **A separate, rebranded repository generated from a tag of this one** by `devops/extract-billing.sh` with a `brand.json`: the other apps deleted, every list that names them shrunk to one entry, the brand applied, a fresh git history, and a brand-leak guard inside the artifact. Its database is bootstrapped empty, so nothing is disabled: the other apps are absent. | "Totally separate" is five things (runtime, git, brand, data, release) and a copy of this repo gives none of them cleanly; a hand-maintained copy stops receiving fixes on its first commit. What this decision leaves open is whether the customer's repo stays a generated artifact or becomes a one-time snapshot, which is a question of who maintains it. See [`standalone-deployment.md`](standalone-deployment.md). |
+| **D-B7** | One VAT rate per invoice or per line? Prices with VAT inside or added? Rounding fixed or per company? | **Per line, either mode, per company.** `invoice_line.vat_rate` nullable (null is exempt, `0` is a rate); `invoice.prices_include_vat`, frozen with the document; `company.rounding`, a closed vocabulary of three policies with the mockup's as default. | Read from the first external customer's code on 2026-09-16: their invoices put a VAT-exempt medical act beside a taxable product, their prices include VAT, and they round VAT to the rappen and the total to five. Phase 1 had already written that a per-line rate is "a column later, a rewrite after"; a customer arriving before the first row made it now. See phase 1, Derivations. |
 
 ### The mockup's pending questions, answered provisionally
 
@@ -205,7 +207,7 @@ cost of overturning it is recorded.
 |---|---|---|---|
 | P4 | Does `BC-{YYYY}-{SEQ4}` restart each year? | **No.** The sequence counts forever; the year is display only. | One column, plus a decision about the year the change takes effect. Cheap. |
 | P7 | Does a cancelled occurrence count toward a series cap? | **No.** A void and its replacement are one occurrence. | The partial unique index in phase 4. Cheap. |
-| P8 | VAT rounding | **0.05**, declared once as `VAT_ROUNDING_STEP`. | One constant, but every historical total changes. Confirm with the fiduciary before the first real bill. |
+| P8 | VAT rounding | **A per-company policy**, default `line_0_05` (the mockup's: every line and every VAT amount to five rappen). `total_0_05` and `none` exist for companies whose books differ. Reshaped by D-B7. | A company setting an owner changes; every historical total of that company changes with it. Confirm with the fiduciary before the first real bill. |
 | P9 | May a sent invoice be edited? | **The document is frozen, the rest is not.** Amounts, client, dates, currency and reference lock on send; the payment message, the due date and the status stay open. A correction is void plus reissue. | A trigger. Moderate — loosening is easy, tightening after real bills exist is not. |
 | P10 | Is the sent PDF archived? | **No. It is regenerated, byte-stably**, and the sha256 of what was sent is recorded on the audit entry. | Adding archival later is additive. Making regeneration byte-stable later is not, which is why it is a phase 2 requirement rather than a phase 3 one. |
 | P11 | What do the 26 QRR digits encode? | `00000000000000` + company `seq` (4) + invoice `seq_no` (8). | **Settle with the bank before the first real QRR bill.** The bank may want the leading digits as a grouping key (§4.3.2). Changing it after bills are out means two schemes in the wild. |
@@ -355,7 +357,9 @@ Amended the same day: decisions D-B5 and D-B6, recorded in
 that b/billing also serve a second company as a standalone service. Their
 items are threaded into phases 0 to 4; nothing else in the plan moved. D-B6
 was rewritten the same day, from a second deploy target of this repo to a
-separate, rebranded product; the first version survives nowhere.
+separate, rebranded product; the first version survives nowhere. D-B7 followed
+from reading the first customer's billing code the same day, and phase 1's tables
+and derivations changed with it.
 
 Two facts about the world that these docs depend on, and that will expire:
 
