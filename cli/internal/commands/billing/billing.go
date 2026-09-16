@@ -38,6 +38,8 @@ package billing
 
 import (
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/appverbs"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
 	"github.com/spf13/cobra"
 )
 
@@ -106,8 +108,20 @@ func NewGroup() *cobra.Command {
 		Short: Short,
 		Long:  long,
 	}
+	cmd.AddCommand(nouns()...)
 	cmd.AddCommand(appOwnedVerbs()...)
 	return cmd
+}
+
+// nouns is this app's own surface — what `bk billing` offers beyond the
+// platform verbs every app has.
+func nouns() []*cobra.Command {
+	return []*cobra.Command{
+		newCompanyCmd(),
+		newInvoiceCmd(),
+		newAuditCmd(),
+		newOverviewCmd(),
+	}
 }
 
 // appOwnedVerbs declares the app-owned platform verbs THIS app serves.
@@ -151,4 +165,28 @@ func appOwnedVerbs() []*cobra.Command {
 		Members:         true,
 		Invites:         true,
 	}).All()
+}
+
+// clientAndWorkspace resolves the credential and THIS app's active workspace.
+//
+// One helper for every command in this package, because the failure it prevents
+// is the same everywhere: a command that silently acted on whichever workspace
+// happened to be remembered by another app. The active workspace is keyed by app
+// slug in the CLI's own config, so `bk billing workspace use` does not disturb
+// sales — two apps' workspace tables have overlapping ids, and one shared
+// setting meant selecting here retargeted the others.
+//
+// In THIS app the consequence is sharper than elsewhere: acting on the wrong
+// workspace means issuing a numbered legal document from the wrong tenant, which
+// cannot be deleted afterwards.
+func clientAndWorkspace() (*client.Client, string, error) {
+	c, cfg, err := cmdutil.NewClientAndConfig()
+	if err != nil {
+		return nil, "", err
+	}
+	ws, err := cmdutil.RequireActiveWorkspace(cfg)
+	if err != nil {
+		return nil, "", err
+	}
+	return c, ws, nil
 }

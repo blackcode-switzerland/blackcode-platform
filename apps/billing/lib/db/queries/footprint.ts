@@ -33,7 +33,7 @@
 import { inArray, eq, sql } from 'drizzle-orm'
 import type { AppFootprint, FootprintSource } from '@blackcode/platform-api'
 import { getDb } from '../client'
-import { billingWorkspaceMembers, billingWorkspaces } from '../schema'
+import { billingCompany, billingInvoice, billingWorkspaceMembers, billingWorkspaces } from '../schema'
 import { APP_SLUG } from '@/lib/app'
 
 export const billingFootprintSource: FootprintSource = {
@@ -115,35 +115,55 @@ async function readFootprint(userId: number): Promise<AppFootprint> {
  * on a confirmation screen is its own kind of dishonesty.
  *
  * ===========================================================================
- * IT IS EMPTY IN PHASE 0, AND PHASE 1 MUST COME BACK FOR IT
+ * PHASE 1 FILLED THIS IN, AND THE GUARD IS WHY
  * ===========================================================================
- * This app has no entity of its own yet: phase 0 creates tenancy and the
- * counter, and nothing else. The scaffold's version queried `scaffold.notes`,
- * whose table this app deliberately never created — leaving that query in place
- * would have been a runtime error on the one route whose whole job is to be
- * answerable.
+ * Through phase 0 this returned `[]`, correctly: the app had tenancy and a
+ * counter and no entities. From phase 1 that answer would be a LIE, and nothing
+ * about the shape of the code changes when it becomes one — which is exactly the
+ * failure `AppContext.footprint` exists to prevent. An app that under-reports is
+ * an app the whole-account close silently SKIPS, leaving its data owned by an
+ * account that can no longer sign in.
  *
- * **Phase 1 adds `billing.company` and `billing.invoice` and must add them
- * here**, and `docs/billing-app-plan/phase-1-companies-and-invoices.md` carries
- * that as an explicit obligation rather than a hope. Returning `[]` while the
- * app holds invoices would be the exact failure `AppContext.footprint` exists to
- * prevent: an account close that reports this app empty and strands its data.
+ * So the obligation is guarded rather than remembered.
+ * `holds-covers-entities.test.ts` reads the table list out of `lib/db/schema.ts`
+ * and fails when a table is neither counted here nor explicitly exempt. It went
+ * red the moment migration 0004's tables were mirrored, which is how this
+ * function came to be written rather than forgotten.
  *
- * The obligation is guarded rather than remembered. `holds-covers-entities.test.ts`
- * beside this file reads the table list out of `lib/db/schema.ts` and fails when
- * a person-facing table has no line here, so adding a table without a line is a
- * red suite rather than a silent hole.
+ * ── AND THE GUARD ITSELF HAD FINDING #11's DEFECT ──────────────────────────
+ * Its first version scanned this whole file and therefore accepted a COMMENT
+ * naming a table. The header that used to sit here promised phase 1 would add
+ * `company` and `invoice`, and that promise satisfied the check for it — so the
+ * guard reported three of the five new tables and stayed quiet about those two.
+ * It strips comments now. Worth knowing before adding a table: the mention has
+ * to be in the CODE.
  *
- * Note this is NOT the same as `known`. An app with no entities still has
- * workspaces to report and members that would block a purge, which is why
+ * Note this is NOT the same question as `known`. An app with no entities still
+ * has workspaces to report and members that would block a purge, which is why
  * `known` is computed from memberships above and not from this array.
  */
 async function countIn(workspaceIds: number[]): Promise<Array<{ label: string; count: number }>> {
-  // `workspaceIds` is non-empty at every call site (the caller checks
-  // `will_delete.length === 0` first), and every element came from
-  // `billing.workspaces.id` — a serial — so there is nothing to interpolate
-  // unsafely. Stated because the next person to add a table here will copy the
-  // shape, and `sql.raw` in a function taking an array deserves a sentence.
-  void workspaceIds
-  return []
+  // Every element came from `billing.workspaces.id` — a serial — and the array
+  // is non-empty at the one call site (the caller checks `will_delete.length`
+  // first). Interpolated through `inArray` rather than `sql.raw` regardless,
+  // because the next person to add a table here will copy this shape.
+  const [companies, invoices] = await Promise.all([
+    getDb()
+      .select({ n: sql<number>`COUNT(*)::int` })
+      .from(billingCompany)
+      .where(inArray(billingCompany.workspace_id, workspaceIds)),
+    getDb()
+      .select({ n: sql<number>`COUNT(*)::int` })
+      .from(billingInvoice)
+      .where(inArray(billingInvoice.workspace_id, workspaceIds)),
+  ])
+
+  const out: Array<{ label: string; count: number }> = []
+  // Plurals a person would recognise LOSING, which is the confirmation screen's
+  // job. "4 companies" and "182 invoices", not "2 workspaces".
+  const company = Number(companies[0]?.n ?? 0)
+  const invoice = Number(invoices[0]?.n ?? 0)
+  if (company > 0) out.push({ label: company === 1 ? 'company' : 'companies', count: company })
+  if (invoice > 0) out.push({ label: invoice === 1 ? 'invoice' : 'invoices', count: invoice })
+  return out
 }

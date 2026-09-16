@@ -111,6 +111,126 @@ Migrations landed as three rows in `drizzle.__drizzle_migrations_billing` — th
 app's own ledger. A shared ledger silently skips an app's migrations, because
 drizzle takes one high-water mark over the whole table.
 
+## Phase 1: companies and invoices
+
+Five more tables, three migrations, and the two contracts that cannot change
+later without touching every row.
+
+| Table | What it is |
+|---|---|
+| `company` | the issuing entity. Owns its own invoice sequence via `next_seq` |
+| `invoice` | a numbered legal document. Three identifiers, all different |
+| `invoice_line` | a table, not `jsonb` (D-B4): a money value inside `jsonb` is a float64 |
+| `audit` | append-only, and it IS the edit workflow. Also the event feed |
+| `idempotency_keys` | so a retried create replays instead of minting a second real bill |
+
+### The two numbers, and a third identifier nothing prints
+
+| | What it is | From | Printed where |
+|---|---|---|---|
+| `id` | the row | `serial` | nowhere |
+| `seq` | the workspace `#number`, the ADDRESS | `billing.counters` | `invoice show 7`, the URN, the route path |
+| `seq_no` → `number` | the per-company STATUTORY sequence | `company.next_seq` | the document, and inside the payment reference |
+
+`seq_no` is gapless because `UPDATE company SET next_seq = next_seq + 1 …
+RETURNING` takes a row lock for the rest of the transaction. A second create
+waits; a rollback reverts the increment **before the waiter is released**, so the
+waiter gets the same number and no hole appears. A Postgres `SEQUENCE` is
+explicitly non-transactional and would leave one.
+
+That serialises creation per company. It is the price of the guarantee and it is
+the right trade at this volume.
+
+### Nothing derived is stored
+
+No `subtotal`, no `vat`, no `total`, no `line_total` column. Every total is
+computed from the lines, the price mode and the company's rounding policy on
+every read.
+
+That is not tidiness. Since decision **D-B7** the rounding policy is a COMPANY
+setting, so a stored total would have to be rewritten across history whenever
+that setting moved — a migration triggered by a settings change.
+
+### The rules with no database object behind them
+
+Four, and they are the ones most likely to be quietly lost, because a write path
+that forgot to call one would pass every other guard in this repo:
+
+| Rule | Why not a CHECK |
+|---|---|
+| QRR requires the company to HAVE a QR-IBAN | needs the company row |
+| an unregistered company charges no VAT on any line | needs the company row |
+| the 140-character payment message budget | a property of the request |
+| `expected_total` against the derived total | a property of the request |
+
+`lib/db/queries/invoices.test.ts` exercises all four directly. They are exported
+for that reason, and `invoices.ts`' header names them so a third write path has
+to notice.
+
+### What only a real HTTP call found
+
+Three bugs survived `tsc`, the unit tests, `cli-parity` and the build, and were
+found by the first `curl` against the routes on 2026-09-17. All three are
+CLAUDE.md's "a route is not a page" corollary one layer down.
+
+| Bug | Symptom | Why nothing else saw it |
+|---|---|---|
+| **nothing derived the reference body.** `ref_body` was left null while the company default was QRR | `check_violation`, 400 on every create | the CHECK was right and the code had no reference generator at all. `lib/derive/reference.ts` now has it, with the P11 warning |
+| **the fresh read ran INSIDE the transaction**, through `getDb()` — a different connection, where the uncommitted row is invisible | "invoice vanished after insert", 500 | the types were fine and every pure-function test was green. All five write paths now read after the commit |
+| **a hand-rolled `ApiStatusError`** on the assumption `apiHandler` recognises any `{status, code, message}` shape. It recognises `ApiError` | the 422 became a 500 with no code and no suggestion | `Errors.unprocessable` existed the whole time. The mistake was inventing a shape instead of reading the module that owns error responses |
+
+The third one also corrected the wire contract: the error body's human field is
+**`error`**, not `message`. `types/index.ts` said `message`, which is what a
+reader would guess and is wrong — a client switching on it reads `undefined` on
+every refusal.
+
+### Verified end to end, as the real role
+
+Against the local Docker database on 2026-09-17, with a real `bk_live_…` token
+over HTTP, and then as `billing_app` directly.
+
+**The arithmetic**, every figure checked against an independent computation:
+
+| Invoice | Shape | Derived |
+|---|---|---|
+| `PX-0001` | exempt + 8.1% + 2.6%, prices INCLUDE VAT, `total_0_05` | subtotal 388.00, VAT 0.46 + 8.99, total **388.00** (nothing added) |
+| `BC-2026-0001` | 8.1%, prices EXCLUDE VAT, `line_0_05` | subtotal 1770.00, VAT 143.35, total **1913.35** |
+| `BC-2026-0003` | exempt only, EUR | subtotal 3600.00, no VAT block |
+| overview | per currency, never merged | CHF outstanding 2982.40 of which overdue 2594.40, paid 1913.35; EUR all zero |
+
+**Idempotency:** the same key with the same body replayed the same `#seq` and set
+`Idempotent-Replayed: true`; the same key with a different body returned 422
+`idempotency_key_reused`; no key at all minted a second invoice, which is correct
+— unguarded is unguarded.
+
+**Eleven write-door refusals**, each with the right status, code and suggestion:
+QRR without a QR-IBAN (409), `total_mismatch` naming the policy and the price
+mode (409), a 141-character message (400), an unknown language (400), editing the
+number (400), editing a sent invoice's currency and its lines (409 each), fields
+and `items` in one patch (400), nested metadata (400), an unknown status filter
+(400). Editing a sent invoice's **due date** returned 200, which is G2 working
+rather than absent.
+
+**And as `billing_app`**, the refusals AND the positives, because a check built
+only on denials cannot tell a working boundary from a role that can do nothing
+(finding #16):
+
+| Refused | How |
+|---|---|
+| DELETE on `invoice`, `audit`, `company` | permission denied — the revoke, before the trigger is reached |
+| UPDATE on `audit` | permission denied |
+| changing an invoice number | G1's trigger, naming the correction path |
+| `paid → sent`, reviving a void | G3's trigger, naming the machine |
+| a `NON` invoice with a reference body | G4's CHECK |
+| another app's schema | permission denied for schema books |
+
+| Allowed | Result |
+|---|---|
+| reading its own invoices | 9 rows |
+| editing a draft's message | 2 rows |
+| appending to the log | inserted |
+| deleting a draft's line | deleted — draft editing works, which the revoke would have broken |
+
 ## The guards, watched failing
 
 A check nobody has watched fail is not a check (CLAUDE.md's standing rule).
@@ -132,6 +252,23 @@ restored, on 2026-09-17:
 | `help_app_roster_test.go` (new) | the billing row deleted from the root help tour; then a row naming an app the binary lacks | both directions reported |
 | `devops/release.sh` | `release.sh web billing` with the placeholder project id | refused, naming the step that fixes it |
 
+Phase 1 added these, on 2026-09-17:
+
+| Guard | The mutation | What it said |
+|---|---|---|
+| `lib/derive/totals.test.ts` | the inclusive VAT formula given the exclusive divisor | named the invoice and the expected 8.99 |
+| the same | `hasVatBlock` rewritten as `> 0`, merging exempt into zero-rated | named the case |
+| the same | `parseRappen` replaced with `Number()` — the `1e3` bug | three tests, including the one that would bill 1000× |
+| the same | rounding changed from half-away-from-zero to `Math.round` | the credit-note symmetry case |
+| `lib/vocabularies.test.ts` | a value added to the served list; removed from the union; added to the CHECK; then the constraint RENAMED | the first three fired. **The fourth passed**, because the name matched as a prefix — fixed with a word boundary, then it fired |
+| `holds-covers-entities.test.ts` | a table named only in a comment | it had accepted that, so `company` and `invoice` went unreported. Comments are stripped now, and it checks the Drizzle identifier |
+| `nextstep_test.go` | the next step dropped from `invoice create` | named the function and the file. **Its first version also false-positived** on a GET whose comment said "ON DELETE SET NULL"; it reads the annotation value now |
+| `seed-guard.test.ts` | the allowlist turned into a blocklist | the two tests that matter — it would have let a non-Neon production host through |
+| `guide_test.go` | three invoice statuses restated in a topic | `--- FAIL: …/billing` |
+| the same | the same three words inside longer words | silent, which is the point |
+| the same | `QRR, SCOR, NON` restated | silent at first — the extractor read lowercase only. Widened, then it fired |
+| `help_flag_drift_test.go` | (not injected) | caught a REAL drift: the audit group's help named `--since`, which only its leaf accepts |
+
 ## Still owed at the end of phase 0
 
 - **The Vercel project.** `bc-billing` does not exist. `devops/release.sh`
@@ -143,9 +280,18 @@ restored, on 2026-09-17:
   separate migrator, which the local container does not model.
 - **`bk login` through a browser.** The loopback round-trip needs a real
   browser session and is a human step.
-- **`/api/me/footprint`'s `holds` array is empty**, correctly: this app has no
-  entities. Phase 1 must add `company` and `invoice` to it, and
-  `lib/db/queries/holds-covers-entities.test.ts` fails the build if it does not.
+- **The QRR reference scheme is position P11 and is not settled with the bank.**
+  `lib/derive/reference.ts` implements the plan's layout — 14 zeros, the company
+  `#number` in 4, the invoice `seq_no` in 8 — in one function, with that warning
+  in its header. Changing it after real bills are out means two schemes in the
+  wild.
+- **The reference CHECK DIGIT is not computed yet.** Phase 2 adds it
+  (`lib/qr/reference.ts`), along with the payload, the validators and the PDF.
+  `ref_body` is stored without it, deliberately: a stored check digit is a value
+  that can disagree with the body it checks.
+- **`/api/me/footprint`'s `holds` array now counts companies and invoices**, and
+  `holds-covers-entities.test.ts` went red the moment 0004's tables were
+  mirrored, which is how it came to be written rather than forgotten.
 
 ## Frontend
 

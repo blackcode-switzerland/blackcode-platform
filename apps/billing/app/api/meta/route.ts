@@ -59,8 +59,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { platformMetaBlock } from '@blackcode/platform-api'
 import { apiHandler, appContext } from '@/lib/api'
 import { APP_SLUG } from '@/lib/app'
-import { INVITATION_STATUSES, MEMBER_ROLES } from '@/lib/vocabularies'
-import { WORKSPACE_NAME_MAX } from '@/lib/limits'
+import {
+  ACTOR_VIA,
+  AUDIT_ACTIONS,
+  DOCUMENT_LANGUAGES,
+  INVITATION_STATUSES,
+  INVOICE_STATUSES,
+  MEMBER_ROLES,
+  REFERENCE_TYPES,
+  ROUNDING_POLICIES,
+} from '@/lib/vocabularies'
+import {
+  LIST_LIMIT_DEFAULT,
+  LIST_LIMIT_MAX,
+  METADATA_LIMITS,
+  PAYMENT_MESSAGE_MAX,
+  WORKSPACE_NAME_MAX,
+} from '@/lib/limits'
+import { CONVENTIONS, PUBLIC_ROUTES } from '@/lib/integration'
 
 /**
  * What this app contributes to its own registry entry, and it is the same
@@ -77,9 +93,36 @@ function currentApp() {
     vocabulary: {
       member_roles: MEMBER_ROLES,
       invitation_statuses: INVITATION_STATUSES,
+      invoice_statuses: INVOICE_STATUSES,
+      reference_types: REFERENCE_TYPES,
+      document_languages: DOCUMENT_LANGUAGES,
+      rounding_policies: ROUNDING_POLICIES,
+      audit_actions: AUDIT_ACTIONS,
+      actor_via: ACTOR_VIA,
     },
     limits: {
       workspace_name_max: WORKSPACE_NAME_MAX,
+      payment_message_max: PAYMENT_MESSAGE_MAX,
+      page_size_default: LIST_LIMIT_DEFAULT,
+      page_size_max: LIST_LIMIT_MAX,
+      metadata: METADATA_LIMITS,
+    },
+    // ── THE PUBLIC SURFACE, IN THE ANONYMOUS HALF ──────────────────────────
+    // Decision D-B5. Served here so it rides inside `contractVersion` — which
+    // hashes everything under `apps.<slug>` — meaning a route added to
+    // `PUBLIC_ROUTES` moves the hash and tells every agent its cached copy is
+    // stale, with nobody having to remember to bump anything.
+    //
+    // Anonymous on purpose: this is a customer's integration documentation, and
+    // requiring a credential to read WHICH routes are public would be a strange
+    // front door.
+    integration: {
+      routes: PUBLIC_ROUTES,
+      conventions: CONVENTIONS,
+      note:
+        'These routes are a declared public contract and change only additively. ' +
+        'Everything else under /api is private plumbing with no stability promise — ' +
+        'the `bk` CLI is its only supported client.',
     },
   }
 }
@@ -118,11 +161,13 @@ export const GET = apiHandler(async (req: NextRequest) => {
     // agent that reads this in phase 0 and concludes the app is broken has read
     // it correctly-but-wrongly, and one sentence prevents that.
     entities: {
-      source: 'none',
+      source: 'database',
+      tables: ['billing.company', 'billing.invoice', 'billing.invoice_line', 'billing.audit'],
       note:
-        'Phase 0: this deployment owns its tenancy and nothing else. Companies and ' +
-        'invoices arrive in phase 1. `bk billing workspace list` is the only read with ' +
-        'data behind it today.',
+        'Companies and invoices are workspace-scoped, so this unauthenticated route cannot ' +
+        'list them. Read them with `bk billing company list` and `bk billing invoice list`, ' +
+        'or GET /api/workspaces/{ws}/invoices. The payment reference, the QR payload and the ' +
+        'PDF arrive in phase 2; sending, paid and void in phase 3.',
     },
   })
 })

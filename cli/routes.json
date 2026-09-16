@@ -21,14 +21,62 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/audit",
+      "command": "bk billing audit list",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/companies",
+      "command": "bk billing company list",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/companies/{slug}",
+      "command": "bk billing company show",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/invitations",
       "command": "bk billing invite list",
       "app": "billing"
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/invoices",
+      "command": "bk billing invoice list",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invoices/{ref}",
+      "command": "bk billing invoice show",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/members",
       "command": "bk billing member list",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/overview",
+      "command": "bk billing overview",
+      "app": "billing"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/companies/{slug}",
+      "command": "bk billing company edit, bk billing company retire",
+      "app": "billing"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/invoices/{ref}",
+      "command": "bk billing invoice edit, bk billing invoice line set",
       "app": "billing"
     },
     {
@@ -45,8 +93,20 @@
     },
     {
       "method": "POST",
+      "path": "/api/workspaces/{ws}/companies",
+      "command": "bk billing company create",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
       "path": "/api/workspaces/{ws}/invitations",
       "command": "bk billing invite send",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invoices",
+      "command": "bk billing invoice create",
       "app": "billing"
     },
     {

@@ -61,7 +61,7 @@ once with `--json` to see which you are getting; it does not change under you.
 
 **These commands paginate**, and no others: `bk <app> activity`,
 `bk super-admin errors list`, `bk sales prospect list`, `bk sales meeting list`,
-`bk sales comm list`. They are exactly the commands with `--limit` / `--cursor`
+`bk sales comm list`, `bk billing invoice list`, `bk billing audit list`. They are exactly the commands with `--limit` / `--cursor`
 — everything else returns the whole list in one response. Page size defaults and
 caps are in `bk meta` under `limits.page_size_default` / `limits.page_size_max`.
 
