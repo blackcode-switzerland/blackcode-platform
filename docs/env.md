@@ -18,6 +18,21 @@ project, and means "set on issues". This table is the THREE-app truth
 (`bc-books` added 2026-08-20). Re-audit it with `vercel env ls` rather than
 trusting it; it is a snapshot, not a mechanism.
 
+**`bc-billing` is not in the table because the project does not exist yet.**
+b/billing's phase 0 registered the app in the repo and in `platform.apps`;
+creating its Vercel project is a human step
+(`docs/billing-app-plan/phase-0-register-the-app.md` §9). It needs the same
+variables as `bc-books` plus three of its own:
+
+| Variable | Note |
+|---|---|
+| `BILLING_DISPLAY_NAME` | the product name a person reads. Optional; defaults to `b/billing`. A rebranded copy of the app sets it |
+| `BILLING_CONTACT_EMAIL` | the reply-to in this app's mail. Optional; defaults to `contact@blackcode.ch` — and a copy of the app that left it at the default would send another company's clients to us |
+| `BILLING_EMAIL_ACCENT` | the email button fill. Optional; the default is measured at 6.55:1 against white, and an override must be measured too |
+
+`BLOB_READ_WRITE_TOKEN` is deliberately NOT set on it: this app stores no
+files.
+
 | Variable | `bc-issues` | `bc-sales` | `bc-books` | Note |
 |---|---|---|---|---|
 | `DATABASE_URL` | ✅ prod + preview | ✅ prod | ✅ prod | different Postgres ROLE per app, same Neon project — books runs as `books_app` |
@@ -521,6 +536,7 @@ two need the same three variables and a different port and database:
 | issues | `apps/issues/.env.local` | 3000 | `http://localhost:3000` |
 | sales | `apps/sales/.env.local` | 3100 | `http://localhost:3100` |
 | books | `apps/books/.env.local` | 3200 | `http://localhost:3200` |
+| billing | `apps/billing/.env.local` | 3300 | `http://localhost:3300` |
 
 Start one at a time with `npm run dev --workspace=<app>`; the root `npm run dev`
 is filtered to issues.

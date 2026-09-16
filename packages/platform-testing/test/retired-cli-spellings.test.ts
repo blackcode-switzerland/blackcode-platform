@@ -102,7 +102,16 @@ function retiredSpellings(): string[] {
 
 const RETIRED = retiredSpellings()
 
-const SCAN_ROOTS = ['issues', 'sales', '_scaffold'].flatMap((app) => [
+// `books` was MISSING here from the day that app shipped until 2026-09-16, when
+// `billing` was added and the list was read. An app absent from this list is an
+// app whose UI could carry a retired `bk` spelling with the suite green — and
+// the whole point of the scan is that a retired spelling in a hint sends a
+// person or an agent at a command that exits non-zero.
+//
+// This is CLAUDE.md finding #22's mechanism exactly: a per-app registry that a
+// new app must OPT INTO has coverage that shrinks every time the platform grows,
+// and it cannot report the app it never heard of.
+const SCAN_ROOTS = ['issues', 'sales', 'books', 'billing', '_scaffold'].flatMap((app) => [
   join(REPO_ROOT, 'apps', app, 'app'),
   join(REPO_ROOT, 'apps', app, 'components'),
 ])

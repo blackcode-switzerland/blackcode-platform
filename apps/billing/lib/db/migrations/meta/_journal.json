@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789639200000,
+      "tag": "0001_billing_init",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789639260000,
+      "tag": "0002_blob_reference_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789639320000,
+      "tag": "0003_app_role_grants",
+      "breakpoints": true
+    }
+  ]
+}

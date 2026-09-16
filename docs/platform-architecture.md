@@ -6,7 +6,9 @@ access model, the URN scheme and the separation rules between apps.
 
 Read this before starting work on a new app, or before touching anything in
 `packages/platform-*`, an app's `lib/db/schema.ts`, `lib/api/`, or `cli/`.
-**Three apps are in production**: `issues` and `sales` since 2026-08-10, `books`
+**Three apps are in production**, and a fourth (`billing`) is in build with its
+schema, role and command group registered since 2026-09-17:
+`issues` and `sales` since 2026-08-10, `books`
 since 2026-08-20.
 
 - **How** to add an app: [`adding-an-app.md`](adding-an-app.md) — the walked checklist.

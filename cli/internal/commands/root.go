@@ -8,6 +8,7 @@ import (
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/books"
+	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/billing"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/issues"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/platform"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/commands/sales"
@@ -118,6 +119,9 @@ platform/apps" for the rule and the reasoning.
 APPS — every app verb sits behind its app name:
   issues      issue, task, project, attachment, move, copy, analytics
   sales       prospect, contact, meeting, comm, product, template, doc, …
+  books       entity, exercice, account, entry, bilan, cr, source, piece, …
+  billing     workspace, member, invite  (companies and invoices: phase 1)
+  scaffold    note  (not deployed — the worked example behind adding-an-app.md)
 
 CHANGED 2026-08-10 (2.1.0), and it is a breaking change for anything scripted:
 "workspace", "member", "invite", "user", "inbox", "storage", "search" and
@@ -228,7 +232,10 @@ func NewRoot() *cobra.Command {
 	// it there rather than here is what lets an app add its own entity-specific
 	// subcommands to those groups (`bk issues label attach`) without this file
 	// knowing any app's nouns.
-	for _, group := range []*cobra.Command{issues.NewGroup(), sales.NewGroup(), books.NewGroup(), scaffold.NewCmd()} {
+	for _, group := range []*cobra.Command{
+		issues.NewGroup(), sales.NewGroup(), books.NewGroup(),
+		billing.NewGroup(), scaffold.NewCmd(),
+	} {
 		pinApp(group, group.Name())
 		root.AddCommand(group)
 	}

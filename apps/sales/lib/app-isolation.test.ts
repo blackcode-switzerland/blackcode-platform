@@ -32,11 +32,18 @@ const APPS_ROOT = join(APP_ROOT, '..')
 /**
  * Postgres schemas belonging to OTHER apps. Never `platform`, never our own.
  *
- * The list is symmetric by hand: adding this app meant adding `'sales'` to
- * `apps/issues` and `apps/_scaffold` in the same change. A one-sided guard only
- * catches the app that remembered.
+ * Keep it symmetric: adding an app means adding its schema HERE and in every
+ * other app, in the same change. A one-sided guard only catches the app that
+ * remembered.
+ *
+ * ── ALL FOUR OF THESE WERE ASYMMETRIC UNTIL 2026-09-16 ─────────────────────
+ * Measured while registering the fifth app: issues had `['scaffold','sales']`,
+ * sales had `['issues','scaffold']`, books and the scaffold both had
+ * `['issues','sales']`. So no app listed every sibling, `books` was invisible to
+ * three of them, and a query reaching into `books.*` from sales would have
+ * passed. Fixed in one commit, in all five files.
  */
-const OTHER_SCHEMAS = ['issues', 'scaffold']
+const OTHER_SCHEMAS = ['issues', 'books', 'billing', 'scaffold']
 
 /**
  * Deliberate exceptions, each with a reason. **Reach for one last.**
