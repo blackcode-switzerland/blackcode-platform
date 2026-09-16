@@ -44,7 +44,35 @@ import { fileURLToPath } from 'node:url'
 
 const HERE = fileURLToPath(new URL('.', import.meta.url))
 const SCHEMA = readFileSync(join(HERE, '..', 'schema.ts'), 'utf8')
-const FOOTPRINT = readFileSync(join(HERE, 'footprint.ts'), 'utf8')
+
+/**
+ * `footprint.ts` with its comments stripped, and that is not tidiness.
+ *
+ * ── THIS GUARD HAD THE DEFECT IT EXISTS TO CATCH ───────────────────────────
+ * The first version scanned the whole file. When phase 1 added five tables it
+ * reported three of them and stayed silent about `company` and `invoice` —
+ * because `countIn`'s own HEADER names those two, in the sentence promising that
+ * phase 1 would add them. The comment describing the obligation satisfied the
+ * check for the obligation.
+ *
+ * That is CLAUDE.md finding #11 exactly: the granularity of a text scan is part
+ * of what it checks. It was caught by the guard going half-red rather than by
+ * review — the three tables it DID report are what prompted reading why the
+ * other two were missing.
+ */
+const FOOTPRINT = stripComments(readFileSync(join(HERE, 'footprint.ts'), 'utf8'))
+
+/**
+ * Block comments then line comments, the same order and the same bounded
+ * naivety as `lib/no-brand-literal.test.ts`.
+ *
+ * It also blanks anything comment-shaped inside a string literal, which makes
+ * the scan see LESS and could hide a mention. The mutation test below injects a
+ * table name into real CODE to prove that path is still seen.
+ */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+}
 
 /**
  * Tables a person does not "lose" in the sense the confirmation screen means.
@@ -76,11 +104,46 @@ const NOT_PERSON_FACING = new Map<string, string>([
       'It has no meaning without the entities it numbers, and those are counted on ' +
       'their own lines',
   ],
+  [
+    'invoice_line',
+    'a line has no existence apart from its invoice, and the invoices are counted. ' +
+      '"182 invoices and 604 lines" tells a person nothing their invoice count did not',
+  ],
+  [
+    'audit',
+    'the log of changes to the rows counted above. It is not a separate thing somebody ' +
+      'loses — it dies with the invoices it describes — and offering "1,204 audit entries" ' +
+      'on a confirmation screen would overstate the damage in a way that reads as padding',
+  ],
+  [
+    'idempotency_keys',
+    'a 24-hour replay cache for retried writes. Nobody has ever wanted one of these back',
+  ],
 ])
 
-/** Tables declared on this app's schema, read from the declarations. */
-function declaredTables(): string[] {
-  return [...SCHEMA.matchAll(/billingSchema\.table\(\s*'([a-z_]+)'/g)].map((m) => m[1])
+/**
+ * Tables declared on this app's schema, as `{ table, ident }` pairs.
+ *
+ * ── WHY BOTH, AND WHY `ident` IS THE ONE THAT MATTERS ──────────────────────
+ * The first version of this guard looked for the TABLE NAME in `footprint.ts`
+ * and passed by luck: `company` and `invoice` matched because `countIn` happens
+ * to build labels out of those words. A table whose label read "clients" would
+ * have been counted correctly and reported as missing; a table referenced
+ * correctly under a different label would have failed.
+ *
+ * To count a table you must reference its DRIZZLE OBJECT — `billingCompany`,
+ * `billingInvoice` — because that is what `.from()` takes. So the identifier is
+ * the precise signal, and it cannot be satisfied by a coincidence of wording.
+ *
+ * The table name is kept for the error message and for `NOT_PERSON_FACING`,
+ * which reads better keyed on `billing.company` than on `billingCompany`.
+ */
+function declaredTables(): Array<{ table: string; ident: string }> {
+  return [
+    ...SCHEMA.matchAll(
+      /export const (\w+) = billingSchema\.table\(\s*'([a-z_]+)'/g
+    ),
+  ].map((m) => ({ ident: m[1], table: m[2] }))
 }
 
 describe('the account footprint covers every person-facing table', () => {
@@ -97,20 +160,25 @@ describe('the account footprint covers every person-facing table', () => {
     ).toBeGreaterThan(0)
     expect(
       tables.length,
-      'no `billingSchema.table(...)` declarations found. Either the schema moved or the ' +
-        'declaration spelling changed, and this guard has been passing without a subject'
+      'no `export const … = billingSchema.table(…)` declarations found. Either the schema ' +
+        'moved or the declaration spelling changed, and this guard has been passing without ' +
+        'a subject'
+    ).toBeGreaterThan(0)
+    expect(
+      FOOTPRINT.length,
+      'footprint.ts read as empty after comments were stripped — has it moved?'
     ).toBeGreaterThan(0)
   })
 
-  it('names every table in `countIn`, or exempts it with a reason', () => {
+  it('references every table in `countIn`, or exempts it with a reason', () => {
     const unaccounted = tables.filter(
-      (t) => !NOT_PERSON_FACING.has(t) && !FOOTPRINT.includes(t)
+      (t) => !NOT_PERSON_FACING.has(t.table) && !FOOTPRINT.includes(t.ident)
     )
     expect(
-      unaccounted,
+      unaccounted.map((t) => `billing.${t.table}`),
       'these tables are in `billing.*` and are neither counted in `countIn` nor exempt ' +
         'in NOT_PERSON_FACING:\n' +
-        unaccounted.map((t) => `  billing.${t}`).join('\n') +
+        unaccounted.map((t) => `  billing.${t.table} (reference ${t.ident})`).join('\n') +
         '\n\nAdd a line to `countIn` in lib/db/queries/footprint.ts. An app that ' +
         'under-reports its footprint is an app the whole-account close silently SKIPS, ' +
         'which is the bug `AppContext.footprint` exists to prevent.'
@@ -121,7 +189,8 @@ describe('the account footprint covers every person-facing table', () => {
   // failure nobody looks for: the entry keeps working, so nothing draws attention
   // to it. Same reasoning as `cli-parity.test.ts`' stale-exclusion check.
   it('every exemption names a table this app still has', () => {
-    const stale = [...NOT_PERSON_FACING.keys()].filter((t) => !tables.includes(t))
+    const names = tables.map((t) => t.table)
+    const stale = [...NOT_PERSON_FACING.keys()].filter((t) => !names.includes(t))
     expect(
       stale,
       `these exemptions name tables that no longer exist — delete them:\n${stale.join('\n')}`

@@ -7,6 +7,42 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-09-17 — The guide's vocabulary guard matches whole words, and sees uppercase values
+
+**Not breaking** for any client. This is a repo guardrail, and it is recorded
+here because it changes what `cli/internal/guide/guide_test.go` will reject in a
+guide topic — which is a constraint on everyone writing one.
+
+Two defects, both found by mutation rather than by review while adding a fourth
+app's vocabularies.
+
+**It matched substrings.** `strings.Contains(line, value)` meant `sent` matched
+"absent" and `done` matched "abandoned". Latent for as long as every vocabulary
+value happened to be a long, distinctive word — and then b/billing declared ISO
+639-1 language codes (`fr`, `de`, `it`, `en`), which as substrings appear in
+"under", "with", "when", "limits" and most other English. The result was around
+thirty findings across `topics/platform/*`, none of them a restatement of
+anything, on topics written before that app existed.
+
+An un-passable guard is worse than no guard: it gets made green by deleting a
+line from `vocabularySources`, which is the coverage loss finding #22 is about.
+
+It now matches on word boundaries, and **skips values shorter than three
+characters** because even bounded, `it` is an English word. The cost was counted
+rather than assumed: of the 182 values and labels the four apps declare, five are
+shorter than three characters and 177 are not.
+
+**It skipped uppercase values.** The extraction pattern was `[a-z_][a-z0-9_]*`,
+so eight values were invisible to it: b/issues' priority codes `P0`–`P4` and
+b/billing's Swiss reference types `QRR`, `SCOR`, `NON`. The reference types are
+the ones that matter — they are a dated, changing standard (IG v2.4 restricts
+QRR for EUR from 14 November 2026), so the vocabulary most likely to move was the
+one nothing was checking. Widened, and the extracted values are lowercased to
+match the body.
+
+If you write a guide topic naming three values from one vocabulary, put
+`` `bk meta` `` on the line beside them, as before.
+
 ## 2026-08-20 — four `bk meta` fixes: it no longer wipes your app registry, no longer reports success on a rejected token, `--app-server` no longer moves your home app, and `--vocab` can read b/books
 
 **Not breaking**, and two of the four are behaviour changes worth reading if you

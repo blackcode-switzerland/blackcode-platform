@@ -44,3 +44,77 @@
  * when a caller exceeds it anyway.
  */
 export const WORKSPACE_NAME_MAX = 80
+
+/**
+ * The `metadata` map's shape, on companies, invoices and (from phase 4) series.
+ *
+ * ── THE NUMBERS ARE STRIPE'S, AND THAT IS THE REASON FOR THEM ──────────────
+ * 50 keys, 40 characters per key, 500 per value. Not because they are optimal —
+ * any bound would do — but because a caller migrating an integration FROM
+ * Stripe keeps its data. Choosing our own limits would mean a customer
+ * discovering, one record at a time, which of their existing keys no longer fit.
+ *
+ * `docs/billing-app-plan/integration-surface.md` §3.
+ *
+ * ── FLAT, STRING TO STRING, AND NESTED VALUES ARE REFUSED ──────────────────
+ * A nested value is refused at the write door rather than stored, because
+ * `metadata` is the caller's bookkeeping and the moment it can hold structure
+ * somebody puts a money amount in it. A money value inside `jsonb` is a JSON
+ * number and therefore a float64, which is decision D-B4's whole argument.
+ */
+export const METADATA_LIMITS = {
+  max_keys: 50,
+  max_key_length: 40,
+  max_value_length: 500,
+} as const
+
+/**
+ * Validate a metadata map. Returns the reason it is refused, or null.
+ *
+ * Returns a REASON rather than throwing or returning a boolean: the caller turns
+ * it into a `400` whose `suggestion` a person can act on, and "invalid
+ * metadata" with no detail is a message that makes somebody guess which of
+ * fifty keys is the problem.
+ */
+export function validateMetadata(meta: unknown): string | null {
+  if (meta === undefined || meta === null) return null
+  if (typeof meta !== 'object' || Array.isArray(meta)) {
+    return 'metadata must be an object of string keys to string values'
+  }
+  const entries = Object.entries(meta as Record<string, unknown>)
+  if (entries.length > METADATA_LIMITS.max_keys) {
+    return `metadata has ${entries.length} keys; the limit is ${METADATA_LIMITS.max_keys}`
+  }
+  for (const [k, v] of entries) {
+    if (k.length > METADATA_LIMITS.max_key_length) {
+      return `metadata key ${JSON.stringify(k.slice(0, 20))}… is longer than ${METADATA_LIMITS.max_key_length} characters`
+    }
+    if (typeof v !== 'string') {
+      return `metadata.${k} is ${Array.isArray(v) ? 'an array' : typeof v}; values must be strings. ` +
+        'A number here would eventually be a money amount, and a money amount in jsonb is a float64'
+    }
+    if (v.length > METADATA_LIMITS.max_value_length) {
+      return `metadata.${k} is ${v.length} characters; the limit is ${METADATA_LIMITS.max_value_length}`
+    }
+  }
+  return null
+}
+
+/**
+ * The QR-bill's unstructured message budget: 140 characters, **shared** with the
+ * structured billing information this app does not emit (position P5).
+ *
+ * Enforced from day one even though nothing emits billing information, which is
+ * what makes emitting it later additive rather than a breaking change for every
+ * invoice already carrying a 140-character message.
+ */
+export const PAYMENT_MESSAGE_MAX = 140
+
+/**
+ * How many rows a list route returns at most, whatever `?limit=` says.
+ *
+ * Served by `/api/meta` so an agent paginating knows the ceiling rather than
+ * discovering it by asking for 10000 and receiving 200 with no explanation.
+ */
+export const LIST_LIMIT_MAX = 200
+export const LIST_LIMIT_DEFAULT = 50

@@ -35,10 +35,15 @@
 // `billing_workspace_members_role_check` and `INVITATION_STATUSES` is
 // `billing_invitations_status_check`, both in migration 0001.
 //
-// **Phase 1 adds the sets that matter most** — invoice status, reference type,
-// audit action, rounding policy — each with its own CHECK in migration 0005.
-// Adding one here without the constraint is the half of the pair that fails
-// silently.
+// Phase 1 added the sets that matter most — invoice status, reference type,
+// audit action, rounding policy — each with its own CHECK in migration 0005 and
+// each mirrored by a union in `types/index.ts`.
+//
+// **Three copies of one list is two too many, so they are checked against each
+// other.** `lib/vocabularies.test.ts` reads this file, the migration and the
+// type declarations and fails when they disagree. That test exists because of
+// CLAUDE.md finding #18: a comment claimed a test asserted a scanner matched a
+// migration's triggers, and no such test had ever been written.
 
 /** One value in a closed set, with what a surface needs to render it. */
 export interface Term {
@@ -87,4 +92,136 @@ export const INVITATION_STATUSES: Term[] = [
   { value: 'accepted', label: 'Accepted', color: '#0f6b44' },
   { value: 'revoked', label: 'Revoked', color: '#8b1a1a' },
   { value: 'expired', label: 'Expired', color: '#5b6470' },
+]
+
+/**
+ * The lifecycle of an invoice. **`draft → sent → paid`, anything → `void`, and
+ * nothing else** — G3's trigger enforces the transitions, because a CHECK
+ * cannot see the old row.
+ *
+ * `void` is not a fifth state to be tidied away. A voided invoice keeps its
+ * number forever, carries the reason it was voided, and still renders. There is
+ * no code path that frees a number, and adding one would be the bug.
+ */
+export const INVOICE_STATUSES: Term[] = [
+  { value: 'draft', label: 'Draft', color: '#5b6470', note: 'Every field editable. Not a document yet.' },
+  {
+    value: 'sent',
+    label: 'Sent',
+    color: '#1d4ed8',
+    note: 'The document half is frozen (G2). The payment message, the due date and the status stay open.',
+  },
+  { value: 'paid', label: 'Paid', color: '#0f6b44', note: 'An assertion by a person, never a reconciliation. Requires a paid date.' },
+  {
+    value: 'void',
+    label: 'Void',
+    color: '#8b1a1a',
+    note: 'Cancelled with a reason. The number stays consumed; a correction is a void plus a reissue.',
+  },
+]
+
+/**
+ * The Swiss QR-bill reference type — and which one an invoice may use is not a
+ * free choice.
+ *
+ * `docs/billing-app-plan/qr-bill.md` has the combination matrix. The half that
+ * a CHECK can express is in G4; the half that needs the company row (QRR
+ * requires the company to HAVE a QR-IBAN) is enforced at the write door.
+ */
+export const REFERENCE_TYPES: Term[] = [
+  {
+    value: 'QRR',
+    label: 'QR reference',
+    color: '#0f6b44',
+    note: 'CHF only, and only on a QR-IBAN (IID 30000–31999). 26 digits plus a modulo-10 check digit.',
+  },
+  {
+    value: 'SCOR',
+    label: 'Creditor reference',
+    color: '#1d4ed8',
+    note: 'ISO 11649. CHF or EUR, on an ordinary IBAN. Up to 25 characters after the RF check digits.',
+  },
+  {
+    value: 'NON',
+    label: 'No reference',
+    color: '#5b6470',
+    note: 'No reference at all, so the body must be empty. The payment message carries what the payer needs.',
+  },
+]
+
+/**
+ * The DOCUMENT's language — what the invoice is written in, and which set of
+ * Annex C literals the payment part prints.
+ *
+ * **Not the operator's UI language.** A French-speaking bookkeeper bills a
+ * German-speaking client in German, and conflating the two would mean the
+ * client's bill changes language depending on who opened the screen.
+ */
+export const DOCUMENT_LANGUAGES: Term[] = [
+  { value: 'fr', label: 'Français' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'it', label: 'Italiano' },
+  { value: 'en', label: 'English' },
+]
+
+/**
+ * How a company rounds — decision D-B7, and a per-company setting rather than
+ * one platform constant.
+ *
+ * An earlier draft of the plan declared a single `VAT_ROUNDING_STEP`. The first
+ * external customer rounds VAT to the rappen and only the payable total to five
+ * rappen, while the mockup rounds every line and every VAT amount to five. Both
+ * are correct bookkeeping; two companies in one workspace may keep different
+ * books, so the value is DATA.
+ *
+ * **Changing a company's policy changes every total it has ever derived**,
+ * because nothing is stored. That is the point of deriving them, and it is also
+ * why this is a setting an owner changes deliberately rather than a default
+ * somebody flips.
+ */
+export const ROUNDING_POLICIES: Term[] = [
+  {
+    value: 'line_0_05',
+    label: 'Per line, 5 rappen',
+    note: 'Each line total and each VAT amount to five rappen, so the printed sums add up exactly with no rounding line. The mockup\u2019s behaviour, and the default.',
+  },
+  {
+    value: 'total_0_05',
+    label: 'Total only, 5 rappen',
+    note: 'Lines and VAT to the rappen, the payable total to five, and the difference printed as its own Arrondi line.',
+  },
+  {
+    value: 'none',
+    label: 'Rappen',
+    note: 'No five-rappen rounding anywhere. For a company billed only by transfer, where no cash amount is ever tendered.',
+  },
+]
+
+/**
+ * What an audit row records. **The log IS the edit workflow** — there is no
+ * separate history feature.
+ *
+ * Served by `/api/meta` because an outside system polling
+ * `GET …/audit?since=<seq>` switches on these values, and a new one must not
+ * need a release on their side to be understood.
+ */
+export const AUDIT_ACTIONS: Term[] = [
+  { value: 'created', label: 'Created' },
+  { value: 'field_changed', label: 'Field changed', note: 'Carries the field path, the old value and the new one.' },
+  { value: 'status_changed', label: 'Status changed' },
+  { value: 'sent', label: 'Sent', note: 'Names the recipient and the message id. Phase 3.' },
+  { value: 'paid', label: 'Marked paid' },
+  { value: 'voided', label: 'Voided', note: 'Carries the reason, in both languages.' },
+]
+
+/**
+ * How a write arrived. The ONLY structural difference between a human write and
+ * an agent write, which is why both land in one log rather than two.
+ *
+ * Same spelling as `/api/meta`'s `user.via`, deliberately: an agent correlating
+ * the two should not have to learn a second vocabulary for one fact.
+ */
+export const ACTOR_VIA: Term[] = [
+  { value: 'session', label: 'Browser' },
+  { value: 'token', label: 'Token' },
 ]

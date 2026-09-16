@@ -22,6 +22,27 @@
       "when": 1789639320000,
       "tag": "0003_app_role_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789639380000,
+      "tag": "0004_billing_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789639440000,
+      "tag": "0005_billing_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789639500000,
+      "tag": "0006_billing_revokes",
+      "breakpoints": true
     }
   ]
 }

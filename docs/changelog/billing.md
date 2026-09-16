@@ -5,6 +5,108 @@ This file is an **agent** surface. It is merged into `bk changelog` and
 entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
+## 2026-09-17 — Companies and invoices
+
+**Not breaking.** New tables, new routes, new commands. Nothing that worked
+before behaves differently.
+
+### What you can do now
+
+    bk billing company create --slug acme-sa --name "Acme SA" --vat-registered
+    bk billing company list | show | edit | retire
+    bk billing invoice create --company acme-sa \
+      --client-name "Junod SA" --item "Consulting|12|days|132.50|8.1"
+    bk billing invoice list | show | edit
+    bk billing invoice line set <ref> --item "…"
+    bk billing audit list [--subject invoice:7] [--since <seq>]
+    bk billing overview
+
+`bk guide billing/companies-and-numbering` and `bk guide billing/invoices` are
+the topics. `bk meta --app-server billing` carries the vocabularies and limits.
+
+### Six things a client has to get right
+
+1. **`<ref>` is the #number or the printed number.** `invoice show 7` and
+   `invoice show BC-2026-0007` reach the same document. They are different
+   numbers and both are real: the first is this app's address space, the second
+   is what the client sees and what goes in the payment reference.
+
+2. **Money and dates are strings.** `"1590.00"`, `"2026-09-17"`. Never a JSON
+   number: a float64 is silently wrong in the last rappen, and an invoice wrong
+   in the last rappen does not match the payment slip attached to it.
+
+3. **A line's VAT rate has three states, not two.** Unset means the line carries
+   **no VAT** — an exempt act, or a company that is not registered. `"0"` is a
+   real rate (export, reverse charge) and prints as 0%. They are different facts
+   on a VAT return, and one invoice may mix them.
+
+4. **Totals are derived and never stored.** They come from the lines, whether the
+   prices include VAT, and the issuing company's rounding policy. Changing a
+   company's `rounding` therefore changes every total it has ever produced.
+
+5. **`POST …/invoices` needs an `Idempotency-Key`.** The number is gapless and
+   the row is never deleted, so an unguarded retry mints a **second real
+   invoice** that can only be voided. The same key with the same body replays and
+   sets `Idempotent-Replayed: true`; the same key with a different body is
+   refused with `422`. `bk` sends one per invocation automatically.
+
+6. **`GET …/audit?since=<seq>` is the event feed, and the flag changes the
+   order.** Without it, newest first. With it, ascending from the cursor —
+   because a descending feed would make a poller re-read the same page forever.
+   Nothing can appear below a cursor you have passed.
+
+### A declared public surface — and it amends a platform rule
+
+**This is new for this platform and deliberate.** The standing rule is that the
+HTTP API is private plumbing and `bk` is its only supported client. b/billing
+declares a **small public subset** so an outside system's backend can drive it
+directly (decision D-B5):
+
+    POST   /api/workspaces/{ws}/invoices
+    GET    /api/workspaces/{ws}/invoices
+    GET    /api/workspaces/{ws}/invoices/{ref}
+    PATCH  /api/workspaces/{ws}/invoices/{ref}
+    GET    /api/workspaces/{ws}/companies
+    GET    /api/workspaces/{ws}/audit
+
+Read it from `/api/meta` under `apps.billing.integration`, which also carries the
+conventions. Those routes change **only additively**; a breaking change is a new
+path, or an entry here marked breaking at least thirty days ahead. Poll
+`contract_version` to know whether anything moved.
+
+**Every other route under `/api` is exactly as private as before** and carries no
+stability promise.
+
+### Correlating with your own records
+
+`external_ref` (unique per workspace, filterable) and `metadata` (a flat map of
+string to string, 50 keys) on companies and invoices. Both stay writable after an
+invoice is sent, because they are your bookkeeping rather than the document.
+
+`expected_total` on a create is worth sending from a script: if it disagrees with
+what we derive, the invoice is refused with `409` and **no number is allocated**,
+and the message names the company's rounding policy and its price mode — which
+is what explains almost every disagreement between two billing systems.
+
+### What is refused, and why
+
+- **A sent invoice's document half is frozen**: amounts, lines, client, currency,
+  reference, issue date. The refusal names the field. Editable after sending:
+  the payment message, the due date, `external_ref`, `metadata`. A correction to
+  anything else is a void plus a reissue.
+- **The number, the issuer and the `#number` can never change.**
+- **Nothing is ever deleted.** No `DELETE` route, no `bk billing invoice delete`,
+  and the database refuses it in two independent ways. Art. 958f CO, ten-year
+  retention.
+- **A QR reference needs the company to have a QR-IBAN**, and is CHF only.
+- **A company that is not VAT-registered** may carry no rate on any line.
+
+### Still to come
+
+The payment reference, the QR payload and the PDF; then sending, marking paid
+and voiding. `bk billing invoice send` and `bk billing invoice pdf` do not exist
+yet.
+
 ## 2026-09-17 — b/billing exists: the app is registered, migrated and answering
 
 **Not breaking.** A new app. Nothing that worked before behaves differently.
