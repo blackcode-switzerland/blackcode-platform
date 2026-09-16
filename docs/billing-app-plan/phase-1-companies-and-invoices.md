@@ -352,6 +352,17 @@ The diff that produces `field_changed` rows belongs in the query layer, not the
 route: one implementation, and it is what makes an agent write and a browser write
 indistinguishable in the log except for `via`.
 
+### A first cut of the seed, pulled forward from phase 6
+
+The frontend binds real screens to these routes in the same step, and it needs
+rows to look at. `lib/db/seed.ts` and its `seed-guard.test.ts` land here with
+the mockup's companies, a dozen invoices across statuses and currencies, their
+lines and a few audit rows, from `fixtures/mockup.json`. Phase 6 finishes it:
+the second near-empty tenant, every placeholder flagged, parity proven to the
+rappen. The guard that refuses to seed anything but a dev database is written
+here, because a seed that exists before its guard is the shape finding #15
+describes.
+
 ### Routes and CLI
 
 Both in the same commit, or the parity test fails the build.

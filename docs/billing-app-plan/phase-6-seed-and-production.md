@@ -34,6 +34,10 @@ and it is live at `billing.blackcode.ch`.
 
 ### The seed
 
+**Its first cut lands in phase 1**, so the frontend has rows to bind to while
+it builds the screens; this phase finishes it. See phase 1, "A first cut of
+the seed".
+
 `lib/db/seed.ts`, loading `fixtures/mockup.json` — a mechanical extraction of
 `b-mockups/bbilling/assets/billing-data.js`, checked in, with a note recording
 the mockup version it came from.
