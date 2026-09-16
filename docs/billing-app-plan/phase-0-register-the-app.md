@@ -399,9 +399,17 @@ path from the set drift compares against.
       database, not inferred from a 201
 - [ ] The login page and the empty dashboard open in a browser, in FR and EN,
       with zero console errors
-- [ ] `BILLING_DISPLAY_NAME=Acme npm run dev` changes the tab title, the login
-      wordmark and the From line, and `grep -rn "b/billing" apps/billing/app apps/billing/components`
-      finds no literal
+- [ ] `BILLING_DISPLAY_NAME=Acme npm run dev` changes the tab title and the
+      landing heading, and `/api/meta` still reports the slug `billing`
+- [ ] No RENDERED string carries the product name, asserted by
+      `lib/no-brand-literal.test.ts` and watched failing on the literal in JSX
+      text, on the literal in a string, and on an empty file list.
+      **The plain `grep -rn "b/billing" apps/billing/app apps/billing/components`
+      this list used to ask for is over-broad and cannot pass**: run on
+      2026-09-17 it returned five hits, all of them comments explaining why the
+      name is environment-driven. A criterion nobody can satisfy is one somebody
+      ignores, and the granularity of a text scan is part of what it checks
+      (finding #11). The test strips comments first
 - [ ] **These guards were watched failing, then restored:** the parity test with
       the guide topics directory renamed away; `app-isolation`'s third case with
       `import { listMyWorkspaces } from '@blackcode/platform-db'` added to a

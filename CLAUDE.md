@@ -4,7 +4,8 @@
 
 A **monorepo** (npm workspaces + Turborepo) holding Blackcode's internal apps.
 
-**Three apps are in production**, on one database and one login:
+**Three apps are in production**, on one database and one login, and a fourth
+is being built:
 `issues.blackcode.ch` and `sales.blackcode.ch` (live since 2026-08-10), and
 `books.blackcode.ch` (live 2026-08-20).
 
@@ -22,6 +23,15 @@ A **monorepo** (npm workspaces + Turborepo) holding Blackcode's internal apps.
   is a `bk books` command, so the CLI is not a convenience layer here, it is the
   product. Same stack plus `platform-i18n` (EN/FR); its own `books.*` schema,
   nineteen migrations, CLI group, eight guide topics and docs.
+- **`apps/billing`** — **b/billing**, Swiss invoicing: issuing companies,
+  gapless invoice numbers, QR-bill payment parts, and an append-only audit log
+  that IS the edit workflow. The **fourth** app, **in build** — phase 0
+  registered it (tenancy, role, address-book row, command group, guide topic)
+  and phase 1 brings companies and invoices. Same stack; its own `billing.*`
+  schema, CLI group and docs. It is also the first app planned to ship as a
+  SEPARATE, rebranded product for an outside company, which is why its display
+  name, contact address and email accent read the environment while the slug
+  never does. The plan is `docs/billing-app-plan/`, one doc per milestone.
 - **`apps/_scaffold`** — the scaffold. A real, minimal app: one entity, one
   route, its own migrations and ledger, nine platform route factories, an entity
   projection and its reconciler, a CLI command group, a guide topic, a page.
@@ -59,8 +69,9 @@ What the migration bought:
   **`apps/issues/lib/auth.ts` (next-auth `authOptions`) deliberately did NOT
   move** — the reason is in `packages/platform-auth/src/index.ts`.
 - The database is **`platform.*` + `issues.*` + `sales.*` + `books.*`** (and
-  `scaffold.*`, never deployed) — never `public`. Each app runs as its own
-  bounded role (`issues_app`, `sales_app`, `books_app`), with no grant on any
+  `billing.*` and `scaffold.*`, the latter never deployed) — never `public`.
+  Each app runs as its own
+  bounded role (`issues_app`, `sales_app`, `books_app`, `billing_app`), with no grant on any
   other app's schema;
   migrations run as `MIGRATE_DATABASE_URL`. See **`docs/platform-db.md`** — the
   boundary, the two credentials, the grants.
@@ -142,6 +153,7 @@ end to end. Extracting one is **`docs/extracting-an-app.md`**, rehearsed.
 apps/issues/          the issue tracker — app/ components/ lib/ types/ docs/ public/
 apps/sales/           the sales app — prospects, meetings, communications
 apps/books/           b/books — Swiss statutory bookkeeping; the web reads, bk writes
+apps/billing/         b/billing — Swiss QR-bill invoicing. The fourth app, in build
 apps/_scaffold/       the scaffold. Copy it; don't edit it
 cli/                  the `bk` Go binary (repo root — shared by every app)
   internal/commands/platform/   bare verbs: workspace, label, upload, trash, …
@@ -149,7 +161,8 @@ cli/                  the `bk` Go binary (repo root — shared by every app)
   internal/commands/books/      that app's nouns, behind `bk books …`
   internal/commands/scaffold/    the scaffold's, behind `bk scaffold …`
   internal/cmdutil/             what both need; app packages never import each other
-  internal/guide/topics/{platform,issues,sales,books,scaffold}/
+  internal/commands/billing/    that app's nouns, behind `bk billing …`
+  internal/guide/topics/{platform,issues,sales,books,billing,scaffold}/
 packages/             shared libraries — apps import these, never each other
 docs/                 PLATFORM docs only (see the Docs sync rule)
 docs/changelog/       one file per app + platform.md — merged by `bk changelog`

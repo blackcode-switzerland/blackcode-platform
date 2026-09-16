@@ -82,7 +82,7 @@ var (
 	helpNegAfterRe = regexp.MustCompile(
 		"^ (is NOT|is not a flag|is not here|does not exist|was removed)")
 	// The app groups a `bk <app> …` placeholder can stand for.
-	helpAppPlaceholders = []string{"books", "issues", "sales", "scaffold"}
+	helpAppPlaceholders = []string{"billing", "books", "issues", "sales", "scaffold"}
 )
 
 // helpKnownFlag reports whether cmd accepts --name, counting inherited

@@ -41,6 +41,7 @@ a clean tree, then asks to confirm before deploying.
 | `issues` | https://issues.blackcode.ch | `bc-issues` | `prj_bueHX5y2f7uaemskB5Q1Plwbry2p` |
 | `sales` | https://sales.blackcode.ch | `bc-sales` | `prj_p5A74QYKnig8696ES87bT6rvHMdZ` |
 | `books` | https://books.blackcode.ch | `bc-books` | `prj_OjkZc6y1oRGkCw3fFtTglIMCN9Ec` |
+| `billing` | https://billing.blackcode.ch | `bc-billing` | **not created yet** — the registry line carries a placeholder and `release.sh` refuses to deploy it |
 
 Dashboard: `https://vercel.com/balathanusans-projects-f76f8a7b/<project>`.
 `app_registry()` in `devops/release.sh` is the authority; this table is a copy.

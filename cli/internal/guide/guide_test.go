@@ -170,6 +170,11 @@ var vocabularySources = map[string]string{
 	// not checked"), sitting in the file that predicted it. The module has the
 	// same `value: '…'` shape as the other two, so nothing else had to change.
 	"books": "apps/books/lib/vocabularies.ts",
+	// Added 2026-09-16 IN THE SAME COMMIT as this app's first guide topic, which
+	// is the whole lesson of the books line above it. An app added here later
+	// than its topics is an app whose topics were never checked, and the section
+	// header reads `--- PASS` either way.
+	"billing": "apps/billing/lib/vocabularies.ts",
 }
 
 // optionValue matches `{ value: 'in_progress', …` — the shape both modules use

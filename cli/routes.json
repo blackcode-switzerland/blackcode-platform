@@ -4,6 +4,54 @@
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/invitations/{id}",
+      "command": "bk billing invite revoke",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "command": "bk billing workspace list, bk billing workspace use",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk billing workspace show",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk billing invite list",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/members",
+      "command": "bk billing member list",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/active-workspace",
+      "command": "bk billing workspace use",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces",
+      "command": "bk billing workspace create",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk billing invite send",
+      "app": "billing"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/invitations/{id}",
       "command": "bk books invite revoke",
       "app": "books"
     },
