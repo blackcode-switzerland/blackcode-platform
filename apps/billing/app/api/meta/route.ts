@@ -78,6 +78,7 @@ import {
   WORKSPACE_NAME_MAX,
 } from '@/lib/limits'
 import { CONVENTIONS, PUBLIC_ROUTES } from '@/lib/integration'
+import { QRR_BODY_LENGTH, SCOR_BODY_MAX } from '@/lib/qr/reference'
 
 /**
  * What this app contributes to its own registry entry, and it is the same
@@ -108,6 +109,9 @@ function currentApp() {
       page_size_max: LIST_LIMIT_MAX,
       metadata: METADATA_LIMITS,
       delivery: DELIVERY_LIMITS,
+      // Fixed by the standards (§2.12, ISO 11649), not by this app — served so a
+      // client composing a ref_body reads them rather than copying them.
+      reference: { qrr_body_length: QRR_BODY_LENGTH, scor_body_max: SCOR_BODY_MAX },
     },
     // ── THE PUBLIC SURFACE, IN THE ANONYMOUS HALF ──────────────────────────
     // Decision D-B5. Served here so it rides inside `contractVersion` — which

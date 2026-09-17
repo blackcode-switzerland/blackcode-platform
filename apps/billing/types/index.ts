@@ -427,7 +427,7 @@ export interface CreateInvoiceBody {
   ref_type?: ReferenceType
   /**
    * The reference body WITHOUT its check digit. Optional: it is derived from the
-   * company and the invoice number when absent (`lib/derive/reference.ts`).
+   * company and the invoice number when absent (`lib/qr/reference.ts`).
    *
    * Supply it when a bank or a client dictates the reference, or when importing
    * one that already exists — in which case it must not be regenerated.

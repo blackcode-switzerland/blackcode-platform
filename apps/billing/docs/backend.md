@@ -175,7 +175,7 @@ CLAUDE.md's "a route is not a page" corollary one layer down.
 
 | Bug | Symptom | Why nothing else saw it |
 |---|---|---|
-| **nothing derived the reference body.** `ref_body` was left null while the company default was QRR | `check_violation`, 400 on every create | the CHECK was right and the code had no reference generator at all. `lib/derive/reference.ts` now has it, with the P11 warning |
+| **nothing derived the reference body.** `ref_body` was left null while the company default was QRR | `check_violation`, 400 on every create | the CHECK was right and the code had no reference generator at all. `lib/derive/reference.ts` got one, with the P11 warning (moved to `lib/qr/reference.ts` in phase 2) |
 | **the fresh read ran INSIDE the transaction**, through `getDb()` — a different connection, where the uncommitted row is invisible | "invoice vanished after insert", 500 | the types were fine and every pure-function test was green. All five write paths now read after the commit |
 | **a hand-rolled `ApiStatusError`** on the assumption `apiHandler` recognises any `{status, code, message}` shape. It recognises `ApiError` | the 422 became a 500 with no code and no suggestion | `Errors.unprocessable` existed the whole time. The mistake was inventing a shape instead of reading the module that owns error responses |
 
@@ -230,6 +230,68 @@ only on denials cannot tell a working boundary from a role that can do nothing
 | editing a draft's message | 2 rows |
 | appending to the log | inserted |
 | deleting a draft's line | deleted — draft editing works, which the revoke would have broken |
+
+## Phase 2, ticket #84: `lib/qr/` — references, character set, payload, validation
+
+Built 2026-09-17, on `feat/billing-phase-2-be`. Pure functions, no I/O, no new
+runtime dependency. `swissqrbill` (MIT) is a **dev** dependency, used only in
+`oracle.test.ts` as a second opinion (decision D-B2). Nothing here is wired into
+a route yet: #85 renders the PDF, #86 exposes it and fills phase 3's
+`prepareInvoiceDocument` seam, which is what turns `send` on.
+
+| Module | What it owns |
+|---|---|
+| `reference.ts` | QRR mod-10 recursive and SCOR mod-97-10, generate and validate; ISO 13616 IBAN check; QR-IID detection; the printed groupings; **the P11 body scheme**, moved here from `lib/derive/reference.ts` |
+| `charset.ts` | §4.1.1 by codepoint. Rejects, never transliterates; positions counted in characters |
+| `labels.ts` | Annex C, all five languages, frozen |
+| `payload.ts` | Table 8, serialized; the invoice → fields mapping (legal name as creditor, debtor only when its address is complete) |
+| `validate.ts` | every refusal, all at once, each with a code and a suggestion |
+| `spec-examples.ts` | the standard's Example 2, as test data |
+
+`apps/billing/docs/qr-bill-spec.md` is the research extraction, vendored, with a
+box at the top listing what the PDF says differently.
+
+### What checking against the standard found
+
+- **The SCOR body limit was wrong in phase 1**, in code and in the database.
+  ISO 11649 allows 25 characters for the WHOLE reference; `referenceBodyFor`
+  truncated the body to 25 and 0005's CHECK allowed 25, so a long invoice number
+  produced a reference no bank takes — and truncation could give two invoices the
+  same one. The body limit is 21 now, a number that cannot form a reference is
+  **refused** (409 `number_cannot_form_reference`, and the allocated number is
+  rolled back), and migration 0008 tightens the CHECK.
+- **The phase-1 seed carried such a reference** — PX-0001, a 24-digit SCOR body.
+  Migration 0008 refused to apply over it, naming the invoice, until the seed was
+  corrected. It refuses rather than rewrites: a sent bill's reference is printed
+  on a document a client holds.
+- **A QR reference of all zeros** passed 0005's CHECK. It does not now.
+- **A supplied `ref_body` was never checked** at create or edit beyond the CHECK.
+  `referenceBodyProblem` checks it at the write door, as the pair it will be
+  after the patch — a type change alone can leave a body the new type cannot
+  carry.
+- **Example 2's creditor name** in the v2.4 PDF is `Max Muster & Söhne (sample
+  company)`; the research extraction had dropped the parenthesis.
+- **The standard does not say** what happens to line 32 when only line 33 is used;
+  `payload.ts` keeps positions and `swissqrbill` does not. Recorded, unreachable
+  in v1.
+
+### Verified on 2026-09-17
+
+- **The standard's numbers, recomputed:** the Annex B vector, the QR references of
+  Annex A examples 1 and 2, the SCOR vector, the example 4 erratum (fails, and
+  `RF24` is its correct check), and the IBANs of examples 1–3.
+- **Example 2's payload, byte for byte**, with CR+LF.
+- **`swissqrbill` agrees** on 500 random QRR bodies, 500 random SCOR bodies, 63
+  valid and corrupted IBANs, the printed groupings, and the payload for Example 2
+  and all four shapes this app issues.
+- **As `billing_app`:** a 21-character SCOR body and a non-zero 26-digit QRR body
+  are accepted; a 22-character body, a hyphenated body, and 26 zeros are refused by
+  the CHECKs. (The first run of this probe touched zero QRR rows — the seed has no
+  QRR draft — and was redone against a draft converted inside the transaction.)
+- **Over HTTP:** a supplied SCOR body with a hyphen and one of 22 characters → 400;
+  21 → 201; a number format yielding 27 letters and digits → 409 with
+  `next_seq` unchanged; draft edits to a 22-character body, to NON with a body left
+  over, and to SCOR with no body → 400, and the corrected pair → 200.
 
 ## Phase 3: lifecycle and delivery
 
@@ -397,6 +459,19 @@ Phase 1 added these, on 2026-09-17:
 | the same | `QRR, SCOR, NON` restated | silent at first — the extractor read lowercase only. Widened, then it fired |
 | `help_flag_drift_test.go` | (not injected) | caught a REAL drift: the audit group's help named `--since`, which only its leaf accepts |
 
+Phase 2 (ticket #84) added these, on 2026-09-17:
+
+| Guard | The mutation | What it said |
+|---|---|---|
+| `lib/qr/reference.test.ts` + `oracle.test.ts` | the mod-10 carry table's last two entries swapped | 8 cases: the Annex B vector, example 1's reference, the 500-body library comparison, and everything that reads a QRR reference |
+| `reference.test.ts` | SCOR check digits as `97 − …` | the vector, the erratum case, and reference completion |
+| the same | `SCOR_BODY_MAX` back to 25 | the 22-character body accepted, three cases. (The limit was also a literal `21` in two regexes, so this mutation could not have reached them — they read the constant now) |
+| `charset.test.ts` | Latin-1's lower bound moved to 0x80 | the boundary case |
+| `labels.test.ts` | `Konto / Zahlbar an` → `Konto / zahlbar an` | named the key and language |
+| `payload.test.ts` | the join forced to LF; the trailing-A-line trim removed; one Ultimate Creditor line deleted | the CR+LF golden; "ends at EPD"; seven cases including the golden |
+| `validate.test.ts` | returns `[]`; refuses everything; QR-IBAN matrix check removed; the 140 budget in UTF-16 units | 17 refusal cases; the four positive shapes and Example 2; the matrix case; the emoji budget case |
+| migration 0008 | run over the phase-1 seed | refused, naming `PX-0001 (SCOR 210000000003139471430009)` |
+
 Phase 3 added these, on 2026-09-17:
 
 | Guard | The mutation | What it said |
@@ -435,12 +510,12 @@ Phase 3 added these, on 2026-09-17:
 - **`bk login` through a browser.** The loopback round-trip needs a real
   browser session and is a human step.
 - **The QRR reference scheme is position P11 and is not settled with the bank.**
-  `lib/derive/reference.ts` implements the plan's layout — 14 zeros, the company
+  `lib/qr/reference.ts` (was `lib/derive/reference.ts`) implements the plan's layout — 14 zeros, the company
   `#number` in 4, the invoice `seq_no` in 8 — in one function, with that warning
   in its header. Changing it after real bills are out means two schemes in the
   wild.
-- **The reference CHECK DIGIT is not computed yet.** Phase 2 adds it
-  (`lib/qr/reference.ts`), along with the payload, the validators and the PDF.
+- ~~**The reference CHECK DIGIT is not computed yet.**~~ Computed since
+  2026-09-17 (ticket #84, `lib/qr/reference.ts`); the PDF is still owed.
   `ref_body` is stored without it, deliberately: a stored check digit is a value
   that can disagree with the body it checks.
 - **`/api/me/footprint`'s `holds` array now counts companies and invoices**, and

@@ -348,7 +348,11 @@ async function main() {
       due_date: '2026-09-25',
       currency: 'CHF',
       ref_type: 'SCOR',
-      ref_body: '210000000003139471430009',
+      // What `referenceBodyFor` derives from `PX-0001`. Until 2026-09-17 this
+      // was a 24-digit string: 0005's CHECK allowed 25, ISO 11649 allows 21 for
+      // the body, and the seed carried a creditor reference no bank accepts
+      // without anything noticing. Migration 0008 is what refused it.
+      ref_body: 'PX0001',
       client: { name: 'Mme A. Perret', street: 'Chemin des Vignes', building: '5', postal_code: '1004', city: 'Lausanne', country: 'CH' },
       message: 'Consultation du 10.09.2026',
       items: [

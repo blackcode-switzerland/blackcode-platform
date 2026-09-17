@@ -43,6 +43,7 @@
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.0",
     "postcss": "^8.4.47",
+    "swissqrbill": "^4.4.1",
     "tailwindcss": "^4.3.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
