@@ -231,6 +231,33 @@ only on denials cannot tell a working boundary from a role that can do nothing
 | appending to the log | inserted |
 | deleting a draft's line | deleted — draft editing works, which the revoke would have broken |
 
+## Phase 1's missing proofs, run 2026-09-17 (tickets #75–#77)
+
+Tickets #75, #76 and #77 each named proofs that phase 1 never ran. They are now
+`lib/db/queries/write-paths.integration.test.ts`, run as `billing_app` against
+Docker, plus `lib/meta-contract-version.test.ts` and two recorded observations.
+Running them found two real bugs.
+
+| Ticket | Proof | Result |
+|---|---|---|
+| #75 | twenty concurrent creates | twenty contiguous numbers, `next_seq` advanced by exactly 20 |
+| #75 | the number read as MAX+1 **outside** the transaction | **19 of 20 refused** with `duplicate key … uq_invoice_company_seq_no` — the duplicate, caught by the backstop |
+| #75 | the same read **inside** the transaction, no company lock | numbers stayed contiguous; only `next_seq` went red. Creation takes the workspace counter lock first, which already serialises one workspace's creates — so contiguity alone does not prove the company lock |
+| #75 | void then create | the voided number stays consumed; the next create takes the following one |
+| #76 | one audit row per changed field / line path, none for unchanged | **red on the first run**: every line replacement logged a phantom `items[0].qty` change (`1` vs `1.000`). Fixed with numeric comparison of decimal columns (`sameValue`) |
+| #76 | `appendFieldChanges` removed from the edit path, then the line path | each went red |
+| #77 | two concurrent requests, one `Idempotency-Key` | one invoice |
+| #77 | `uq_idempotency_ws_key` dropped as the owner | **two invoices**. Recreating the constraint then failed on the duplicate keys the run had written; they were deleted, the constraint recreated, and the catalog read back |
+| #77 | a declared public route with no file | `lib/integration.test.ts` named it, twice |
+| #77 | the contract hash moving | **there was no hash.** `/api/meta` never called `contractVersion`. Now served; over HTTP `436685fcf27ec26e` → `0818b5e4641d63d4` with one route added → `436685fcf27ec26e` on removal |
+
+**The suite leaves data behind on purpose.** Invoices cannot be deleted, for the
+owner either, so each run leaves one `itest-<timestamp>` workspace in the local
+database. Run it with:
+
+    TEST_DATABASE_URL=postgres://billing_app:…@localhost:5434/blackcode_issues \
+      npx vitest run lib/db/queries/write-paths.integration.test.ts
+
 ## Phase 3: lifecycle and delivery
 
 Built on 2026-09-17, **before phase 2**. Four write paths in
