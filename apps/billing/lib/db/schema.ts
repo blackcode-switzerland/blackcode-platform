@@ -299,6 +299,14 @@ export const billingInvoice = billingSchema.table('invoice', {
   /** A void is a RECORD, never a deletion. `{ts, by, reason: {fr, en}}`. */
   void: jsonb('void'),
 
+  // ── DELIVERY (0007). Frozen by G2 once written. ──────────────────────────
+  /** When it left `draft`. Required of a `sent` or `paid` invoice by a CHECK. */
+  sent_at: timestamp('sent_at', { withTimezone: true }),
+  /** The transport's id. NULL on a sent invoice means "sent outside this app". */
+  sent_message_id: varchar('sent_message_id', { length: 255 }),
+  /** sha256 of the PDF bytes actually attached — position P10's answer. */
+  pdf_sha256: char('pdf_sha256', { length: 64 }),
+
   external_ref: varchar('external_ref', { length: 80 }),
   metadata: jsonb('metadata').default({}).notNull(),
 

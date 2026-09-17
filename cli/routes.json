@@ -52,7 +52,7 @@
     {
       "method": "GET",
       "path": "/api/workspaces/{ws}/invoices/{ref}",
-      "command": "bk billing invoice show",
+      "command": "bk billing invoice show, bk billing invoice void",
       "app": "billing"
     },
     {
@@ -107,6 +107,30 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/invoices",
       "command": "bk billing invoice create",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invoices/{ref}/mark-sent",
+      "command": "bk billing invoice mark-sent",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invoices/{ref}/paid",
+      "command": "bk billing invoice paid",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invoices/{ref}/send",
+      "command": "bk billing invoice send",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invoices/{ref}/void",
+      "command": "bk billing invoice void",
       "app": "billing"
     },
     {

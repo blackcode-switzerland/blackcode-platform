@@ -231,6 +231,134 @@ only on denials cannot tell a working boundary from a role that can do nothing
 | appending to the log | inserted |
 | deleting a draft's line | deleted — draft editing works, which the revoke would have broken |
 
+## Phase 3: lifecycle and delivery
+
+Built on 2026-09-17, **before phase 2**. Four write paths in
+`lib/db/queries/lifecycle.ts`, four public routes under
+`app/api/workspaces/[ws]/invoices/[ref]/`, migration `0007_billing_delivery.sql`,
+and one change to a shared package (`packages/platform-email`, decision D-B3 —
+the reasoning is in `docs/changelog/platform.md`).
+
+### `send` is built and refuses, and the seam is where phase 2 lands
+
+`send` needs the QR-bill validation and the PDF, and both are phase 2. Rather than
+mail a stand-in document or pass a validator that checks nothing,
+`lib/delivery/document.ts` exports ONE function, `prepareInvoiceDocument`, that
+phase 2 fills with validate-then-render. Today it throws **501
+`document_renderer_not_built`**, after the route's own checks and before anything
+is rendered, mailed or written, with `mark-sent` as the suggestion.
+`lib/delivery/document.test.ts` asserts the refusal and is the test phase 2
+rewrites.
+
+### The order of a send
+
+1. **`canDeliverEmail()`, in the route, first.** Production with no Resend key
+   answers `503 email_not_configured` and nothing else runs.
+   `lib/api/send-route.test.ts` asserts the RESPONSE both ways (finding #21).
+2. Parse the body; no database.
+3. **`SELECT … FOR UPDATE` on the invoice.** It must be a draft.
+4. Readiness (`assertReadyToIssue`): a line, a client name, a positive total, an
+   account for the reference type, a live company, and the write-door rules
+   re-run — a draft can have been edited into a state `create` would refuse.
+   Plus a company email, because it becomes `reply-to`.
+5. The document (the seam above).
+6. The transport, with an idempotency key derived from WHAT is sent (recipients,
+   subject, body, PDF sha256). A refusal is **502 `email_delivery_failed`**, and
+   the transaction rolls back: still a draft, no audit row.
+7. `status`, `sent_at`, `sent_message_id`, `pdf_sha256` and one `sent` audit row,
+   in the transaction that has held the lock since step 3.
+
+The lock is held across the transport call deliberately: committing first could
+mark a bill sent that never left, and mailing first reopens the double send.
+
+**The one state no ordering removes** is mail accepted, then commit failed. It
+answers **500 `delivered_not_recorded`** naming the message id and `mark-sent`,
+and writes an `error_events` row with the Postgres cause (Drizzle hides it in
+`cause`). A retry of the same send within Resend's window is deduplicated by the
+transport key.
+
+**Development carve-out.** Outside production with no key, `canDeliverEmail()` is
+true and the send completes WITHOUT delivering: the server log prints what would
+have gone, `sent_message_id` and `pdf_sha256` stay null, and the audit detail says
+"WITHOUT delivery". The platform's rule, not this app's (`client.ts`).
+
+### What 0007 changed, including in phase 1's guard
+
+- Three columns: `sent_at`, `sent_message_id`, `pdf_sha256`, with four CHECKs — a
+  sent or paid invoice has a `sent_at`; a message id has a fingerprint; delivery
+  facts have a `sent_at`; the fingerprint is 64 lowercase hex.
+- **G2 was replaced**, although the plan said it needed no change. `language` was
+  in neither of 0005's lists — neither frozen nor stated as editable — while it
+  decides every word on the document. The invoice-level `vat_rate` was frozen by
+  the app and not by the trigger, under a comment claiming the two mirrored.
+  Both are frozen in the database now, with the three delivery columns.
+  `frozen-fields.test.ts` compares the newest definition with `DOCUMENT_FIELDS`.
+- Backfill: dev rows that walked `sent`/`paid` got `sent_at = updated_at`. On a
+  database with real bills it touches nothing, because none exist.
+
+### Two phase-1 defects this phase made reachable, fixed
+
+- **`setInvoiceLines` took the invoice's row lock last.** A send could lock,
+  render and commit while a line replacement that had already read `draft`
+  rewrote the lines underneath; its final `updated_at` bump then committed new
+  amounts on a sent invoice. It locks first now.
+- **The 403 envelope was scrambled in four routes** —
+  `Errors.forbidden(code, message, suggestion)` against a signature of
+  `(message, suggestion, code)`. One mapping in `lib/api/refusal.ts` now, tested
+  per status.
+
+### Verified on 2026-09-17, against Docker Postgres
+
+Over HTTP with a real `bk_live_…` token:
+
+| Request | Result |
+|---|---|
+| send a ready draft | **501** `document_renderer_not_built`; still a draft, 0 audit rows |
+| send with no `to`; with `"a@b.ch, c@d.ch"` | 400 `recipient_required`; 400 `invalid_recipient` |
+| send a sent invoice | 409 `already_sent` |
+| mark-sent with a key, then the same key again | 200; **200 with `Idempotent-Replayed: true`** |
+| mark-sent again with no key | 409 `already_sent` |
+| PATCH `language`, `client`, lines on a sent invoice | 409 `document_frozen` ×3 |
+| PATCH `due_date` + `message` on it | 200, two `field_changed` rows |
+| PATCH `sent_message_id` | 400 `field_not_editable` |
+| paid on a draft; in 2027; on 2026-02-30 | 409 `not_sent`; 400 `paid_date_in_future`; 400 `invalid_paid_date` |
+| paid; paid again | 200; 409 `already_paid` |
+| void with no reason; `confirm: "px-0002"` | 400 `void_reason_required`; 409 `confirm_mismatch` |
+| void; void again | 200 with `{ts, by, reason}`; 409 `already_void` |
+| the next create for that company | `PX-0003` — the voided `PX-0002` stays consumed |
+
+With a **temporary fixture renderer** in the seam (never committed):
+
+| Case | Result |
+|---|---|
+| two concurrent sends of one draft | one 200, one 409 `already_sent`, **one** audit row, one log line |
+| the same, with `.for('update')` removed from `lockInvoice` | **three transport calls** for three requests; one recorded, two 500s — which also exposed that `delivered` was set on the dev path, so those 500s said "WAS emailed" of mail that never left. Fixed |
+| a real Resend call with an invalid key | **502** `email_delivery_failed: API key is invalid`; still a draft, no audit row, the idempotency key released (a retry ran again rather than 409) |
+
+The first fixture send found a bug the unit tests could not: readiness parsed the
+total with `parseMinor(total, 2)`, whose second argument is a multiplier, not a
+count of places. It passed on every `.00` total and threw a 500 on `540.50`. The
+test fixture now has real cents, and the old spelling turns four cases red.
+
+As `billing_app` over `psql`, positives first: a sent invoice's `due_date` and
+`message` update; a draft goes to `sent` with its delivery facts. Refused: G2 on
+`language`, `vat_rate`, `sent_message_id`, `sent_at`, and a line of a sent
+invoice; `invoice_sent_requires_sent_at`, `invoice_message_requires_fingerprint`,
+`invoice_pdf_sha256_shape`, `invoice_delivery_requires_sent_at`. With
+`trg_invoice_document_frozen` and `trg_invoice_line_frozen` disabled inside a
+rolled-back transaction, the same `language` and `unit_price` edits succeeded;
+after rollback both triggers read enabled.
+
+The line race, with a second session holding the invoice row for four seconds
+and committing `sent`: the HTTP line replacement waited ~4s and answered **409
+`document_frozen`**, lines unchanged. With the lock-first block removed, the same
+race answered **200** and `9999.00` was committed on the sent invoice.
+
+Through the built `bk` binary: `send` printed the 501 and its hint; `void`
+without `--confirm` and with `--confirm 11` both exited **2** before any write;
+`--confirm " BC-2026-0007 "` voided it and echoed the number, client and amount;
+`mark-sent` on a sent invoice exited **2** on the server's 409.
+
 ## The guards, watched failing
 
 A check nobody has watched fail is not a check (CLAUDE.md's standing rule).
@@ -268,6 +396,32 @@ Phase 1 added these, on 2026-09-17:
 | the same | the same three words inside longer words | silent, which is the point |
 | the same | `QRR, SCOR, NON` restated | silent at first — the extractor read lowercase only. Widened, then it fired |
 | `help_flag_drift_test.go` | (not injected) | caught a REAL drift: the audit group's help named `--since`, which only its leaf accepts |
+
+Phase 3 added these, on 2026-09-17:
+
+| Guard | The mutation | What it said |
+|---|---|---|
+| `packages/platform-email/test/send.test.ts` | the `attachments` spread removed from `deliver()`; then `replyTo`; then the idempotency option | the bytes case; then the reply-to case, twice. The invitation key-set case stayed green, as it should |
+| `lib/api/send-route.test.ts` | `if (true \|\| !canDeliverEmail())` | the "can deliver" case — finding #21's exact mutation |
+| the same | the check moved below `sendInvoice` | the "cannot deliver" case: the send path was entered |
+| `lib/api/refusal.test.ts` | the old `forbidden(code, message, suggestion)` order | both 403 cases |
+| `lib/db/queries/frozen-fields.test.ts` | `language` out of `DOCUMENT_FIELDS`; out of 0007; 0007's definition hidden | each direction, then three cases at once. **Its first run found its own extractor blind to `pdf_sha256`** (`[a-z_]+` has no digits) |
+| `lib/db/queries/lifecycle.test.ts` | readiness back to `parseMinor(total, 2)` | four cases, once the fixture had real cents |
+| `lifecycle_test.go` | presence check removed; compared with `ref`; raw flag sent; `EqualFold` | each its own case. The raw-flag mutation's first spelling did not compile — a red that proved nothing, redone |
+| `guide_references_test.go` (new) | the referenced topic renamed away | named the help and both topics. Its first run false-positived on the valid bare slug `bk guide files` |
+| `guide_test.go` | (not injected) | caught a REAL restatement in the new topic: `sent, paid or voided` is the audit-action vocabulary |
+| `invoice_sent_requires_sent_at` | (not injected) | refused phase 1's seed walk, `SET status = 'sent'` — confirmed by running the old seed |
+
+## Still owed at the end of phase 3
+
+- **Phase 2**, which turns `send` on: `prepareInvoiceDocument` must validate and
+  render, and `document.test.ts` flips with it.
+- **A real email to a real inbox**, with the attachment's sha256 compared to
+  `pdf_sha256`. Needs phase 2 and a Resend key; it is the headline done-when of
+  `docs/billing-app-plan/phase-3-lifecycle-and-delivery.md` and it is not done.
+- **The 503 over HTTP in production mode.** Asserted by `send-route.test.ts` on
+  the response; not run against `next start` with `NODE_ENV=production`.
+- **The email shell's fixed words are English** (see the platform changelog).
 
 ## Still owed at the end of phase 0
 

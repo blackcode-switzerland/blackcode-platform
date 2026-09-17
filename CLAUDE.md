@@ -26,8 +26,10 @@ is being built:
 - **`apps/billing`** — **b/billing**, Swiss invoicing: issuing companies,
   gapless invoice numbers, QR-bill payment parts, and an append-only audit log
   that IS the edit workflow. The **fourth** app, **in build** — phase 0
-  registered it (tenancy, role, address-book row, command group, guide topic)
-  and phase 1 brings companies and invoices. Same stack; its own `billing.*`
+  registered it (tenancy, role, address-book row, command group, guide topic),
+  phase 1 brought companies and invoices, and phase 3 the lifecycle (send,
+  mark-sent, paid, void). Phase 2 (the QR payload and the PDF) is not built, so
+  `send` refuses with `document_renderer_not_built` until it is. Same stack; its own `billing.*`
   schema, CLI group and docs. It is also the first app planned to ship as a
   SEPARATE, rebranded product for an outside company, which is why its display
   name, contact address and email accent read the environment while the slug

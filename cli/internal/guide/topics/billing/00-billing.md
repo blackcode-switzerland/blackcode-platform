@@ -13,17 +13,19 @@ Related commands: `bk billing workspace list`, `bk billing workspace use`,
 `bk billing workspace create`, `bk billing member list`, `bk billing invite
 send`, `bk billing invite list`, `bk billing invite revoke`.
 
-## Phase 0: only tenancy exists today
+## What exists today
 
-This deployment is registered and answering, and it holds nothing but its own
-workspaces, their members and their invitations. **Companies and invoices are
-not built yet.** If you are looking for `bk billing invoice`, it does not exist
-and you have not mistyped it.
+Companies, invoices with their lines, the audit log, and the lifecycle — sending
+a bill by email, recording one that went out another way, marking it paid, and
+voiding it with a reason. `bk guide billing/companies-and-numbering`,
+`bk guide billing/invoices` and `bk guide billing/sending-and-status` cover them.
 
-What arrives next, in order: companies, invoices, line items and the audit log;
-then the payment reference, the QR payload and the PDF; then sending, paid and
-void; then recurrence; then imported history. `docs/billing-app-plan/` in the
-repo is the plan, one document per milestone.
+**Not built yet:** the payment reference check digit, the QR payload and the PDF.
+Until they exist `bk billing invoice send` refuses with
+`document_renderer_not_built` before anything happens, and
+`bk billing invoice mark-sent` is how a bill delivered another way is recorded.
+After those come recurrence, then imported history. `docs/billing-app-plan/` in
+the repo is the plan, one document per milestone.
 
 ## Start here
 
@@ -55,8 +57,8 @@ bk billing workspace create --name "Acme SA"
 ```
 
 Use this for a genuinely separate tenant. It is **not** how you add a second
-entity to bill from — that is a company inside an existing workspace, and it
-arrives in phase 1.
+entity to bill from — that is a company inside an existing workspace
+(`bk billing company create`).
 
 There is deliberately no `bk billing workspace delete`, and there will not be
 one. A workspace holds invoices, and an invoice carries a ten-year retention duty

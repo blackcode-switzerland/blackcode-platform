@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
+import { refusalToApiError } from '@/lib/api/refusal'
 import { CompanyRefused, editCompany, getCompany } from '@/lib/db/queries/companies'
 import { authVia } from '@/lib/api/actor'
 
@@ -51,11 +52,7 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
     )
     return NextResponse.json(company)
   } catch (e) {
-    if (e instanceof CompanyRefused) {
-      if (e.status === 403) throw Errors.forbidden(e.code, e.message, e.suggestion)
-      if (e.status === 409) throw Errors.conflict(e.code, e.message, e.suggestion)
-      throw Errors.badRequest(e.code, e.message, e.suggestion)
-    }
+    if (e instanceof CompanyRefused) throw refusalToApiError(e)
     throw e
   }
 })

@@ -303,6 +303,17 @@ export interface Invoice {
   /** A void is a RECORD, never a deletion. The number stays consumed. */
   void: VoidRecord | null
 
+  /** When it left `draft`. Null until then. */
+  sent_at: string | null
+  /**
+   * The id of the email that carried it. **Null on a sent invoice means it was
+   * sent OUTSIDE this app** (`mark-sent`): "sent by us, here is the message" and
+   * "sent somehow, we were told" are different facts, and the null is the second.
+   */
+  sent_message_id: string | null
+  /** sha256 (hex) of the PDF bytes actually attached. Null unless this app emailed it. */
+  pdf_sha256: string | null
+
   /** The lines, as the mockup serves them. */
   items: InvoiceLine[]
   /** Derived. Never stored. */
@@ -442,4 +453,37 @@ export interface CreateInvoiceBody {
    * complaint.
    */
   expected_total?: string
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle bodies (phase 3)
+// ---------------------------------------------------------------------------
+
+/** `POST …/invoices/{ref}/send`. Subject and body default to the document's language. */
+export interface SendInvoiceBody {
+  to: string
+  cc?: string[]
+  subject?: string
+  /** Plain text. Paragraphs separated by a blank line. Never HTML. */
+  body?: string
+}
+
+/** `POST …/invoices/{ref}/paid`. An ASSERTION that money arrived — this app never reconciles. */
+export interface MarkPaidBody {
+  /** YYYY-MM-DD, not in the future. */
+  paid_date: string
+}
+
+/**
+ * `POST …/invoices/{ref}/void`. At least one reason; a single one is used for
+ * both languages.
+ */
+export interface VoidInvoiceBody {
+  reason_fr?: string
+  reason_en?: string
+  /**
+   * Optional. When present it must equal the invoice's printed `number`
+   * EXACTLY, or nothing is voided. `bk` always sends it; an integration may.
+   */
+  confirm?: string
 }

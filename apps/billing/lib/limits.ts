@@ -118,3 +118,20 @@ export const PAYMENT_MESSAGE_MAX = 140
  */
 export const LIST_LIMIT_MAX = 200
 export const LIST_LIMIT_DEFAULT = 50
+
+// ---------------------------------------------------------------------------
+// Delivery and lifecycle (phase 3)
+// ---------------------------------------------------------------------------
+// Served under `limits.delivery` by `/api/meta`, so an agent composing a send
+// reads the real ceilings rather than a copy in a guide topic.
+
+export const DELIVERY_LIMITS = {
+  /** A subject line longer than this is a paragraph in the wrong field. */
+  subject_max: 200,
+  /** The covering note, not the document. The document is the attachment. */
+  body_max: 5000,
+  /** Copies. More than this is a mailing list, which a bill should not go to. */
+  cc_max: 5,
+  /** Per language. A void reason is a sentence a fiduciary reads in five years. */
+  void_reason_max: 500,
+} as const

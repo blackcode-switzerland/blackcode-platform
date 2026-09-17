@@ -77,3 +77,32 @@ This app does **not** copy `apps/books/lib/read-only.test.ts`' read-only
 assertion — that is a different product decision for a different app. It copies
 its module-graph half, so a stray `fetch` outside `lib/client.ts` fails the
 build.
+
+## What phase 3 put on the wire (backend landed 2026-09-17)
+
+For the action bar, the send modal and the read-only-with-a-reason rendering.
+`types/index.ts` is the contract; this is what matters for a screen.
+
+- **Four POSTs**, each returning the fresh invoice: `…/invoices/{ref}/send`
+  (`SendInvoiceBody`), `…/mark-sent` (no body), `…/paid` (`MarkPaidBody`),
+  `…/void` (`VoidInvoiceBody`). One hook per write in `lib/mutations.ts`.
+- **Three new invoice fields**: `sent_at`, `sent_message_id`, `pdf_sha256`. A
+  sent invoice with `sent_message_id: null` was **not** emailed by this app —
+  render "sent outside the app", never "sending…".
+- **`send` answers 501 `document_renderer_not_built` on every deployment until
+  phase 2.** The button should exist and the refusal should render as what it
+  is, with `mark-sent` offered, not be hidden behind a feature flag nobody
+  remembers to remove.
+- **Frozen after send**, in the database: `currency`, `language`, `ref_type`,
+  `ref_body`, `client`, `vat_rate`, `prices_include_vat`, `issue_date`, the lines.
+  Still editable: `due_date`, `message`, `external_ref`, `metadata`. A PATCH of a
+  frozen field answers 409 `document_frozen` naming it — render those fields
+  read-only with the reason, before the request.
+- **`void` takes a reason** (one is enough) and should send `confirm` equal to
+  the printed number; the server refuses a mismatch with 409 `confirm_mismatch`.
+  Collect the reason with `useConfirm`'s prompt variant, never `window.prompt`.
+- **`paid_date`** is required, `YYYY-MM-DD`, not in the future.
+- **Undo is not possible for any of the four**; say so in the toast instead of
+  offering one.
+- Limits for the modal (subject, body, copies, reason length) are served at
+  `GET /api/meta` under `limits.delivery`. Do not copy the numbers.

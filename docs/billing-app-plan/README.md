@@ -164,7 +164,7 @@ ordering argument, which is the part people push back on.
 | **0. Register** | First, always. Nothing can be built against an app that has no schema, no role and no address. It is a walk of [`adding-an-app.md`](../adding-an-app.md) and almost none of it is thinking. |
 | **1. Companies and invoices** | The keystone. The number allocator and the audit contract decided here cannot be changed later without touching every row, and every phase after this one writes through them. |
 | **2. References, QR, PDF** | Needs an invoice to reference. Comes before sending, because you cannot email a document that does not render yet, and it is the highest-risk work in the project — it wants a whole phase and an external validator. |
-| **3. Lifecycle and delivery** | Needs the PDF, because `send` attaches it. The freeze rules need something worth freezing. |
+| **3. Lifecycle and delivery** | Needs the PDF, because `send` attaches it. The freeze rules need something worth freezing. **Built first anyway, on 2026-09-17**: `send` refuses with `document_renderer_not_built` behind one seam until phase 2 fills it — see the phase doc's "As built". |
 | **4. Recurrence** | Needs a template invoice and the full create path, since an occurrence is just another draft. |
 | **5. Imported history** | Independent of everything above and worth nothing until the native path is trusted. Deliberately last of the features. |
 | **6. Seed and production** | Must be last. Parity is only meaningful once there is a whole app to compare. |

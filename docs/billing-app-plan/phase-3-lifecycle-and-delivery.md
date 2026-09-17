@@ -137,8 +137,13 @@ its `RESEND_FROM_EMAIL` is that company's own verified domain.
 | `sent_message_id` | `varchar(255)` nullable | the Resend message id. Null for `mark-sent`, which is the "sent outside this app" path. |
 | `pdf_sha256` | `char(64)` nullable | of the bytes actually attached. This is the P10 answer: not the document, its fingerprint. |
 
-Guard **G2** already exists from phase 1 and needs no change: it keys on
-`status <> 'draft'`, and these three columns are outside its frozen set.
+Guard **G2** exists from phase 1 and keys on `status <> 'draft'`. **It did need a
+change, and 0007 replaces it** (this paragraph said otherwise until it was built):
+`language` was in neither of 0005's lists while it decides every word on the
+document, the invoice-level `vat_rate` was frozen by the app but not the trigger,
+and the three delivery columns are evidence that must not move once written. All
+five are frozen in 0007, and `lib/db/queries/frozen-fields.test.ts` compares the
+trigger with the app's `DOCUMENT_FIELDS`.
 
 ### The four write paths
 
@@ -269,6 +274,41 @@ of these four, so say that instead of offering it.
       `appendAudit` dropped from the void path
 - [ ] The action bar exercised in a browser for each of the four actions, on a
       draft, a sent and a voided invoice, in FR and EN
+
+## As built (2026-09-17)
+
+Built before phase 2, so the order in [README.md](README.md) was inverted on
+purpose. What differs from the text above, and why:
+
+- **`send` refuses with 501 `document_renderer_not_built` until phase 2.** The
+  PDF render and the payload validation arrive through one seam,
+  `apps/billing/lib/delivery/document.ts` → `prepareInvoiceDocument`, which throws
+  today after `send`'s own checks and before anything is written or mailed. The
+  rest of the send path was exercised end to end with a fixture in that seam.
+  Phase 2's job includes rewriting `lib/delivery/document.test.ts`.
+- **Every lifecycle write locks the invoice row first** (`SELECT … FOR UPDATE`),
+  and `send` holds it across the transport call. Without it, concurrent sends of
+  one draft each reached the transport. `setInvoiceLines` now locks first too;
+  it used to lock last, which let new lines commit on a just-sent invoice.
+- **The transport call carries its own idempotency key**, derived from what is
+  sent, so a retry after "delivered, commit failed" does not deliver twice. That
+  state has its own answer, `500 delivered_not_recorded`, naming `mark-sent`.
+- **`mark-sent` applies the same readiness checks as `send`**: a line, a client,
+  a positive total, an account for the reference type, a live company.
+- **`void` accepts an optional `confirm`**, checked exactly by the server (409
+  `confirm_mismatch`). `bk` always sends the trimmed value, so the binary and the
+  server decide on the same string.
+- **All four routes are wrapped in `withIdempotency`**, not only `send`: a retry
+  of `paid` replays its answer instead of meeting `409 already_paid`.
+- **`bk billing invoice create` gained `--idempotency-key`.** Its phase-1 help
+  claimed it sent a key on its own; nothing did.
+- The template's fixed words ("Attached", the footer) are English; the default
+  subject and body are in the document's language.
+
+Still open from the done-when list: a real email to a real inbox with the
+attachment's hash compared (needs phase 2 and a key), and the 503 exercised
+against a production build rather than asserted in a route test. The browser
+checks belong to the frontend ticket.
 
 ## Frontend gets
 

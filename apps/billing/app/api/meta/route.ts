@@ -70,6 +70,7 @@ import {
   ROUNDING_POLICIES,
 } from '@/lib/vocabularies'
 import {
+  DELIVERY_LIMITS,
   LIST_LIMIT_DEFAULT,
   LIST_LIMIT_MAX,
   METADATA_LIMITS,
@@ -106,6 +107,7 @@ function currentApp() {
       page_size_default: LIST_LIMIT_DEFAULT,
       page_size_max: LIST_LIMIT_MAX,
       metadata: METADATA_LIMITS,
+      delivery: DELIVERY_LIMITS,
     },
     // ── THE PUBLIC SURFACE, IN THE ANONYMOUS HALF ──────────────────────────
     // Decision D-B5. Served here so it rides inside `contractVersion` — which
@@ -166,8 +168,9 @@ export const GET = apiHandler(async (req: NextRequest) => {
       note:
         'Companies and invoices are workspace-scoped, so this unauthenticated route cannot ' +
         'list them. Read them with `bk billing company list` and `bk billing invoice list`, ' +
-        'or GET /api/workspaces/{ws}/invoices. The payment reference, the QR payload and the ' +
-        'PDF arrive in phase 2; sending, paid and void in phase 3.',
+        'or GET /api/workspaces/{ws}/invoices. Sending, paid and void exist; the payment ' +
+        'reference check digit, the QR payload and the PDF do not yet, so a send refuses with ' +
+        'document_renderer_not_built and `bk billing invoice mark-sent` records a bill delivered another way.',
     },
   })
 })

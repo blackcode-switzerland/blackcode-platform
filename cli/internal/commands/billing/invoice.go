@@ -11,8 +11,10 @@
 //     is voided with a reason and reissued. The void keeps its number forever.
 //  3. **Creating one consumes a number that cannot be reclaimed.** The sequence
 //     per company is contiguous with no holes, so every create is a permanent
-//     act. That is why `create` sends an idempotency key: a retried request must
-//     replay rather than mint a second real bill.
+//     act. That is why `create` takes `--idempotency-key`: a retry that passes
+//     the same key replays rather than minting a second real bill. (Until
+//     2026-09-17 this said the command SENT a key on its own. It did not, and a
+//     per-invocation key would not have helped — see postJSONIdempotent.)
 package billing
 
 import (
@@ -54,9 +56,19 @@ carries NO VAT (an exempt act, or a company that is not registered). "0" is a
 real rate — an export, a reverse charge — and prints as 0%. They are different
 facts on a VAT return.
 
-Sending, marking paid and voiding arrive in phase 3.`,
+THE LIFECYCLE is draft -> sent -> paid, and anything -> void:
+
+  bk billing invoice send <ref> --to client@example.ch   email the PDF
+  bk billing invoice mark-sent <ref>                     it went out another way
+  bk billing invoice paid <ref> --date 2026-10-02        the money arrived
+  bk billing invoice void <ref> --reason "…" --confirm <number>
+
+Run "bk guide billing/sending-and-status" for what each one records.`,
 	}
-	cmd.AddCommand(newInvoiceListCmd(), newInvoiceShowCmd(), newInvoiceCreateCmd(), newInvoiceEditCmd(), newInvoiceLineCmd())
+	cmd.AddCommand(
+		newInvoiceListCmd(), newInvoiceShowCmd(), newInvoiceCreateCmd(), newInvoiceEditCmd(), newInvoiceLineCmd(),
+		newInvoiceSendCmd(), newInvoiceMarkSentCmd(), newInvoicePaidCmd(), newInvoiceVoidCmd(),
+	)
 	return cmd
 }
 
@@ -165,6 +177,9 @@ func renderInvoice(w io.Writer, inv *client.BillingInvoice) error {
 	fmt.Fprintf(tw, "To:\t%s\t%s\n", inv.Client.Name, addressLine(inv.Client))
 	fmt.Fprintf(tw, "Status:\t%s\n", inv.Status)
 	fmt.Fprintf(tw, "Issued:\t%s\tdue %s\n", inv.IssueDate, orDash(inv.DueDate))
+	if inv.SentAt != "" {
+		fmt.Fprintf(tw, "Sent:\t%s\t%s\n", inv.SentAt, sentHow(inv))
+	}
 	if inv.PaidDate != "" {
 		fmt.Fprintf(tw, "Paid:\t%s\n", inv.PaidDate)
 	}
@@ -233,6 +248,7 @@ func newInvoiceCreateCmd() *cobra.Command {
 	var meta []string
 	var vatRate string
 	var pricesIncludeVat bool
+	var idempotencyKey string
 
 	cmd := &cobra.Command{
 		Use:         "create",
@@ -242,8 +258,12 @@ func newInvoiceCreateCmd() *cobra.Command {
 
 THE NUMBER IS CONSUMED BY THIS COMMAND AND CANNOT BE RECLAIMED. The sequence per
 company is contiguous, so there is no way to "undo" a create — a bill you did
-not mean is voided with a reason and keeps its number. That is why this command
-sends an idempotency key: a retry replays rather than minting a second real bill.
+not mean is voided with a reason and keeps its number.
+
+So from a script, pass --idempotency-key with an identifier of YOUR request (an
+order id, an appointment id). Running the same command again with the same key
+replays the first answer instead of minting a second real bill. Without the
+flag, every run is a new invoice.
 
 --item is "description|qty|unit|price" and repeats. Example:
 
@@ -300,7 +320,7 @@ explains almost every disagreement between two billing systems.`,
 			}
 			req.Metadata = kv
 
-			inv, err := c.CreateBillingInvoice(ws, req)
+			inv, err := c.CreateBillingInvoice(ws, req, idempotencyKey)
 			if err != nil {
 				return err
 			}
@@ -320,7 +340,7 @@ explains almost every disagreement between two billing systems.`,
 					nextStep(w, `bk billing invoice edit %d --client-name "…"`, inv.Number)
 					return nil
 				}
-				nextStep(w, "bk billing invoice show %d   (sending arrives in phase 3)", inv.Number)
+				nextStep(w, "bk billing invoice send %d --to <client email>", inv.Number)
 				return nil
 			})
 		},
@@ -345,6 +365,7 @@ explains almost every disagreement between two billing systems.`,
 	f.StringVar(&req.ExternalRef, "external-ref", "", "Your own identifier for this invoice")
 	f.StringArrayVar(&meta, "meta", nil, "key=value, repeatable; your own bookkeeping")
 	f.StringVar(&req.ExpectedTotal, "expect-total", "", "Refuse the create if the derived total differs")
+	f.StringVar(&idempotencyKey, "idempotency-key", "", "Your identifier for this request; a rerun with the same key replays instead of minting")
 	_ = cmd.MarkFlagRequired("company")
 	return cmd
 }

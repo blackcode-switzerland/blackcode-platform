@@ -80,11 +80,26 @@ export class InvoiceRefused extends Error {
     public code: string,
     message: string,
     public suggestion: string,
-    public status: 400 | 403 | 409 = 400
+    // 404/422/5xx arrived with phase 3's lifecycle routes. Every route maps this
+    // through `lib/api/refusal.ts`, never by hand — see that file for the 403
+    // that four hand-written mappings scrambled.
+    public status: 400 | 403 | 404 | 409 | 422 | 500 | 501 | 502 = 400
   ) {
     super(message)
   }
 }
+
+/**
+ * Where a read runs: the pool, or an open transaction.
+ *
+ * A read that must see the state a transaction has LOCKED has to run on that
+ * transaction's connection. Reading through `getDb()` instead does two wrong
+ * things at once: it cannot see the transaction's own uncommitted writes (the
+ * phase-1 "vanished after insert" bug, below), and it takes a SECOND pooled
+ * connection while the first is held — with a pool of five, five concurrent
+ * sends each holding one and waiting for another is a deadlock with no error.
+ */
+export type Exec = Tx | ReturnType<typeof getDb>
 
 export interface WriteCtx {
   workspaceId: number
@@ -113,6 +128,9 @@ const INV_COLS = {
   prices_include_vat: billingInvoice.prices_include_vat,
   message: billingInvoice.message,
   void: billingInvoice.void,
+  sent_at: billingInvoice.sent_at,
+  sent_message_id: billingInvoice.sent_message_id,
+  pdf_sha256: billingInvoice.pdf_sha256,
   external_ref: billingInvoice.external_ref,
   metadata: billingInvoice.metadata,
 } as const
@@ -163,6 +181,9 @@ function shape(r: Record<string, unknown>, lines: Record<string, unknown>[]): In
     prices_include_vat: pricesIncludeVat,
     message: (r.message as string) ?? null,
     void: (r.void as Invoice['void']) ?? null,
+    sent_at: r.sent_at ? new Date(r.sent_at as string | Date).toISOString() : null,
+    sent_message_id: (r.sent_message_id as string) ?? null,
+    pdf_sha256: (r.pdf_sha256 as string) ?? null,
     items,
     totals: computeTotals(totalsLines, pricesIncludeVat, rounding),
     external_ref: (r.external_ref as string) ?? null,
@@ -179,10 +200,13 @@ const emptyAddress = (): StructuredAddress => ({
   country: null,
 })
 
-async function linesOf(invoiceIds: number[]): Promise<Map<number, Record<string, unknown>[]>> {
+async function linesOf(
+  invoiceIds: number[],
+  exec: Exec = getDb()
+): Promise<Map<number, Record<string, unknown>[]>> {
   const out = new Map<number, Record<string, unknown>[]>()
   if (invoiceIds.length === 0) return out
-  const rows = await getDb()
+  const rows = await exec
     .select()
     .from(billingInvoiceLine)
     .where(inArray(billingInvoiceLine.invoice_id, invoiceIds))
@@ -244,19 +268,24 @@ export async function listInvoices(
  * `number_format` that produced bare integers would be a format
  * `checkNumberFormat` should reject before it got here.
  */
-export async function getInvoice(workspaceId: number, ref: string): Promise<Invoice | null> {
-  const row = await getInvoiceRow(workspaceId, ref)
+export async function getInvoice(
+  workspaceId: number,
+  ref: string,
+  exec: Exec = getDb()
+): Promise<Invoice | null> {
+  const row = await getInvoiceRow(workspaceId, ref, exec)
   if (!row) return null
-  const lines = await linesOf([Number(row.id)])
+  const lines = await linesOf([Number(row.id)], exec)
   return shape(row, lines.get(Number(row.id)) ?? [])
 }
 
 export async function getInvoiceRow(
   workspaceId: number,
-  ref: string
+  ref: string,
+  exec: Exec = getDb()
 ): Promise<Record<string, unknown> | null> {
   const numeric = /^\d+$/.test(ref) ? Number(ref) : null
-  const rows = await getDb()
+  const rows = await exec
     .select(INV_COLS)
     .from(billingInvoice)
     .innerJoin(billingCompany, eq(billingCompany.id, billingInvoice.company_id))
@@ -449,9 +478,12 @@ const NEVER_EDITABLE: Record<string, string> = {
   seq: 'the #number is this invoice’s address',
   company_id: 'an invoice that changed issuer would be a different document with the same number',
   company: 'an invoice that changed issuer would be a different document with the same number',
-  status: 'use the lifecycle commands (phase 3: send, mark-sent, paid, void)',
+  status: 'use the lifecycle commands: bk billing invoice send, mark-sent, paid, void',
   paid_date: 'set by marking the invoice paid',
   void: 'set by voiding the invoice, with a reason',
+  sent_at: 'set by sending the invoice, and permanent once set',
+  sent_message_id: 'recorded from the email that carried the invoice; it is evidence, not a field',
+  pdf_sha256: 'the fingerprint of the PDF that was attached; it is evidence, not a field',
 }
 
 export async function editInvoice(
@@ -532,9 +564,21 @@ export async function editInvoice(
     })
 }
 
-/** The columns G2 freezes once an invoice is not a draft. Mirrors 0005's trigger. */
-const DOCUMENT_FIELDS = new Set([
+/**
+ * The EDITABLE columns G2 freezes once an invoice is not a draft.
+ *
+ * `frozen-fields.test.ts` reads the newest definition of
+ * `billing.invoice_document_frozen()` from the migrations and fails when this set
+ * and the trigger disagree. Until 2026-09-17 this comment said "Mirrors 0005's
+ * trigger" and it did not: this set froze `vat_rate` and the trigger did not,
+ * and neither froze `language`. Migration 0007 is where both were reconciled.
+ *
+ * The trigger also freezes the three delivery columns; those are in
+ * `NEVER_EDITABLE` instead, because they are not editable even on a draft.
+ */
+export const DOCUMENT_FIELDS: ReadonlySet<string> = new Set([
   'currency',
+  'language',
   'ref_type',
   'ref_body',
   'client',
@@ -582,9 +626,35 @@ export async function setInvoiceLines(
   const company = companyRows[0]
   assertLinesAgainstCompany(items, Boolean(company?.vat_registered), String(company?.slug))
 
-  const before = (await linesOf([Number(row.id)])).get(Number(row.id)) ?? []
-
   return await getDb().transaction(async (tx) => {
+    // ── LOCK THE INVOICE ROW BEFORE TOUCHING ITS LINES ─────────────────────
+    // Phase 3 made this necessary. The line trigger reads the invoice's status
+    // when each line statement runs, and the first version of this function
+    // took the invoice's row lock only at the END (the `updated_at` bump). So a
+    // `send` could lock the invoice, read the committed lines, render and mail
+    // them, and commit `sent` — while this transaction had already replaced the
+    // lines under a `draft` status it read before `send` committed. Its final
+    // UPDATE then waited, succeeded (G2 does not freeze `updated_at`), and
+    // committed new lines on a sent invoice. The client would hold a PDF whose
+    // amounts the database no longer had.
+    //
+    // Locking first serialises the two: whichever holds the row finishes, and
+    // the other re-reads the status under the lock.
+    const [locked] = await tx
+      .select({ status: billingInvoice.status })
+      .from(billingInvoice)
+      .where(eq(billingInvoice.id, Number(row.id)))
+      .for('update')
+    if (String(locked?.status) !== 'draft') {
+      throw new InvoiceRefused(
+        'document_frozen',
+        `invoice ${row.number} became ${locked?.status} while this change was being made, and its lines are part of the sent document`,
+        'void it with a reason and reissue; the amounts on a sent bill are a legal fact',
+        409
+      )
+    }
+    const before = (await linesOf([Number(row.id)], tx)).get(Number(row.id)) ?? []
+
     await tx.delete(billingInvoiceLine).where(eq(billingInvoiceLine.invoice_id, Number(row.id)))
     if (items.length > 0) {
       await tx.insert(billingInvoiceLine).values(

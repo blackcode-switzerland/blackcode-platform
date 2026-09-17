@@ -69,17 +69,18 @@ two apps' workspace tables have overlapping ids, so one shared setting would
 mean selecting here silently retargeted another app.
 
 A WORKSPACE is a tenant. The company that issues a bill is a row inside it, so
-a second issuing entity is not a second workspace — that arrives in phase 1 as
+a second issuing entity is not a second workspace — that is
 "bk billing company create". "workspace create" exists for a genuinely separate
 tenant, and there is deliberately no "workspace delete": a workspace holds
 invoices, and those carry a ten-year retention duty (art. 958f CO). That is the
 same doctrine that keeps "trash" and "label" off this group entirely — an
 invoice is voided, never binned, so there is no purge path to expose.
 
-NOT HERE YET. Phase 0 registers the app and its tenancy; nothing about invoicing
-exists. Companies, invoices, line items and the audit log arrive in phase 1;
-the QR-bill payload and the PDF in phase 2; sending and the paid/void lifecycle
-in phase 3. See docs/billing-app-plan/. This paragraph is the one thing in this
+NOT HERE YET. Companies, invoices, line items, the audit log and the lifecycle
+(send, mark-sent, paid, void) exist. The payment reference check digit, the
+QR-bill payload and the PDF do not, so "invoice send" refuses before doing
+anything and "invoice mark-sent" records a bill delivered another way. See
+docs/billing-app-plan/. This paragraph is the one thing in this
 help text that is expected to go out of date, and the table below is generated
 from the commands this binary actually carries — so where it and this prose
 disagree, the table is right.

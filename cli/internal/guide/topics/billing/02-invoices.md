@@ -115,11 +115,14 @@ total. Adding CHF to EUR produces a number that is not money in any currency.
 `overdue` is a subset of `outstanding`, not a third bucket. A draft counts toward
 neither — nobody owes an unsent bill — and a void counts toward nothing at all.
 
-## What is not here yet
+## After the draft
 
-The payment reference, the QR code and the PDF arrive next; sending, marking paid
-and voiding after that. `bk billing invoice send` does not exist yet, and neither
-does `bk billing invoice pdf`.
+Sending, marking paid and voiding are `bk guide billing/sending-and-status`. Once
+an invoice leaves draft its document half is frozen, and the only correction is a
+void plus a new invoice.
+
+The payment reference check digit, the QR code and the PDF are not built yet;
+`bk billing invoice pdf` does not exist.
 
 Vocabularies and limits are served live by `bk meta --app-server billing`, so
 nothing on this page lists them.

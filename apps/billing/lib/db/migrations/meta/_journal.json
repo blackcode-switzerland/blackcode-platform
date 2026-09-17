@@ -43,6 +43,13 @@
       "when": 1789639500000,
       "tag": "0006_billing_revokes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789639560000,
+      "tag": "0007_billing_delivery",
+      "breakpoints": true
     }
   ]
 }

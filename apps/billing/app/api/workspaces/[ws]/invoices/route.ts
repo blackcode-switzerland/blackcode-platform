@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors, jsonList } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
+import { refusalToApiError } from '@/lib/api/refusal'
 import { withIdempotency } from '@/lib/api/idempotency'
 import { authVia } from '@/lib/api/actor'
 import { createInvoice, InvoiceRefused, listInvoices } from '@/lib/db/queries/invoices'
@@ -82,11 +83,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       )
       return NextResponse.json(invoice, { status: 201 })
     } catch (e) {
-      if (e instanceof InvoiceRefused) {
-        if (e.status === 403) throw Errors.forbidden(e.code, e.message, e.suggestion)
-        if (e.status === 409) throw Errors.conflict(e.code, e.message, e.suggestion)
-        throw Errors.badRequest(e.code, e.message, e.suggestion)
-      }
+      if (e instanceof InvoiceRefused) throw refusalToApiError(e)
       throw e
     }
   })

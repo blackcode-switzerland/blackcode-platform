@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors, jsonList } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
+import { refusalToApiError } from '@/lib/api/refusal'
 import { withIdempotency } from '@/lib/api/idempotency'
 import { CompanyRefused, createCompany, listCompanies } from '@/lib/db/queries/companies'
 import { authVia } from '@/lib/api/actor'
@@ -65,15 +66,12 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
  * straight onto the platform's error shape rather than being flattened into a
  * generic 400.
  *
- * Exported-by-duplication across the four route files rather than shared,
- * because each one maps its OWN refusal type — and a shared mapper taking
- * `unknown` would happily swallow a real bug as a 400.
+ * The `instanceof` stays HERE, per route, because each route recognises its OWN
+ * refusal type — a shared mapper taking `unknown` would happily swallow a real
+ * bug as a 400. The status → envelope mapping is shared (`lib/api/refusal.ts`),
+ * since 2026-09-17: four hand-written copies of it had the same transposed 403.
  */
 function asApiError(e: unknown): unknown {
-  if (e instanceof CompanyRefused) {
-    if (e.status === 403) return Errors.forbidden(e.code, e.message, e.suggestion)
-    if (e.status === 409) return Errors.conflict(e.code, e.message, e.suggestion)
-    return Errors.badRequest(e.code, e.message, e.suggestion)
-  }
+  if (e instanceof CompanyRefused) return refusalToApiError(e)
   return e
 }
