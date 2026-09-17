@@ -1382,7 +1382,7 @@ real fallback channel — the OTP is printed to the server log, where the only
 person who could read that mailbox is already looking — so `canDeliverEmail()`
 returns true there and local development needs no Resend account.
 
-Three transactional stages send today; everything else (mentions, assignments,
+Four transactional stages send today; everything else (mentions, assignments,
 activity) stays in-app-only via the inbox:
 
 1. **Password reset (logged out)** — `app/api/auth/password-reset/request/route.ts`,
@@ -1401,6 +1401,17 @@ activity) stays in-app-only via the inbox:
    the DB first, then `sendInvitationEmail()` fires (workspace name, inviter,
    accept URL). A bounced email doesn't invalidate the invite — it's still
    reachable via the in-app inbox or a copyable link.
+4. **A document** — `sendDocumentEmail(to, input, delivery)`, added 2026-09-17
+   for b/billing's invoice PDF. **Unlike the other three it is not best-effort
+   from the caller's side**: the caller branches on `sent`, because a bill
+   marked sent that never left is the failure. It still never throws. The
+   template (`documentEmail`) is shared and its copy is a parameter —
+   `identity.ts` still refuses per-app templates. `delivery` carries
+   `attachments` (at least one, refused otherwise), `cc`, `replyTo` and an
+   `idempotencyKey` handed to Resend; with a `replyTo` the footer names that
+   address rather than the app's contact address. The result carries the
+   transport's `messageId`. The body is plain text and escaped. This package's
+   first tests, `test/send.test.ts`, assert the payload Resend receives.
 
 ### Error responses & sanitization
 

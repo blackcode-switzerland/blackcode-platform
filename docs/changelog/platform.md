@@ -7,6 +7,52 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-09-17 — `platform-email` sends documents: attachments, reply-to, a message id
+
+**Not breaking.** The invitation and password-reset emails are byte-for-byte what
+they were; a test asserts their payload's exact key set.
+
+`packages/platform-email` gained, for b/billing's invoice PDF:
+
+- **`sendDocumentEmail(to, input, delivery)`** on `EmailSender`, with one shared
+  **`documentEmail`** template. The copy (subject, heading, body) is a parameter;
+  the template is shared. `identity.ts`'s refusal of per-app template sets
+  stands — this is the one parameterised template any app can use.
+- **`delivery`** carries `attachments` (at least one, refused otherwise), `cc`,
+  `replyTo` and an `idempotencyKey` passed to Resend. With a `replyTo`, the
+  footer names that address instead of the app's contact address, so a client
+  who replies to a bill reaches the business that sent it.
+- **`SendResult.messageId`**: the transport's id for an accepted message.
+- The body is plain text and is escaped, never interpreted as HTML.
+- **The package has tests for the first time** (`test/send.test.ts`), asserting
+  the payload the transport receives, and each of `attachments`, `replyTo` and
+  the idempotency key was removed once and watched failing.
+
+**Decision D-B3, a recorded deviation.** b/billing's brief asked for the PDF
+"attached directly to a Gmail send". There is no Google credential on this
+platform, and acquiring a `gmail.send` grant on a company mailbox to deliver a
+document is a security surface, not a feature. Resend already carries every
+message the platform sends, from the verified apex domain, and supports
+attachments. The client's reply reaches the company through `reply-to`, which is
+what the brief wanted. If a sent invoice must appear in a person's Sent folder,
+that is a conversation about a Google credential, not a line of code.
+
+**Known limit:** the shared shell's fixed words ("Attached", the automated-message
+footer) are English. The caller's subject and body are in the document's
+language; localising the shell is a change to every template and was not made
+here.
+
+## 2026-09-17 — Every `bk guide <topic>` named in help or a topic must exist
+
+**Not breaking.** A repo guardrail, recorded because it closed a gap in the
+agent surface. `cli/internal/commands/guide_references_test.go` walks every
+command's help and every topic, extracts each `bk guide <topic>` reference, and
+fails when one names no topic. Nothing checked this before: `bk billing invoice
+--help` was edited to point at a topic that did not exist yet, and every suite
+stayed green. It checks 74 references today. Watched failing by renaming the
+referenced topic away; its first run also reported a false positive (`bk guide
+files`, a valid bare slug), fixed before landing.
+
 ## 2026-09-17 — The guide's vocabulary guard matches whole words, and sees uppercase values
 
 **Not breaking** for any client. This is a repo guardrail, and it is recorded

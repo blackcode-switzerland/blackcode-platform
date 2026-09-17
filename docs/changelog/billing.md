@@ -5,6 +5,67 @@ This file is an **agent** surface. It is merged into `bk changelog` and
 entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
+## 2026-09-17 — Sending, paid and void
+
+**Not breaking** for any client that reads invoices by field name. The invoice
+object gains three fields; four routes and four commands are new. One phase-1
+refusal changes its body (the 403 fix below), and one field that was editable on
+a sent invoice no longer is.
+
+### What you can do now
+
+    bk billing invoice send <ref> --to client@example.ch [--cc …] [--subject …] [--body-file …]
+    bk billing invoice mark-sent <ref>
+    bk billing invoice paid <ref> --date 2026-10-02
+    bk billing invoice void <ref> --reason "…" --confirm <printed number>
+
+All four take `--idempotency-key`. `bk guide billing/sending-and-status` is the
+topic. All four routes are **public** (`POST …/invoices/{ref}/send|mark-sent|paid|void`).
+
+### `send` refuses today, and says so before doing anything
+
+The PDF and the QR-bill payload are phase 2 and are not built. Until they are,
+every send answers **501 `document_renderer_not_built`** after its own checks and
+before anything is rendered, mailed or written. Deliver the bill another way and
+record it with `bk billing invoice mark-sent`. The rest of the send path — the
+email package, the row lock, the transport's idempotency key, the delivery
+record — is built and was exercised end to end against a fixture renderer.
+
+### What a client has to get right
+
+1. **`sent_message_id` null on a sent invoice means it was NOT emailed by this
+   app** (`mark-sent`). Do not read a null as "not recorded yet".
+2. **`send` checks email first**: a deployment that cannot deliver answers
+   `503 email_not_configured` and nothing is read or written.
+3. **`email_delivery_failed` (502) changed nothing**; the invoice is still a
+   draft. **`delivered_not_recorded` (500) means the mail WENT** — do not send
+   again; `mark-sent` it.
+4. **`paid` is an assertion.** `paid_date` is required, `YYYY-MM-DD`, not in the
+   future (Zurich calendar), and only a sent invoice can be paid.
+5. **`void` needs a reason** (`reason_fr` and/or `reason_en`; one serves both).
+   Send `confirm` equal to the printed number and the server refuses a void
+   aimed at the wrong invoice with 409 `confirm_mismatch`. `bk` always sends it
+   and requires `--confirm` even with `--yes`.
+6. **Send `Idempotency-Key` on all four.** A retry then replays the first answer
+   (`Idempotent-Replayed: true`) instead of meeting a 409 about its own success,
+   and for `send`, instead of a second bill in the client's inbox.
+
+### Changed
+
+- **`language` and the invoice-level `vat_rate` are frozen once an invoice is
+  sent**, in the database as well as the app. `language` decides every word on
+  the document; it had been editable after send by omission. `sent_at`,
+  `sent_message_id` and `pdf_sha256` are frozen once written and refused by
+  `PATCH` on any invoice.
+- **403 refusals now carry the right fields.** Phase 1's owner-only IBAN refusal
+  answered `{ error: "<code>", code: "<suggestion>", suggestion: "<sentence>" }`.
+  It is `{ code, error, suggestion }` in the right places now. If you matched on
+  the old scrambled `code`, match on `iban_owner_only`.
+- **`bk billing invoice create` now takes `--idempotency-key`.** Its help used to
+  say the command sent a key on its own; it never did. Without the flag, every
+  run creates a new invoice.
+- `GET /api/meta` serves `limits.delivery` (subject, body, copies, void reason).
+
 ## 2026-09-17 — Companies and invoices
 
 **Not breaking.** New tables, new routes, new commands. Nothing that worked

@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
+import { refusalToApiError } from '@/lib/api/refusal'
 import { authVia } from '@/lib/api/actor'
 import { editInvoice, getInvoice, InvoiceRefused, setInvoiceLines } from '@/lib/db/queries/invoices'
 import type { CreateInvoiceLineBody } from '@/types'
@@ -78,11 +79,7 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
     const invoice = await editInvoice(writeCtx, ref, fields)
     return NextResponse.json(invoice)
   } catch (e) {
-    if (e instanceof InvoiceRefused) {
-      if (e.status === 403) throw Errors.forbidden(e.code, e.message, e.suggestion)
-      if (e.status === 409) throw Errors.conflict(e.code, e.message, e.suggestion)
-      throw Errors.badRequest(e.code, e.message, e.suggestion)
-    }
+    if (e instanceof InvoiceRefused) throw refusalToApiError(e)
     throw e
   }
 })

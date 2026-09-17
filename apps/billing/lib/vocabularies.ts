@@ -209,7 +209,13 @@ export const AUDIT_ACTIONS: Term[] = [
   { value: 'created', label: 'Created' },
   { value: 'field_changed', label: 'Field changed', note: 'Carries the field path, the old value and the new one.' },
   { value: 'status_changed', label: 'Status changed' },
-  { value: 'sent', label: 'Sent', note: 'Names the recipient and the message id. Phase 3.' },
+  {
+    value: 'sent',
+    label: 'Sent',
+    note:
+      'Emailed by this app: names the recipients and the message id. Marked sent outside ' +
+      'this app: says so, and carries no message id.',
+  },
   { value: 'paid', label: 'Marked paid' },
   { value: 'voided', label: 'Voided', note: 'Carries the reason, in both languages.' },
 ]

@@ -35,9 +35,13 @@
 package client
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // ===========================================================================
@@ -259,6 +263,15 @@ type BillingInvoice struct {
 	Message string       `json:"message,omitempty"`
 	Void    *BillingVoid `json:"void,omitempty"`
 
+	// When it left draft. Empty until then.
+	SentAt string `json:"sent_at,omitempty"`
+	// The id of the email that carried it. EMPTY ON A SENT INVOICE MEANS IT WAS
+	// SENT OUTSIDE THIS APP (`mark-sent`) — "sent by us, here is the message" and
+	// "sent somehow, we were told" are different facts.
+	SentMessageID string `json:"sent_message_id,omitempty"`
+	// sha256 of the PDF bytes actually attached. Empty unless this app emailed it.
+	PdfSha256 string `json:"pdf_sha256,omitempty"`
+
 	Items  []BillingInvoiceLine `json:"items"`
 	Totals BillingTotals        `json:"totals"`
 
@@ -354,9 +367,105 @@ func (c *Client) GetBillingInvoice(ws, ref string) (*BillingInvoice, error) {
 	return &out, nil
 }
 
-func (c *Client) CreateBillingInvoice(ws string, req CreateBillingInvoiceRequest) (*BillingInvoice, error) {
+// CreateBillingInvoice drafts an invoice, consuming a number that cannot be
+// reclaimed. Pass a non-empty idempotencyKey to make a retry of THIS request
+// replay instead of minting a second bill; see postJSONIdempotent.
+func (c *Client) CreateBillingInvoice(ws string, req CreateBillingInvoiceRequest, idempotencyKey string) (*BillingInvoice, error) {
 	var out BillingInvoice
-	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/invoices", ws), req, &out); err != nil {
+	if err := c.postJSONIdempotent(fmt.Sprintf("/api/workspaces/%s/invoices", ws), req, idempotencyKey, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// postJSONIdempotent is postJSON plus the Idempotency-Key header, when a key is
+// given.
+//
+// ── THE KEY IS THE CALLER'S, NOT GENERATED HERE ────────────────────────────
+// Until 2026-09-17 `bk billing invoice create`'s help said the command "sends an
+// idempotency key", and no code in this binary did. A key generated per
+// invocation would not have helped anyway: `bk` does not retry, so the only
+// retry is the caller running the command again — which would generate a NEW
+// key and mint a second bill. What protects a retry is a key that is the same
+// on both runs, and only the caller knows what "the same request" means (their
+// own order id, an appointment id). So it is a flag, and an empty one sends no
+// header at all.
+func (c *Client) postJSONIdempotent(path string, body any, idempotencyKey string, out any) error {
+	var buf bytes.Buffer
+	if body != nil {
+		if err := json.NewEncoder(&buf).Encode(body); err != nil {
+			return err
+		}
+	}
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+path, &buf)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if key := strings.TrimSpace(idempotencyKey); key != "" {
+		req.Header.Set("Idempotency-Key", key)
+	}
+	return c.do(req, out)
+}
+
+// ===========================================================================
+// THE LIFECYCLE: send, mark-sent, paid, void
+// ===========================================================================
+
+// SendBillingInvoiceRequest is `bk billing invoice send`. Subject and body
+// default, server-side, to the invoice's DOCUMENT language.
+type SendBillingInvoiceRequest struct {
+	To      string   `json:"to"`
+	Cc      []string `json:"cc,omitempty"`
+	Subject string   `json:"subject,omitempty"`
+	Body    string   `json:"body,omitempty"`
+}
+
+// SendBillingInvoice emails the invoice PDF and records the delivery.
+func (c *Client) SendBillingInvoice(ws, ref string, req SendBillingInvoiceRequest, idempotencyKey string) (*BillingInvoice, error) {
+	var out BillingInvoice
+	path := fmt.Sprintf("/api/workspaces/%s/invoices/%s/send", ws, url.PathEscape(ref))
+	if err := c.postJSONIdempotent(path, req, idempotencyKey, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// MarkBillingInvoiceSent records a delivery that happened outside this app.
+func (c *Client) MarkBillingInvoiceSent(ws, ref, idempotencyKey string) (*BillingInvoice, error) {
+	var out BillingInvoice
+	path := fmt.Sprintf("/api/workspaces/%s/invoices/%s/mark-sent", ws, url.PathEscape(ref))
+	if err := c.postJSONIdempotent(path, map[string]any{}, idempotencyKey, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// MarkBillingInvoicePaid asserts that the money arrived on paidDate. An
+// assertion, never a reconciliation.
+func (c *Client) MarkBillingInvoicePaid(ws, ref, paidDate, idempotencyKey string) (*BillingInvoice, error) {
+	var out BillingInvoice
+	path := fmt.Sprintf("/api/workspaces/%s/invoices/%s/paid", ws, url.PathEscape(ref))
+	if err := c.postJSONIdempotent(path, map[string]string{"paid_date": paidDate}, idempotencyKey, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// VoidBillingInvoiceRequest is `bk billing invoice void`. Confirm is sent so the
+// server checks the same value the binary did — TRIMMED, by the command, before
+// it gets here.
+type VoidBillingInvoiceRequest struct {
+	ReasonFr string `json:"reason_fr,omitempty"`
+	ReasonEn string `json:"reason_en,omitempty"`
+	Confirm  string `json:"confirm"`
+}
+
+// VoidBillingInvoice cancels an invoice with a reason. Its number stays consumed.
+func (c *Client) VoidBillingInvoice(ws, ref string, req VoidBillingInvoiceRequest, idempotencyKey string) (*BillingInvoice, error) {
+	var out BillingInvoice
+	path := fmt.Sprintf("/api/workspaces/%s/invoices/%s/void", ws, url.PathEscape(ref))
+	if err := c.postJSONIdempotent(path, req, idempotencyKey, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

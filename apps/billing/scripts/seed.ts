@@ -441,7 +441,19 @@ async function main() {
 
     // `draft` needs nothing further. Everything else is a transition, in order.
     if (inv.status === 'sent' || inv.status === 'paid') {
-      await db.update(billingInvoice).set({ status: 'sent' }).where(eq(billingInvoice.id, row.id))
+      // `sent_at` in the same statement, for the same reason as `paid_date`
+      // below: migration 0007's `invoice_sent_requires_sent_at` refuses a sent
+      // invoice with no moment it was sent. This walk was the first thing that
+      // CHECK refused — a plain `SET status = 'sent'` is exactly the console
+      // shortcut it exists to stop.
+      //
+      // No `sent_message_id` and no `pdf_sha256`: seeded bills were never
+      // emailed by this app, and a null there is how the record says so — the
+      // same shape `bk billing invoice mark-sent` produces.
+      await db
+        .update(billingInvoice)
+        .set({ status: 'sent', sent_at: new Date(`${inv.issue_date}T09:00:00.000Z`) })
+        .where(eq(billingInvoice.id, row.id))
     }
     if (inv.status === 'paid') {
       // `paid_date` in the SAME statement as the status: the CHECK

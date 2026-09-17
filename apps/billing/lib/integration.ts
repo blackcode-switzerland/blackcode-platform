@@ -87,7 +87,41 @@ export const PUBLIC_ROUTES: readonly PublicRoute[] = [
     path: '/api/workspaces/{ws}/invoices/{ref}',
     since: '2026-09-17',
     purpose:
-      'Edit a draft. Once an invoice is sent, the document half is frozen and the refusal names which field.',
+      'Edit a draft. Once an invoice is sent, the document half is frozen and the refusal names which ' +
+      'field; due_date, message, external_ref and metadata stay editable.',
+  },
+  {
+    method: 'POST',
+    path: '/api/workspaces/{ws}/invoices/{ref}/send',
+    since: '2026-09-17',
+    purpose:
+      'Email the invoice PDF and mark it sent; records the message id and the PDF sha256. Send an ' +
+      'Idempotency-Key: a retry must not put a second bill in the client’s inbox. Refuses 503 ' +
+      'email_not_configured before anything happens, and 501 document_renderer_not_built until the PDF exists.',
+  },
+  {
+    method: 'POST',
+    path: '/api/workspaces/{ws}/invoices/{ref}/mark-sent',
+    since: '2026-09-17',
+    purpose:
+      'Record that a draft was delivered outside this app. sent_message_id stays null, which is how ' +
+      'the record says so permanently.',
+  },
+  {
+    method: 'POST',
+    path: '/api/workspaces/{ws}/invoices/{ref}/paid',
+    since: '2026-09-17',
+    purpose:
+      'Assert that a sent invoice was paid, with paid_date (YYYY-MM-DD, not in the future). An ' +
+      'assertion, never a reconciliation.',
+  },
+  {
+    method: 'POST',
+    path: '/api/workspaces/{ws}/invoices/{ref}/void',
+    since: '2026-09-17',
+    purpose:
+      'Cancel with reason_fr and/or reason_en; the number stays consumed. Pass confirm equal to the ' +
+      'printed number to have the server refuse a void aimed at the wrong invoice.',
   },
   {
     method: 'GET',

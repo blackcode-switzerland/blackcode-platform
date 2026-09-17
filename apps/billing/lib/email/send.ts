@@ -28,37 +28,40 @@
 // degradation rule is about production, where no such channel exists.
 //
 // ===========================================================================
-// PHASE 3 EXTENDS THIS, AND THE EXTENSION IS IN THE PACKAGE, NOT HERE
+// PHASE 3 EXTENDED THIS, AND THE EXTENSION IS IN THE PACKAGE, NOT HERE
 // ===========================================================================
-// `docs/billing-app-plan/phase-3-lifecycle-and-delivery.md` adds attachment
-// support so an invoice PDF can be mailed. That is a change to
-// `packages/platform-email` — one shared `documentEmail` template and
-// `attachments` on the one Resend call — and this file gains one name in the
-// destructuring. A per-app template set is refused by the package, and
-// `sendDocumentEmail` arriving here as a local implementation would be that
-// refusal routed around.
+// An invoice PDF is mailed through `sendDocumentEmail`, which is the package's
+// shared `documentEmail` template plus `attachments` and `replyTo` on its one
+// Resend call (2026-09-17). This file gained one name in the destructuring and
+// nothing else. A per-app template set is refused by the package, and an
+// invoice email implemented here would be that refusal routed around.
 import { createEmailSender } from '@blackcode/platform-email'
 import { getDb } from '@/lib/db/client'
 import { APP_NAME, APP_SLUG, CONTACT_EMAIL, EMAIL_ACCENT } from '@/lib/app'
 
 export type { SendResult } from '@blackcode/platform-email'
 
-export const { canDeliverEmail, emailEnabled, sendInvitationEmail, sendPasswordResetEmail } =
-  createEmailSender({
-    app: APP_SLUG,
-    getDb: () => getDb(),
-    identity: {
-      // `APP_NAME`, so the From line and the UI cannot drift apart. It is
-      // environment-driven, which is what lets a rebranded copy of this app send
-      // as its own company with no edit here.
-      name: APP_NAME,
-      appUrl: (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, ''),
-      // NOT `--primary`. See `EMAIL_ACCENT`'s own note in lib/app.ts: the accent
-      // always carries white text, and the mockup's signal green is 2.00:1
-      // against white — measured, not guessed.
-      accent: EMAIL_ACCENT,
-      // Also environment-driven: a copy of this app replying to
-      // contact@blackcode.ch would be sending another company's clients to us.
-      contactEmail: CONTACT_EMAIL,
-    },
-  })
+export const {
+  canDeliverEmail,
+  emailEnabled,
+  sendDocumentEmail,
+  sendInvitationEmail,
+  sendPasswordResetEmail,
+} = createEmailSender({
+  app: APP_SLUG,
+  getDb: () => getDb(),
+  identity: {
+    // `APP_NAME`, so the From line and the UI cannot drift apart. It is
+    // environment-driven, which is what lets a rebranded copy of this app send
+    // as its own company with no edit here.
+    name: APP_NAME,
+    appUrl: (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, ''),
+    // NOT `--primary`. See `EMAIL_ACCENT`'s own note in lib/app.ts: the accent
+    // always carries white text, and the mockup's signal green is 2.00:1
+    // against white — measured, not guessed.
+    accent: EMAIL_ACCENT,
+    // Also environment-driven: a copy of this app replying to
+    // contact@blackcode.ch would be sending another company's clients to us.
+    contactEmail: CONTACT_EMAIL,
+  },
+})
