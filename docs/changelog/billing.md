@@ -5,6 +5,35 @@ This file is an **agent** surface. It is merged into `bk changelog` and
 entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
+## 2026-09-17 — `contract_version` is served, and the audit log stops recording edits that did not happen
+
+**Not breaking.** Two fixes to things an integration may already rely on.
+
+### `GET /api/meta` now serves `contract_version`
+
+The integration conventions have said since the public routes were declared:
+*poll `contract_version` from `/api/meta` to know whether anything moved.* This
+app never served it. It does now, at the top level for an anonymous caller and
+under `apps.billing` for `bk meta`: a 16-character hash of the declared contract
+(vocabularies, limits, public routes and conventions) that changes if and only if
+that contract does.
+
+**How to adapt:** store the value; when it differs from the one you stored,
+re-read `/api/meta` and `/api/changelog`. If you polled for it before and got
+nothing, that was this bug, not your client.
+
+### The audit log no longer records decimal changes nobody made
+
+Replacing an invoice's lines logged a `field_changed` row for `items[i].qty`
+on every unchanged line, because the database returns `1.000` and a request
+sends `1`. The same would have happened for a unit price (`100` / `100.00`) and a
+VAT rate (`8.1` / `8.10`), on lines and on the invoice. Decimal fields are now
+compared as numbers.
+
+**How to adapt:** a feed consumer that saw `qty` changes with equal values before
+and after can ignore them; rows already written are permanent, like every audit
+row.
+
 ## 2026-09-17 — Sending, paid and void
 
 **Not breaking** for any client that reads invoices by field name. The invoice
