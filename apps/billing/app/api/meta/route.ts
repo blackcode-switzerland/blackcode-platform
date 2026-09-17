@@ -56,7 +56,7 @@
 // credential to read which routes are public would be a strange front door.
 // That block arrives with phase 1's `lib/integration.ts`.
 import { NextRequest, NextResponse } from 'next/server'
-import { platformMetaBlock } from '@blackcode/platform-api'
+import { contractVersion, platformMetaBlock } from '@blackcode/platform-api'
 import { apiHandler, appContext } from '@/lib/api'
 import { APP_SLUG } from '@/lib/app'
 import {
@@ -137,12 +137,29 @@ export const GET = apiHandler(async (req: NextRequest) => {
   // Offered, not demanded: `resolveUser` reads a bearer token or a session
   // cookie and answers null for neither.
   const user = await appContext.resolveUser(req)
+  const app = currentApp()
+
+  // ── THE CONTRACT HASH, WHICH THIS ROUTE DID NOT SERVE UNTIL 2026-09-17 ───
+  // Every comment in this file and `lib/integration.ts` said the public routes
+  // "ride inside contractVersion", and the integration conventions told outside
+  // systems to poll `contract_version` from here. Nothing called
+  // `contractVersion` at all: `apps/sales` computes and serves it, and this
+  // route was built from a copy that did not. Found by ticket #77's proof —
+  // "observe the hash move when PUBLIC_ROUTES gains an entry" — which had no
+  // hash to observe.
+  //
+  // Computed over exactly `app`, so nothing per-user or per-deploy is folded in
+  // (see `contractVersion`'s header). Served nested, where `bk meta` reads it,
+  // and flat, because an integrator reads this route anonymously.
+  // `meta-contract-version.test.ts` watches it move.
+  const contract_version = contractVersion(app)
   const platform = user
-    ? await platformMetaBlock(appContext, req, user, { currentApp: currentApp() })
+    ? await platformMetaBlock(appContext, req, user, { currentApp: { ...app, contract_version } })
     : null
 
   return NextResponse.json({
     app: APP_SLUG,
+    contract_version,
 
     // ── WHO, WHERE, AND THE ADDRESS BOOK ─────────────────────────────────
     // Null for an anonymous caller, which is what the vocabulary-only half is
@@ -157,10 +174,10 @@ export const GET = apiHandler(async (req: NextRequest) => {
 
     // ── THE VOCABULARIES AND LIMITS, FOR AN ANONYMOUS CALLER TOO ─────────
     // Served flat here as well as nested under `apps.billing`, which is what
-    // `apps/issues` and `apps/sales` do. The nested copy is the one the contract
-    // hash covers and the one `bk meta` reads; the flat copy is what a person
-    // curling this route sees first.
-    ...currentApp(),
+    // `apps/issues` and `apps/sales` do. Both copies are the object
+    // `contract_version` above is computed over; `bk meta` reads the nested one,
+    // and a person or an integration curling this route sees the flat one.
+    ...app,
 
     // ── WHAT THIS APP HOLDS, AND WHAT IT DOES NOT YET ────────────────────
     // Said plainly rather than left to be inferred from an empty payload. An

@@ -33,7 +33,7 @@ import { getDb } from '../client'
 import { allocateCompanySeqNo, allocateSeq, type Tx } from './seq'
 import { appendAudit, appendFieldChanges } from './audit'
 import { computeTotals, computeTotalsRappen, type TotalsLine } from '@/lib/derive/totals'
-import { formatRappen } from '@/lib/derive/money'
+import { formatRappen, parseMinor } from '@/lib/derive/money'
 import { renderNumber } from '@/lib/derive/number'
 import { ReferenceProblem, referenceBodyFor, referenceBodyProblem } from '@/lib/qr/reference'
 import { yearOf } from '@/lib/derive/format'
@@ -564,7 +564,7 @@ export async function editInvoice(
     const changes: Array<{ field: string; from: unknown; to: unknown }> = []
     for (const [key, to] of Object.entries(patch)) {
       const from = row[key]
-      if (JSON.stringify(from ?? null) !== JSON.stringify(to ?? null)) {
+      if (!sameValue(key, from, to, (f, t) => JSON.stringify(f ?? null) === JSON.stringify(t ?? null))) {
         changes.push({ field: EDITABLE[key] ?? key, from, to })
       }
     }
@@ -730,6 +730,40 @@ export async function setInvoiceLines(
     })
 }
 
+/**
+ * The decimal columns a diff can see, and the scale they compare at.
+ *
+ * ── WHY A DIFF CANNOT COMPARE THESE AS STRINGS ─────────────────────────────
+ * Postgres returns a `numeric` in its column's scale: `qty` numeric(12,3) comes
+ * back as `1.000`, `unit_price` as `100.00`, `vat_rate` as `8.10`. A caller sends
+ * `1`, `100` and `8.1`. Compared as strings, every line replacement logged a
+ * `qty` change that nobody made, and the audit log — which IS the edit history —
+ * recorded edits that never happened.
+ *
+ * Found 2026-09-17 by the first test that ran a line replacement against a real
+ * database (`write-paths.integration.test.ts`), which expected one row per
+ * changed line path and got a phantom `items[0].qty` beside them.
+ */
+const DECIMAL_SCALE: Readonly<Record<string, number>> = { qty: 1000, unit_price: 100, vat_rate: 100 }
+
+function sameValue(
+  field: string,
+  from: unknown,
+  to: unknown,
+  fallback: (from: unknown, to: unknown) => boolean
+): boolean {
+  const scale = DECIMAL_SCALE[field]
+  if (scale !== undefined && from !== null && from !== undefined && from !== '' && to !== null && to !== undefined && to !== '') {
+    try {
+      return parseMinor(String(from), scale) === parseMinor(String(to), scale)
+    } catch {
+      // Not a plain decimal at this scale. The write door refuses it elsewhere;
+      // here, compare as given, so a real difference is never hidden.
+    }
+  }
+  return fallback(from, to)
+}
+
 /** One entry per changed path, in the mockup's `items[i].field` spelling. */
 function diffLines(
   before: Record<string, unknown>[],
@@ -755,7 +789,7 @@ function diffLines(
       // default — otherwise omitting it on an unchanged line would log a change
       // from '1' to null that never happened.
       const to = (a[f] as unknown) ?? (f === 'qty' ? '1' : null)
-      if (String(from ?? '') !== String(to ?? '')) {
+      if (!sameValue(f, from, to, (x, y) => String(x ?? '') === String(y ?? ''))) {
         out.push({ field: `items[${i}].${f}`, from, to })
       }
     }
