@@ -267,3 +267,29 @@ export const HISTORY_STATUSES: Term[] = [
   },
   { value: 'void', label: 'Void', color: '#8b1a1a', note: 'Cancelled in the source. A missing reason is in the import flag.' },
 ]
+
+/**
+ * How often a series repeats (phase 4). Each has its own period shape —
+ * `2026-10`, `2026-Q4`, `2026` — in `lib/derive/recurrence.ts`.
+ */
+export const RECURRENCE_FREQUENCIES: Term[] = [
+  { value: 'monthly', label: 'Monthly', note: 'Period like 2026-10. A start on the 31st falls on each month’s last day where it is shorter.' },
+  { value: 'quarterly', label: 'Quarterly', note: 'Period like 2026-Q4.' },
+  { value: 'yearly', label: 'Yearly', note: 'Period like 2026.' },
+]
+
+/**
+ * Where a series stands. **`completed` is never set by hand**: it is what a
+ * series becomes when its counter reaches its cap, and a CHECK in 0012 holds the
+ * two together (invariant I9). There is no open-ended series to leave running.
+ */
+export const RECURRENCE_STATUSES: Term[] = [
+  { value: 'active', label: 'Active', color: '#0f6b44', note: 'Generates when asked. Nothing generates on its own — an agent reads the next date.' },
+  { value: 'paused', label: 'Paused', color: '#b8860b', note: 'Refuses to generate until resumed. Needs no reason.' },
+  {
+    value: 'completed',
+    label: 'Completed',
+    color: '#5b6470',
+    note: 'Reached its cap. Set by the last generation, never by hand, and final.',
+  },
+]

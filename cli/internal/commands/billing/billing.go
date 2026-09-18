@@ -78,8 +78,8 @@ invoice is voided, never binned, so there is no purge path to expose.
 
 NOT HERE YET. Companies, invoices, line items, the PDF with its QR-bill payment
 part ("invoice pdf", "invoice qr"), the audit log, the lifecycle (send,
-mark-sent, paid, void) and the imported archive ("history") exist. Recurring
-invoices do not. See docs/billing-app-plan/. This paragraph is the one thing in this
+mark-sent, paid, void), finite recurring series ("recurrence") and the imported
+archive ("history") exist. See docs/billing-app-plan/. This paragraph is the one thing in this
 help text that is expected to go out of date, and the table below is generated
 from the commands this binary actually carries — so where it and this prose
 disagree, the table is right.
@@ -121,6 +121,7 @@ func nouns() []*cobra.Command {
 		newInvoiceCmd(),
 		newAuditCmd(),
 		newOverviewCmd(),
+		newRecurrenceCmd(),
 		newHistoryCmd(),
 	}
 }

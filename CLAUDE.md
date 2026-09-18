@@ -34,8 +34,11 @@ is being built:
   `bk billing invoice pdf` and `invoice qr`, one validate-then-render seam
   (`lib/delivery/document.ts`) that `send` goes through too, and an invoice
   that leaves draft takes its own copy of its company (`issuer`, migration
-  0011) — so editing a company never changes a bill already sent. Only
-  recurrence (phase 4) is unbuilt on the backend. Same stack; its own `billing.*`
+  0011) — so editing a company never changes a bill already sent. Phase 4
+  (2026-09-18) added finite recurring series (`bk billing recurrence`): a rule
+  stored as data that nothing fires on, `generate` refusing a second live bill
+  for one period at the row lock and at a partial unique index. **The backend
+  is complete; the screens are not.** Same stack; its own `billing.*`
   schema, CLI group and docs. It is also the first app planned to ship as a
   SEPARATE, rebranded product for an outside company, which is why its display
   name, contact address and email accent read the environment while the slug

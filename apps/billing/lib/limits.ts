@@ -158,3 +158,15 @@ export const HISTORY_LIMITS = {
   import_flag_max: 500,
   drive_path_max: 1000,
 } as const
+
+/**
+ * Recurring series (phase 4).
+ *
+ * `occurrences_max` is a sanity cap, not a policy: ten years of monthly bills.
+ * A series is FINITE by design (invariant I9), and a count past this is far more
+ * likely a typo — 1200 for 12 — than an agreement anybody signed.
+ */
+export const RECURRENCE_LIMITS = {
+  occurrences_max: 120,
+  label_max: 200,
+} as const

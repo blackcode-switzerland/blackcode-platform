@@ -56,7 +56,9 @@ already passed. Store the last number you saw and pass it back.
 
   bk billing audit list --since 0            everything, oldest first
   bk billing audit list --since 412          what has happened since
-  bk billing audit list --subject invoice:7  one invoice's history`,
+  bk billing audit list --subject invoice:7  one invoice's history
+  bk billing audit list --subject recurrence:3  one series' history: its
+                                             counter, pauses, replacements`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -115,7 +117,7 @@ already passed. Store the last number you saw and pass it back.
 			})
 		},
 	}
-	cmd.Flags().StringVar(&subject, "subject", "", "One record's history, e.g. invoice:7")
+	cmd.Flags().StringVar(&subject, "subject", "", "One record's history: invoice:<ref> or recurrence:<#>")
 	cmd.Flags().IntVar(&since, "since", 0, "Read forward from this seq, ascending (0 = from the beginning)")
 	cmd.Flags().IntVar(&limit, "limit", 0, "How many entries (bk meta for the ceiling)")
 	return cmd

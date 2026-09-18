@@ -64,6 +64,7 @@ import {
   billingCounters,
   billingInvoice,
   billingInvoiceLine,
+  billingRecurrence,
   billingWorkspaceMembers,
   billingWorkspaces,
   users,
@@ -74,6 +75,9 @@ import { MOCKUP, mockupHistoryRows } from '../lib/mockup'
 import { importHistory } from '../lib/db/queries/history'
 import { getInvoice } from '../lib/db/queries/invoices'
 import { issuerSnapshot } from '../lib/issuer'
+import { getRecurrence } from '../lib/db/queries/recurrences'
+import { periodKey } from '../lib/derive/recurrence'
+import type { RecurrenceFrequency } from '../types'
 
 // Module scope, so every helper shares one client. `getDb()` is lazy, so this
 // opens nothing at import time.
@@ -122,7 +126,7 @@ async function rebuildFrom(workspaceId: number): Promise<void> {
     // Named individually rather than looped over `pg_trigger`, so this list is
     // a decision a reader can check against 0005 rather than "whatever happens
     // to be installed".
-    for (const table of ['company', 'invoice', 'audit']) {
+    for (const table of ['company', 'invoice', 'audit', 'recurrence']) {
       await tx.execute(sql.raw(`ALTER TABLE billing.${table} DISABLE TRIGGER trg_no_hard_delete`))
     }
     await tx.execute(sql.raw('ALTER TABLE billing.audit DISABLE TRIGGER trg_audit_append_only'))
@@ -133,7 +137,7 @@ async function rebuildFrom(workspaceId: number): Promise<void> {
 
     await tx.delete(billingWorkspaces).where(eq(billingWorkspaces.id, workspaceId))
 
-    for (const table of ['company', 'invoice', 'audit']) {
+    for (const table of ['company', 'invoice', 'audit', 'recurrence']) {
       await tx.execute(sql.raw(`ALTER TABLE billing.${table} ENABLE TRIGGER trg_no_hard_delete`))
     }
     await tx.execute(sql.raw('ALTER TABLE billing.audit ENABLE TRIGGER trg_audit_append_only'))
@@ -222,7 +226,7 @@ interface SeedInvoice {
  * its lines, sent, then paid or voided. Every seeded row has therefore passed
  * through the transitions the app's own write paths use.
  */
-async function insertInvoice(workspaceId: number, owner: { id: number; email: string }, inv: SeedInvoice): Promise<void> {
+async function insertInvoice(workspaceId: number, owner: { id: number; email: string }, inv: SeedInvoice): Promise<number> {
   const [row] = await db
     .insert(billingInvoice)
     .values({
@@ -294,13 +298,15 @@ async function insertInvoice(workspaceId: number, owner: { id: number; email: st
       .set({ status: 'void', void: { ts: inv.void!.ts, by: owner.email, reason: inv.void!.reason } })
       .where(eq(billingInvoice.id, row.id))
   }
+  return row.id
 }
 
 /** Bring the #number allocators in line with what was inserted directly. */
-async function setCounters(workspaceId: number, counts: { company: number; invoice: number }): Promise<void> {
+async function setCounters(workspaceId: number, counts: { company: number; invoice: number; recurrence?: number }): Promise<void> {
   await db.insert(billingCounters).values([
     { workspace_id: workspaceId, entity_type: 'company', last_value: counts.company },
     { workspace_id: workspaceId, entity_type: 'invoice', last_value: counts.invoice },
+    { workspace_id: workspaceId, entity_type: 'recurrence', last_value: counts.recurrence ?? 0 },
     { workspace_id: workspaceId, entity_type: 'audit', last_value: 0 },
   ])
 }
@@ -348,7 +354,7 @@ function companyFromMockup(c: (typeof MOCKUP.companies)[number], seq: number): C
   }
 }
 
-async function seedMockup(owner: { id: number; email: string }): Promise<{ workspaceId: number; invoices: number; history: number }> {
+async function seedMockup(owner: { id: number; email: string }): Promise<{ workspaceId: number; invoices: number; history: number; series: number }> {
   const wsId = await freshWorkspace('blackcode', 'blackcode', owner.id)
   const mockupWs = MOCKUP.workspaces.find((w) => w.slug === 'blackcode')!
 
@@ -359,6 +365,7 @@ async function seedMockup(owner: { id: number; email: string }): Promise<{ works
   }
 
   const invoices = MOCKUP.invoices.filter((i) => i.workspace_id === mockupWs.id).sort((a, b) => a.id - b.id)
+  const invoiceIds = new Map<number, number>()
   for (const [i, inv] of invoices.entries()) {
     const company = companies.find((c) => c.id === inv.company_id)!
     // The mockup's number is DATA here, and the app renders numbers from a
@@ -369,7 +376,7 @@ async function seedMockup(owner: { id: number; email: string }): Promise<{ works
       throw new Error(`mockup invoice ${inv.id} is numbered ${inv.number}, but ${company.number_format} renders ${rendered}`)
     }
     const rate = inv.vat_rate === null ? null : inv.vat_rate.toFixed(2)
-    await insertInvoice(wsId, owner, {
+    const invoiceId = await insertInvoice(wsId, owner, {
       seq: i + 1,
       companyId: companyIds.get(inv.company_id)!,
       seqNo: inv.seq,
@@ -397,7 +404,10 @@ async function seedMockup(owner: { id: number; email: string }): Promise<{ works
         vat_rate: rate,
       })),
     })
+    invoiceIds.set(inv.id, invoiceId)
   }
+
+  const series = await seedRecurrences(wsId, owner.id, companyIds, invoiceIds)
 
   // `next_seq` is the mockup's, and must lie beyond every number issued, or the
   // next real create would collide with a seeded one.
@@ -407,7 +417,7 @@ async function seedMockup(owner: { id: number; email: string }): Promise<{ works
       throw new Error(`mockup company ${c.id} says next_seq ${c.next_seq}, but it has already issued ${highest}`)
     }
   }
-  await setCounters(wsId, { company: companies.length, invoice: invoices.length })
+  await setCounters(wsId, { company: companies.length, invoice: invoices.length, recurrence: series })
 
   // THROUGH THE REAL WRITE DOOR, as the agent that owns an import would. The
   // seed is that agent here, so `via` is `token`.
@@ -416,7 +426,65 @@ async function seedMockup(owner: { id: number; email: string }): Promise<{ works
     { rows: mockupHistoryRows((id) => MOCKUP_SLUG[id]) }
   )
 
-  return { workspaceId: wsId, invoices: invoices.length, history: imported.imported }
+  return { workspaceId: wsId, invoices: invoices.length, history: imported.imported, series }
+}
+
+/**
+ * The mockup's four series, AS DATA — status, counter and next date exactly as
+ * the mockup states them — and the period of each invoice that carries one.
+ *
+ * Inserted directly rather than through `createRecurrence`, for the reason the
+ * invoices are: a series with two occurrences already behind it cannot be
+ * produced through today's write door without inventing when they happened.
+ * `assertParity` reads every one back through `getRecurrence` and fails the seed
+ * on any difference, and the CHECKs in 0012 refuse a state the app could not
+ * reach (a completed series with a next date, a counter past its cap).
+ *
+ * An invoice's period is the one its ISSUE DATE falls in. That is what makes the
+ * mockup's BC-2026-0033 (void) and BC-2026-0034 one occurrence: both were issued
+ * in the Junod series' second quarter.
+ *
+ * ── ONE THING IN THE MOCKUP'S DATA DOES NOT ADD UP, AND IS SEEDED AS IS ─────
+ * Junod (quarterly from 2026-01-05) has two occurrences done and its next date
+ * in Q4 — a quarter after Q1 + Q2 would put it. The mockup shows no Q1 invoice
+ * and no Q3 one. The app computes the NEXT date from the stored one, never from
+ * the count, so this is faithfully reproduced rather than "corrected"; it is on
+ * the list of questions for Andrea (apps/billing/docs/backend.md, phase 4).
+ */
+async function seedRecurrences(
+  wsId: number,
+  ownerId: number,
+  companyIds: Map<number, number>,
+  invoiceIds: Map<number, number>
+): Promise<number> {
+  const rules = MOCKUP.recurrences.filter((r) => r.workspace_id === 1).sort((a, b) => a.id - b.id)
+  for (const [i, r] of rules.entries()) {
+    const [row] = await db
+      .insert(billingRecurrence)
+      .values({
+        workspace_id: wsId,
+        seq: i + 1,
+        company_id: companyIds.get(r.company_id)!,
+        template_invoice_id: r.template_invoice_id === null ? null : invoiceIds.get(r.template_invoice_id)!,
+        status: r.status,
+        frequency: r.frequency,
+        start_date: r.start_date,
+        occurrences_total: r.occurrences_total,
+        occurrences_done: r.occurrences_done,
+        next_date: r.next_date,
+        label_fr: r.label.fr,
+        label_en: r.label.en,
+        created_by: ownerId,
+      })
+      .returning({ id: billingRecurrence.id })
+    for (const inv of MOCKUP.invoices.filter((x) => x.recurrence_id === r.id)) {
+      await db
+        .update(billingInvoice)
+        .set({ recurrence_id: row.id, occurrence_period: periodKey(r.frequency as RecurrenceFrequency, inv.issue_date) })
+        .where(eq(billingInvoice.id, invoiceIds.get(inv.id)!))
+    }
+  }
+  return rules.length
 }
 
 /**
@@ -479,6 +547,30 @@ async function assertParity(workspaceId: number): Promise<number> {
       problems.push(`${m.number} is ${inv.status} and its issuer copy is ${inv.issuer === null ? 'missing' : 'present'}`)
     }
   }
+
+  // The series, read back through the app's own read — and each one's
+  // invoices, which is where a wrong period or a lost link would show.
+  const rules = MOCKUP.recurrences.filter((r) => r.workspace_id === 1).sort((a, b) => a.id - b.id)
+  for (const [i, m] of rules.entries()) {
+    const r = await getRecurrence(workspaceId, i + 1)
+    if (!r) {
+      problems.push(`series #${i + 1} (${m.label.en}) did not read back`)
+      continue
+    }
+    const check = (what: string, ours: unknown, theirs: unknown) => {
+      if (ours !== theirs) problems.push(`series "${m.label.en}" ${what}: this app ${ours}, the mockup ${theirs}`)
+    }
+    check('status', r.status, m.status)
+    check('frequency', r.frequency, m.frequency)
+    check('occurrences', `${r.occurrences_done}/${r.occurrences_total}`, `${m.occurrences_done}/${m.occurrences_total}`)
+    check('next date', r.next_date, m.next_date)
+    const tpl = m.template_invoice_id === null ? null : MOCKUP.invoices.find((x) => x.id === m.template_invoice_id)!.number
+    check('template', r.template_number, tpl)
+    const expected = MOCKUP.invoices.filter((x) => x.recurrence_id === m.id).map((x) => x.number).sort()
+    check('invoices', (r.invoices ?? []).map((x) => x.number).sort().join(', '), expected.join(', '))
+    for (const x of r.invoices ?? []) if (!x.occurrence_period) problems.push(`${x.number} is in series "${m.label.en}" with no period`)
+  }
+
   if (problems.length > 0) {
     throw new Error(`the seeded "blackcode" workspace does NOT reproduce the mockup:\n  ${problems.join('\n  ')}`)
   }
@@ -627,7 +719,7 @@ async function main() {
   await seedPraxis(owner)
 
   console.log(`✓ seeded for ${owner.email} (mockup ${MOCKUP.source.commit?.slice(0, 7)}, file sha256 ${MOCKUP.source.sha256.slice(0, 12)})`)
-  console.log(`  blackcode     2 companies, ${mock.invoices} invoices, ${mock.history} imported bills — ${checked} invoices read back and equal to the mockup`)
+  console.log(`  blackcode     2 companies, ${mock.invoices} invoices, ${mock.series} recurring series, ${mock.history} imported bills — ${checked} invoices and every series read back and equal to the mockup`)
   console.log('  demo-tenant   1 company, nothing else')
   console.log('  praxis-demo   1 company (prices include VAT, total rounding), 2 invoices')
   console.log('  0 audit entries anywhere: the log records what somebody did, and nobody has yet')

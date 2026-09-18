@@ -68,6 +68,8 @@ import {
   INVITATION_STATUSES,
   INVOICE_STATUSES,
   MEMBER_ROLES,
+  RECURRENCE_FREQUENCIES,
+  RECURRENCE_STATUSES,
   REFERENCE_TYPES,
   ROUNDING_POLICIES,
 } from '@/lib/vocabularies'
@@ -78,6 +80,7 @@ import {
   LIST_LIMIT_MAX,
   METADATA_LIMITS,
   PAYMENT_MESSAGE_MAX,
+  RECURRENCE_LIMITS,
   WORKSPACE_NAME_MAX,
 } from '@/lib/limits'
 import { CONVENTIONS, PUBLIC_ROUTES } from '@/lib/integration'
@@ -106,6 +109,8 @@ function currentApp() {
       actor_via: ACTOR_VIA,
       history_sources: HISTORY_SOURCES,
       history_statuses: HISTORY_STATUSES,
+      recurrence_frequencies: RECURRENCE_FREQUENCIES,
+      recurrence_statuses: RECURRENCE_STATUSES,
     },
     limits: {
       workspace_name_max: WORKSPACE_NAME_MAX,
@@ -118,6 +123,7 @@ function currentApp() {
       // client composing a ref_body reads them rather than copying them.
       reference: { qrr_body_length: QRR_BODY_LENGTH, scor_body_max: SCOR_BODY_MAX },
       history: HISTORY_LIMITS,
+      recurrence: RECURRENCE_LIMITS,
     },
     // ── THE PUBLIC SURFACE, IN THE ANONYMOUS HALF ──────────────────────────
     // Decision D-B5. Served here so it rides inside `contractVersion` — which
@@ -191,13 +197,14 @@ export const GET = apiHandler(async (req: NextRequest) => {
     // it correctly-but-wrongly, and one sentence prevents that.
     entities: {
       source: 'database',
-      tables: ['billing.company', 'billing.invoice', 'billing.invoice_line', 'billing.audit', 'billing.history'],
+      tables: ['billing.company', 'billing.invoice', 'billing.invoice_line', 'billing.audit', 'billing.history', 'billing.recurrence'],
       note:
-        'Companies, invoices and imported history are workspace-scoped, so this unauthenticated ' +
-        'route cannot list them. Read them with `bk billing company list`, `bk billing invoice list` ' +
-        'and `bk billing history list`. An invoice renders as a PDF with its QR-bill payment part ' +
-        '(`bk billing invoice pdf`, `invoice qr`) and is sent, marked paid or voided from there. ' +
-        'Recurrence is not built yet.',
+        'Companies, invoices, recurring series and imported history are workspace-scoped, so this ' +
+        'unauthenticated route cannot list them. Read them with `bk billing company list`, ' +
+        '`bk billing invoice list`, `bk billing recurrence list` and `bk billing history list`. An ' +
+        'invoice renders as a PDF with its QR-bill payment part (`bk billing invoice pdf`, `invoice qr`) ' +
+        'and is sent, marked paid or voided from there. A series generates nothing on its own: ' +
+        '`bk billing recurrence list --due` names the ones to generate.',
     },
   })
 })

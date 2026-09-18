@@ -97,3 +97,12 @@ export function yearOf(iso: string): number {
 
 /** `"8.1"` → `"8.1%"`. The rate arrives already trimmed from `formatRate`. */
 export const percent = (rate: string): string => `${rate}%`
+
+/** Today's date where the businesses using this app are, as YYYY-MM-DD. */
+export function todayInZurich(now: Date = new Date()): string {
+  // `en-CA` formats as YYYY-MM-DD. Zurich, not UTC: between midnight and 01:00
+  // or 02:00 local time, UTC is still yesterday, and "paid today" would be
+  // refused as a future date for an hour every night — and a series due today
+  // would not be due until 01:00.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich' }).format(now)
+}

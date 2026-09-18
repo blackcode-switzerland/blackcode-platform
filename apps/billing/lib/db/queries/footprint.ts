@@ -33,7 +33,7 @@
 import { inArray, eq, sql } from 'drizzle-orm'
 import type { AppFootprint, FootprintSource } from '@blackcode/platform-api'
 import { getDb } from '../client'
-import { billingCompany, billingHistory, billingInvoice, billingWorkspaceMembers, billingWorkspaces } from '../schema'
+import { billingCompany, billingHistory, billingInvoice, billingRecurrence, billingWorkspaceMembers, billingWorkspaces } from '../schema'
 import { APP_SLUG } from '@/lib/app'
 
 export const billingFootprintSource: FootprintSource = {
@@ -147,7 +147,7 @@ async function countIn(workspaceIds: number[]): Promise<Array<{ label: string; c
   // is non-empty at the one call site (the caller checks `will_delete.length`
   // first). Interpolated through `inArray` rather than `sql.raw` regardless,
   // because the next person to add a table here will copy this shape.
-  const [companies, invoices, history] = await Promise.all([
+  const [companies, invoices, history, series] = await Promise.all([
     getDb()
       .select({ n: sql<number>`COUNT(*)::int` })
       .from(billingCompany)
@@ -160,6 +160,10 @@ async function countIn(workspaceIds: number[]): Promise<Array<{ label: string; c
       .select({ n: sql<number>`COUNT(*)::int` })
       .from(billingHistory)
       .where(inArray(billingHistory.workspace_id, workspaceIds)),
+    getDb()
+      .select({ n: sql<number>`COUNT(*)::int` })
+      .from(billingRecurrence)
+      .where(inArray(billingRecurrence.workspace_id, workspaceIds)),
   ])
 
   const out: Array<{ label: string; count: number }> = []
@@ -173,5 +177,9 @@ async function countIn(workspaceIds: number[]): Promise<Array<{ label: string; c
   // another system's document, and "182 invoices" should mean the ones issued here.
   const imported = Number(history[0]?.n ?? 0)
   if (imported > 0) out.push({ label: imported === 1 ? 'imported bill' : 'imported bills', count: imported })
+  // A series is an agreement ("bill Junod quarterly, eight times"), and losing
+  // one is losing the record of what was agreed, not only its invoices.
+  const recurring = Number(series[0]?.n ?? 0)
+  if (recurring > 0) out.push({ label: 'recurring series', count: recurring })
   return out
 }

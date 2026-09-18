@@ -27,6 +27,7 @@ import { NextRequest } from 'next/server'
 import { Errors, jsonList } from '@blackcode/platform-api'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
 import { listAudit } from '@/lib/db/queries/audit'
+import { recurrenceIdOf } from '@/lib/db/queries/recurrences'
 import { getInvoiceRow } from '@/lib/db/queries/invoices'
 import { LIST_LIMIT_MAX } from '@/lib/limits'
 
@@ -61,17 +62,24 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const subject = q.get('subject')
   if (subject) {
     const [type, ref] = subject.split(':')
-    if (type !== 'invoice' || !ref) {
+    if ((type !== 'invoice' && type !== 'recurrence') || !ref) {
       throw Errors.badRequest(
         'invalid_subject',
-        'subject is `invoice:<ref>`',
-        'company and recurrence subjects arrive with their own screens'
+        'subject is `invoice:<ref>` or `recurrence:<#number>`',
+        'company subjects arrive with their own screen'
       )
     }
-    const row = await getInvoiceRow(ctx.workspace.id, ref)
-    if (!row) throw Errors.notFound('invoice', 'bk billing invoice list')
-    subjectType = 'invoice'
-    subjectId = Number(row.id)
+    if (type === 'invoice') {
+      const row = await getInvoiceRow(ctx.workspace.id, ref)
+      if (!row) throw Errors.notFound('invoice', 'bk billing invoice list')
+      subjectType = 'invoice'
+      subjectId = Number(row.id)
+    } else {
+      const id = /^\d+$/.test(ref) ? await recurrenceIdOf(ctx.workspace.id, Number(ref)) : null
+      if (id === null) throw Errors.notFound('recurrence_not_found', `no series #${ref} in this workspace`, 'bk billing recurrence list')
+      subjectType = 'recurrence'
+      subjectId = id
+    }
   }
 
   const page = await listAudit(ctx.workspace.id, {

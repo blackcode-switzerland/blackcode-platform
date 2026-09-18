@@ -92,6 +92,18 @@
       "app": "billing"
     },
     {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/recurrences",
+      "command": "bk billing recurrence list",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/recurrences/{seq}",
+      "command": "bk billing recurrence show",
+      "app": "billing"
+    },
+    {
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/companies/{slug}",
       "command": "bk billing company edit, bk billing company retire",
@@ -101,6 +113,12 @@
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/invoices/{ref}",
       "command": "bk billing invoice edit, bk billing invoice line set",
+      "app": "billing"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/recurrences/{seq}",
+      "command": "bk billing recurrence edit, bk billing recurrence pause, bk billing recurrence resume",
       "app": "billing"
     },
     {
@@ -161,6 +179,18 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/invoices/{ref}/void",
       "command": "bk billing invoice void",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/recurrences",
+      "command": "bk billing recurrence create",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/recurrences/{seq}/generate",
+      "command": "bk billing recurrence generate",
       "app": "billing"
     },
     {

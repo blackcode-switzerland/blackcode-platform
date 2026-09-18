@@ -21,6 +21,7 @@ import {
   date,
   jsonb,
   timestamp,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 import { users } from '@blackcode/platform-db'
 
@@ -315,9 +316,49 @@ export const billingInvoice = billingSchema.table('invoice', {
    */
   issuer: jsonb('issuer'),
 
+  // ── SERIES (0012). Set once, never changed (`trg_invoice_series_frozen`). ──
+  /** The series this invoice is an occurrence — or the template — of. A void keeps it. */
+  recurrence_id: integer('recurrence_id').references((): AnyPgColumn => billingRecurrence.id),
+  /** `2026-10` / `2026-Q4` / `2026`. At most one LIVE invoice per (series, period). */
+  occurrence_period: varchar('occurrence_period', { length: 7 }),
+
   external_ref: varchar('external_ref', { length: 80 }),
   metadata: jsonb('metadata').default({}).notNull(),
 
+  created_by: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+/**
+ * A finite recurring series (0012, phase 4). **A rule is data; nothing fires on
+ * it** — an agent reads `next_date` and asks for the next occurrence.
+ *
+ * `completed` is derived from the counter reaching the cap, and a CHECK holds
+ * it to `occurrences_done = occurrences_total` and to `next_date IS NULL`.
+ */
+export const billingRecurrence = billingSchema.table('recurrence', {
+  id: serial('id').primaryKey(),
+  workspace_id: integer('workspace_id')
+    .notNull()
+    .references(() => billingWorkspaces.id, { onDelete: 'cascade' }),
+  seq: integer('seq').notNull(),
+  company_id: integer('company_id')
+    .notNull()
+    .references(() => billingCompany.id, { onDelete: 'restrict' }),
+  /** Null when the template predates this app (it is in the imported archive). */
+  template_invoice_id: integer('template_invoice_id').references((): AnyPgColumn => billingInvoice.id),
+  status: varchar('status', { length: 10 }).default('active').notNull(),
+  frequency: varchar('frequency', { length: 10 }).notNull(),
+  start_date: date('start_date').notNull(),
+  /** THE END CONDITION. Required, at least one: there is no open-ended series. */
+  occurrences_total: integer('occurrences_total').notNull(),
+  occurrences_done: integer('occurrences_done').default(0).notNull(),
+  next_date: date('next_date'),
+  label_fr: varchar('label_fr', { length: 200 }),
+  label_en: varchar('label_en', { length: 200 }),
+  external_ref: varchar('external_ref', { length: 80 }),
+  metadata: jsonb('metadata').default({}).notNull(),
   created_by: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -473,3 +514,4 @@ export type BillingInvoiceRow = typeof billingInvoice.$inferSelect
 export type BillingInvoiceLineRow = typeof billingInvoiceLine.$inferSelect
 export type BillingAuditRow = typeof billingAudit.$inferSelect
 export type BillingHistoryRow = typeof billingHistory.$inferSelect
+export type BillingRecurrenceRow = typeof billingRecurrence.$inferSelect

@@ -209,6 +209,13 @@ func renderInvoice(w io.Writer, inv *client.BillingInvoice) error {
 	default:
 		fmt.Fprintf(tw, "Issuer:\tcopied %s\t%s — later edits to the company do not reach this invoice\n", inv.Issuer.CapturedAt[:10], inv.Issuer.LegalName)
 	}
+	if inv.Recurrence != nil {
+		if inv.OccurrencePeriod != nil {
+			fmt.Fprintf(tw, "Series:\t#%d\toccurrence for %s — bk billing recurrence show %d\n", *inv.Recurrence, *inv.OccurrencePeriod, *inv.Recurrence)
+		} else {
+			fmt.Fprintf(tw, "Series:\t#%d\tthe template its occurrences copy — bk billing recurrence show %d\n", *inv.Recurrence, *inv.Recurrence)
+		}
+	}
 	if inv.Message != "" {
 		fmt.Fprintf(tw, "Message:\t%s\n", inv.Message)
 	}

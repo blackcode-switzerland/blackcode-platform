@@ -229,7 +229,7 @@ export function checkImportRows(
     }
 
     if (source !== null && sourceRef !== null) {
-      const key = `${source} ${sourceRef}`
+      const key = `${source}\u0000${sourceRef}`
       const first = seen.get(key)
       if (first !== undefined) {
         bad('source_ref', `repeats row ${first}'s ${source} ${JSON.stringify(sourceRef)}; one source id is one bill`)
@@ -266,8 +266,8 @@ async function alreadyImported(workspaceId: number, rows: ImportHistoryRow[]): P
     .select({ source: billingHistory.source, source_ref: billingHistory.source_ref, seq: billingHistory.seq })
     .from(billingHistory)
     .where(and(eq(billingHistory.workspace_id, workspaceId), inArray(billingHistory.source_ref, refs)))
-  const wanted = new Set(rows.map((r) => `${r.source} ${r.source_ref}`))
-  return found.filter((f) => wanted.has(`${f.source} ${f.source_ref}`))
+  const wanted = new Set(rows.map((r) => `${r.source}\u0000${r.source_ref}`))
+  return found.filter((f) => wanted.has(`${f.source}\u0000${f.source_ref}`))
 }
 
 function alreadyImportedRefusal(existing: Existing[], batchSize: number): HistoryRefused {

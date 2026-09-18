@@ -172,6 +172,42 @@ run('billing owner-only guards (integration, rolled back)', () => {
     })
   })
 
+  describe('billing.recurrence (0012)', () => {
+    async function seriesRow(c: PoolClient, workspaceId: number): Promise<number> {
+      const co = await c.query<{ id: number }>(
+        `INSERT INTO billing.company (workspace_id, seq, slug, name, legal_name) VALUES ($1, 1, 'probe', 'Probe', 'Probe SA') RETURNING id`,
+        [workspaceId]
+      )
+      const r = await c.query<{ id: number }>(
+        `INSERT INTO billing.recurrence (workspace_id, seq, company_id, frequency, start_date, occurrences_total, next_date)
+         VALUES ($1, 1, $2, 'monthly', '2026-01-01', 3, '2026-01-01') RETURNING id`,
+        [workspaceId, co.rows[0].id]
+      )
+      return r.rows[0].id
+    }
+
+    it('lets the owner advance a series (the positive half, first)', async () => {
+      const out = await rolledBack(async (c) => {
+        const { workspaceId } = await fixture(c)
+        const id = await seriesRow(c, workspaceId)
+        const r = await c.query(`UPDATE billing.recurrence SET occurrences_done = 1, next_date = '2026-02-01' WHERE id = $1`, [id])
+        return r.rowCount
+      })
+      expect(out).toBe(1)
+    })
+
+    it('refuses a DELETE from the owner', async () => {
+      const out = await rolledBack(async (c) => {
+        const { workspaceId } = await fixture(c)
+        const id = await seriesRow(c, workspaceId)
+        await c.query(`DELETE FROM billing.recurrence WHERE id = $1`, [id])
+        return 'deleted'
+      })
+      expect(out).toBeInstanceOf(Error)
+      expect((out as Error).message).toMatch(/recurrence rows are never deleted/)
+    })
+  })
+
   describe('billing.audit (0009)', () => {
     it('lets a hard DELETE of the author clear actor_user_id, and keeps the row', async () => {
       const out = await rolledBack(async (c) => {

@@ -28,7 +28,7 @@
 //      a rounding question.
 
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
-import { billingCompany, billingInvoice, billingInvoiceLine } from '../schema'
+import { billingCompany, billingInvoice, billingInvoiceLine, billingRecurrence } from '../schema'
 import { getDb } from '../client'
 import { allocateCompanySeqNo, allocateSeq, type Tx } from './seq'
 import { appendAudit, appendFieldChanges } from './audit'
@@ -137,6 +137,8 @@ const INV_COLS = {
   company_id: billingInvoice.company_id,
   company_slug: billingCompany.slug,
   issuer: billingInvoice.issuer,
+  recurrence_seq: billingRecurrence.seq,
+  occurrence_period: billingInvoice.occurrence_period,
   ...LIVE_ISSUER_COLS,
   seq_no: billingInvoice.seq_no,
   number: billingInvoice.number,
@@ -262,6 +264,8 @@ function shapeWithIssuer(
     sent_message_id: (r.sent_message_id as string) ?? null,
     pdf_sha256: (r.pdf_sha256 as string) ?? null,
     issuer: (r.issuer as IssuerSnapshot | null) ?? null,
+    recurrence: r.recurrence_seq === null || r.recurrence_seq === undefined ? null : Number(r.recurrence_seq),
+    occurrence_period: (r.occurrence_period as string) ?? null,
     items,
     totals: computeTotals(totalsLines, pricesIncludeVat, rounding),
     external_ref: (r.external_ref as string) ?? null,
@@ -325,6 +329,7 @@ export async function listInvoices(
     .select(INV_COLS)
     .from(billingInvoice)
     .innerJoin(billingCompany, eq(billingCompany.id, billingInvoice.company_id))
+    .leftJoin(billingRecurrence, eq(billingRecurrence.id, billingInvoice.recurrence_id))
     .where(and(...where))
     .orderBy(desc(billingInvoice.seq))
     .limit(limit + 1)
@@ -391,6 +396,7 @@ export async function getInvoiceRow(
     .select(INV_COLS)
     .from(billingInvoice)
     .innerJoin(billingCompany, eq(billingCompany.id, billingInvoice.company_id))
+    .leftJoin(billingRecurrence, eq(billingRecurrence.id, billingInvoice.recurrence_id))
     .where(
       and(
         eq(billingInvoice.workspace_id, workspaceId),
@@ -406,6 +412,43 @@ export async function getInvoiceRow(
 // ---------------------------------------------------------------------------
 
 export async function createInvoice(ctx: WriteCtx, body: CreateInvoiceBody): Promise<Invoice> {
+  const { seq } = await getDb().transaction((tx) => insertInvoice(tx, ctx, body))
+  const fresh = await getInvoice(ctx.workspaceId, String(seq))
+  if (!fresh) {
+    // Genuinely unreachable once the transaction has committed, and asserted
+    // because the alternative is returning `null` up a chain typed
+    // `Promise<Invoice>`.
+    throw new Error(`invoice #${seq} not readable after commit`)
+  }
+  return fresh
+}
+
+/** Where an occurrence belongs. Only the recurrence generate path passes one. */
+export interface SeriesPlacement {
+  recurrenceId: number
+  period: string
+}
+
+/**
+ * THE create path, inside a caller's transaction: validate, allocate, insert,
+ * audit. `createInvoice` wraps it in a transaction of its own; the recurrence
+ * generate path calls it inside the transaction that also advances the series'
+ * counter, so an occurrence and its counter commit together or not at all.
+ *
+ * ONE path, so an occurrence is an ordinary invoice: the same checks, the next
+ * number in the company's sequence, the same audit row. A second insert for
+ * occurrences would be a second definition of "an invoice".
+ *
+ * Every refusal here happens inside the transaction, and the number the
+ * transaction took is released with it — the allocator is a row lock, not a
+ * sequence (lib/db/queries/seq.ts), so a rollback leaves no hole.
+ */
+export async function insertInvoice(
+  tx: Tx,
+  ctx: WriteCtx,
+  body: CreateInvoiceBody,
+  series?: SeriesPlacement
+): Promise<{ id: number; seq: number; number: string }> {
   if (!body.company) {
     throw new InvoiceRefused(
       'company_required',
@@ -414,7 +457,7 @@ export async function createInvoice(ctx: WriteCtx, body: CreateInvoiceBody): Pro
     )
   }
 
-  const companyRows = await getDb()
+  const companyRows = await tx
     .select()
     .from(billingCompany)
     .where(and(eq(billingCompany.workspace_id, ctx.workspaceId), eq(billingCompany.slug, body.company)))
@@ -462,8 +505,9 @@ export async function createInvoice(ctx: WriteCtx, body: CreateInvoiceBody): Pro
   const dueDate = body.due_date ?? addDays(issueDate, company.payment_terms_days)
 
   // ── THE EXPECTED-TOTAL CHECK HAPPENS BEFORE ANYTHING IS ALLOCATED ────────
-  // Deliberately outside the transaction: a refusal must not have consumed a
-  // number. `assertExpectedTotal` is pure, so it can run here.
+  // Before the allocator: a refusal must not have consumed a number (and one
+  // after it would not either — the rollback releases it — but refusing before
+  // the row lock keeps concurrent creates for this company from waiting on it).
   if (body.expected_total !== undefined) {
     assertExpectedTotal(
       items,
@@ -474,94 +518,88 @@ export async function createInvoice(ctx: WriteCtx, body: CreateInvoiceBody): Pro
     )
   }
 
-  return await getDb().transaction(async (tx) => {
-    const seq = await allocateSeq(tx, ctx.workspaceId, 'invoice')
-    // The row lock that makes the statutory sequence gapless. Everything after
-    // this point is inside it, so a second create for this company waits.
-    const seqNo = await allocateCompanySeqNo(tx, company.id)
-    const number = renderNumber(company.number_format, yearOf(issueDate), seqNo)
+  const seq = await allocateSeq(tx, ctx.workspaceId, 'invoice')
+  // The row lock that makes the statutory sequence gapless. Everything after
+  // this point is inside it, so a second create for this company waits.
+  const seqNo = await allocateCompanySeqNo(tx, company.id)
+  const number = renderNumber(company.number_format, yearOf(issueDate), seqNo)
 
-    // The reference BODY, derived here because it contains `seq_no` — which G1
-    // freezes the moment this row exists, so it can never change afterwards.
-    // The CHECK DIGIT is not stored and is computed on every render (I6).
-    //
-    // A caller-supplied body wins; see `referenceBodyFor`. The QRR layout is
-    // position P11 and must be agreed with the bank before the first real QRR
-    // bill.
-    let refBody: string | null
-    try {
-      refBody = referenceBodyFor(refType, body.ref_body, company.seq, seqNo, number)
-    } catch (e) {
-      // A number that cannot form a reference is a fact about the company's
-      // configuration, not about the request — 409, and the rollback releases
-      // the number this transaction took.
-      if (e instanceof ReferenceProblem) throw new InvoiceRefused(e.code, e.message, e.suggestion, 409)
-      throw e
-    }
+  // The reference BODY, derived here because it contains `seq_no` — which G1
+  // freezes the moment this row exists, so it can never change afterwards.
+  // The CHECK DIGIT is not stored and is computed on every render (I6).
+  //
+  // A caller-supplied body wins; see `referenceBodyFor`. The QRR layout is
+  // position P11 and must be agreed with the bank before the first real QRR
+  // bill.
+  let refBody: string | null
+  try {
+    refBody = referenceBodyFor(refType, body.ref_body, company.seq, seqNo, number)
+  } catch (e) {
+    // A number that cannot form a reference is a fact about the company's
+    // configuration, not about the request — 409, and the rollback releases
+    // the number this transaction took.
+    if (e instanceof ReferenceProblem) throw new InvoiceRefused(e.code, e.message, e.suggestion, 409)
+    throw e
+  }
 
-    const [inserted] = await tx
-      .insert(billingInvoice)
-      .values({
-        workspace_id: ctx.workspaceId,
-        seq,
-        company_id: company.id,
-        seq_no: seqNo,
-        number,
-        status: 'draft',
-        issue_date: issueDate,
-        due_date: dueDate,
-        currency,
-        language,
-        ref_type: refType,
-        ref_body: refBody,
-        client: { ...emptyAddress(), ...(body.client ?? {}) },
-        vat_rate: body.vat_rate ?? company.default_vat_rate,
-        prices_include_vat: pricesIncludeVat,
-        message: body.message ?? null,
-        external_ref: body.external_ref ?? null,
-        metadata: body.metadata ?? {},
-        created_by: ctx.actorUserId,
-      })
-      .returning({ id: billingInvoice.id })
-
-    if (items.length > 0) {
-      await tx.insert(billingInvoiceLine).values(
-        items.map((l, i) => ({
-          invoice_id: inserted.id,
-          line_no: i + 1,
-          description: l.description,
-          qty: l.qty ?? '1',
-          unit: l.unit ?? null,
-          unit_price: l.unit_price,
-          vat_rate: l.vat_rate ?? null,
-        }))
-      )
-    }
-
-    await appendAudit(tx, {
-      workspaceId: ctx.workspaceId,
-      subjectType: 'invoice',
-      subjectId: inserted.id,
-      subjectSeq: seq,
-      actorUserId: ctx.actorUserId,
-      via: ctx.via,
-      action: 'created',
-      detailEn: `Invoice ${number} created for ${company.name}`,
-      detailFr: `Facture ${number} créée pour ${company.name}`,
+  const [inserted] = await tx
+    .insert(billingInvoice)
+    .values({
+      workspace_id: ctx.workspaceId,
+      seq,
+      company_id: company.id,
+      seq_no: seqNo,
+      number,
+      status: 'draft',
+      issue_date: issueDate,
+      due_date: dueDate,
+      currency,
+      language,
+      ref_type: refType,
+      ref_body: refBody,
+      client: { ...emptyAddress(), ...(body.client ?? {}) },
+      vat_rate: body.vat_rate ?? company.default_vat_rate,
+      prices_include_vat: pricesIncludeVat,
+      message: body.message ?? null,
+      external_ref: body.external_ref ?? null,
+      metadata: body.metadata ?? {},
+      recurrence_id: series?.recurrenceId ?? null,
+      occurrence_period: series?.period ?? null,
+      created_by: ctx.actorUserId,
     })
+    .returning({ id: billingInvoice.id })
 
-    return seq
+  if (items.length > 0) {
+    await tx.insert(billingInvoiceLine).values(
+      items.map((l, i) => ({
+        invoice_id: inserted.id,
+        line_no: i + 1,
+        description: l.description,
+        qty: l.qty ?? '1',
+        unit: l.unit ?? null,
+        unit_price: l.unit_price,
+        vat_rate: l.vat_rate ?? null,
+      }))
+    )
+  }
+
+  await appendAudit(tx, {
+    workspaceId: ctx.workspaceId,
+    subjectType: 'invoice',
+    subjectId: inserted.id,
+    subjectSeq: seq,
+    actorUserId: ctx.actorUserId,
+    via: ctx.via,
+    action: 'created',
+    detailEn: series
+      ? `Invoice ${number} created for ${company.name} — occurrence ${series.period} of a recurring series`
+      : `Invoice ${number} created for ${company.name}`,
+    detailFr: series
+      ? `Facture ${number} créée pour ${company.name} — échéance ${series.period} d’une série récurrente`
+      : `Facture ${number} créée pour ${company.name}`,
   })
-    .then(async (seq) => {
-      const fresh = await getInvoice(ctx.workspaceId, String(seq))
-      if (!fresh) {
-        // Genuinely unreachable once the transaction has committed, and asserted
-        // because the alternative is returning `null` up a chain typed
-        // `Promise<Invoice>`.
-        throw new Error(`invoice #${seq} not readable after commit`)
-      }
-      return fresh
-    })
+
+  return { id: inserted.id, seq, number }
 }
 
 // ---------------------------------------------------------------------------
@@ -603,6 +641,9 @@ const NEVER_EDITABLE: Record<string, string> = {
   pdf_sha256: 'the fingerprint of the PDF that was attached; it is evidence, not a field',
   issuer: 'the company as it was when the invoice was issued; it is copied, never typed',
   derived: 'it is computed on every read and never stored',
+  recurrence: 'an invoice joins a series by being generated from it, or by being its template — bk billing recurrence create',
+  recurrence_id: 'an invoice joins a series by being generated from it, or by being its template — bk billing recurrence create',
+  occurrence_period: 'set when an occurrence is generated, and permanent',
   totals: 'they are computed from the lines on every read and never stored',
 }
 

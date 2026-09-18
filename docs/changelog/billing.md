@@ -5,6 +5,49 @@ This file is an **agent** surface. It is merged into `bk changelog` and
 entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
+## 2026-09-18 — Finite recurring series: `bk billing recurrence`
+
+### New
+
+- **`bk billing recurrence`** — a series bills the same invoice on a schedule, a
+  fixed number of times, then stops. Seven commands: `list [--due] [--company]
+  [--status]`, `show`, `create`, `edit`, `pause`, `resume`, `generate`.
+  Routes: `GET/POST /api/workspaces/{ws}/recurrences`,
+  `GET/PATCH …/recurrences/{seq}`, `POST …/recurrences/{seq}/generate`.
+- **Nothing schedules anything.** `recurrence list --due` names the active series
+  whose next date has arrived (today in Zurich) and the period to generate; an
+  agent calls `generate` with that period. An occurrence is an ordinary DRAFT
+  with the next number in its company's sequence. Generating is not sending.
+- **`create` requires `occurrences_total`** (`--occurrences`); there is no
+  default and no open-ended series. A template issued in the start date's
+  period counts as the first occurrence.
+- **`generate` requires `period`** and never infers it. Refusals an agent should
+  handle: `409 already_generated` (the period has a live invoice — the message
+  and suggestion name it; retrying is safe), `409 period_not_expected` (the
+  suggestion is the command with the right period), `409 series_paused`,
+  `409 series_completed`, `409 no_template`, `400 invalid_period`. It honours
+  `Idempotency-Key`: the same key and body return the same invoice.
+- **A voided occurrence frees its period**: generating it again is a replacement
+  (`"replacement": true`), and the counter does not move.
+- Every invoice gains **`recurrence`** (the series' #number, or null) and
+  **`occurrence_period`**. `bk billing invoice show` prints the series.
+- `GET …/audit?subject=recurrence:<seq>` (`bk billing audit list --subject
+  recurrence:3`): a series' own history — counter, pauses, replacements.
+- `bk meta` serves `recurrence_frequencies`, `recurrence_statuses` and
+  `limits.recurrence`.
+- `bk guide billing/recurrence`.
+
+### Not public
+
+The recurrence routes are **not** in `integration.routes`: the plan's public
+surface does not include them, and adding one is a decision for the
+integration surface, not a side effect of shipping the feature.
+
+### Not breaking
+
+Additions only. `recurrence` and `occurrence_period` are refused by
+`PATCH …/invoices/{ref}` as `field_not_editable`.
+
 ## 2026-09-18 — The invoice PDF and its QR payload are served; `send` is on; a sent invoice keeps its own copy of its issuer
 
 ### New
