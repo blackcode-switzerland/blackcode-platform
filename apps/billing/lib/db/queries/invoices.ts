@@ -35,7 +35,20 @@ import { appendAudit, appendFieldChanges } from './audit'
 import { computeTotals, computeTotalsRappen, type TotalsLine } from '@/lib/derive/totals'
 import { formatRappen, parseMinor } from '@/lib/derive/money'
 import { renderNumber } from '@/lib/derive/number'
-import { ReferenceProblem, referenceBodyFor, referenceBodyProblem } from '@/lib/qr/reference'
+import {
+  ReferenceProblem,
+  formatIban,
+  formatQRR,
+  formatSCOR,
+  invoiceAccount,
+  invoiceReference,
+  referenceBodyFor,
+  referenceBodyProblem,
+} from '@/lib/qr/reference'
+import { qrBillFieldsFor } from '@/lib/qr/payload'
+import { findDisallowed } from '@/lib/qr/charset'
+import { hasPaymentPart, validateQrBill } from '@/lib/qr/validate'
+import { ISSUER_FIELDS, issuerOf, type IssuerSource } from '@/lib/issuer'
 import { yearOf } from '@/lib/derive/format'
 import { LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, PAYMENT_MESSAGE_MAX, METADATA_LIMITS, validateMetadata } from '@/lib/limits'
 import { DOCUMENT_LANGUAGES, REFERENCE_TYPES } from '@/lib/vocabularies'
@@ -45,8 +58,10 @@ import type {
   CreateInvoiceLineBody,
   DocumentLanguage,
   Invoice,
+  InvoiceDerived,
   InvoiceLine,
   InvoiceStatus,
+  IssuerSnapshot,
   ReferenceType,
   RoundingPolicy,
   StructuredAddress,
@@ -107,12 +122,22 @@ export interface WriteCtx {
   via: ActorVia
 }
 
+/**
+ * The joined company's columns, under a `co_` prefix: the LIVE issuer, which
+ * `issuerOf` uses only when the invoice carries no snapshot (a draft). Built from
+ * `ISSUER_FIELDS`, so a field added there is selected here without a second edit.
+ */
+const LIVE_ISSUER_COLS = Object.fromEntries(
+  ISSUER_FIELDS.map((k) => [`co_${k}`, billingCompany[k]])
+) as { [K in (typeof ISSUER_FIELDS)[number] as `co_${K}`]: (typeof billingCompany)[K] }
+
 const INV_COLS = {
   id: billingInvoice.id,
   seq: billingInvoice.seq,
   company_id: billingInvoice.company_id,
   company_slug: billingCompany.slug,
-  company_rounding: billingCompany.rounding,
+  issuer: billingInvoice.issuer,
+  ...LIVE_ISSUER_COLS,
   seq_no: billingInvoice.seq_no,
   number: billingInvoice.number,
   status: billingInvoice.status,
@@ -135,22 +160,74 @@ const INV_COLS = {
   metadata: billingInvoice.metadata,
 } as const
 
+/** The issuer this row renders from: its snapshot, or — for a draft — the joined company. */
+function issuerOfRow(r: Record<string, unknown>, liveOverride?: IssuerSource): IssuerSource {
+  const live =
+    liveOverride ??
+    (Object.fromEntries(ISSUER_FIELDS.map((k) => [k, r[`co_${k}`] ?? null])) as unknown as IssuerSource)
+  return issuerOf((r.issuer as IssuerSnapshot | null) ?? null, live)
+}
+
+/**
+ * What the payment part says, from the same functions the PDF calls.
+ *
+ * `problems` is `validateQrBill` — the check `…/pdf`, `…/qr` and `send` refuse
+ * on — so `invoice show` can say why a bill would be refused before anybody
+ * tries to send it.
+ */
+export function deriveInvoice(invoice: Omit<Invoice, 'derived'>, issuer: IssuerSource): InvoiceDerived {
+  let reference: string | null = null
+  try {
+    reference = invoiceReference(invoice.ref_type, invoice.ref_body)
+  } catch (e) {
+    if (!(e instanceof ReferenceProblem)) throw e
+  }
+  const account = invoiceAccount(invoice.ref_type, issuer)
+  const withSlip = hasPaymentPart(invoice.currency) && invoice.status !== 'void'
+  return {
+    reference,
+    reference_formatted: reference === null ? null : invoice.ref_type === 'QRR' ? formatQRR(reference) : formatSCOR(reference),
+    account: account ?? null,
+    account_formatted: account ? formatIban(account) : null,
+    creditor: {
+      name: issuer.legal_name,
+      street: issuer.street,
+      building: issuer.building,
+      postal_code: issuer.postal_code,
+      city: issuer.city,
+      country: issuer.country,
+    },
+    has_payment_part: withSlip,
+    problems: withSlip ? validateQrBill(qrBillFieldsFor(invoice as Invoice, issuer)) : [],
+  }
+}
+
 /**
  * Assemble the wire shape, including the DERIVED totals.
  *
- * `rounding` comes from the joined company, which is why every read joins it: the
- * policy is a company setting (D-B7) and the totals cannot be computed without
- * it. An invoice read without its company's policy would have to guess, and the
- * guess would be right most of the time — which is the worst kind of wrong.
+ * `rounding` comes from the ISSUER — the snapshot once there is one, the joined
+ * company while the invoice is a draft (lib/issuer.ts). The policy is a company
+ * setting (D-B7) and the totals cannot be computed without it; read from the
+ * live company, a sent invoice's total moved whenever somebody changed the
+ * setting, which is the half of I12 that migration 0011 closed.
  */
 function shape(r: Record<string, unknown>, lines: Record<string, unknown>[]): Invoice {
+  return shapeWithIssuer(r, lines).invoice
+}
+
+function shapeWithIssuer(
+  r: Record<string, unknown>,
+  lines: Record<string, unknown>[],
+  liveOverride?: IssuerSource
+): { invoice: Invoice; issuer: IssuerSource } {
+  const issuer = issuerOfRow(r, liveOverride)
   const totalsLines: TotalsLine[] = lines.map((l) => ({
     qty: String(l.qty),
     unit_price: String(l.unit_price),
     vat_rate: (l.vat_rate as string) ?? null,
   }))
   const pricesIncludeVat = Boolean(r.prices_include_vat)
-  const rounding = r.company_rounding as RoundingPolicy
+  const rounding = issuer.rounding as RoundingPolicy
   const rappen = computeTotalsRappen(totalsLines, pricesIncludeVat, rounding)
 
   const items: InvoiceLine[] = lines.map((l, i) => ({
@@ -163,7 +240,7 @@ function shape(r: Record<string, unknown>, lines: Record<string, unknown>[]): In
     line_total: formatRappen(rappen.line_totals[i]),
   }))
 
-  return {
+  const invoice: Omit<Invoice, 'derived'> = {
     seq: Number(r.seq),
     company: String(r.company_slug),
     number: String(r.number),
@@ -184,11 +261,13 @@ function shape(r: Record<string, unknown>, lines: Record<string, unknown>[]): In
     sent_at: r.sent_at ? new Date(r.sent_at as string | Date).toISOString() : null,
     sent_message_id: (r.sent_message_id as string) ?? null,
     pdf_sha256: (r.pdf_sha256 as string) ?? null,
+    issuer: (r.issuer as IssuerSnapshot | null) ?? null,
     items,
     totals: computeTotals(totalsLines, pricesIncludeVat, rounding),
     external_ref: (r.external_ref as string) ?? null,
     metadata: (r.metadata as Record<string, string>) ?? {},
   }
+  return { invoice: { ...invoice, derived: deriveInvoice(invoice, issuer) }, issuer }
 }
 
 const emptyAddress = (): StructuredAddress => ({
@@ -277,6 +356,29 @@ export async function getInvoice(
   if (!row) return null
   const lines = await linesOf([Number(row.id)], exec)
   return shape(row, lines.get(Number(row.id)) ?? [])
+}
+
+/**
+ * An invoice AND the issuer it renders from — what `…/pdf`, `…/qr` and `send`
+ * hand the renderer. One read, so the two cannot come from different moments.
+ *
+ * `asIssuedBy` is for the write that takes a draft OUT of draft: it has already
+ * read the company row once (to check it, and to snapshot it), and passing that
+ * row's snapshot here makes the totals, the PDF and the stored copy all come
+ * from that ONE read — instead of from this function's own join, a moment
+ * later, which a concurrent company edit could land between. It never overrides
+ * a snapshot the row already carries.
+ */
+export async function getInvoiceDocumentSource(
+  workspaceId: number,
+  ref: string,
+  exec: Exec = getDb(),
+  asIssuedBy?: IssuerSource
+): Promise<{ invoice: Invoice; issuer: IssuerSource } | null> {
+  const row = await getInvoiceRow(workspaceId, ref, exec)
+  if (!row) return null
+  const lines = await linesOf([Number(row.id)], exec)
+  return shapeWithIssuer(row, lines.get(Number(row.id)) ?? [], asIssuedBy)
 }
 
 export async function getInvoiceRow(
@@ -499,6 +601,9 @@ const NEVER_EDITABLE: Record<string, string> = {
   sent_at: 'set by sending the invoice, and permanent once set',
   sent_message_id: 'recorded from the email that carried the invoice; it is evidence, not a field',
   pdf_sha256: 'the fingerprint of the PDF that was attached; it is evidence, not a field',
+  issuer: 'the company as it was when the invoice was issued; it is copied, never typed',
+  derived: 'it is computed on every read and never stored',
+  totals: 'they are computed from the lines on every read and never stored',
 }
 
 export async function editInvoice(
@@ -878,6 +983,21 @@ export function assertLinesAgainstCompany(
 
 export function assertMessage(message: string | null | undefined): void {
   if (!message) return
+  // The character set, at the WRITE door and not only at send. Found 2026-09-18
+  // by the first `invoice pdf` over HTTP: every one of the mockup's eleven
+  // payment messages carries an em dash (U+2014), which a Swiss QR Code cannot
+  // encode — so each was a draft that saved cleanly and could never be sent.
+  // A refusal at the moment of typing costs one keystroke; at send it costs a
+  // failed delivery, and on an invoice marked sent it cannot be un-sent.
+  const bad = findDisallowed(message)
+  if (bad) {
+    const shown = bad.codepoint === 'U+000A' || bad.codepoint === 'U+000D' ? 'a line break' : JSON.stringify(bad.character)
+    throw new InvoiceRefused(
+      'message_character_not_allowed',
+      `the payment message contains ${shown} (${bad.codepoint}) at character ${bad.position}, which a Swiss QR Code cannot carry`,
+      'replace it (an em dash becomes "-"); it is not substituted for you, because a message that was silently altered is a message nobody approved'
+    )
+  }
   if (message.length > PAYMENT_MESSAGE_MAX) {
     throw new InvoiceRefused(
       'message_too_long',

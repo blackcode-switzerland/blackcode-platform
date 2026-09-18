@@ -73,9 +73,7 @@ import { assertLocalDatabase } from '../lib/db/seed-guard'
 import { MOCKUP, mockupHistoryRows } from '../lib/mockup'
 import { importHistory } from '../lib/db/queries/history'
 import { getInvoice } from '../lib/db/queries/invoices'
-import { getCompany } from '../lib/db/queries/companies'
-import { formatIban, formatQRR, formatSCOR, invoiceAccount, invoiceReference } from '../lib/qr/reference'
-import type { ReferenceType } from '../types'
+import { issuerSnapshot } from '../lib/issuer'
 
 // Module scope, so every helper shares one client. `getDb()` is lazy, so this
 // opens nothing at import time.
@@ -264,10 +262,20 @@ async function insertInvoice(workspaceId: number, owner: { id: number; email: st
   // refuses a sent invoice with no moment it was sent. No `sent_message_id` and
   // no `pdf_sha256` — seeded bills were never emailed by this app, and a null
   // there is how the record says so, the shape `invoice mark-sent` produces.
+  //
+  // `issuer` in the same statement too: 0011's `invoice_issuer_iff_issued`
+  // refuses an invoice that left draft without its copy of the company
+  // (invariant I12). Taken from the company row as seeded, stamped with the
+  // moment the seed says the bill went out — what `mark-sent` would have stored.
+  const leftDraftAt = new Date(`${inv.issue_date}T09:00:00.000Z`)
+  const issuerNow = async () => {
+    const [company] = await db.select().from(billingCompany).where(eq(billingCompany.id, inv.companyId)).limit(1)
+    return issuerSnapshot(company, leftDraftAt)
+  }
   if (inv.status !== 'draft') {
     await db
       .update(billingInvoice)
-      .set({ status: 'sent', sent_at: new Date(`${inv.issue_date}T09:00:00.000Z`) })
+      .set({ status: 'sent', sent_at: leftDraftAt, issuer: await issuerNow() })
       .where(eq(billingInvoice.id, row.id))
   }
   if (inv.status === 'paid') {
@@ -377,7 +385,7 @@ async function seedMockup(owner: { id: number; email: string }): Promise<{ works
       client: inv.client,
       vat_rate: rate,
       prices_include_vat: false,
-      message: inv.message ?? null,
+      message: qrSafeMessage(inv.message ?? null),
       void: inv.void ? { ts: inv.void.ts, reason: inv.void.reason } : undefined,
       // The mockup has ONE rate per invoice; this app has one per line (D-B7).
       // Every line takes the invoice's rate, which is what the mockup means.
@@ -419,6 +427,26 @@ async function seedMockup(owner: { id: number; email: string }): Promise<{ works
  * This is the half of parity `lib/derive/parity.test.ts` cannot prove: that
  * the DATA that went in reproduces the numbers, not only that the maths would.
  */
+/**
+ * THE ONE PLACE THE SEED DEPARTS FROM THE MOCKUP'S TEXT, AND WHY.
+ *
+ * Every payment message in the mockup carries an em dash — "Facture
+ * BC-2026-0031 — pilote terrain" — and U+2014 is outside the character set a
+ * Swiss QR Code may carry (§4.1.1). The mockup never noticed because its QR is a
+ * deliberate fake that encodes nothing. Seeded verbatim, all eleven bills were
+ * refused by `invoice pdf`, `invoice qr` and `invoice send` — found 2026-09-18
+ * by the first PDF fetched over HTTP.
+ *
+ * The APP does not substitute (the write door refuses the character and says
+ * so); the SEED may, because it is the author of this data. Only U+2014, only in
+ * the message, and `assertParity` below fails the seed if any seeded bill still
+ * is not a valid QR-bill. Line descriptions keep their dashes: they are printed,
+ * never encoded.
+ */
+function qrSafeMessage(message: string | null): string | null {
+  return message === null ? null : message.replace(/\u2014/g, '-')
+}
+
 async function assertParity(workspaceId: number): Promise<number> {
   const digits = (s: string) => s.replace(/\s/g, '')
   const invoices = MOCKUP.invoices.filter((i) => i.workspace_id === 1).sort((a, b) => a.id - b.id)
@@ -437,22 +465,19 @@ async function assertParity(workspaceId: number): Promise<number> {
     check('subtotal', inv.totals.subtotal, digits(a.subtotal))
     check('VAT', inv.totals.vat_total, digits(a.vat))
     check('total', inv.totals.total, digits(a.total))
-    const ref = invoiceReference(inv.ref_type as ReferenceType, inv.ref_body)
-    check('reference', ref, a.reference)
-    check(
-      'printed reference',
-      ref === null ? null : inv.ref_type === 'QRR' ? formatQRR(ref) : formatSCOR(ref),
-      a.reference_formatted
-    )
-    // The SEEDED company, read back — not the mockup's record, which would be
-    // comparing the mockup with itself.
-    const company = await getCompany(workspaceId, inv.company)
-    if (!company) {
-      problems.push(`${m.number}: its company ${inv.company} did not read back`)
-      continue
+    // From the app's OWN `derived` block — what `invoice show`, the screens and
+    // the PDF all read — not re-derived here, which would be the seed agreeing
+    // with itself. `derived.account` comes from the invoice's issuer: the copy
+    // taken at issue for a sent bill, the seeded company for a draft.
+    check('reference', inv.derived.reference, a.reference)
+    check('printed reference', inv.derived.reference_formatted, a.reference_formatted)
+    check('account', inv.derived.account_formatted, a.account_formatted === '—' ? null : a.account_formatted)
+    // …and every bill that carries a payment part is one the standard accepts,
+    // so `invoice pdf` serves the whole seeded workspace.
+    for (const p of inv.derived.problems) problems.push(`${m.number} is not a valid QR-bill: [${p.code}] ${p.message}`)
+    if ((inv.status === 'draft') !== (inv.issuer === null)) {
+      problems.push(`${m.number} is ${inv.status} and its issuer copy is ${inv.issuer === null ? 'missing' : 'present'}`)
     }
-    const account = invoiceAccount(inv.ref_type as ReferenceType, company)
-    check('account', account === null ? null : formatIban(account), a.account_formatted === '—' ? null : a.account_formatted)
   }
   if (problems.length > 0) {
     throw new Error(`the seeded "blackcode" workspace does NOT reproduce the mockup:\n  ${problems.join('\n  ')}`)

@@ -280,6 +280,7 @@ of these four, so say that instead of offering it.
 Built before phase 2, so the order in [README.md](README.md) was inverted on
 purpose. What differs from the text above, and why:
 
+- **(Closed 2026-09-18, ticket #86: the seam validates and renders, and `send` sends. What follows is what was true when this phase was built.)**
 - **`send` refuses with 501 `document_renderer_not_built` until phase 2.** The
   PDF render and the payload validation arrive through one seam,
   `apps/billing/lib/delivery/document.ts` → `prepareInvoiceDocument`, which throws

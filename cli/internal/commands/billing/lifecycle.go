@@ -93,15 +93,20 @@ Use --body-file FILE (or --body -) for a multi-line body: a newline typed into
 a flag value is where shells and PowerShell disagree.
 
 WHAT IS RECORDED: the status becomes sent, with the moment, the email's
-message id, and the sha256 of the exact PDF bytes attached. One audit entry
-names the recipients and the message id.
+message id, the sha256 of the exact PDF bytes attached, and a copy of the issuing
+company as it was — name, address, accounts, rounding policy — which the invoice
+renders from forever after. One audit entry names the recipients and the
+message id. "invoice pdf" later tells you whether what it fetched is byte for
+byte what was mailed.
 
 WHAT CAN GO WRONG, and what each leaves behind:
 
   email_not_configured   this deployment cannot send email. Nothing happened.
-  document_renderer_not_built
-                         this build cannot produce the PDF yet. Nothing happened;
-                         deliver it yourself and run "invoice mark-sent".
+  payment_part_invalid   the record would make a payment part a bank rejects
+                         (an incomplete address, no QR-IBAN for a QRR bill, a
+                         character the standard does not carry). Nothing
+                         happened. Every problem is named; "invoice show" lists
+                         them, and "invoice pdf" is the dry run for this.
   email_delivery_failed  the mail was refused. Still a draft; fix and resend.
   delivered_not_recorded the mail WENT and recording it failed. Do NOT send
                          again; run "invoice mark-sent".
@@ -170,8 +175,13 @@ For a bill delivered on paper, from somebody's own mailbox, or by hand. No email
 is sent and no PDF fingerprint is recorded — and the missing message id is how
 the record says, permanently, that this app did not deliver it.
 
-The same readiness checks as "invoice send" apply: it needs lines, a client, a
-positive total and an account to be paid into.`,
+The same checks as "invoice send" apply, all of them: it needs lines, a client,
+a positive total, an account to be paid into, AND a record that makes a valid
+QR-bill (payment_part_invalid otherwise). Once an invoice is sent its document is
+frozen, so one that could not render at that moment could never be served.
+
+From that moment the invoice carries its own copy of the issuing company, and
+later edits to the company do not reach it.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {

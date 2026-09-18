@@ -47,9 +47,15 @@ AN INVOICE IS A NUMBERED LEGAL DOCUMENT, and three properties follow from that:
 "invoice show BC-2026-0007" reach the same document.
 
 TOTALS ARE NEVER STORED. They are derived from the lines, the price mode and the
-company's rounding policy every time an invoice is read — so a company's
-rounding setting changes every total it has ever produced, which is what makes
-that setting a deliberate act.
+issuer's rounding policy every time an invoice is read.
+
+THE ISSUER IS COPIED AT ISSUE. A draft reads its company as it is now; from the
+moment an invoice leaves draft it carries its own copy of the company — name,
+address, accounts, rounding policy — and renders from that forever. Editing a
+company changes its drafts and its future bills, never one that already went out.
+
+  bk billing invoice pdf <ref>      the document, with its QR-bill payment part
+  bk billing invoice qr <ref>       the payload that QR code carries
 
 A line's VAT rate has three states and they are not two. Unset means the line
 carries NO VAT (an exempt act, or a company that is not registered). "0" is a
@@ -68,6 +74,7 @@ Run "bk guide billing/sending-and-status" for what each one records.`,
 	cmd.AddCommand(
 		newInvoiceListCmd(), newInvoiceShowCmd(), newInvoiceCreateCmd(), newInvoiceEditCmd(), newInvoiceLineCmd(),
 		newInvoiceSendCmd(), newInvoiceMarkSentCmd(), newInvoicePaidCmd(), newInvoiceVoidCmd(),
+		newInvoicePdfCmd(), newInvoiceQrCmd(),
 	)
 	return cmd
 }
@@ -184,7 +191,24 @@ func renderInvoice(w io.Writer, inv *client.BillingInvoice) error {
 		fmt.Fprintf(tw, "Paid:\t%s\n", inv.PaidDate)
 	}
 	fmt.Fprintf(tw, "Currency:\t%s\tdocument language %s\n", inv.Currency, inv.Language)
-	fmt.Fprintf(tw, "Reference:\t%s\t%s\n", inv.RefType, orDash(inv.RefBody))
+	// The FULL reference, check digits included, as it prints — not the stored
+	// body, which is what this line showed before the server derived one.
+	fmt.Fprintf(tw, "Reference:\t%s\t%s\n", inv.RefType, orDash(deref(inv.Derived.ReferenceFormatted)))
+	if inv.Derived.HasPaymentPart {
+		fmt.Fprintf(tw, "Pay to:\t%s\t%s\n", orDash(deref(inv.Derived.AccountFormatted)), inv.Derived.Creditor.Name)
+	} else if inv.Status == "void" {
+		fmt.Fprintf(tw, "Pay to:\t—\tvoid: its PDF carries no payment part\n")
+	} else {
+		fmt.Fprintf(tw, "Pay to:\t—\tno payment part: the QR-bill does not carry %s\n", inv.Currency)
+	}
+	switch {
+	case inv.Issuer == nil:
+		fmt.Fprintf(tw, "Issuer:\tlive\ta draft reads company %s as it is now; the copy is taken when it is issued\n", inv.Company)
+	case inv.Issuer.Backfilled:
+		fmt.Fprintf(tw, "Issuer:\tcopied %s\tBACKFILLED by a migration — the company as it was then, not at issue\n", inv.Issuer.CapturedAt[:10])
+	default:
+		fmt.Fprintf(tw, "Issuer:\tcopied %s\t%s — later edits to the company do not reach this invoice\n", inv.Issuer.CapturedAt[:10], inv.Issuer.LegalName)
+	}
 	if inv.Message != "" {
 		fmt.Fprintf(tw, "Message:\t%s\n", inv.Message)
 	}
@@ -238,7 +262,20 @@ func renderInvoice(w io.Writer, inv *client.BillingInvoice) error {
 	if inv.PricesIncludeVat {
 		fmt.Fprintln(w, "\n(prices include VAT: the total is the sum of the lines)")
 	}
+	if n := len(inv.Derived.Problems); n > 0 {
+		fmt.Fprintf(w, "\nNOT A VALID QR-BILL YET — %d problem(s); pdf, qr and send refuse until they are fixed:\n", n)
+		for _, p := range inv.Derived.Problems {
+			fmt.Fprintf(w, "  [%s] %s\n      fix: %s\n", p.Code, p.Message, p.Suggestion)
+		}
+	}
 	return nil
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 func newInvoiceCreateCmd() *cobra.Command {
@@ -340,7 +377,18 @@ explains almost every disagreement between two billing systems.`,
 					nextStep(w, `bk billing invoice edit %d --client-name "…"`, inv.Number)
 					return nil
 				}
-				nextStep(w, "bk billing invoice send %d --to <client email>", inv.Number)
+				// The third half-finished state, and the one the server now tells
+				// us about: a draft that saved and cannot be sent. "send it" would
+				// be a suggestion that is guaranteed to be refused.
+				if n := len(inv.Derived.Problems); n > 0 {
+					fmt.Fprintf(w, "it cannot be sent yet: %s\n", inv.Derived.Problems[0].Message)
+					if n > 1 {
+						fmt.Fprintf(w, "(and %d more)\n", n-1)
+					}
+					nextStep(w, "bk billing invoice show %d   lists each problem with its fix", inv.Number)
+					return nil
+				}
+				nextStep(w, "bk billing invoice pdf %d   then: bk billing invoice send %d --to <client email>", inv.Number, inv.Number)
 				return nil
 			})
 		},

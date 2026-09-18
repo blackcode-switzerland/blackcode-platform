@@ -360,6 +360,147 @@ against the Style Guide grid sheet stays a manual step (`qr-bill.md` §8).
   same invoice, accents (`à é è`) intact. This is a machine scan of a rendered
   page, not a banking app — the two-app scan is still owed.
 
+## Phase 2, ticket #86: the routes, the seam, and the issuer copy (2026-09-18)
+
+Two public routes, two commands, one migration, and the function `send` had been
+waiting on.
+
+| Route | Command | Answers |
+|---|---|---|
+| `GET …/invoices/{ref}/pdf` | `bk billing invoice pdf <ref> [--out] [--force]` | `application/pdf`, plus `X-Billing-Pdf-Sha256`, `X-Billing-Sent-Pdf-Sha256` (only when `send` delivered it) and `X-Billing-Invoice-Status` |
+| `GET …/invoices/{ref}/qr` | `bk billing invoice qr <ref>` | `text/plain`: the payload, LF, no trailing newline |
+| `GET …/invoices/{ref}` | `bk billing invoice show <ref>` | gains `issuer` and `derived` |
+
+Both new routes are in `PUBLIC_ROUTES`. Neither writes an audit row.
+
+### One seam, three callers
+
+`lib/delivery/document.ts` — `prepareInvoiceDocument` (validate, then render) and
+`prepareQrPayload` (validate, then serialize). `send`, `mark-sent`, `…/pdf` and
+`…/qr` all go through it, so they refuse for the same reasons with the same
+words: **422 `payment_part_invalid`**, one stable code, every problem in the
+message. The individual codes are structured in `derived.problems` on the
+invoice, which is how `invoice show` lists them without rendering anything.
+
+`mark-sent` validates too, and that is a behaviour change. Once an invoice is
+sent its document half is frozen; one that could not render at that moment could
+never be served afterwards, and the only exit would be a void.
+
+`…/qr` answers **409 `no_payment_part`** for a currency the QR-bill does not
+carry and for a void invoice, rather than an empty 200: pasted into a validator,
+an empty string reads as "the app produced nothing".
+
+### A void invoice loses its payment part
+
+`renderInvoiceDocument` draws no slip for a void invoice and stamps the title
+line (`ANNULÉE` / `STORNIERT` / `ANNULLATA` / `VOID`, in `lib/pdf/copy.ts`). A
+cancelled bill with a scannable code is the one PDF this app could serve that
+moves money by mistake. A void invoice therefore always renders, even if its
+issuer could no longer pass validation: nothing about the account is drawn.
+
+### Invariant I12, the issuer half: migration 0011
+
+`lib/invariants.test.ts` carried a case named "KNOWN GAP (#86)" that asserted a
+company IBAN edit moved a SENT bill's account, written to go red the day this
+landed. It did, and is now the invariant.
+
+`billing.invoice.issuer` is a jsonb copy of the company, **NULL exactly while
+the invoice is a draft**:
+
+| Guard | What it holds |
+|---|---|
+| `invoice_issuer_iff_issued` CHECK | `(status = 'draft') = (issuer IS NULL)` — a write path cannot forget the copy, and a draft cannot carry a stale one |
+| `invoice_issuer_shape` CHECK | an object with every key of `ISSUER_FIELDS` plus `captured_at` |
+| G2 (`invoice_document_frozen`) | `issuer` is in the frozen list: nobody revises it, the owner included |
+| `NEVER_EDITABLE` in `invoices.ts` | the PATCH refuses `issuer` and `derived` by name |
+
+**The app writes the copy, not a trigger.** A trigger would read
+`billing.company` a second time, after the render; a company edit committing
+between the two would store a snapshot that is not what the client was mailed.
+`draftToIssue` in `lifecycle.ts` reads the company row ONCE, and the readiness
+checks, the totals (through `rounding`), the PDF and the stored copy all come
+from that read — `getInvoiceDocumentSource(…, asIssuedBy)` shapes the invoice by
+the snapshot instead of by its own join.
+
+`rounding` is in the copy. It prints nothing and decides every total (D-B7), so
+read from the live company a sent invoice's total moved with the setting. The
+test for a future company column is in `lib/issuer.ts`: *would an already-sent
+PDF look or add up differently if it changed?*
+
+Every reader goes through `issuerOf(snapshot, live)`. `lib/issuer.test.ts` holds
+`ISSUER_FIELDS`, 0011's backfill and 0011's shape CHECK to one another, and
+fails if anything under `lib/pdf`, `lib/delivery`, `lib/qr` or the two routes
+reaches for `billing.company` itself.
+
+The backfill marks its rows `"backfilled": true`: the company as it was on
+migration day, not at issue, because that moment was never recorded. b/billing
+is undeployed, so this touches development databases only. `invoice show` says
+BACKFILLED on those rows.
+
+### The fonts, and how to know Vercel will have them
+
+`lib/pdf/fonts.ts` reads two TTFs by a `process.cwd()` path the tracer cannot
+follow. `next.config.js` includes them for `/api/workspaces/**` — every
+workspace route, because the renderer sits behind `lifecycle.ts`, which a dozen
+routes import, and a per-route list is a list somebody forgets.
+`lib/pdf/font-tracing.test.ts` walks each route's imports transitively and
+matches the include keys with Next's own bundled `picomatch`.
+
+Read off a real `next build` on 2026-09-18: `route.js.nft.json` names both TTFs
+for `…/pdf`, `…/send`, `…/mark-sent` and `…/companies`, and **neither** for
+`/api/meta` — so the instrument can see an absence.
+
+### What the first HTTP call found
+
+**Every one of the mockup's eleven payment messages carries an em dash**
+(U+2014), which a Swiss QR Code cannot encode (§4.1.1). The mockup never noticed
+because its QR is a deliberate fake. Seeded verbatim, `invoice pdf` refused the
+whole `blackcode` workspace. Three changes:
+
+- the WRITE door refuses the character (`message_character_not_allowed`), so a
+  draft that saves is a draft that can be sent. The app still never substitutes;
+- the seed replaces U+2014 with `-` in messages only, says why in
+  `qrSafeMessage`, and its read-back now fails if any seeded bill has a
+  `derived.problems` entry or an issuer copy on the wrong side of draft;
+- `character_not_allowed`'s suggestion named the creditor-name reason for a
+  message field. It is per field now.
+
+**To raise with Andrea:** the mockup's message convention (`Facture N — objet`)
+cannot go on a QR-bill as typed.
+
+Also: the first `next dev` of the session answered an HTML 404 for every
+`[ref]/*` sub-route, including `…/paid`, which predates this ticket. A
+`next build` and a restart cleared it and it did not recur; the cause was not
+established (a stale `.next/dev` is the suspicion, not a finding).
+
+### Verified on 2026-09-18, working tree on `e6bce0a`, over HTTP with the built `bk`
+
+| Did | Saw |
+|---|---|
+| `invoice pdf PX-0001` (praxis-demo) | 29 569 bytes, `PDF document, version 1.7`; read as a page: issuer block, lines, `dont TVA`, payment part with QR, both IBAN blocks |
+| the same, twice, `--out -` piped to `shasum` | one hash, equal to the one the command printed and the server's header |
+| the same again, default path | exit 2, "already exists and may be the copy that was sent" |
+| `invoice qr 1` through `od -c` | 31 lines, LF, ends `E P D` with no newline |
+| `invoice pdf 7` (blackcode, before the seed fix) | exit 6, 422 `payment_part_invalid`, naming U+2014 at character 22 |
+| `invoice qr 3` (void) | exit 2, 409 `no_payment_part` |
+| `invoice pdf 3` (void) | renders; `ANNULÉE` beside the title, no payment part |
+| `invoice show 1` | full reference, `Pay to` account and creditor, `Issuer: copied … BACKFILLED`, the problem list under the totals |
+
+`lib/delivery/send.integration.test.ts` does what HTTP cannot without a Resend
+key: a transport that keeps what it is handed. The sha256 of the mailed bytes
+equals `pdf_sha256`, equals a re-render from the database — and still does after
+the company's IBAN, legal name, rounding and footer are edited. It differs once
+the payment message is edited, and matches again when the edit is reverted.
+
+### Not done
+
+- **The manual tiers of `qr-bill.md` §8**: four bills through SIX's validation
+  portal, two banking apps, the grid-sheet print. `invoice qr` is what makes the
+  first one a paste. Needs a person.
+- **A real email to a real inbox** (needs a Resend key).
+- The ticket's `derived.totals`: not added. `totals` is already on the invoice,
+  and a second copy in one response is two numbers that must agree.
+
 ## Migration 0009: an audit author can be hard-deleted (2026-09-18)
 
 Found while designing phase 5's history table, which has the same shape. The
@@ -390,16 +531,14 @@ Built on 2026-09-17, **before phase 2**. Four write paths in
 and one change to a shared package (`packages/platform-email`, decision D-B3 —
 the reasoning is in `docs/changelog/platform.md`).
 
-### `send` is built and refuses, and the seam is where phase 2 lands
+### The seam `send` goes through (it refused until 2026-09-18)
 
-`send` needs the QR-bill validation and the PDF, and both are phase 2. Rather than
-mail a stand-in document or pass a validator that checks nothing,
-`lib/delivery/document.ts` exports ONE function, `prepareInvoiceDocument`, that
-phase 2 fills with validate-then-render. Today it throws **501
-`document_renderer_not_built`**, after the route's own checks and before anything
-is rendered, mailed or written, with `mark-sent` as the suggestion.
-`lib/delivery/document.test.ts` asserts the refusal and is the test phase 2
-rewrites.
+`send` needs the QR-bill validation and the PDF, and both are phase 2, which was
+built second. Rather than mail a stand-in document or pass a validator that
+checks nothing, `lib/delivery/document.ts` exported ONE function,
+`prepareInvoiceDocument`, that threw **501 `document_renderer_not_built`** until
+phase 2 filled it. Ticket #86 did, on 2026-09-18: it validates and then renders,
+and that code is gone from every path. See "Phase 2, ticket #86" below.
 
 ### The order of a send
 
@@ -820,12 +959,27 @@ Phase 3 added these, on 2026-09-17:
 | `guide_test.go` | (not injected) | caught a REAL restatement in the new topic: `sent, paid or voided` is the audit-action vocabulary |
 | `invoice_sent_requires_sent_at` | (not injected) | refused phase 1's seed walk, `SET status = 'sent'` — confirmed by running the old seed |
 
+Ticket #86 added these, on 2026-09-18:
+
+| Guard | The mutation | What it said |
+|---|---|---|
+| `invoice_issuer_iff_issued` (catalog) | the constraint dropped from the local database | I12's "the database holds it": the forgetful `SET status = 'sent'` succeeded. Left a sent row with no copy, repaired before the constraint went back; `pg_constraint` re-read |
+| G2's `issuer` line (catalog) | the function replaced without it | the same case: expected `P0001`, got no error. Restored from `pg_get_functiondef`, `pg_proc` re-read |
+| `lib/delivery/send.integration.test.ts` | `issuer` dropped from send's UPDATE; the read path ignoring the stored copy; mark-sent's validation removed; the write door's character check off | 23514 from the database on every send; "still is after the company is edited" (and I12 with it); the mark-sent case; the write-door case |
+| `lib/invariants.test.ts` I12 | a void from draft taking no copy | three cases: every void-from-draft in the file is refused by the CHECK |
+| `lib/delivery/document.test.ts` | the seam's validation removed; then the renderer's too; the void checks; CRLF in the seam | the 422 case (the renderer still threw, as a bare error with no code); plus `pdf.test.ts`' blank-account case; each void case; "character for character" |
+| `lib/issuer.test.ts` | `rounding` out of `ISSUER_FIELDS`; `footer_en` out of the CHECK; `billingCompany` imported by the renderer; the same in a comment; the scan pointed at `lib/email` | three cases; one; one; **green, correctly**; "found files to scan" |
+| `lib/pdf/font-tracing.test.ts` | the include key narrowed to the PDF route; the glob changed to `*.otf`; the target file renamed | named the other rendering routes; the glob case; the vacuous-pass case |
+| `lib/db/queries/frozen-fields.test.ts` | the `issuer` line removed from 0011 | "the trigger freezes the delivery evidence" |
+| the seed's read-back | `qrSafeMessage` made a no-op | refused, naming each bill and U+2014 |
+| `raw_response_test.go` (new) | the raw branch moved above the error handling; the body trimmed | a JSON 422 came back as content; the hostile bytes differed |
+| `guide_test.go` | the three reference types restated in the new topic | named `REFERENCE_TYPES`, line 119 |
+
 ## Still owed at the end of phase 3
 
-- **Phase 2**, which turns `send` on: `prepareInvoiceDocument` must validate and
-  render, and `document.test.ts` flips with it.
+- ~~Phase 2, which turns `send` on~~ — done 2026-09-18, ticket #86.
 - **A real email to a real inbox**, with the attachment's sha256 compared to
-  `pdf_sha256`. Needs phase 2 and a Resend key; it is the headline done-when of
+  `pdf_sha256`. Needs a Resend key; it is the headline done-when of
   `docs/billing-app-plan/phase-3-lifecycle-and-delivery.md` and it is not done.
 - **The 503 over HTTP in production mode.** Asserted by `send-route.test.ts` on
   the response; not run against `next start` with `NODE_ENV=production`.

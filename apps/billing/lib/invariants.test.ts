@@ -15,17 +15,22 @@
 // the rest runs as `billing_app` (TEST_DATABASE_URL) and skips LOUDLY without
 // one, naming itself.
 //
-// ── TWO INVARIANTS ARE NOT WHOLE YET, AND THEIR TESTS SAY SO ───────────────
+// ── ONE INVARIANT IS NOT WHOLE YET, AND ITS TEST SAYS SO ───────────────────
 //   I9   recurrence — phase 4 is not built. The case asserts the table is ABSENT,
 //        so it fails the day phase 4 adds it and has to be replaced by the
 //        real check rather than forgotten.
-//   I12  the document half is frozen at send (G2), but the ISSUER is not: the
-//        invoice carries no copy of its company's legal name, address or IBAN,
-//        so editing the company changes what a sent bill settles on. The KNOWN
-//        GAP case asserts that behaviour, and fails the day #86 snapshots the
-//        issuer — which is when it must be flipped into the invariant.
+//
+//   I12 was the second until 2026-09-18: its case read "KNOWN GAP (#86)" and
+//   asserted that a company IBAN edit moved a SENT bill's account. Migration
+//   0011 gave the invoice its own copy of the issuer, that case went red as it
+//   was written to, and it is now the invariant.
 //
 // WATCHED FAILING, 2026-09-18 — each restored; recorded in apps/billing/docs/backend.md
+//
+// I12's two database guards were each removed from the LOCAL CATALOG (not from a
+// file), watched red, restored and re-read from pg_constraint / pg_proc:
+//   - `invoice_issuer_iff_issued` dropped            → "the database holds it" red (the forgetful UPDATE succeeded)
+//   - the `NEW.issuer` line removed from G2's function → the same case red: expected P0001, got no error
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -312,19 +317,73 @@ run('billing invariants (integration)', () => {
       expect(ok.message).toBe('still open')
     })
 
-    it('KNOWN GAP (#86): the issuer is not frozen — a company IBAN edit changes what a SENT bill settles on', async () => {
-      // This asserts the GAP, deliberately. The day #86 snapshots the issuer at
-      // send, it fails: flip it into the invariant then, don't delete it.
-      const { invoiceAccount } = await import('@/lib/qr/reference')
-      const a = await draft()
+    it('the ISSUER is frozen too: a company edit changes the next bill, and never one already sent', async () => {
+      // Until 2026-09-18 this case read "KNOWN GAP (#86)" and asserted the
+      // opposite: that a company IBAN edit moved the account of a SENT bill,
+      // because the invoice carried no copy of its issuer. Migration 0011 added
+      // the copy; the tripwire fired, and this is the invariant it became.
+      const { prepareInvoiceDocument } = await import('@/lib/delivery/document')
+      const { createHash } = await import('node:crypto')
+      const sha = async (seq: number) => {
+        const src = (await q.invoices.getInvoiceDocumentSource(ctx.workspaceId, String(seq)))!
+        return createHash('sha256').update(await prepareInvoiceDocument(src)).digest('hex')
+      }
+      const read = async (seq: number) => (await q.invoices.getInvoice(ctx.workspaceId, String(seq)))!
+
+      // 0.03 so the rounding policy visibly matters: 100.03 → 100.05 under
+      // `line_0_05`, and stays 100.03 under `none`.
+      const odd = { items: [{ description: 'Work', qty: '1', unit_price: '100.03', vat_rate: null }] }
+      const a = await draft(odd)
       await q.lifecycle.markInvoiceSent(ctx, String(a.seq))
-      const sent = (await q.invoices.getInvoice(ctx.workspaceId, String(a.seq)))!
-      const before = invoiceAccount(sent.ref_type, (await q.companies.getCompany(ctx.workspaceId, 'inv'))!)
-      await q.companies.editCompany(ctx, 'inv', { iban: 'CH5604835012345678009' })
-      const after = invoiceAccount(sent.ref_type, (await q.companies.getCompany(ctx.workspaceId, 'inv'))!)
-      expect(columnsOf('invoice').filter((c) => /iban|issuer|creditor/.test(c))).toEqual([])
-      expect(after).not.toBe(before)
-      await q.companies.editCompany(ctx, 'inv', { iban: 'CH9300762011623852957' })
+      const stillDraft = await draft(odd)
+      const before = await read(a.seq)
+      const shaBefore = await sha(a.seq)
+      expect(before.issuer?.iban).toBe('CH9300762011623852957')
+      expect(before.issuer?.captured_at).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+      expect(before.totals.total).toBe('100.05')
+      expect((await read(stillDraft.seq)).issuer).toBeNull()
+
+      await q.companies.editCompany(ctx, 'inv', { iban: 'CH5604835012345678009', legal_name: 'Renamed SA', rounding: 'none' })
+      try {
+        // THE POSITIVE HALF, FIRST: the edit really took, and a DRAFT sees all of
+        // it. Without this, "the sent one did not move" is also what a company
+        // edit that silently did nothing looks like.
+        const d = await read(stillDraft.seq)
+        expect(d.derived.account).toBe('CH5604835012345678009')
+        expect(d.derived.creditor.name).toBe('Renamed SA')
+        expect(d.totals.total).toBe('100.03')
+
+        const after = await read(a.seq)
+        expect(after.derived.account).toBe('CH9300762011623852957')
+        expect(after.derived.creditor.name).toBe('Invariant SA')
+        expect(after.totals.total).toBe('100.05')
+        expect(after.issuer).toEqual(before.issuer)
+        // …and the DOCUMENT is the same bytes (position P10).
+        expect(await sha(a.seq)).toBe(shaBefore)
+      } finally {
+        await q.companies.editCompany(ctx, 'inv', { iban: 'CH9300762011623852957', legal_name: 'Invariant SA', rounding: 'line_0_05' })
+      }
+    })
+
+    it('the database holds it: no issued invoice without a copy, no draft with one, no revision', async () => {
+      const a = await draft()
+      const where = sql`workspace_id = ${ctx.workspaceId} AND seq = ${a.seq}`
+      // A status change that forgets the copy — what a future write path would do.
+      expect(await sqlstate(sql`UPDATE billing.invoice SET status = 'sent', sent_at = now() WHERE ${where}`)).toBe('23514')
+      // A draft carrying one would render from a company as it WAS.
+      expect(await sqlstate(sql`UPDATE billing.invoice SET issuer = '{"legal_name":"x"}'::jsonb WHERE ${where}`)).toBe('23514')
+      // The positive half: the real transition is accepted…
+      const sent = await q.lifecycle.markInvoiceSent(ctx, String(a.seq))
+      expect(sent.issuer?.legal_name).toBe('Invariant SA')
+      // …and from then on the copy is part of the sent document (G2).
+      expect(
+        await sqlstate(sql`UPDATE billing.invoice SET issuer = jsonb_set(issuer, '{iban}', '"CH5604835012345678009"') WHERE ${where}`)
+      ).toBe('P0001')
+      // A void from DRAFT leaves draft too, and takes its copy.
+      const v = await draft()
+      const voided = await q.lifecycle.voidInvoice(ctx, String(v.seq), { reason_en: 'invariant I12' })
+      expect(voided.issuer?.legal_name).toBe('Invariant SA')
+      expect(voided.derived.has_payment_part).toBe(false)
     })
   })
 

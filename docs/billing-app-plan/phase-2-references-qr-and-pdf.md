@@ -227,8 +227,28 @@ its QR decoded from a rendered page to the exact payload. Details in
 `apps/billing/docs/backend.md` under "Phase 2, ticket #85". Positions inside the
 sections follow `swissqrbill`'s renderer; the standard's sizes are asserted.
 
-**#86 (routes, `bk`, the seam) is not started**, and the manual tiers of
-`qr-bill.md` §8 are not done.
+**#86 (routes, `bk`, the seam), built 2026-09-18** on
+`feat/billing-phase-2-routes`. Details in `apps/billing/docs/backend.md` under
+"Phase 2, ticket #86". What building it changed:
+
+- **Migration 0011** — this doc says "no migration". Invariant I12's issuer half
+  needed one: an invoice that leaves draft takes its own copy of its company
+  (`issuer`, jsonb), and everything renders from it. Without it the byte-stable
+  PDF this phase is built around stopped matching `pdf_sha256` the first time a
+  company was edited.
+- `derived` carries `creditor` and `problems` as well, and **not** `totals`,
+  which the invoice already has.
+- **`mark-sent` validates like `send`.** A sent invoice's document is frozen, so
+  one that could not render at that moment never could.
+- **A void invoice renders with no payment part**, stamped.
+- The payment message's character set is checked at the write door. The
+  mockup's own messages all fail it (an em dash); the seed substitutes, the app
+  never does. **Raise with Andrea.**
+- The client's raw mode is a `RawResponse` passed to the existing `do()`.
+
+**The manual tiers of `qr-bill.md` §8 are not done** — the SIX portal, two
+banking apps, the grid sheet. They need a person; `bk billing invoice qr` is what
+makes the first a paste.
 
 ## Frontend gets
 

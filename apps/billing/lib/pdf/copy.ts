@@ -27,6 +27,7 @@ export type CopyKey =
   | 'total'
   | 'vat_number'
   | 'page'
+  | 'void'
 
 export const INVOICE_COPY: Readonly<Record<DocumentLanguage, Readonly<Record<CopyKey, string>>>> = {
   fr: {
@@ -47,6 +48,7 @@ export const INVOICE_COPY: Readonly<Record<DocumentLanguage, Readonly<Record<Cop
     total: 'Total',
     vat_number: 'N° TVA',
     page: 'Page {n} / {of}',
+    void: 'ANNULÉE',
   },
   de: {
     invoice: 'Rechnung',
@@ -66,6 +68,7 @@ export const INVOICE_COPY: Readonly<Record<DocumentLanguage, Readonly<Record<Cop
     total: 'Total',
     vat_number: 'MWST-Nr.',
     page: 'Seite {n} / {of}',
+    void: 'STORNIERT',
   },
   it: {
     invoice: 'Fattura',
@@ -85,6 +88,7 @@ export const INVOICE_COPY: Readonly<Record<DocumentLanguage, Readonly<Record<Cop
     total: 'Totale',
     vat_number: 'N. IVA',
     page: 'Pagina {n} / {of}',
+    void: 'ANNULLATA',
   },
   en: {
     invoice: 'Invoice',
@@ -104,6 +108,7 @@ export const INVOICE_COPY: Readonly<Record<DocumentLanguage, Readonly<Record<Cop
     total: 'Total',
     vat_number: 'VAT no.',
     page: 'Page {n} / {of}',
+    void: 'VOID',
   },
 }
 

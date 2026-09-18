@@ -30,9 +30,12 @@ is being built:
   phase 1 brought companies and invoices, phase 3 the lifecycle (send,
   mark-sent, paid, void), phase 5 the read-only archive of imported bills
   (`bk billing history`), and phase 6's backend a seed that IS the mockup,
-  verified on the way in. Phase 2's QR payload and PDF renderer
-  exist (`lib/qr/`, `lib/pdf/`) but nothing serves them yet (#86), so
-  `send` refuses with `document_renderer_not_built` until it does. Same stack; its own `billing.*`
+  verified on the way in. Phase 2 is served since 2026-09-18 (#86):
+  `bk billing invoice pdf` and `invoice qr`, one validate-then-render seam
+  (`lib/delivery/document.ts`) that `send` goes through too, and an invoice
+  that leaves draft takes its own copy of its company (`issuer`, migration
+  0011) — so editing a company never changes a bill already sent. Only
+  recurrence (phase 4) is unbuilt on the backend. Same stack; its own `billing.*`
   schema, CLI group and docs. It is also the first app planned to ship as a
   SEPARATE, rebranded product for an outside company, which is why its display
   name, contact address and email accent read the environment while the slug

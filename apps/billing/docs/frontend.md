@@ -89,10 +89,24 @@ For the action bar, the send modal and the read-only-with-a-reason rendering.
 - **Three new invoice fields**: `sent_at`, `sent_message_id`, `pdf_sha256`. A
   sent invoice with `sent_message_id: null` was **not** emailed by this app —
   render "sent outside the app", never "sending…".
-- **`send` answers 501 `document_renderer_not_built` on every deployment until
-  phase 2.** The button should exist and the refusal should render as what it
-  is, with `mark-sent` offered, not be hidden behind a feature flag nobody
-  remembers to remove.
+- **`send` and `mark-sent` answer 422 `payment_part_invalid`** when the record
+  would make a payment part a bank rejects. Do not wait for the refusal: the
+  invoice's own `derived.problems` lists the same problems on every read, each
+  with a `code`, a `message` and a `suggestion` — disable the actions and show
+  the list. (Until 2026-09-18 `send` answered 501 `document_renderer_not_built`;
+  that code is gone.)
+- **Phase 2 gives the screens three things** (ticket #86):
+  - `derived` on every invoice: `reference`, `reference_formatted`, `account`,
+    `account_formatted`, `creditor`, `has_payment_part`, `problems`. **Render the
+    payment part from this block and from nothing else** — never from the
+    company record. A sent invoice's account and creditor come from its own copy
+    of the company, and `derived` is where that has already been resolved.
+  - `issuer`: that copy. `null` on a draft, and only on a draft. Show "as issued
+    on <captured_at>" from it; `backfilled: true` means a migration filled it in.
+  - `GET …/invoices/{ref}/pdf` (open in a tab for Preview, `download` for
+    Download) and `GET …/invoices/{ref}/qr` (the payload the on-screen QR must
+    encode — draw the matrix from this string, never from a re-serialization in
+    the browser). A void invoice has `has_payment_part: false`: draw no slip.
 - **Frozen after send**, in the database: `currency`, `language`, `ref_type`,
   `ref_body`, `client`, `vat_rate`, `prices_include_vat`, `issue_date`, the lines.
   Still editable: `due_date`, `message`, `external_ref`, `metadata`. A PATCH of a

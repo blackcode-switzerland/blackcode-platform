@@ -5,6 +5,70 @@ This file is an **agent** surface. It is merged into `bk changelog` and
 entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
+## 2026-09-18 — The invoice PDF and its QR payload are served; `send` is on; a sent invoice keeps its own copy of its issuer
+
+### New
+
+- **`bk billing invoice pdf <ref> [--out FILE|-] [--force]`** —
+  `GET /api/workspaces/{ws}/invoices/{ref}/pdf`, `application/pdf`. The A4
+  invoice in the document's language with the QR-bill payment part (CHF and
+  EUR). Rendered on demand and byte-stable. The response carries
+  `X-Billing-Pdf-Sha256` (these bytes), `X-Billing-Sent-Pdf-Sha256` (the bytes
+  `send` emailed, when it did) and `X-Billing-Invoice-Status`; the command
+  prints whether the two match. It refuses to overwrite a file without `--force`
+  and refuses to write a PDF to a terminal.
+- **`bk billing invoice qr <ref>`** — `GET …/invoices/{ref}/qr`, `text/plain`.
+  The Swiss QR Code payload exactly as the PDF encodes it: LF line endings, no
+  trailing newline, elements identified by line number. Do not trim it.
+- **`GET …/invoices/{ref}` and every invoice in a list gain two fields.**
+  `derived`: `reference` (with its check digits), `reference_formatted`,
+  `account`, `account_formatted`, `creditor`, `has_payment_part`, and
+  `problems` — what would make the PDF refuse, each with a `code`, `message` and
+  `suggestion`. `issuer`: the issuing company as it was when the invoice left
+  draft; `null` on a draft. `bk billing invoice show` prints both.
+- Both new routes are **public** (`/api/meta` → `integration.routes`), so
+  `contract_version` changes.
+- **`bk guide billing/references-and-qr`.**
+
+### Changed — read this if you call `send` or `mark-sent`
+
+- **`send` works.** It no longer answers 501 `document_renderer_not_built`; that
+  code is gone from every path, and a client switching on it can drop the branch.
+- **`send` and `mark-sent` can now answer 422 `payment_part_invalid`**: the
+  record would make a payment part a bank rejects (a company address with no
+  town, a QR reference with no QR-IBAN, a character the standard does not carry).
+  Nothing is written or mailed, and the message names every problem.
+  **`mark-sent` did not validate before and does now** — once sent, the document
+  is frozen, so an invoice that could not render at that moment never could.
+  **How to adapt:** read `derived.problems` first, or fetch the PDF as a dry run;
+  both refuse for exactly the reasons a send would.
+- **A payment message containing a character a QR code cannot carry is refused
+  when it is written**: 400 `message_character_not_allowed`, on create and on
+  edit, naming the character and its position. Typographic dashes and quotes are
+  the usual cause. Nothing is substituted for you. Existing drafts are not
+  touched; `derived.problems` names any that carry one.
+- **A sent invoice renders from its own copy of its company, forever.**
+  Editing a company's IBAN, legal name, address, footers or rounding policy
+  changes its drafts and its future bills, and no invoice that already left
+  draft: not its account, not its creditor block, not its **totals**. This
+  closes the gap the previous entry stated. If a sent bill names the wrong
+  account, void it and reissue.
+- **A void invoice's PDF carries no payment part** and is stamped void, and
+  `…/qr` answers 409 `no_payment_part` for it: a cancelled bill must not be
+  payable.
+
+### Not breaking
+
+Every existing field keeps its name and type. `issuer` and `derived` are
+additions; a PATCH that sends either back is refused as `field_not_editable`,
+like `number`.
+
+### Still not done
+
+One bill of each shape through SIX's validation portal, and a scan by two
+banking apps. `bk billing invoice qr` exists so that the first is a paste. No
+real invoice should go out before both.
+
 ## 2026-09-18 — An unknown `--company` is refused; the pitfalls guide; what still blocks a real invoice
 
 ### Breaking for one request, which was already wrong

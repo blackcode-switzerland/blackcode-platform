@@ -69,6 +69,18 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/invoices/{ref}/pdf",
+      "command": "bk billing invoice pdf",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invoices/{ref}/qr",
+      "command": "bk billing invoice qr",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/members",
       "command": "bk billing member list",
       "app": "billing"

@@ -62,14 +62,20 @@ A `--company` that names no company in this workspace is refused, never answered
 with an empty list — so "no invoices" always means none, not "that slug does not
 exist here".
 
-## Editing a company changes its outstanding bills
+## Editing a company does not reach a bill that already went out
 
-A sent bill's document half — client, lines, currency, reference — is frozen. Its
-ISSUER is not yet: the bill carries no copy of the company's legal name, address
-or bank account, so editing the company's IBAN changes the account every one of
-its unpaid bills points to. Until that is closed, change a company's bank details
-only when nothing sent is still waiting to be paid, or accept that those bills now
-say something different from the copy the client holds.
+An invoice takes its own copy of the issuing company the moment it leaves draft,
+and renders from that copy forever: its account, its creditor name and its totals
+do not move when the company is edited. So a corrected IBAN fixes the drafts and
+every future bill, and **not** the unpaid ones already with clients — those still
+name the old account, exactly as the copy the client holds does. If that account
+is wrong, void each one with a reason and reissue it.
+
+## A dash your keyboard typed can stop a bill
+
+A Swiss QR Code carries Latin letters, accents and plain punctuation. An em dash,
+a curly quote or an emoji in the payment message is refused when you write it,
+naming the character and where it is. Nothing is replaced for you; retype it.
 
 ## The archive is not a list of debts
 

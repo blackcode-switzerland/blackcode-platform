@@ -307,6 +307,14 @@ export const billingInvoice = billingSchema.table('invoice', {
   /** sha256 of the PDF bytes actually attached — position P10's answer. */
   pdf_sha256: char('pdf_sha256', { length: 64 }),
 
+  // ── THE ISSUER, AS IT WAS AT ISSUE (0011). Invariant I12. ────────────────
+  /**
+   * The company's name, address, account and rounding policy, copied the moment
+   * the invoice left `draft`. NULL exactly while it IS a draft (a CHECK holds
+   * the iff); frozen by G2 from then on. Shape: `IssuerSnapshot`, lib/issuer.ts.
+   */
+  issuer: jsonb('issuer'),
+
   external_ref: varchar('external_ref', { length: 80 }),
   metadata: jsonb('metadata').default({}).notNull(),
 

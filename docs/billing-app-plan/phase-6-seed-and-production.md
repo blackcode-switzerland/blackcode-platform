@@ -198,7 +198,8 @@ backend". What building it changed:
   append-only log).
 - The seed verifies parity itself, reading every invoice back through the app.
 - `invariants.test.ts` found **I12 half-built**: the issuer is not snapshotted
-  at send. Assigned to #86.
+  at send. Assigned to #86, and **closed there on 2026-09-18** (migration 0011);
+  the "KNOWN GAP" case went red as written and is now the invariant.
 - `?company=` naming nothing is refused on all three list routes.
 
 Not done, and not doable from this repo alone: the release, the production

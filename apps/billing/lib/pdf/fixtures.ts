@@ -56,6 +56,7 @@ export function sampleInvoice(over: Partial<Invoice> = {}): Invoice {
     sent_at: null,
     sent_message_id: null,
     pdf_sha256: null,
+    issuer: null,
     items: [
       { line_no: 1, description: 'Développement, septembre 2026', qty: '12.500', unit: 'jours', unit_price: '1200.00', vat_rate: '8.10', line_total: '15000.00' },
       { line_no: 2, description: 'Frais de déplacement (exonérés)', qty: '1.000', unit: null, unit_price: '240.00', vat_rate: null, line_total: '240.00' },
