@@ -144,3 +144,53 @@ For #92 — the recurrence card, the `↻ n/N` badge, "Make recurring…".
   compute one, and render `409 already_generated` as "already exists: <number>",
   linking to it.
 - `GET …/audit?subject=recurrence:<seq>` is the card's history.
+
+## The minimal test UI (2026-09-18) — scaffolding, to be replaced
+
+A bare, deliberately unstyled web surface so the backend can be driven in a
+browser with Playwright before the real screens exist. **It is not the design
+and not a starting point for one**; #79 onward replace it.
+
+| Page | Routes it calls |
+|---|---|
+| `/dashboard` (existing) — now links each workspace | — (server component, as before) |
+| `/dashboard/[ws]` overview | `GET …/overview` |
+| `/dashboard/[ws]/companies` list + create | `GET/POST …/companies` |
+| `/dashboard/[ws]/invoices` list, filter, create | `GET/POST …/invoices`, `GET …/companies` |
+| `/dashboard/[ws]/invoices/[ref]` detail and every action | `GET/PATCH …/invoices/{ref}`, `…/pdf`, `…/qr`, `…/send`, `…/mark-sent`, `…/paid`, `…/void`, `GET …/audit?subject=invoice:` |
+| `/dashboard/[ws]/recurrences` list (`due`), create | `GET/POST …/recurrences` |
+| `/dashboard/[ws]/recurrences/[seq]` detail, generate, pause/resume, total | `GET/PATCH …/recurrences/{seq}`, `POST …/generate`, `GET …/audit?subject=recurrence:` |
+| `/dashboard/[ws]/history` list + import (paste JSON) | `GET/POST …/history` |
+
+**The rules it keeps, which the real screens should keep too:**
+
+- **Client components calling the same routes `bk` calls.** No server actions,
+  no database reads in a page — so nothing here is a capability the CLI lacks,
+  and a route test covers what the page does. One `fetch`, in `lib/web.ts`.
+- **Every POST sends a fresh `Idempotency-Key`**, as `bk` does.
+- **Errors show the server's `error` and `suggestion`**, with the code. The
+  envelope is `{ error, code, suggestion }`; the phase-0 create-workspace form
+  read `message`, which never exists, and showed only the status — fixed here.
+- **A success line appears only after the data has reloaded.** The first
+  version announced "marked sent" beside the old status; a Playwright walk
+  caught it on its second run. `useLoad().reload()` returns a promise for that.
+- **Nothing is computed in the browser that the server derives**: totals, the
+  reference, the account, the next period, the problems list are all read from
+  the response. `generate` sends the period as typed, never a default.
+
+**For tests:** every element a script needs has a `data-testid`
+(`input-<field>`, `invoice-row-<number>`, `field-<name>`, `error`, `done`, …).
+That attribute is the contract, not the markup. `lib/web.ts`' header says the
+same, so a later refactor keeps them.
+
+**What it does not do:** i18n, the company switcher, the payment-part preview,
+empty states beyond one line, any styling beyond undoing Tailwind's reset (a
+`<style>` block scoped to the workspace layout).
+
+**Verified 2026-09-18** with a Playwright script (Chromium, outside the repo):
+register a throwaway account, sign in through `/login`, and walk the empty
+overview → company → a refused em-dash message → a draft (total, no problems,
+QR payload, PDF with the session) → mark sent (issuer copied) → paid → a series
+refused without a count → created → generated → the same period refused →
+pause/resume → a history import → the overview. 21 steps, five consecutive
+green runs; watched failing with error lines hidden.

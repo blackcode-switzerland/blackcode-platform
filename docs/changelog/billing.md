@@ -5,6 +5,15 @@ This file is an **agent** surface. It is merged into `bk changelog` and
 entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
+## 2026-09-18 — A minimal web UI, for testing in a browser
+
+Bare pages under `/dashboard/<workspace>/`: overview, companies, invoices (with
+every lifecycle action, the PDF and the QR payload), recurring series and
+imported history. They call the same routes `bk` does, so nothing changes for an
+agent or an integration: **no route, command or response changed.** The real
+screens replace these. The phase-0 workspace form now shows the server's own
+error sentence instead of only a status code.
+
 ## 2026-09-18 — Finite recurring series: `bk billing recurrence`
 
 ### New

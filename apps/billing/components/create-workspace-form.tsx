@@ -44,11 +44,14 @@ export function CreateWorkspaceForm() {
         // The server's `suggestion` is the recovery, and showing the raw code
         // instead would make the reader guess. Same contract the CLI prints as a
         // `hint:` line.
+        // `error`, not `message`: the envelope is `{ error, code, suggestion }`
+        // (`errorBody` in packages/platform-api). Until 2026-09-18 this read
+        // `message`, which never exists, so every refusal showed only the status.
         const body = (await res.json().catch(() => null)) as
-          | { message?: string; suggestion?: string }
+          | { error?: string; suggestion?: string }
           | null
         setError(
-          [body?.message ?? `create failed (${res.status})`, body?.suggestion]
+          [body?.error ?? `create failed (${res.status})`, body?.suggestion]
             .filter(Boolean)
             .join(' — ')
         )
