@@ -98,6 +98,20 @@ export default async function DashboardPage() {
         Signed in as {user.email}. You are the <strong>{ws.member_role}</strong> of this workspace.
       </p>
 
+      {/* The minimal test UI (lib/web.ts). Every workspace, not only this one,
+          so a test can reach a seeded workspace by its slug. */}
+      <h2>Open</h2>
+      <ul data-testid="workspaces">
+        {mine.map((w) => (
+          <li key={w.id}>
+            <a href={`/dashboard/${w.slug}`} data-testid={`workspace-${w.slug}`}>
+              {w.name}
+            </a>{' '}
+            <code>{w.slug}</code>
+          </li>
+        ))}
+      </ul>
+
       <h2>Your team</h2>
       <ul>
         {members.map((m) => (
