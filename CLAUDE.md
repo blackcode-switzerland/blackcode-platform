@@ -27,8 +27,9 @@ is being built:
   gapless invoice numbers, QR-bill payment parts, and an append-only audit log
   that IS the edit workflow. The **fourth** app, **in build** — phase 0
   registered it (tenancy, role, address-book row, command group, guide topic),
-  phase 1 brought companies and invoices, and phase 3 the lifecycle (send,
-  mark-sent, paid, void). Phase 2's QR payload and PDF renderer
+  phase 1 brought companies and invoices, phase 3 the lifecycle (send,
+  mark-sent, paid, void), and phase 5 the read-only archive of imported bills
+  (`bk billing history`). Phase 2's QR payload and PDF renderer
   exist (`lib/qr/`, `lib/pdf/`) but nothing serves them yet (#86), so
   `send` refuses with `document_renderer_not_built` until it does. Same stack; its own `billing.*`
   schema, CLI group and docs. It is also the first app planned to ship as a

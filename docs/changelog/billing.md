@@ -5,6 +5,53 @@ This file is an **agent** surface. It is merged into `bk changelog` and
 entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
+## 2026-09-18 — Imported history: the bills from before this app, as a read-only archive
+
+**Not breaking. New commands, new routes, two new vocabularies, one new limit
+block — so `contract_version` changes.** Re-read `bk meta --app-server billing`.
+
+### What you can do now
+
+- `bk billing history import --file rows.json` (or `--file -` for stdin) —
+  `POST /api/workspaces/{ws}/history` with `{"rows": [...]}`. Map each bill from
+  a Zoho Books or Invoicely export yourself; the app stores and shows, and does
+  no mapping. `bk billing history import --help` has the row shape.
+- `bk billing history list` — `GET …/history`, newest bill first, filters
+  `--source --currency --year --company --flagged`, paginated with
+  `--limit`/`--cursor` like the other lists.
+- `bk billing history show <#>` — `GET …/history/{seq}`.
+
+### What to expect
+
+- **All or nothing.** Every problem in the batch comes back in one 400
+  (`invalid_history_rows`), each naming its row and field, and nothing is
+  written. A row whose source and source ref are already archived refuses the
+  whole import with a **409 `already_imported`** naming its `#number` — it is not
+  skipped. Importing the same file twice changes nothing and tells you which rows
+  were there.
+- **`total` is a string** (`"3240.00"`); a JSON number is refused. **`source_ref`
+  is stored verbatim**, whitespace included. **A key the row shape does not have
+  is refused.** `import_flag` is `{fr, en}` — both or neither — and is never
+  cleared. `drive_path` is a path or id on Google Drive, or `null` when the export
+  had no PDF; a link into the platform's own file store is refused.
+- **Rows are addressed by `#number` only.** The historical `number` is not
+  unique and is not accepted as an address.
+- **A row is read-only.** There is no edit or delete, and the database refuses
+  both.
+- **The archive is not a receivable.** An `unpaid` archived bill is not in
+  `bk billing overview`.
+
+`bk meta --app-server billing` now serves `vocabulary.history_sources`,
+`vocabulary.history_statuses` and `limits.history` (the rows-per-import ceiling
+and the field lengths).
+
+### Also in this release
+
+A hard `DELETE FROM platform.users` of a person who had written a billing audit
+row used to fail on the audit log's append-only trigger. It now clears the
+author, as the column always declared. Account close is a soft delete and was
+never affected.
+
 ## 2026-09-17 — `contract_version` is served, and the audit log stops recording edits that did not happen
 
 **Not breaking.** Two fixes to things an integration may already rely on.

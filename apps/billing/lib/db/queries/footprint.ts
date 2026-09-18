@@ -33,7 +33,7 @@
 import { inArray, eq, sql } from 'drizzle-orm'
 import type { AppFootprint, FootprintSource } from '@blackcode/platform-api'
 import { getDb } from '../client'
-import { billingCompany, billingInvoice, billingWorkspaceMembers, billingWorkspaces } from '../schema'
+import { billingCompany, billingHistory, billingInvoice, billingWorkspaceMembers, billingWorkspaces } from '../schema'
 import { APP_SLUG } from '@/lib/app'
 
 export const billingFootprintSource: FootprintSource = {
@@ -147,7 +147,7 @@ async function countIn(workspaceIds: number[]): Promise<Array<{ label: string; c
   // is non-empty at the one call site (the caller checks `will_delete.length`
   // first). Interpolated through `inArray` rather than `sql.raw` regardless,
   // because the next person to add a table here will copy this shape.
-  const [companies, invoices] = await Promise.all([
+  const [companies, invoices, history] = await Promise.all([
     getDb()
       .select({ n: sql<number>`COUNT(*)::int` })
       .from(billingCompany)
@@ -156,6 +156,10 @@ async function countIn(workspaceIds: number[]): Promise<Array<{ label: string; c
       .select({ n: sql<number>`COUNT(*)::int` })
       .from(billingInvoice)
       .where(inArray(billingInvoice.workspace_id, workspaceIds)),
+    getDb()
+      .select({ n: sql<number>`COUNT(*)::int` })
+      .from(billingHistory)
+      .where(inArray(billingHistory.workspace_id, workspaceIds)),
   ])
 
   const out: Array<{ label: string; count: number }> = []
@@ -165,5 +169,9 @@ async function countIn(workspaceIds: number[]): Promise<Array<{ label: string; c
   const invoice = Number(invoices[0]?.n ?? 0)
   if (company > 0) out.push({ label: company === 1 ? 'company' : 'companies', count: company })
   if (invoice > 0) out.push({ label: invoice === 1 ? 'invoice' : 'invoices', count: invoice })
+  // Its own line, not added to the invoices: an imported bill is a record of
+  // another system's document, and "182 invoices" should mean the ones issued here.
+  const imported = Number(history[0]?.n ?? 0)
+  if (imported > 0) out.push({ label: imported === 1 ? 'imported bill' : 'imported bills', count: imported })
   return out
 }

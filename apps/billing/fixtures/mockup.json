@@ -1,0 +1,1185 @@
+{
+  "source": {
+    "file": "b-mockups/bbilling/assets/billing-data.js",
+    "sha256": "6f1e9943d9c8f39f3406624bb06797508c8a60f170e6052942335cfeca0f790d",
+    "commit": "e406174c4d4caee70c7d36c380971bf5c3c15525",
+    "extracted_by": "apps/billing/scripts/extract-mockup.mjs",
+    "note": "Mechanical. Do not edit by hand — re-run the script and read the diff."
+  },
+  "workspaces": [
+    {
+      "id": 1,
+      "name": "blackcode",
+      "slug": "blackcode",
+      "logo_url": null,
+      "owner_id": 3,
+      "member_role": "owner",
+      "created_at": "2026-06-15T15:40:39.829Z"
+    },
+    {
+      "id": 2,
+      "name": "Demo Tenant",
+      "slug": "demo-tenant",
+      "logo_url": null,
+      "owner_id": 3,
+      "member_role": "owner",
+      "created_at": "2026-09-07T00:00:00.000Z",
+      "demo": true
+    }
+  ],
+  "companies": [
+    {
+      "id": 1,
+      "workspace_id": 1,
+      "name": "blackcode SA",
+      "legal_name": "blackcode SA",
+      "street": "Rue des Vollandes",
+      "building": "58",
+      "postal_code": "1207",
+      "city": "Genève",
+      "country": "CH",
+      "email": "billing@blackcode.ch",
+      "logo": {
+        "initials": "b/",
+        "color": "#3ecf8e"
+      },
+      "qr_iban": "CH4431999123000889012",
+      "iban": "CH9300762011623852957",
+      "vat_registered": true,
+      "uid": "CHE-345.678.901",
+      "vat_number": "CHE-345.678.901 TVA",
+      "default_currency": "CHF",
+      "default_language": "fr",
+      "default_ref_type": "QRR",
+      "number_format": "BC-{YYYY}-{SEQ4}",
+      "next_seq": 39,
+      "payment_terms_days": 30
+    },
+    {
+      "id": 2,
+      "workspace_id": 1,
+      "name": "Aurora Labs Sàrl",
+      "legal_name": "Aurora Labs Sàrl",
+      "street": "Avenue de la Gare",
+      "building": "10",
+      "postal_code": "1003",
+      "city": "Lausanne",
+      "country": "CH",
+      "email": "invoices@auroralabs.ch",
+      "logo": {
+        "initials": "AL",
+        "color": "#5b9dff"
+      },
+      "qr_iban": null,
+      "iban": "CH5604835012345678009",
+      "vat_registered": false,
+      "uid": "CHE-489.123.775",
+      "vat_number": null,
+      "default_currency": "CHF",
+      "default_language": "fr",
+      "default_ref_type": "SCOR",
+      "number_format": "AL-{SEQ4}",
+      "next_seq": 118,
+      "payment_terms_days": 20
+    },
+    {
+      "id": 9,
+      "workspace_id": 2,
+      "name": "Demo SA",
+      "legal_name": "Demo SA",
+      "street": "—",
+      "building": "—",
+      "postal_code": "—",
+      "city": "—",
+      "country": "CH",
+      "email": "demo@example.invalid",
+      "logo": {
+        "initials": "D/",
+        "color": "#7a8595"
+      },
+      "qr_iban": null,
+      "iban": null,
+      "vat_registered": false,
+      "uid": "CHE-###.###.### (démo)",
+      "vat_number": null,
+      "default_currency": "CHF",
+      "default_language": "fr",
+      "default_ref_type": "NON",
+      "payment_terms_days": 30,
+      "number_format": "DEMO-{YYYY}-{SEQ4}",
+      "next_seq": 1,
+      "footer": {
+        "fr": "",
+        "en": ""
+      }
+    }
+  ],
+  "invoices": [
+    {
+      "id": 7001,
+      "workspace_id": 1,
+      "company_id": 1,
+      "number": "BC-2026-0031",
+      "seq": 31,
+      "status": "paid",
+      "issue_date": "2026-03-02",
+      "due_date": "2026-04-01",
+      "paid_date": "2026-03-18",
+      "currency": "CHF",
+      "language": "fr",
+      "ref_type": "QRR",
+      "ref_body": "00000000000000012026000031",
+      "client": {
+        "name": "Metaesthetics SA",
+        "street": "Rue du Rhône",
+        "building": "114",
+        "postal_code": "1204",
+        "city": "Genève",
+        "country": "CH"
+      },
+      "items": [
+        {
+          "description": "Développement pilote terrain — sprint mars",
+          "qty": 12,
+          "unit": "jours",
+          "unit_price": 1450
+        },
+        {
+          "description": "Atelier de cadrage produit (Genève, 05.03)",
+          "qty": 1,
+          "unit": "forfait",
+          "unit_price": 1800
+        }
+      ],
+      "vat_rate": 8.1,
+      "message": "Facture BC-2026-0031 — pilote terrain, mars 2026",
+      "void": null
+    },
+    {
+      "id": 7002,
+      "workspace_id": 1,
+      "company_id": 1,
+      "number": "BC-2026-0032",
+      "seq": 32,
+      "status": "paid",
+      "issue_date": "2026-04-14",
+      "due_date": "2026-05-14",
+      "paid_date": "2026-05-02",
+      "currency": "CHF",
+      "language": "fr",
+      "ref_type": "QRR",
+      "ref_body": "00000000000000012026000032",
+      "client": {
+        "name": "StaffUp Sàrl",
+        "street": "Rue de Genève",
+        "building": "77",
+        "postal_code": "1004",
+        "city": "Lausanne",
+        "country": "CH"
+      },
+      "items": [
+        {
+          "description": "Phase 1 — intégration plateforme staffing",
+          "qty": 1,
+          "unit": "forfait",
+          "unit_price": 24000
+        }
+      ],
+      "vat_rate": 8.1,
+      "message": "Facture BC-2026-0032 — Phase 1, solde",
+      "void": null
+    },
+    {
+      "id": 7003,
+      "workspace_id": 1,
+      "company_id": 1,
+      "number": "BC-2026-0033",
+      "seq": 33,
+      "recurrence_id": 6001,
+      "status": "void",
+      "issue_date": "2026-05-11",
+      "due_date": "2026-06-10",
+      "paid_date": null,
+      "currency": "CHF",
+      "language": "fr",
+      "ref_type": "QRR",
+      "ref_body": "00000000000000012026000033",
+      "client": {
+        "name": "Transports Junod SA",
+        "street": "Rue de l'Industrie",
+        "building": "8",
+        "postal_code": "1400",
+        "city": "Yverdon-les-Bains",
+        "country": "CH"
+      },
+      "items": [
+        {
+          "description": "Maintenance portail flotte — T2 2026",
+          "qty": 1,
+          "unit": "forfait",
+          "unit_price": 4800
+        }
+      ],
+      "vat_rate": 8.1,
+      "message": "Facture BC-2026-0033 — maintenance T2",
+      "void": {
+        "ts": "2026-05-12T09:40:00",
+        "by": "andrea",
+        "reason": {
+          "fr": "Montant erroné (forfait T2 facturé plein tarif malgré le geste commercial post-incident). Remplacée par BC-2026-0034.",
+          "en": "Wrong amount (Q2 retainer billed at full rate despite the post-incident goodwill discount). Replaced by BC-2026-0034."
+        }
+      }
+    },
+    {
+      "id": 7004,
+      "workspace_id": 1,
+      "company_id": 1,
+      "number": "BC-2026-0034",
+      "seq": 34,
+      "recurrence_id": 6001,
+      "status": "paid",
+      "issue_date": "2026-05-12",
+      "due_date": "2026-06-11",
+      "paid_date": "2026-06-08",
+      "currency": "CHF",
+      "language": "fr",
+      "ref_type": "QRR",
+      "ref_body": "00000000000000012026000034",
+      "client": {
+        "name": "Transports Junod SA",
+        "street": "Rue de l'Industrie",
+        "building": "8",
+        "postal_code": "1400",
+        "city": "Yverdon-les-Bains",
+        "country": "CH"
+      },
+      "items": [
+        {
+          "description": "Maintenance portail flotte — T2 2026 (tarif ajusté)",
+          "qty": 1,
+          "unit": "forfait",
+          "unit_price": 3600
+        }
+      ],
+      "vat_rate": 8.1,
+      "message": "Facture BC-2026-0034 — maintenance T2 (remplace BC-2026-0033)",
+      "void": null
+    },
+    {
+      "id": 7005,
+      "workspace_id": 1,
+      "company_id": 1,
+      "number": "BC-2026-0035",
+      "seq": 35,
+      "status": "sent",
+      "issue_date": "2026-07-10",
+      "due_date": "2026-08-09",
+      "paid_date": null,
+      "currency": "EUR",
+      "language": "en",
+      "ref_type": "SCOR",
+      "ref_body": "20260035",
+      "client": {
+        "name": "Atelier Nova SARL",
+        "street": "Rue de la République",
+        "building": "22",
+        "postal_code": "69002",
+        "city": "Lyon",
+        "country": "FR"
+      },
+      "items": [
+        {
+          "description": "Cross-border e-commerce audit — July engagement",
+          "qty": 6,
+          "unit": "days",
+          "unit_price": 1300
+        },
+        {
+          "description": "Technical due-diligence report (EN)",
+          "qty": 1,
+          "unit": "flat",
+          "unit_price": 900
+        }
+      ],
+      "vat_rate": 0,
+      "message": "Invoice BC-2026-0035 — reverse charge, VAT 0% (export of services)",
+      "void": null
+    },
+    {
+      "id": 7006,
+      "workspace_id": 1,
+      "company_id": 1,
+      "number": "BC-2026-0036",
+      "seq": 36,
+      "status": "sent",
+      "issue_date": "2026-07-28",
+      "due_date": "2026-08-27",
+      "paid_date": null,
+      "currency": "CHF",
+      "language": "it",
+      "ref_type": "QRR",
+      "ref_body": "00000000000000012026000036",
+      "client": {
+        "name": "Atelier Botta Architetti SA",
+        "street": "Via Nassa",
+        "building": "21",
+        "postal_code": "6900",
+        "city": "Lugano",
+        "country": "CH"
+      },
+      "items": [
+        {
+          "description": "Sezione «Concorsi» — sviluppo e integrazione galleria 3D",
+          "qty": 1,
+          "unit": "forfait",
+          "unit_price": 9200
+        },
+        {
+          "description": "Accesso privato giuria (concorso Mendrisio)",
+          "qty": 1,
+          "unit": "forfait",
+          "unit_price": 450
+        }
+      ],
+      "vat_rate": 8.1,
+      "message": "Fattura BC-2026-0036 — sezione Concorsi",
+      "void": null
+    },
+    {
+      "id": 7007,
+      "workspace_id": 1,
+      "company_id": 1,
+      "number": "BC-2026-0037",
+      "seq": 37,
+      "recurrence_id": 6002,
+      "status": "sent",
+      "issue_date": "2026-07-06",
+      "due_date": "2026-08-05",
+      "paid_date": null,
+      "currency": "CHF",
+      "language": "fr",
+      "ref_type": "QRR",
+      "ref_body": "00000000000000012026000037",
+      "client": {
+        "name": "Fiduciaire Morel & Associés SA",
+        "street": "Faubourg de l'Hôpital",
+        "building": "12",
+        "postal_code": "2000",
+        "city": "Neuchâtel",
+        "country": "CH"
+      },
+      "items": [
+        {
+          "description": "Maintenance annuelle du site 2026",
+          "qty": 1,
+          "unit": "forfait",
+          "unit_price": 2400
+        },
+        {
+          "description": "Mise à jour PHP & certificats",
+          "qty": 3,
+          "unit": "heures",
+          "unit_price": 180
+        }
+      ],
+      "vat_rate": 8.1,
+      "message": "Facture BC-2026-0037 — maintenance 2026",
+      "void": null
+    },
+    {
+      "id": 7008,
+      "workspace_id": 1,
+      "company_id": 1,
+      "number": "BC-2026-0038",
+      "seq": 38,
+      "status": "draft",
+      "issue_date": "2026-08-16",
+      "due_date": "2026-09-15",
+      "paid_date": null,
+      "currency": "CHF",
+      "language": "fr",
+      "ref_type": "QRR",
+      "ref_body": "00000000000000012026000038",
+      "client": {
+        "name": "Metaesthetics SA",
+        "street": "Rue du Rhône",
+        "building": "114",
+        "postal_code": "1204",
+        "city": "Genève",
+        "country": "CH"
+      },
+      "items": [
+        {
+          "description": "Extension du pilote — acompte 40%",
+          "qty": 1,
+          "unit": "forfait",
+          "unit_price": 18400
+        }
+      ],
+      "vat_rate": 8.1,
+      "message": "Facture BC-2026-0038 — extension pilote, acompte",
+      "void": null
+    },
+    {
+      "id": 7101,
+      "workspace_id": 1,
+      "company_id": 2,
+      "number": "AL-0115",
+      "seq": 115,
+      "status": "paid",
+      "issue_date": "2026-05-20",
+      "due_date": "2026-06-09",
+      "paid_date": "2026-06-01",
+      "currency": "CHF",
+      "language": "fr",
+      "ref_type": "SCOR",
+      "ref_body": "202600115",
+      "client": {
+        "name": "La Semeuse SA",
+        "street": "Rue du Nord",
+        "building": "176",
+        "postal_code": "2300",
+        "city": "La Chaux-de-Fonds",
+        "country": "CH"
+      },
+      "items": [
+        {
+          "description": "Shooting produit — gamme printemps (2 jours studio)",
+          "qty": 2,
+          "unit": "jours",
+          "unit_price": 950
+        },
+        {
+          "description": "Retouche & export e-commerce (48 visuels)",
+          "qty": 48,
+          "unit": "pièces",
+          "unit_price": 12
+        }
+      ],
+      "vat_rate": null,
+      "message": "Facture AL-0115 — shooting printemps",
+      "void": null
+    },
+    {
+      "id": 7102,
+      "workspace_id": 1,
+      "company_id": 2,
+      "number": "AL-0116",
+      "seq": 116,
+      "recurrence_id": 6003,
+      "status": "sent",
+      "issue_date": "2026-07-30",
+      "due_date": "2026-08-19",
+      "paid_date": null,
+      "currency": "CHF",
+      "language": "fr",
+      "ref_type": "NON",
+      "ref_body": null,
+      "client": {
+        "name": "Association Quartier Libre",
+        "street": "Place du Tunnel",
+        "building": "3",
+        "postal_code": "1005",
+        "city": "Lausanne",
+        "country": "CH"
+      },
+      "items": [
+        {
+          "description": "Identité visuelle festival 2026 — tarif associatif",
+          "qty": 1,
+          "unit": "forfait",
+          "unit_price": 1600
+        }
+      ],
+      "vat_rate": null,
+      "message": "Facture AL-0116 — identité festival 2026",
+      "void": null
+    },
+    {
+      "id": 7103,
+      "workspace_id": 1,
+      "company_id": 2,
+      "number": "AL-0117",
+      "seq": 117,
+      "status": "draft",
+      "issue_date": "2026-08-14",
+      "due_date": "2026-09-03",
+      "paid_date": null,
+      "currency": "EUR",
+      "language": "de",
+      "ref_type": "SCOR",
+      "ref_body": "202600117",
+      "client": {
+        "name": "Nordlicht Media GmbH",
+        "street": "Torstrasse",
+        "building": "140",
+        "postal_code": "10119",
+        "city": "Berlin",
+        "country": "DE"
+      },
+      "items": [
+        {
+          "description": "Markenworkshop Berlin — Vorbereitung und Moderation",
+          "qty": 1,
+          "unit": "Pauschale",
+          "unit_price": 2800
+        },
+        {
+          "description": "Reisespesen (Bahn, 2 Nächte)",
+          "qty": 1,
+          "unit": "Pauschale",
+          "unit_price": 420
+        }
+      ],
+      "vat_rate": null,
+      "message": "Rechnung AL-0117 — Markenworkshop August",
+      "void": null
+    }
+  ],
+  "recurrences": [
+    {
+      "id": 6001,
+      "workspace_id": 1,
+      "company_id": 1,
+      "template_invoice_id": 7004,
+      "status": "active",
+      "frequency": "quarterly",
+      "start_date": "2026-01-05",
+      "occurrences_total": 8,
+      "occurrences_done": 2,
+      "next_date": "2026-10-05",
+      "label": {
+        "fr": "Maintenance portail flotte — Junod",
+        "en": "Fleet-portal maintenance — Junod"
+      }
+    },
+    {
+      "id": 6002,
+      "workspace_id": 1,
+      "company_id": 1,
+      "template_invoice_id": 7007,
+      "status": "active",
+      "frequency": "yearly",
+      "start_date": "2026-07-06",
+      "occurrences_total": 5,
+      "occurrences_done": 1,
+      "next_date": "2027-07-06",
+      "label": {
+        "fr": "Maintenance annuelle site — Fiduciaire Morel",
+        "en": "Yearly site maintenance — Fiduciaire Morel"
+      }
+    },
+    {
+      "id": 6003,
+      "workspace_id": 1,
+      "company_id": 2,
+      "template_invoice_id": 7102,
+      "status": "active",
+      "frequency": "yearly",
+      "start_date": "2026-07-30",
+      "occurrences_total": 3,
+      "occurrences_done": 1,
+      "next_date": "2027-07-30",
+      "label": {
+        "fr": "Identité festival — Quartier Libre (3 éditions convenues)",
+        "en": "Festival identity — Quartier Libre (3 agreed editions)"
+      }
+    },
+    {
+      "id": 6004,
+      "workspace_id": 1,
+      "company_id": 1,
+      "template_invoice_id": null,
+      "status": "completed",
+      "frequency": "monthly",
+      "start_date": "2023-09-01",
+      "occurrences_total": 12,
+      "occurrences_done": 12,
+      "next_date": null,
+      "label": {
+        "fr": "Hébergement mensuel — Häberli (série terminée 2024, modèle archivé dans l'import Zoho)",
+        "en": "Monthly hosting — Häberli (series ended 2024, template archived in the Zoho import)"
+      }
+    }
+  ],
+  "audit": [
+    {
+      "id": 9001,
+      "workspace_id": 1,
+      "invoice_id": 7001,
+      "ts": "2026-03-02T09:12:00",
+      "actor": "companion",
+      "action": "created",
+      "detail": {
+        "fr": "Facture créée sur demande d'Andrea (« facture le sprint de mars à Metaesthetics »).",
+        "en": "Invoice created on Andrea's request (\"bill the March sprint to Metaesthetics\")."
+      }
+    },
+    {
+      "id": 9002,
+      "workspace_id": 1,
+      "invoice_id": 7001,
+      "ts": "2026-03-02T09:14:00",
+      "actor": "andrea",
+      "action": "status_changed",
+      "field": "status",
+      "from": "draft",
+      "to": "sent",
+      "detail": {
+        "fr": "Envoyée par email (PDF joint).",
+        "en": "Sent by email (PDF attached)."
+      }
+    },
+    {
+      "id": 9003,
+      "workspace_id": 1,
+      "invoice_id": 7001,
+      "ts": "2026-03-18T14:03:00",
+      "actor": "companion",
+      "action": "status_changed",
+      "field": "status",
+      "from": "sent",
+      "to": "paid",
+      "detail": {
+        "fr": "Paiement repéré sur le relevé (rapproché manuellement — la réconciliation vit dans b/books).",
+        "en": "Payment spotted on the statement (matched manually — reconciliation lives in b/books)."
+      }
+    },
+    {
+      "id": 9010,
+      "workspace_id": 1,
+      "invoice_id": 7003,
+      "ts": "2026-05-11T16:20:00",
+      "actor": "companion",
+      "action": "created",
+      "detail": {
+        "fr": "Facture maintenance T2 créée depuis le modèle du T1.",
+        "en": "Q2 maintenance invoice created from the Q1 pattern."
+      }
+    },
+    {
+      "id": 9011,
+      "workspace_id": 1,
+      "invoice_id": 7003,
+      "ts": "2026-05-11T16:22:00",
+      "actor": "andrea",
+      "action": "status_changed",
+      "field": "status",
+      "from": "draft",
+      "to": "sent",
+      "detail": {
+        "fr": "Envoyée.",
+        "en": "Sent."
+      }
+    },
+    {
+      "id": 9012,
+      "workspace_id": 1,
+      "invoice_id": 7003,
+      "ts": "2026-05-12T09:40:00",
+      "actor": "andrea",
+      "action": "voided",
+      "field": "status",
+      "from": "sent",
+      "to": "void",
+      "detail": {
+        "fr": "Annulée : montant erroné (geste commercial post-incident non appliqué). Le numéro BC-2026-0033 reste consommé — la séquence ne se troue jamais.",
+        "en": "Voided: wrong amount (post-incident goodwill discount not applied). Number BC-2026-0033 stays consumed — the sequence never gets holes."
+      }
+    },
+    {
+      "id": 9013,
+      "workspace_id": 1,
+      "invoice_id": 7004,
+      "ts": "2026-05-12T09:44:00",
+      "actor": "companion",
+      "action": "created",
+      "detail": {
+        "fr": "Facture de remplacement créée (tarif ajusté −25%), liée à BC-2026-0033.",
+        "en": "Replacement invoice created (rate adjusted −25%), linked to BC-2026-0033."
+      }
+    },
+    {
+      "id": 9020,
+      "workspace_id": 1,
+      "invoice_id": 7005,
+      "ts": "2026-07-10T08:05:00",
+      "actor": "companion",
+      "action": "created",
+      "detail": {
+        "fr": "Créée depuis l'email du client (devis accepté). Montants repris du devis.",
+        "en": "Created from the client's email (quote accepted). Amounts carried over from the quote."
+      }
+    },
+    {
+      "id": 9021,
+      "workspace_id": 1,
+      "invoice_id": 7005,
+      "ts": "2026-07-10T08:06:00",
+      "actor": "companion",
+      "action": "field_changed",
+      "field": "language",
+      "from": "fr",
+      "to": "en",
+      "detail": {
+        "fr": "Texte traduit en anglais à la volée (client à Lyon, préfère l'anglais). Aucun template — traduction directe.",
+        "en": "Text translated to English on the fly (Lyon client prefers English). No template — direct translation."
+      }
+    },
+    {
+      "id": 9022,
+      "workspace_id": 1,
+      "invoice_id": 7005,
+      "ts": "2026-07-10T08:08:00",
+      "actor": "companion",
+      "action": "field_changed",
+      "field": "ref_type",
+      "from": "QRR",
+      "to": "SCOR",
+      "detail": {
+        "fr": "EUR → QR-IBAN impossible (v2.4 : QRR = CHF uniquement). Basculée sur IBAN + SCOR.",
+        "en": "EUR → QR-IBAN impossible (v2.4: QRR is CHF-only). Switched to IBAN + SCOR."
+      }
+    },
+    {
+      "id": 9023,
+      "workspace_id": 1,
+      "invoice_id": 7005,
+      "ts": "2026-07-10T09:30:00",
+      "actor": "andrea",
+      "action": "status_changed",
+      "field": "status",
+      "from": "draft",
+      "to": "sent",
+      "detail": {
+        "fr": "Validée et envoyée.",
+        "en": "Approved and sent."
+      }
+    },
+    {
+      "id": 9030,
+      "workspace_id": 1,
+      "invoice_id": 7008,
+      "ts": "2026-08-16T18:12:00",
+      "actor": "companion",
+      "action": "created",
+      "detail": {
+        "fr": "Brouillon créé après la signature de l'extension du pilote (b/clients : signature attendue août — confirmée le 14.08).",
+        "en": "Draft created after the pilot-extension signature (b/clients: signature expected August — confirmed 14.08)."
+      }
+    },
+    {
+      "id": 9031,
+      "workspace_id": 1,
+      "invoice_id": 7008,
+      "ts": "2026-08-16T18:14:00",
+      "actor": "companion",
+      "action": "field_changed",
+      "field": "items[0].unit_price",
+      "from": "17800.00",
+      "to": "18400.00",
+      "detail": {
+        "fr": "Acompte recalculé sur le montant signé (40% de 46 000).",
+        "en": "Deposit recomputed on the signed amount (40% of 46,000)."
+      }
+    },
+    {
+      "id": 9040,
+      "workspace_id": 1,
+      "invoice_id": 7102,
+      "ts": "2026-07-30T11:00:00",
+      "actor": "clara",
+      "action": "created",
+      "detail": {
+        "fr": "Créée à la main — client associatif, sans référence (NON), message libre.",
+        "en": "Created by hand — non-profit client, no reference (NON), free-text message."
+      }
+    },
+    {
+      "id": 9041,
+      "workspace_id": 1,
+      "invoice_id": 7103,
+      "ts": "2026-08-14T10:20:00",
+      "actor": "companion",
+      "action": "created",
+      "detail": {
+        "fr": "Brouillon en allemand (client à Berlin), EUR + SCOR. Aurora Labs non assujettie → aucune TVA sur la facture.",
+        "en": "Draft in German (Berlin client), EUR + SCOR. Aurora Labs not VAT-registered → no VAT on the invoice at all."
+      }
+    }
+  ],
+  "history": [
+    {
+      "id": 8001,
+      "workspace_id": 1,
+      "source": "invoicely",
+      "source_ref": "INV-0184",
+      "company_id": 1,
+      "number": "2019-041",
+      "client_name": "Café des Arts Sàrl",
+      "issue_date": "2019-06-14",
+      "currency": "CHF",
+      "total": 3240,
+      "status": "paid",
+      "import_flag": null,
+      "drive_path": "Factures archivées/Invoicely/2019/INV-0184.pdf"
+    },
+    {
+      "id": 8002,
+      "workspace_id": 1,
+      "source": "invoicely",
+      "source_ref": "INV-0197",
+      "company_id": 1,
+      "number": "2019-054",
+      "client_name": "Helvetia Events GmbH",
+      "issue_date": "2019-11-02",
+      "currency": "EUR",
+      "total": 5120,
+      "status": "paid",
+      "import_flag": null,
+      "drive_path": "Factures archivées/Invoicely/2019/INV-0197.pdf"
+    },
+    {
+      "id": 8003,
+      "workspace_id": 1,
+      "source": "invoicely",
+      "source_ref": "INV-0211",
+      "company_id": 1,
+      "number": "2020-012",
+      "client_name": "R. Steiner (indépendant)",
+      "issue_date": "2020-03-09",
+      "currency": "CHF",
+      "total": 880,
+      "status": "paid",
+      "import_flag": {
+        "fr": "Client personne physique — correspondance b/clients incertaine.",
+        "en": "Individual client — b/clients match uncertain."
+      },
+      "drive_path": "Factures archivées/Invoicely/2020/INV-0211.pdf"
+    },
+    {
+      "id": 8004,
+      "workspace_id": 1,
+      "source": "invoicely",
+      "source_ref": "INV-0242",
+      "company_id": 1,
+      "number": "2020-037",
+      "client_name": "Nova Santé SA",
+      "issue_date": "2020-09-21",
+      "currency": "CHF",
+      "total": 12400,
+      "status": "paid",
+      "import_flag": null,
+      "drive_path": "Factures archivées/Invoicely/2020/INV-0242.pdf"
+    },
+    {
+      "id": 8005,
+      "workspace_id": 1,
+      "source": "invoicely",
+      "source_ref": "INV-0260",
+      "company_id": 1,
+      "number": "2021-008",
+      "client_name": "US EdTech Inc.",
+      "issue_date": "2021-02-16",
+      "currency": "USD",
+      "total": 7500,
+      "status": "paid",
+      "import_flag": {
+        "fr": "USD — hors périmètre QR ; montant TVA absent de la source.",
+        "en": "USD — outside QR scope; VAT amount missing in the source."
+      },
+      "drive_path": null
+    },
+    {
+      "id": 8006,
+      "workspace_id": 1,
+      "source": "invoicely",
+      "source_ref": "INV-0281",
+      "company_id": 1,
+      "number": "2021-029",
+      "client_name": "Cabinet Ehrat Consulting GmbH",
+      "issue_date": "2021-10-05",
+      "currency": "CHF",
+      "total": 15800,
+      "status": "paid",
+      "import_flag": null,
+      "drive_path": "Factures archivées/Invoicely/2021/INV-0281.pdf"
+    },
+    {
+      "id": 8007,
+      "workspace_id": 1,
+      "source": "invoicely",
+      "source_ref": "INV-0293",
+      "company_id": 1,
+      "number": "2022-004",
+      "client_name": "Fiduciaire Morel & Associés SA",
+      "issue_date": "2022-05-30",
+      "currency": "CHF",
+      "total": 6900,
+      "status": "paid",
+      "import_flag": null,
+      "drive_path": "Factures archivées/Invoicely/2022/INV-0293.pdf"
+    },
+    {
+      "id": 8008,
+      "workspace_id": 1,
+      "source": "zoho",
+      "source_ref": "ZB-000112",
+      "company_id": 1,
+      "number": "2022-018",
+      "client_name": "Cabinet Ehrat Consulting GmbH",
+      "issue_date": "2022-11-14",
+      "currency": "CHF",
+      "total": 9200,
+      "status": "paid",
+      "import_flag": {
+        "fr": "Doublon possible avec INV-0293 (période de migration Invoicely → Zoho).",
+        "en": "Possible duplicate of INV-0293 (Invoicely → Zoho migration window)."
+      },
+      "drive_path": "Factures archivées/Zoho/2022/ZB-000112.pdf"
+    },
+    {
+      "id": 8009,
+      "workspace_id": 1,
+      "source": "zoho",
+      "source_ref": "ZB-000178",
+      "company_id": 1,
+      "number": "2023-011",
+      "client_name": "Transports Junod SA",
+      "issue_date": "2023-12-01",
+      "currency": "CHF",
+      "total": 21500,
+      "status": "paid",
+      "import_flag": null,
+      "drive_path": "Factures archivées/Zoho/2023/ZB-000178.pdf"
+    },
+    {
+      "id": 8010,
+      "workspace_id": 1,
+      "source": "zoho",
+      "source_ref": "ZB-000203",
+      "company_id": 1,
+      "number": "2024-007",
+      "client_name": "SKS Innovation SA",
+      "issue_date": "2024-03-22",
+      "currency": "CHF",
+      "total": 11800,
+      "status": "paid",
+      "import_flag": null,
+      "drive_path": "Factures archivées/Zoho/2024/ZB-000203.pdf"
+    },
+    {
+      "id": 8011,
+      "workspace_id": 1,
+      "source": "zoho",
+      "source_ref": "ZB-000219",
+      "company_id": 1,
+      "number": "2024-019",
+      "client_name": "Häberli Gartenbau AG",
+      "issue_date": "2024-08-30",
+      "currency": "CHF",
+      "total": 16400,
+      "status": "paid",
+      "import_flag": null,
+      "drive_path": "Factures archivées/Zoho/2024/ZB-000219.pdf"
+    },
+    {
+      "id": 8012,
+      "workspace_id": 1,
+      "source": "zoho",
+      "source_ref": "ZB-000241",
+      "company_id": 1,
+      "number": "2024-031",
+      "client_name": "Helvetia Events GmbH",
+      "issue_date": "2024-12-10",
+      "currency": "EUR",
+      "total": 4300,
+      "status": "void",
+      "import_flag": {
+        "fr": "Marquée « annulée » dans Zoho sans motif — motif à reconstituer ; PDF absent de l'export.",
+        "en": "Marked \"void\" in Zoho with no reason — reason to be reconstructed; PDF missing from the export."
+      },
+      "drive_path": null
+    },
+    {
+      "id": 8013,
+      "workspace_id": 1,
+      "source": "zoho",
+      "source_ref": "ZB-000266",
+      "company_id": 1,
+      "number": "2025-014",
+      "client_name": "Metaesthetics SA",
+      "issue_date": "2025-06-18",
+      "currency": "CHF",
+      "total": 28750,
+      "status": "paid",
+      "import_flag": null,
+      "drive_path": "Factures archivées/Zoho/2025/ZB-000266.pdf"
+    },
+    {
+      "id": 8014,
+      "workspace_id": 1,
+      "source": "zoho",
+      "source_ref": "ZB-000281",
+      "company_id": 2,
+      "number": "AL-0096",
+      "client_name": "La Semeuse SA",
+      "issue_date": "2025-09-25",
+      "currency": "CHF",
+      "total": 1860,
+      "status": "paid",
+      "import_flag": {
+        "fr": "Entité émettrice déduite du compte bancaire — à confirmer.",
+        "en": "Issuing entity inferred from the bank account — to confirm."
+      },
+      "drive_path": "Factures archivées/Zoho/2025/ZB-000281.pdf"
+    }
+  ],
+  "vat_rates": [
+    {
+      "id": "standard",
+      "rate": 8.1,
+      "label": {
+        "fr": "Taux normal",
+        "en": "Standard rate"
+      }
+    },
+    {
+      "id": "reduced",
+      "rate": 2.6,
+      "label": {
+        "fr": "Taux réduit",
+        "en": "Reduced rate"
+      }
+    },
+    {
+      "id": "lodging",
+      "rate": 3.8,
+      "label": {
+        "fr": "Taux hébergement",
+        "en": "Lodging rate"
+      }
+    },
+    {
+      "id": "zero_export",
+      "rate": 0,
+      "label": {
+        "fr": "Exonéré / export (0%)",
+        "en": "Exempt / export (0%)"
+      }
+    }
+  ],
+  "answers": {
+    "7001": {
+      "subtotal": "19 200.00",
+      "has_vat": true,
+      "vat": "1 555.20",
+      "total": "20 755.20",
+      "reference": "000000000000000120260000316",
+      "reference_formatted": "00 00000 00000 00012 02600 00316",
+      "account": "CH4431999123000889012",
+      "account_formatted": "CH44 3199 9123 0008 8901 2"
+    },
+    "7002": {
+      "subtotal": "24 000.00",
+      "has_vat": true,
+      "vat": "1 944.00",
+      "total": "25 944.00",
+      "reference": "000000000000000120260000324",
+      "reference_formatted": "00 00000 00000 00012 02600 00324",
+      "account": "CH4431999123000889012",
+      "account_formatted": "CH44 3199 9123 0008 8901 2"
+    },
+    "7003": {
+      "subtotal": "4 800.00",
+      "has_vat": true,
+      "vat": "388.80",
+      "total": "5 188.80",
+      "reference": "000000000000000120260000332",
+      "reference_formatted": "00 00000 00000 00012 02600 00332",
+      "account": "CH4431999123000889012",
+      "account_formatted": "CH44 3199 9123 0008 8901 2"
+    },
+    "7004": {
+      "subtotal": "3 600.00",
+      "has_vat": true,
+      "vat": "291.60",
+      "total": "3 891.60",
+      "reference": "000000000000000120260000348",
+      "reference_formatted": "00 00000 00000 00012 02600 00348",
+      "account": "CH4431999123000889012",
+      "account_formatted": "CH44 3199 9123 0008 8901 2"
+    },
+    "7005": {
+      "subtotal": "8 700.00",
+      "has_vat": true,
+      "vat": "0.00",
+      "total": "8 700.00",
+      "reference": "RF8320260035",
+      "reference_formatted": "RF83 2026 0035",
+      "account": "CH9300762011623852957",
+      "account_formatted": "CH93 0076 2011 6238 5295 7"
+    },
+    "7006": {
+      "subtotal": "9 650.00",
+      "has_vat": true,
+      "vat": "781.65",
+      "total": "10 431.65",
+      "reference": "000000000000000120260000369",
+      "reference_formatted": "00 00000 00000 00012 02600 00369",
+      "account": "CH4431999123000889012",
+      "account_formatted": "CH44 3199 9123 0008 8901 2"
+    },
+    "7007": {
+      "subtotal": "2 940.00",
+      "has_vat": true,
+      "vat": "238.15",
+      "total": "3 178.15",
+      "reference": "000000000000000120260000377",
+      "reference_formatted": "00 00000 00000 00012 02600 00377",
+      "account": "CH4431999123000889012",
+      "account_formatted": "CH44 3199 9123 0008 8901 2"
+    },
+    "7008": {
+      "subtotal": "18 400.00",
+      "has_vat": true,
+      "vat": "1 490.40",
+      "total": "19 890.40",
+      "reference": "000000000000000120260000385",
+      "reference_formatted": "00 00000 00000 00012 02600 00385",
+      "account": "CH4431999123000889012",
+      "account_formatted": "CH44 3199 9123 0008 8901 2"
+    },
+    "7101": {
+      "subtotal": "2 476.00",
+      "has_vat": false,
+      "vat": "0.00",
+      "total": "2 476.00",
+      "reference": "RF58202600115",
+      "reference_formatted": "RF58 2026 0011 5",
+      "account": "CH5604835012345678009",
+      "account_formatted": "CH56 0483 5012 3456 7800 9"
+    },
+    "7102": {
+      "subtotal": "1 600.00",
+      "has_vat": false,
+      "vat": "0.00",
+      "total": "1 600.00",
+      "reference": null,
+      "reference_formatted": null,
+      "account": "CH5604835012345678009",
+      "account_formatted": "CH56 0483 5012 3456 7800 9"
+    },
+    "7103": {
+      "subtotal": "3 220.00",
+      "has_vat": false,
+      "vat": "0.00",
+      "total": "3 220.00",
+      "reference": "RF04202600117",
+      "reference_formatted": "RF04 2026 0011 7",
+      "account": "CH5604835012345678009",
+      "account_formatted": "CH56 0483 5012 3456 7800 9"
+    }
+  }
+}

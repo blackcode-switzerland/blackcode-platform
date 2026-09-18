@@ -178,6 +178,29 @@ codes, badges — and let the columns size themselves.
 - [ ] The page opened in a browser, in FR and EN, and **on the empty tenant**,
       where it must say what it is for rather than showing an empty frame
 
+## Progress
+
+**Backend built 2026-09-18** on `feat/billing-phase-5-be` (ticket #93). The
+details, the verification and the mutations are in
+`apps/billing/docs/backend.md` under "Phase 5". What building it changed, so
+this doc is not re-read as a plan for it:
+
+- The migration is **0010**, not 0009: phase 2 took 0008 and a fix to the audit
+  log's append-only trigger took 0009. Phase 4's recurrence will be 0011.
+- `status` is a closed vocabulary — `paid`, `unpaid`, `void` — rather than the
+  source's own word; what the word loses goes in the flag.
+- The importer is recorded on the row (`imported_by`, `imported_via`), not in
+  `billing.audit`, which is a public event feed.
+- `drive_path` refuses the blob store's host at a CHECK instead of carrying a
+  blob-reference trigger.
+- The import is all or nothing and reports every problem at once; a duplicate is
+  a 409 for the whole batch, naming each archived row's `#number`.
+- The mockup's data is extracted mechanically into
+  `apps/billing/fixtures/mockup.json` (`scripts/extract-mockup.mjs`).
+
+Still owed from "Done when": the page (ticket #94), and with it the browser
+checks, the Drive link, and the counts and totals per year against the mockup.
+
 ## Frontend gets
 
 One page, and it is the least dense in the app. The mockup's

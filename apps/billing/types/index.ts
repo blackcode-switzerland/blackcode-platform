@@ -104,6 +104,12 @@ export type AuditAction =
 /** How the write arrived. The only structural difference between a human and an agent. */
 export type ActorVia = 'session' | 'token'
 
+/** Where an imported bill came from. `lib/vocabularies.ts` HISTORY_SOURCES. */
+export type HistorySource = 'zoho' | 'invoicely'
+
+/** An imported bill's status, mapped onto three words. Not the native lifecycle. */
+export type HistoryStatus = 'paid' | 'unpaid' | 'void'
+
 // ---------------------------------------------------------------------------
 // Address
 // ---------------------------------------------------------------------------
@@ -359,6 +365,51 @@ export interface AuditEntry {
 }
 
 // ---------------------------------------------------------------------------
+// Imported history (phase 5)
+// ---------------------------------------------------------------------------
+
+/** An ambiguity the mapper could not resolve, in both languages or neither. */
+export interface ImportFlag {
+  fr: string
+  en: string
+}
+
+/**
+ * One bill from before this app existed. **Read-only**, and in its own
+ * namespace: `number` is the historical number as issued and is never a native
+ * invoice number, and `seq` is this app's address for the row.
+ */
+export interface HistoryEntry {
+  /** The workspace #number — the ADDRESS (`bk billing history show 12`). */
+  seq: number
+  source: HistorySource
+  /** The source system's own id, byte for byte as it was imported. */
+  source_ref: string
+  /** The issuing company's slug. */
+  company: string
+  /** The historical number as issued. Never renumbered. */
+  number: string
+  client_name: string
+  issue_date: string
+  /** Any ISO 4217 code, USD included. Only CHF and EUR ever carry a payment part, and an archive row carries none. */
+  currency: string
+  /** Stored, not derived: the source's total. A decimal STRING. */
+  total: string
+  status: HistoryStatus
+  /** Null means the row mapped cleanly. Never cleared once set. */
+  import_flag: ImportFlag | null
+  /** A path or id on Google Drive. Null means the export had no PDF — say so, do not hide it. */
+  drive_path: string | null
+  imported_at: string
+  imported_by: {
+    /** Null when the importing account has since been removed. */
+    user_id: number | null
+    email: string | null
+    via: ActorVia
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Overview
 // ---------------------------------------------------------------------------
 
@@ -458,6 +509,42 @@ export interface CreateInvoiceBody {
 // ---------------------------------------------------------------------------
 // Lifecycle bodies (phase 3)
 // ---------------------------------------------------------------------------
+
+/**
+ * One row of `POST …/history`, as an agent maps it from an export.
+ *
+ * Unknown keys are REFUSED, not ignored: a mapper that wrote `sourceRef` would
+ * otherwise import a row with its only link to the source silently missing.
+ */
+export interface ImportHistoryRow {
+  source: HistorySource
+  /** Verbatim. Surrounding whitespace is kept, because the source has it. */
+  source_ref: string
+  /** The issuing company's slug. */
+  company: string
+  number: string
+  client_name: string
+  issue_date: string
+  currency: string
+  /** A decimal string, `"3240.00"`. A JSON number is refused: money is never a float here. */
+  total: string
+  status: HistoryStatus
+  import_flag?: ImportFlag | null
+  drive_path?: string | null
+}
+
+/** `POST …/history`'s body: the rows, all written or none. */
+export interface ImportHistoryBody {
+  rows: ImportHistoryRow[]
+}
+
+/** `POST …/history`'s answer: what was written, named, not just counted. */
+export interface ImportHistoryResult {
+  imported: number
+  flagged: number
+  without_pdf: number
+  rows: HistoryEntry[]
+}
 
 /** `POST …/invoices/{ref}/send`. Subject and body default to the document's language. */
 export interface SendInvoiceBody {

@@ -63,6 +63,8 @@ import {
   ACTOR_VIA,
   AUDIT_ACTIONS,
   DOCUMENT_LANGUAGES,
+  HISTORY_SOURCES,
+  HISTORY_STATUSES,
   INVITATION_STATUSES,
   INVOICE_STATUSES,
   MEMBER_ROLES,
@@ -71,6 +73,7 @@ import {
 } from '@/lib/vocabularies'
 import {
   DELIVERY_LIMITS,
+  HISTORY_LIMITS,
   LIST_LIMIT_DEFAULT,
   LIST_LIMIT_MAX,
   METADATA_LIMITS,
@@ -101,6 +104,8 @@ function currentApp() {
       rounding_policies: ROUNDING_POLICIES,
       audit_actions: AUDIT_ACTIONS,
       actor_via: ACTOR_VIA,
+      history_sources: HISTORY_SOURCES,
+      history_statuses: HISTORY_STATUSES,
     },
     limits: {
       workspace_name_max: WORKSPACE_NAME_MAX,
@@ -112,6 +117,7 @@ function currentApp() {
       // Fixed by the standards (§2.12, ISO 11649), not by this app — served so a
       // client composing a ref_body reads them rather than copying them.
       reference: { qrr_body_length: QRR_BODY_LENGTH, scor_body_max: SCOR_BODY_MAX },
+      history: HISTORY_LIMITS,
     },
     // ── THE PUBLIC SURFACE, IN THE ANONYMOUS HALF ──────────────────────────
     // Decision D-B5. Served here so it rides inside `contractVersion` — which
@@ -185,13 +191,13 @@ export const GET = apiHandler(async (req: NextRequest) => {
     // it correctly-but-wrongly, and one sentence prevents that.
     entities: {
       source: 'database',
-      tables: ['billing.company', 'billing.invoice', 'billing.invoice_line', 'billing.audit'],
+      tables: ['billing.company', 'billing.invoice', 'billing.invoice_line', 'billing.audit', 'billing.history'],
       note:
-        'Companies and invoices are workspace-scoped, so this unauthenticated route cannot ' +
-        'list them. Read them with `bk billing company list` and `bk billing invoice list`, ' +
-        'or GET /api/workspaces/{ws}/invoices. Sending, paid and void exist; the payment ' +
-        'reference check digit, the QR payload and the PDF do not yet, so a send refuses with ' +
-        'document_renderer_not_built and `bk billing invoice mark-sent` records a bill delivered another way.',
+        'Companies, invoices and imported history are workspace-scoped, so this unauthenticated ' +
+        'route cannot list them. Read them with `bk billing company list`, `bk billing invoice list` ' +
+        'and `bk billing history list`. Sending, paid and void exist; the QR payload and the PDF ' +
+        'are built but not yet served, so a send refuses with document_renderer_not_built and ' +
+        '`bk billing invoice mark-sent` records a bill delivered another way.',
     },
   })
 })

@@ -107,6 +107,10 @@ async function rebuildFrom(workspaceId: number): Promise<void> {
       await tx.execute(sql.raw(`ALTER TABLE billing.${table} DISABLE TRIGGER trg_no_hard_delete`))
     }
     await tx.execute(sql.raw('ALTER TABLE billing.audit DISABLE TRIGGER trg_audit_append_only'))
+    // The archive (0010) refuses a DELETE even from the owner, so the cascade
+    // from the workspace stops at it the moment anybody has imported into the
+    // seeded workspace — which the frontend does to see the history screen.
+    await tx.execute(sql.raw('ALTER TABLE billing.history DISABLE TRIGGER trg_history_read_only'))
 
     await tx.delete(billingWorkspaces).where(eq(billingWorkspaces.id, workspaceId))
 
@@ -114,6 +118,7 @@ async function rebuildFrom(workspaceId: number): Promise<void> {
       await tx.execute(sql.raw(`ALTER TABLE billing.${table} ENABLE TRIGGER trg_no_hard_delete`))
     }
     await tx.execute(sql.raw('ALTER TABLE billing.audit ENABLE TRIGGER trg_audit_append_only'))
+    await tx.execute(sql.raw('ALTER TABLE billing.history ENABLE TRIGGER trg_history_read_only'))
   })
 
   // A POSITIVE assertion that the guards are back, because the cost of getting
@@ -512,6 +517,12 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error(e instanceof Error ? e.message : e)
+  // The whole cause chain, not the top message. Drizzle wraps the driver's
+  // error as "Failed query: …", so printing only `e.message` names the
+  // statement and hides the database's REASON — which is the one line that
+  // says which guard refused it.
+  for (let x: unknown = e, depth = 0; x && depth < 5; x = (x as { cause?: unknown }).cause, depth++) {
+    console.error(depth === 0 ? '' : '  caused by: ', x instanceof Error ? x.message : String(x))
+  }
   process.exit(1)
 })
