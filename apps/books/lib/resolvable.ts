@@ -72,7 +72,7 @@
 //
 // ── WHY A FUNCTION AND NOT A TIDIER TERNARY ──────────────────────────────
 // A ternary inside a 350-line component can only be checked by scanning the
-// file as text, and `lib/dashboard-paths.test.ts` in apps/issues is on record
+// file as text, and `lib/dashboard-paths.test.ts` in apps/sales is on record
 // twice for what text scanning is worth: the granularity of the scan is part of
 // what it checks, and both of its first two versions passed against code that
 // did the wrong thing.

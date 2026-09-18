@@ -152,7 +152,7 @@ that route can give.
 
 ## 4. How the checks here have been wrong
 
-`CLAUDE.md` carries the table of twenty-one guardrails found green-but-inert.
+`CLAUDE.md` carries the table of twenty-six guardrails found green-but-inert.
 What follows is the *shapes*, which is what transfers. The governing rule is:
 
 > **A check you have not watched fail is not a check.** Before claiming any
@@ -269,7 +269,7 @@ cd cli && make routes          # if any `routes` annotation changed
 
 **`npx tsc --noEmit` does not work from the repo root, by design.** There is no
 root `tsconfig.json`, because a root config that compiled nothing would report a
-vacuous green — the exact failure this repo has twenty-one recorded instances of.
+vacuous green — the exact failure this repo has twenty-six recorded instances of.
 Use `npm run typecheck`, or `cd apps/issues && npx tsc --noEmit`.
 
 `npm run build` does not touch a database: the `postbuild` hook only migrates

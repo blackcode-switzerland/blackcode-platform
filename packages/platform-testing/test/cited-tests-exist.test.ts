@@ -166,7 +166,14 @@ const CITATIONS = collectCitations()
  * ONE file rather than a name everywhere.
  */
 const ALLOWED = new Map<string, string>([
-  // EMPTY, as of 2026-08-10. Its one entry covered a comment in
+  [
+    'apps/books/lib/resolvable.ts::lib/dashboard-paths.test.ts',
+    'narrates CLAUDE.md finding #11 — apps/sales\' guard, the cautionary tale about text ' +
+      'scans — as the reason books uses a function instead. It is a story about another ' +
+      'app\'s test, not a claim that books is protected by it. (Its first version put the ' +
+      'file in apps/issues; the tightened resolution of 2026-09-18 is what surfaced that.)',
+  ],
+  // Was EMPTY from 2026-08-10 to 2026-09-18. Its one entry covered a comment in
   // `apps/sales/lib/db/queries/entities.ts`, and that file is gone: Phase 3 of
   // the multi-app refactor removed this app's projection into
   // `platform.entities` altogether. The staleness assertion below is what
@@ -180,6 +187,40 @@ const ALLOWED = new Map<string, string>([
 
 const allowKey = (c: Citation) => `${c.from}::${c.cited}`
 
+/**
+ * The app a file belongs to — `apps/billing` for `apps/billing/lib/x.ts` — or
+ * null for anything outside `apps/`.
+ */
+function appRootOf(repoRelative: string): string | null {
+  const m = /^apps\/[^/]+/.exec(repoRelative)
+  return m ? m[0] : null
+}
+
+/**
+ * May a test at `testPath` be what a comment in `from` is citing?
+ *
+ * ── NOT A TEST IN ANOTHER APP (found 2026-09-18) ──────────────────────────
+ * The first version matched a bare name or a partial path ANYWHERE in the
+ * repo. Apps are written from the same scaffold, so they share test names:
+ * `apps/billing/lib/db/schema.ts` cited `lib/db/schema-parity.test.ts`, which
+ * billing never had, and the guard resolved it to `apps/books`' file of that
+ * name — and `apps/billing/lib/derive/totals.ts` cited a `parity.test.ts` that
+ * resolved the same way. Two claims about what protects billing, both
+ * satisfied by books.
+ *
+ * An app never imports or describes another app (CLAUDE.md, the docs rule), so
+ * a comment in one cannot legitimately be citing another's test. A comment in
+ * an app may cite its own tests and the shared packages'; a comment in a
+ * package may cite anything, because a package's guard can live in any app that
+ * exercises it.
+ */
+function mayCite(from: string, testPath: string): boolean {
+  const fromApp = appRootOf(from)
+  if (fromApp === null) return true
+  const rel = testPath.slice(REPO_ROOT.length + 1)
+  return rel.startsWith(fromApp + '/') || rel.startsWith('packages/')
+}
+
 /** Can this citation be resolved to a real file? */
 function resolves(c: Citation): boolean {
   const citingDir = join(REPO_ROOT, dirname(c.from))
@@ -188,17 +229,25 @@ function resolves(c: Citation): boolean {
   const asRelative = resolve(citingDir, c.cited)
   if (existsSync(asRelative) && statSync(asRelative).isFile()) return true
 
+  // A path, relative to the citing file's APP — `lib/db/x.test.ts` written in
+  // `apps/billing/lib/db/schema.ts` means `apps/billing/lib/db/x.test.ts`.
+  const app = appRootOf(c.from)
+  if (app) {
+    const asAppPath = join(REPO_ROOT, app, c.cited)
+    if (existsSync(asAppPath) && statSync(asAppPath).isFile()) return true
+  }
+
   // A path, relative to the repo root.
   const asRepoPath = join(REPO_ROOT, c.cited)
   if (existsSync(asRepoPath) && statSync(asRepoPath).isFile()) return true
 
-  // A bare filename, or a partial path, matched anywhere in the repo. A comment
-  // may legitimately name a guard that lives in another package.
+  // A bare filename, or a partial path, matched in the citing file's own app or
+  // in the shared packages — see `mayCite`.
   const name = basename(c.cited)
-  const candidates = TESTS.byName.get(name)
-  if (!candidates?.length) return false
+  const candidates = (TESTS.byName.get(name) ?? []).filter((p) => mayCite(c.from, p))
+  if (!candidates.length) return false
   if (!c.cited.includes('/')) return true
-  return TESTS.paths.some((p) => p.endsWith('/' + c.cited) || p.endsWith(c.cited))
+  return candidates.some((p) => p.endsWith('/' + c.cited) || p.endsWith(c.cited))
 }
 
 describe('every test file cited in a comment exists', () => {
