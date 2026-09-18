@@ -212,6 +212,13 @@ computationally.
 the two vectors above, plus the PDF's Example 2 serialized payload as the
 serializer's golden test.
 
+**Two things the PDF says that the extraction did not carry** (found 2026-09-17,
+ticket #84): Example 2's creditor name is printed `Max Muster & Söhne (sample
+company)`, and the QR references of examples 1 and 2 and the IBANs of examples
+1–3 all verify, so they are usable vectors too. The standard does not settle
+line 32 when only line 33 is used; `apps/billing/lib/qr/payload.ts` records the
+choice.
+
 ## 5. What the reference body encodes
 
 Position **P11**, still open, and it needs the bank. The QRR body's leading

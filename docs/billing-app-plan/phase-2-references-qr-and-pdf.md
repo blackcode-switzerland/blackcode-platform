@@ -204,6 +204,32 @@ Both routes are reads, so neither writes an audit row.
       printed page and a screen — and the transcript is in
       `apps/billing/docs/backend.md` with its commit hash
 
+## Progress
+
+**#84, `lib/qr/`, built 2026-09-17** on `feat/billing-phase-2-be`. Every `lib/qr`
+item in "Done when" above holds except the ones that need a PDF; the details and
+the mutations are in `apps/billing/docs/backend.md` under "Phase 2, ticket #84".
+What building it changed, so this doc is not re-read as a plan for it:
+
+- `refBodyFor` lives in `lib/qr/reference.ts` as `referenceBodyFor`, moved from
+  `lib/derive/reference.ts` rather than duplicated.
+- The SCOR body limit is 21, not 25; migration **0008** corrects phase 1's CHECK
+  and refuses to apply over a row that violates it.
+- `validate.ts` returns every refusal, not the first.
+- The test oracle is `swissqrbill` 4.4.1's utilities plus its internal payload
+  generator, loaded by path; one recorded disagreement (line 32 when only an
+  alternative procedure is used).
+- The full extraction is vendored at `apps/billing/docs/qr-bill-spec.md`.
+
+**#85, `lib/pdf/`, built 2026-09-18** on the same branch: the A4 body and the
+payment part, measured from the saved file, byte-stable across processes, and
+its QR decoded from a rendered page to the exact payload. Details in
+`apps/billing/docs/backend.md` under "Phase 2, ticket #85". Positions inside the
+sections follow `swissqrbill`'s renderer; the standard's sizes are asserted.
+
+**#86 (routes, `bk`, the seam) is not started**, and the manual tiers of
+`qr-bill.md` §8 are not done.
+
 ## Frontend gets
 
 The payment part as a React component, rendered in true millimetres from the

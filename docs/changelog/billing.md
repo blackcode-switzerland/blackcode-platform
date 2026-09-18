@@ -33,6 +33,41 @@ compared as numbers.
 **How to adapt:** a feed consumer that saw `qty` changes with equal values before
 and after can ignore them; rows already written are permanent, like every audit
 row.
+## 2026-09-17 — Payment references are checked against the standard
+
+**Breaking for one kind of request, which never produced a valid bill.** No
+route, command or field is new; what changes is what a create or an edit
+accepts.
+
+### What is refused now
+
+- **A creditor reference (SCOR) body over 21 characters.** 25 is the limit for
+  the whole reference, `RF` and its two check digits included; the body was
+  wrongly allowed 25. `400 invalid_creditor_reference`.
+- **A SCOR body with anything but letters and digits** (`INV-7`). Same code.
+- **A QR reference (QRR) body of all zeros.** `400 invalid_qr_reference`.
+- **An invoice whose number cannot form a SCOR reference** — more than 21
+  letters and digits once punctuation is removed. It used to be truncated, which
+  could give two invoices the same reference; it is refused now with
+  `409 number_cannot_form_reference`, and **no number is consumed**. Supply
+  `ref_body`, shorten the company's `number_format`, or use `NON`.
+- **A reference edit on a draft that leaves an invalid pair**: switching to `NON`
+  while a body remains (`400 non_takes_no_reference`, send `ref_body: null` with
+  it), or to `SCOR`/`QRR` with no body (`400 reference_body_required`).
+
+The database enforces the first three as well, for every writer.
+
+### How a client should adapt
+
+Send `ref_body` only when your bank or client dictates the reference, as 1–21
+letters and digits for SCOR or 26 digits for QRR — never the check digits.
+`bk meta --app-server billing` serves both limits under `limits.reference`.
+
+### Also
+
+The references are now computed, not only stored (`RF18…`, the 27th QRR digit),
+in code that nothing calls yet: the PDF and the QR payload arrive with the rest of
+phase 2.
 
 ## 2026-09-17 — Sending, paid and void
 

@@ -35,7 +35,7 @@ import { appendAudit, appendFieldChanges } from './audit'
 import { computeTotals, computeTotalsRappen, type TotalsLine } from '@/lib/derive/totals'
 import { formatRappen, parseMinor } from '@/lib/derive/money'
 import { renderNumber } from '@/lib/derive/number'
-import { referenceBodyFor } from '@/lib/derive/reference'
+import { ReferenceProblem, referenceBodyFor, referenceBodyProblem } from '@/lib/qr/reference'
 import { yearOf } from '@/lib/derive/format'
 import { LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, PAYMENT_MESSAGE_MAX, METADATA_LIMITS, validateMetadata } from '@/lib/limits'
 import { DOCUMENT_LANGUAGES, REFERENCE_TYPES } from '@/lib/vocabularies'
@@ -350,6 +350,12 @@ export async function createInvoice(ctx: WriteCtx, body: CreateInvoiceBody): Pro
     throw new InvoiceRefused('invalid_metadata', metaProblem, `at most ${METADATA_LIMITS.max_keys} flat string keys`)
   }
 
+  // A SUPPLIED reference body is checked before anything is allocated. The
+  // derived one is checked inside the transaction, because it depends on the
+  // number the transaction allocates — and a refusal there rolls the number back.
+  const bodyProblem = referenceBodyProblem(refType, body.ref_body)
+  if (bodyProblem) throw new InvoiceRefused(bodyProblem.code, bodyProblem.message, bodyProblem.suggestion)
+
   const issueDate = body.issue_date ?? new Date().toISOString().slice(0, 10)
   const dueDate = body.due_date ?? addDays(issueDate, company.payment_terms_days)
 
@@ -380,7 +386,16 @@ export async function createInvoice(ctx: WriteCtx, body: CreateInvoiceBody): Pro
     // A caller-supplied body wins; see `referenceBodyFor`. The QRR layout is
     // position P11 and must be agreed with the bank before the first real QRR
     // bill.
-    const refBody = referenceBodyFor(refType, body.ref_body, company.seq, seqNo, number)
+    let refBody: string | null
+    try {
+      refBody = referenceBodyFor(refType, body.ref_body, company.seq, seqNo, number)
+    } catch (e) {
+      // A number that cannot form a reference is a fact about the company's
+      // configuration, not about the request — 409, and the rollback releases
+      // the number this transaction took.
+      if (e instanceof ReferenceProblem) throw new InvoiceRefused(e.code, e.message, e.suggestion, 409)
+      throw e
+    }
 
     const [inserted] = await tx
       .insert(billingInvoice)
@@ -517,6 +532,24 @@ export async function editInvoice(
         `invoice ${row.number} is ${status}, and ${frozen.join(', ')} ${frozen.length === 1 ? 'is' : 'are'} part of the sent document`,
         'void it with a reason and reissue; due_date, message, external_ref and metadata stay editable',
         409
+      )
+    }
+  }
+
+  // The reference pair is checked as the pair it will BE after the patch: a type
+  // change alone can leave a body the new type cannot carry (a 26-digit QRR body
+  // is 5 characters too long for SCOR).
+  if (patch.ref_type !== undefined || patch.ref_body !== undefined) {
+    const nextType = (patch.ref_type ?? row.ref_type) as ReferenceType
+    const nextBody =
+      patch.ref_body !== undefined ? ((patch.ref_body as string | null) ?? null) : ((row.ref_body as string | null) ?? null)
+    const p = referenceBodyProblem(nextType, nextBody)
+    if (p) throw new InvoiceRefused(p.code, p.message, p.suggestion)
+    if (nextType !== 'NON' && (nextBody === null || nextBody === '')) {
+      throw new InvoiceRefused(
+        'reference_body_required',
+        `a ${nextType} invoice needs a reference body`,
+        'send ref_body with the new ref_type'
       )
     }
   }
