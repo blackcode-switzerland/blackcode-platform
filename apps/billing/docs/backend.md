@@ -497,7 +497,7 @@ the payment message is edited, and matches again when the edit is reverted.
 - **The manual tiers of `qr-bill.md` §8**: four bills through SIX's validation
   portal, two banking apps, the grid-sheet print. `invoice qr` is what makes the
   first one a paste. Needs a person.
-- **A real email to a real inbox** (needs a Resend key).
+- ~~A real email to a real inbox~~ — done 2026-09-18; see "Still owed at the end of phase 3".
 - The ticket's `derived.totals`: not added. `totals` is already on the invoice,
   and a second copy in one response is two numbers that must agree.
 
@@ -1085,8 +1085,12 @@ Ticket #86 added these, on 2026-09-18:
 ## Still owed at the end of phase 3
 
 - ~~Phase 2, which turns `send` on~~ — done 2026-09-18, ticket #86.
-- **A real email to a real inbox**, with the attachment's sha256 compared to
-  `pdf_sha256`. Needs a Resend key; it is the headline done-when of
+- ~~A real email to a real inbox~~ — **done 2026-09-18**, from a local run with
+  a Resend key: `bk billing invoice send` of AC-0003 (CHF 1.00) to
+  mustneer@blackcode.ch, Resend message `01a0b51d-a0ed-741b-87c8-b194646cd81c`,
+  Resend's `last_event: delivered`, and the recipient confirmed it arrived with
+  the PDF. `pdf_sha256` (`cebe5ca7…`) equals a fresh `invoice pdf` byte for
+  byte. From `admin@blackcode.ch`, reply-to the company's email. Was: it is the headline done-when of
   `docs/billing-app-plan/phase-3-lifecycle-and-delivery.md` and it is not done.
 - **The 503 over HTTP in production mode.** Asserted by `send-route.test.ts` on
   the response; not run against `next start` with `NODE_ENV=production`.
