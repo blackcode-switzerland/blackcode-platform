@@ -14,6 +14,7 @@
 // and an integration that depended on it would be depending on a layout.
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
+import { companyFilter } from '@/lib/api/company-filter'
 import { getOverview } from '@/lib/db/queries/overview'
 
 interface Params {
@@ -23,6 +24,6 @@ interface Params {
 export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const { ws } = await params
   const ctx = await resolveWorkspace(req, ws)
-  const company = req.nextUrl.searchParams.get('company') ?? undefined
+  const company = await companyFilter(ctx.workspace.id, req.nextUrl.searchParams.get('company'))
   return NextResponse.json(await getOverview(ctx.workspace.id, company))
 })

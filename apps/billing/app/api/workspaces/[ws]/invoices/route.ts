@@ -24,6 +24,7 @@ import { authVia } from '@/lib/api/actor'
 import { createInvoice, InvoiceRefused, listInvoices } from '@/lib/db/queries/invoices'
 import { INVOICE_STATUSES } from '@/lib/vocabularies'
 import { LIST_LIMIT_MAX } from '@/lib/limits'
+import { companyFilter } from '@/lib/api/company-filter'
 import type { CreateInvoiceBody, InvoiceStatus } from '@/types'
 
 interface Params {
@@ -53,7 +54,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   }
 
   const page = await listInvoices(ctx.workspace.id, {
-    company: q.get('company') ?? undefined,
+    company: await companyFilter(ctx.workspace.id, q.get('company')),
     status: (status as InvoiceStatus) ?? undefined,
     currency: q.get('currency')?.toUpperCase() ?? undefined,
     externalRef: q.get('external_ref') ?? undefined,

@@ -73,7 +73,8 @@ export const PUBLIC_ROUTES: readonly PublicRoute[] = [
     path: '/api/workspaces/{ws}/invoices',
     since: '2026-09-17',
     purpose:
-      'List invoices. Filters: company, status, currency, external_ref. Paginate with limit and cursor.',
+      'List invoices. Filters: company, status, currency, external_ref. Paginate with limit and cursor. ' +
+      'A company that is not in this workspace is a 404 company_not_found, never an empty page.',
   },
   {
     method: 'GET',

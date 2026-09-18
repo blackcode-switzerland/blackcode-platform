@@ -616,6 +616,103 @@ its fourteen history rows; phase 6's parity test uses the answers.
   restates `audit_via_check`'s two values on a second table; `alsoConstraints`
   covers it now.
 
+## Phase 6, backend (ticket #95, 2026-09-18)
+
+Built on `feat/billing-phase-6-be`. The release, the production checks and the
+per-page browser walk are not in it: the first two need a human with the
+Vercel project that does not exist yet and an npm OTP, and the third is the
+frontend's ticket (#96).
+
+### The seed: three workspaces, the mockup verified on the way in
+
+`npm run db:seed:billing` (`scripts/seed.ts`) builds:
+
+| Workspace | What | Why |
+|---|---|---|
+| `blackcode` | the mockup's two companies, eleven invoices and fourteen imported bills, read from `fixtures/mockup.json` | parity: it is the mockup, not something shaped like it |
+| `demo-tenant` | one company, nothing else | the empty states, and the only state in which a cross-tenant leak is visible |
+| `praxis-demo` | decision D-B7's shape: prices including VAT, an exempt line beside two rates, rounding on the total | the first customer's bill, which the mockup predates — in its own workspace so `blackcode` stays exactly the mockup |
+
+At the end it reads every mockup invoice back through `getInvoice` — the app's
+read path, derivations included — and compares number, subtotal, VAT, total,
+reference, printed reference and printed account with the answers the mockup's
+own code gave. **Any difference stops the seed**, listing each. The history rows
+go in through `importHistory`, the real write door.
+
+Deliberately absent, and said so in the seed's header: the mockup's four
+**recurrences** (phase 4 is not built) and its fifteen **audit rows** (they name
+mockup actors that are not accounts, and an append-only log is the last place
+for invented rows — phase 1's decision, kept).
+
+Two fixes to the seed itself: the owner is now the OLDEST account (`ORDER BY
+id`); the first version's unordered `LIMIT 1` handed the seeded workspace to a
+test account an integration suite had created, and the developer's own login
+stopped being a member of it. And its error output prints the cause chain (phase
+5).
+
+### The tests phase 6 asked for
+
+| File | What it holds the app to |
+|---|---|
+| `lib/derive/parity.test.ts` | every mockup invoice's totals, reference, printed reference, account and number, against the mockup's OWN answers (45 cases, no database) |
+| `lib/invariants.test.ts` | DATA-MODEL §11's thirteen invariants as named groups; the pure ones always, the rest as `billing_app`. I9 is a tripwire (phase 4), I12 records a gap (below) |
+| `lib/runtime.integration.test.ts` | three companies created at runtime and invoiced concurrently, each holding its own sequence, references and account; and an EMPTY tenant beside a full one, with the same company slug in both, reading nothing of the other's |
+| `lib/db/schema-parity.test.ts` | `schema.ts` against `pg_attribute`: tables, columns, types and nullability, both directions. Cited by `schema.ts` since phase 1 and never written — see finding #24 in CLAUDE.md |
+
+### The subject-parameter rule
+
+`?company=` changes what a list is ABOUT, so an unknown one is refused:
+`GET …/invoices`, `…/overview` and `…/history` answer 404 `company_not_found`
+through `lib/api/company-filter.ts`, which also resolves a `#number`. Until now
+all three answered an empty page, which reads as "no invoices" — verified before
+and after with `bk`. `{ref}` and `{seq}` were already refused when unknown.
+
+### What checking it found
+
+- **I12 is half-built.** A sent invoice freezes its document half but carries
+  no copy of its ISSUER: the company's legal name, address and IBAN are read as
+  they are now. Editing a company's IBAN changes what its unpaid sent bills
+  settle on — confirmed against the database by the KNOWN GAP case in
+  `invariants.test.ts` — and a regenerated PDF would not match the recorded
+  `pdf_sha256`. Belongs to #86, which wires the renderer: snapshot the issuer at
+  send, render sent bills from it, and flip that case.
+- **The 140-character budget was declared twice**, in `lib/limits.ts` and in
+  `lib/qr/validate.ts`. The validator reads the limit now.
+- **`totals.ts` cited the wrong file** for the inclusive-versus-exclusive VAT
+  proof; `totals.test.ts` has it.
+- Findings **#24, #25 and #26** in CLAUDE.md: the cited-tests guard resolving to
+  another app's file, the help-tour regex that could not read two-space rows (it
+  hid a real `bk books --help` drift, fixed), and this app's footprint guard
+  satisfied by an import line (phase 5).
+- **Only one mockup invoice exercises five-rappen VAT rounding** (BC-2026-0037,
+  238.14 → 238.15): removing that rounding fails one parity case of 45. The
+  rounding policies are covered in depth by `totals.test.ts`; the mockup is thin
+  there, and that is a fact about the mockup.
+- `apps/books/lib/db/schema-parity.test.ts` announces its skip with
+  `console.warn`, which vitest drops — finding #12's mechanism. Not changed here
+  (another app's test); billing's copy uses `integrationDescribe`.
+
+### Verified on 2026-09-18
+
+- `npm run db:seed:billing` against the local database: "11 invoices read back
+  and equal to the mockup". With the mockup companies set to round on the total
+  instead, it refused: `BC-2026-0037 VAT: this app 238.14, the mockup 238.15`.
+- As `billing_app`: `invariants.test.ts` 21/21, `runtime.integration.test.ts`
+  5/5, `schema-parity.test.ts` 3/3, and phase 5's suites unchanged.
+- `bk billing invoice list|overview|history list --company nope` → 404, exit 5;
+  `--company blackcode` lists; `--company 2` resolves the second company.
+
+### Still owed at the end of phase 6's backend
+
+- **The release** (`./devops/release.sh`, web → cli → web for every app), the
+  deploy log's "applying Drizzle migrations", `bk app list` from a clean global
+  install, and the north-star sequence against production. All need the
+  `bc-billing` Vercel project, which does not exist.
+- **The issuer snapshot** (I12), with #86.
+- **Phase 4**: recurrence, the seed's four series, and I9 made real.
+- **The per-page browser report** on all three tenants in FR and EN (#96).
+- The five open questions in the changelog: P1, P2, P3, P11, P8.
+
 ## The guards, watched failing
 
 A check nobody has watched fail is not a check (CLAUDE.md's standing rule).
@@ -692,6 +789,21 @@ Phase 5 added these, on 2026-09-18:
 | `cli-parity.test.ts` | `history show`'s annotation set to `none` | the route named as unreachable |
 | `pagination_claim_test.go` | (not injected) | caught a REAL gap: the platform guide's list of paginating commands did not name `history list` |
 | the seed | (not injected) | with a row in the seeded workspace, the old rebuild failed on the history trigger; confirmed through the new cause-chain output |
+
+Phase 6 added these, on 2026-09-18:
+
+| Guard | The mutation | What it said |
+|---|---|---|
+| `lib/derive/parity.test.ts` | VAT not rounded to five rappen under `line_0_05` | 1 of 45: BC-2026-0037 — the only mockup invoice whose VAT is not already a multiple of 0.05 |
+| the same | the QRR carry table's last two entries swapped | the seven QRR invoices' reference cases |
+| the same | IBANs printed in blocks of five | all eleven account cases |
+| the seed's read-back | the mockup companies rounding on the total | refused, naming BC-2026-0037's VAT |
+| `lib/invariants.test.ts` | an invariant's group renamed out of the index; the QR budget typed as 141 again; a `total` column on the invoice mirror | the index case; both I11 cases; both I6 cases |
+| `lib/runtime.integration.test.ts` | the history list unscoped; the company lookup unscoped; the QRR body without the company | the empty-tenant list case; the other-tenant address and filter cases; the three-company case (two companies sharing references) |
+| `lib/db/schema-parity.test.ts` | `history.total` as `numeric(12,2)`; `imported_via` undeclared; `drive_path` declared `notNull` | the column case, each naming the column |
+| `help_prose_table_test.go`, generalised | `invite … accept` invented in billing's tour; `create` dropped from its workspace row | "names accept, which the binary does not carry"; "has create — the table never names it" |
+| `guide_test.go` | three invoice statuses, then the three history statuses, restated in `07-pitfalls.md` | named the INVOICE_STATUSES and then the HISTORY_STATUSES vocabulary |
+| `cited-tests-exist.test.ts`, tightened | (not injected) | five REAL dead citations, above |
 
 Phase 3 added these, on 2026-09-17:
 

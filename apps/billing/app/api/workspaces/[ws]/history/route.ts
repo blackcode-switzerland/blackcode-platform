@@ -24,6 +24,7 @@ import { authVia } from '@/lib/api/actor'
 import { HistoryRefused, importHistory, listHistory } from '@/lib/db/queries/history'
 import { HISTORY_SOURCES } from '@/lib/vocabularies'
 import { LIST_LIMIT_MAX } from '@/lib/limits'
+import { companyFilter } from '@/lib/api/company-filter'
 import type { HistorySource } from '@/types'
 
 interface Params {
@@ -69,7 +70,7 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
       currency: q.get('currency')?.toUpperCase() ?? undefined,
       year: year !== null ? Number(year) : undefined,
       flagged: flagged === 'true',
-      company: q.get('company') ?? undefined,
+      company: await companyFilter(ctx.workspace.id, q.get('company')),
       limit: limitRaw ? Number(limitRaw) : undefined,
       cursor: cursorRaw !== null ? Number(cursorRaw) : undefined,
     })
