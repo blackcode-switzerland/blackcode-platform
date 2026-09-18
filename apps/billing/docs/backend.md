@@ -319,6 +319,47 @@ box at the top listing what the PDF says differently.
   `next_seq` unchanged; draft edits to a 22-character body, to NON with a body left
   over, and to SCOR with no body → 400, and the corrected pair → 200.
 
+## Phase 2, ticket #85: `lib/pdf/` — the A4 invoice and the payment part
+
+Built 2026-09-18, on `feat/billing-phase-2-be`. `renderInvoiceDocument({invoice,
+company})` returns the bytes, whether a payment part was drawn, the page count
+and a draw log. **Still not wired into a route**: #86 serves it, lists the fonts
+in `outputFileTracingIncludes` and fills `prepareInvoiceDocument`, which is what
+turns `send` on.
+
+| Module | What it owns |
+|---|---|
+| `invoice.ts` | the A4 body in the invoice's language (issuer, client, lines, subtotal/VAT/total, message, footer), pagination with page numbers, the payment part on the LAST page; validates before drawing and throws `PaymentPartRefused` |
+| `payment-part.ts` | the 210 × 105 mm strip: receipt 62 mm, payment part 148 mm, separation lines, QR at (67, 17) mm, 46 × 46, the 7 × 7 cross, blank fields at their mandated sizes |
+| `sheet.ts` | top-left millimetre coordinates over pdf-lib; rectangles and lines written as raw operators with absolute coordinates inside `BMC … EMC` tags, so a test can read them back |
+| `qr-matrix.ts` | `qrcode`, byte mode, ECC M, no ECI |
+| `format.ts`, `copy.ts` | printed amounts, addresses and dates; the body's fixed words in fr/de/it/en |
+| `fonts/` | Liberation Sans 2.1.5, vendored with its OFL licence and hashes (`fonts/README.md`) |
+
+Three dependencies, runtime, this app only: `pdf-lib`, `@pdf-lib/fontkit`,
+`qrcode`.
+
+**Positions inside the sections follow `swissqrbill`'s renderer**, which
+implements the SIX Style Guide. The standard states the SIZES in text and those
+are asserted; the positions are drawn in its figures, so the printed check
+against the Style Guide grid sheet stays a manual step (`qr-bill.md` §8).
+
+### Verified on 2026-09-18, working tree on `91f45e4`
+
+- **`pdf.test.ts`, 16 cases, measured from the SAVED file**: A4 size; the QR
+  symbol 46 × 46 mm at (67, 209) mm from the page's top-left; the cross; the
+  separation lines at 62 mm and 192 mm; the blank fields; no slip on USD; each
+  language's headings; nothing on the receipt that §3.6 forbids; no heading whose
+  value is absent; amounts and VAT; a multi-page invoice with the slip on the
+  last page; a refusal instead of a slip the standard would reject.
+- **Byte stability (P10), across two processes**: the same invoice renders to
+  the same sha256 in two separate `tsx` runs.
+- **The QR on the page scans to the payload.** The fixture was rendered, turned
+  into a 2400 px PNG with `qlmanage`, cropped to the symbol and decoded with
+  `jsQR`: 230 bytes, 31 lines, **byte-identical** to `serializeQrPayload` for the
+  same invoice, accents (`à é è`) intact. This is a machine scan of a rendered
+  page, not a banking app — the two-app scan is still owed.
+
 ## Phase 3: lifecycle and delivery
 
 Built on 2026-09-17, **before phase 2**. Four write paths in
@@ -497,6 +538,15 @@ Phase 2 (ticket #84) added these, on 2026-09-17:
 | `payload.test.ts` | the join forced to LF; the trailing-A-line trim removed; one Ultimate Creditor line deleted | the CR+LF golden; "ends at EPD"; seven cases including the golden |
 | `validate.test.ts` | returns `[]`; refuses everything; QR-IBAN matrix check removed; the 140 budget in UTF-16 units | 17 refusal cases; the four positive shapes and Example 2; the matrix case; the emoji budget case |
 | migration 0008 | run over the phase-1 seed | refused, naming `PX-0001 (SCOR 210000000003139471430009)` |
+
+Phase 2 (ticket #85) added these, on 2026-09-18:
+
+| Guard | The mutation | What it said |
+|---|---|---|
+| `lib/pdf/pdf.test.ts` | the QR module size computed from 45 mm | 1 case: the 46 × 46 measurement |
+| the same | `setCreationDate(new Date())` | 1 case: the two-process byte comparison |
+| the same | the receipt printing the additional-information heading | 2 cases: "never on the receipt" and "no heading whose value is absent" |
+| the same | `hasPaymentPart` forced true | 2 cases: both USD ones — red because validation then refused the bill, which is the barrier between a USD invoice and a slip |
 
 Phase 3 added these, on 2026-09-17:
 

@@ -221,7 +221,14 @@ What building it changed, so this doc is not re-read as a plan for it:
   alternative procedure is used).
 - The full extraction is vendored at `apps/billing/docs/qr-bill-spec.md`.
 
-**#85 (`lib/pdf/`) and #86 (routes, `bk`, the seam) are not started.**
+**#85, `lib/pdf/`, built 2026-09-18** on the same branch: the A4 body and the
+payment part, measured from the saved file, byte-stable across processes, and
+its QR decoded from a rendered page to the exact payload. Details in
+`apps/billing/docs/backend.md` under "Phase 2, ticket #85". Positions inside the
+sections follow `swissqrbill`'s renderer; the standard's sizes are asserted.
+
+**#86 (routes, `bk`, the seam) is not started**, and the manual tiers of
+`qr-bill.md` §8 are not done.
 
 ## Frontend gets
 
