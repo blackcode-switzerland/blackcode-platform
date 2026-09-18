@@ -185,6 +185,26 @@ a route nobody had checked was mounted.
       install of the released binary
 - [ ] The north-star sequence run literally, end to end, against production
 
+## Progress
+
+**Backend built 2026-09-18** on `feat/billing-phase-6-be` (ticket #95), except
+the release. Details and mutations: `apps/billing/docs/backend.md`, "Phase 6,
+backend". What building it changed:
+
+- The seed has **three** workspaces, not two: D-B7's inclusive-VAT company went
+  to its own `praxis-demo`, so `blackcode` is exactly the mockup.
+- The mockup's **recurrences** are not seeded (phase 4 is not built) and its
+  **audit trail** is not seeded at all (phase 1's decision: no invented rows in an
+  append-only log).
+- The seed verifies parity itself, reading every invoice back through the app.
+- `invariants.test.ts` found **I12 half-built**: the issuer is not snapshotted
+  at send. Assigned to #86.
+- `?company=` naming nothing is refused on all three list routes.
+
+Not done, and not doable from this repo alone: the release, the production
+checks, `bk app list` from a clean install and the north-star sequence — all
+need the `bc-billing` Vercel project. The browser walk is #96.
+
 ## Notes
 
 **Never verify a translation on a string that is the same in both languages.**

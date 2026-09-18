@@ -28,8 +28,9 @@ is being built:
   that IS the edit workflow. The **fourth** app, **in build** — phase 0
   registered it (tenancy, role, address-book row, command group, guide topic),
   phase 1 brought companies and invoices, phase 3 the lifecycle (send,
-  mark-sent, paid, void), and phase 5 the read-only archive of imported bills
-  (`bk billing history`). Phase 2's QR payload and PDF renderer
+  mark-sent, paid, void), phase 5 the read-only archive of imported bills
+  (`bk billing history`), and phase 6's backend a seed that IS the mockup,
+  verified on the way in. Phase 2's QR payload and PDF renderer
   exist (`lib/qr/`, `lib/pdf/`) but nothing serves them yet (#86), so
   `send` refuses with `document_renderer_not_built` until it does. Same stack; its own `billing.*`
   schema, CLI group and docs. It is also the first app planned to ship as a
@@ -208,7 +209,7 @@ npm run lint       # eslint, all apps and packages
 > guardrail, test, assertion or probe works, break the thing it guards and watch
 > it go red. Then restore.
 
-This is not a style preference. **Twenty-three guardrails in this repo have been
+This is not a style preference. **Twenty-six guardrails in this repo have been
 found green-but-inert** — eight during the migration, and the count is still growing.
 Every one looked like working protection:
 
@@ -240,6 +241,15 @@ Every one looked like working protection:
 | 21 | `password-degradation.test.ts`'s POSITIVE case | Written 2026-08-11 **to satisfy finding #16** — the rule that a guard built only on "was this denied?" cannot tell a working check from a subject that refuses everything. So it asserted the route "got past the 503" by watching a flag set on any access to a `db` proxy. It passed against `if (true \|\| !contribution.canDeliverEmail())` — an unconditional refusal — because **`apiHandler` writes an `error_events` row when it catches the ApiError, and that touched the db and set the flag**. The guard was satisfied by the error path of the exact bug it existed to catch. Found by mutating the route and watching the test stay green; it asserts the RESPONSE now (`status !== 503`). **The positive case written to cure #16 had #16's own disease** |
 | 22 | `guide_test.go`'s `vocabularySources` map | Had a line for `issues` and one for `sales` and **none for `books`**. The map is what stops a guide topic hardcoding a status, a vocabulary or a limit, and its own comment says *"Adding an app means adding a line. An app that is missing simply is not checked"* — so b/books' eight topics had a free pass from the day the first was written until 2026-08-20, through the app going to production. The suite was green the whole time and the section header read `--- PASS: .../books` only because there was no books section at all. **The failure was predicted, in a comment, in the file it happened in.** Adding one line found a real restatement immediately. The lesson is narrower than "add the line": a per-app registry that a new app must OPT INTO is a guard whose coverage silently shrinks every time the platform grows, and it cannot report the app it never heard of |
 | 23 | `bk books --help`'s hand-written command tour | Named `entry list, show` while `declare` and `post` — the two WRITES — existed and went unnamed, missed `rule deactivate`, `category retire` and five of `source`'s eight verbs, and advertised **`bk books member remove`, which that app does not carry**. It had been corrected once before by hand, and the paragraph under it apologises for the previous drift and says "where it and this prose disagree, the table is right" — an honest disclaimer and no protection at all, because the reader has already read the wrong line. **A prose copy of a fact that lives in the code is a guard's job, not a comment's**; `help_prose_table_test.go` now checks the tour against the tree and found all five |
+| 24 | `cited-tests-exist.test.ts` — the guard written FOR finding #18 | Resolved a bare or app-relative citation to a same-named test ANYWHERE in the repo. Apps are copied from one scaffold, so they share test names: b/billing's `schema.ts` cited `lib/db/schema-parity.test.ts` from phase 1 on, billing never had one, and the guard found `apps/books`' file of that name and reported it resolved. `totals.ts`' `parity.test.ts` resolved the same way. Tightened 2026-09-18 to the citing app and `packages/`, it then found five dead citations: three in billing, a sales header still describing the `projectEntity` it lost on 2026-08-10, and a books comment placing a sales test in `apps/issues` |
+| 25 | `help_prose_table_test.go`'s row regex | `bk (?:word )+?` put a space AFTER each word, spending one of the two spaces between a command and its verbs — so a tour row padded with exactly two was never read. `bk books --help`'s `workspace  list, show, use` was one: books gained `workspace create` and its tour never said so, with the guard green. And a row with no description swallowed the next row's indent, so only every other row of billing's tour parsed. Both found 2026-09-18 by generalising the check to every app group (finding #22's lesson), which also found the books drift |
+| 26 | b/billing's `holds-covers-entities.test.ts`, a second time | After finding #11's fix it stripped comments and still searched for a table's identifier anywhere in `footprint.ts` — and the file's own `import { … } from '../schema'` names every table it uses. Removing phase 5's history count and keeping the import stayed green. It requires `.from(<ident>)` now. **The granularity of a text scan is part of what it checks** — the same file, the same lesson, one layer down |
+
+**#24 to #26 landed 2026-09-18**, in b/billing's phases 5 and 6, and #24 is the
+one to sit with: it is the guard written to enforce finding #18, and it was
+satisfied by ANOTHER APP's file. A resolver that looks "anywhere in the repo"
+cannot tell the app that makes a claim from the app that happens to share a
+filename — and every app here is born from one scaffold, so they all do.
 
 **#22 and #23 landed 2026-08-20**, the day b/books went to production, in a phase
 whose job was to make one app's CLI answer for itself. Both are the same shape as
@@ -502,7 +512,7 @@ command whose guide topic still describes last week's behaviour.
 > compares routes against `bk`, never *pages* against `bk`. A feature added to a
 > server component, or one that reuses an existing route in a new way, ships a
 > capability gap with **every suite green**. That is the exact shape of the
-> twenty-one findings in the table above, so treat "the tests pass" as saying
+> twenty-six findings in the table above, so treat "the tests pass" as saying
 > nothing at all here, and check both front doors by hand.
 
 **The one legitimate exception is a deliberate capability decision, and it gets

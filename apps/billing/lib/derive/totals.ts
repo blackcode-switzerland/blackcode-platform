@@ -129,8 +129,9 @@ export function computeTotalsRappen(
     //
     // The second formula is the one that is easy to get wrong by reaching for
     // the first, and getting it wrong overstates the VAT by a factor of
-    // (100 + rate)/100 — about 8% at the Swiss standard rate. `parity.test.ts`
-    // asserts the difference on a fixture where the two disagree.
+    // (100 + rate)/100 — about 8% at the Swiss standard rate. `totals.test.ts`
+    // asserts the difference on a fixture where the two disagree ("the mixed
+    // invoice the first external customer actually sends").
     const amount = pricesIncludeVat
       ? divRoundHalfAway(base * bp, 10000 + bp)
       : divRoundHalfAway(base * bp, 10000)

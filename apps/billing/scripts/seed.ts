@@ -1,37 +1,56 @@
-// The DEVELOPMENT seed — a first cut, pulled forward from phase 6.
+// The DEVELOPMENT seed: the mockup's own data, an empty tenant, and the one
+// customer shape the mockup does not have.
+//
+//   npm run db:seed:billing
 //
 // ===========================================================================
-// WHY THIS IS IN PHASE 1 AT ALL
+// THREE WORKSPACES, AND WHY EACH ONE
 // ===========================================================================
-// `docs/billing-app-plan/` runs the backend one phase ahead of the frontend, so
-// the screens are built against phase 1's routes while phase 2 is being written.
-// Screens need rows. Without a seed the frontend either builds against fixtures
-// it wrote itself — which drift from the server the moment a shape changes — or
-// against an empty workspace, where every list is an empty state and nothing
-// about the layout can be judged.
+//   blackcode      THE MOCKUP. Its two companies, its eleven invoices (a void,
+//                  an EUR bill on SCOR, a not-registered company with no VAT at
+//                  all, one draft each), and its fourteen imported bills — read
+//                  from `fixtures/mockup.json`, never retyped. At the end the
+//                  seed reads every invoice back through the app's own read
+//                  path and refuses to finish if one total, reference or
+//                  account differs from what the mockup's code says.
+//   demo-tenant    ONE company and nothing else. The state a new tenant is in,
+//                  and the only way a leak between tenants becomes visible:
+//                  while every workspace has data, a read that forgot its
+//                  workspace looks exactly like one that remembered.
+//   praxis-demo    Decision D-B7's shape, which came from the first external
+//                  customer after the mockup was finished: prices INCLUDING
+//                  VAT, an exempt line beside taxable ones, three rates on one
+//                  bill, rounding on the total only. In its own workspace so
+//                  the mockup tenant stays exactly the mockup.
 //
-// `docs/billing-app-plan/phase-6-seed-and-production.md` finishes it: the second
-// near-empty tenant, every placeholder visibly flagged, and
-// `lib/derive/parity.test.ts` proving the totals match the mockup to the rappen.
+// ── WHAT IS DELIBERATELY NOT HERE ──────────────────────────────────────────
+//   - THE MOCKUP'S FOUR RECURRENCES. Phase 4 (recurrence) is not built, so
+//     there is no table to put them in; the four invoices the mockup attaches
+//     to a series are seeded as ordinary invoices. Phase 4 adds them.
+//   - THE MOCKUP'S AUDIT TRAIL. The log records what somebody DID, and its
+//     fifteen entries name mockup actors ("andrea", "companion") that are not
+//     accounts. Inventing rows in an append-only table nothing can correct is
+//     worse than a gap, so every seeded workspace starts with an empty log and
+//     the first real edit fills it. The plan listed the trail; this is the
+//     deliberate difference.
 //
-// ── WHAT IS DELIBERATELY NOT HERE YET ──────────────────────────────────────
-// The mockup's own data file. Phase 6 extracts `billing-data.js` into
-// `fixtures/mockup.json` and asserts equality against it, which is what makes
-// the parity claim mean something. This seed is shaped like that data and is not
-// it, so nothing here may be cited as parity evidence.
+// ── EVERY PLACEHOLDER IS A PLACEHOLDER ─────────────────────────────────────
+// The mockup's UIDs and IBANs are not blackcode's (open questions P1 and P2),
+// its VAT rates are unverified against the ESTV (P3), and its QR reference
+// bodies predate the scheme the bank has to agree (P11). The seed carries them
+// because the screens need them; none of them may be used for a real invoice.
 //
 // ===========================================================================
 // IT REFUSES A NON-LOCAL DATABASE, AND THE REFUSAL IS THE POINT
 // ===========================================================================
-// This script DELETES the workspace it rebuilds. Against production that would
+// This script DELETES the workspaces it rebuilds. Against production that would
 // destroy invoices — numbered legal documents under a ten-year retention duty
 // that `0006` revokes DELETE on, so the delete would fail halfway and leave a
 // workspace in pieces.
 //
 // The host check is first, before any connection is opened, and it is a
 // positive assertion rather than a blocklist: an unrecognised host is refused.
-// `apps/books/lib/db/seed.ts` is the precedent and `seed-guard.test.ts` beside
-// this file proves the refusal fires.
+// `seed-guard.test.ts` beside `lib/db/seed-guard.ts` proves the refusal fires.
 
 import { config } from 'dotenv'
 import { eq, sql } from 'drizzle-orm'
@@ -51,14 +70,16 @@ import {
 } from '../lib/db/schema'
 import { renderNumber } from '../lib/derive/number'
 import { assertLocalDatabase } from '../lib/db/seed-guard'
+import { MOCKUP, mockupHistoryRows } from '../lib/mockup'
+import { importHistory } from '../lib/db/queries/history'
+import { getInvoice } from '../lib/db/queries/invoices'
+import { getCompany } from '../lib/db/queries/companies'
+import { formatIban, formatQRR, formatSCOR, invoiceAccount, invoiceReference } from '../lib/qr/reference'
+import type { ReferenceType } from '../types'
 
-/** The workspace this seed owns, destructively. */
-const WORKSPACE_SLUG = 'blackcode'
-
-// Module scope, so `rebuildFrom` and `main` share one client. `getDb()` is lazy,
-// so this opens nothing at import time.
+// Module scope, so every helper shares one client. `getDb()` is lazy, so this
+// opens nothing at import time.
 const db = getDb()
-
 
 /**
  * Delete a seeded workspace and everything under it.
@@ -144,14 +165,429 @@ async function rebuildFrom(workspaceId: number): Promise<void> {
   }
 }
 
+/** A fresh workspace with the owner as its only member. Any previous one of that slug is removed first. */
+async function freshWorkspace(slug: string, name: string, ownerId: number): Promise<number> {
+  const existing = await db
+    .select({ id: billingWorkspaces.id })
+    .from(billingWorkspaces)
+    .where(eq(billingWorkspaces.slug, slug))
+    .limit(1)
+  if (existing[0]) await rebuildFrom(existing[0].id)
+  const [ws] = await db
+    .insert(billingWorkspaces)
+    .values({ name, slug, owner_id: ownerId })
+    .returning({ id: billingWorkspaces.id })
+  await db.insert(billingWorkspaceMembers).values({ workspace_id: ws.id, user_id: ownerId, role: 'owner' })
+  return ws.id
+}
+
+type CompanyValues = Omit<typeof billingCompany.$inferInsert, 'workspace_id' | 'id'>
+
+async function insertCompany(workspaceId: number, ownerId: number, c: CompanyValues): Promise<number> {
+  const [row] = await db
+    .insert(billingCompany)
+    .values({ ...c, workspace_id: workspaceId, created_by: ownerId })
+    .returning({ id: billingCompany.id })
+  return row.id
+}
+
+interface SeedInvoice {
+  seq: number
+  companyId: number
+  seqNo: number
+  number: string
+  status: 'draft' | 'sent' | 'paid' | 'void'
+  issue_date: string
+  due_date: string | null
+  paid_date?: string | null
+  currency: string
+  language: string
+  ref_type: 'QRR' | 'SCOR' | 'NON'
+  ref_body: string | null
+  client: Record<string, string | null>
+  vat_rate: string | null
+  prices_include_vat: boolean
+  message: string | null
+  void?: { ts: string; reason: { fr: string; en: string } }
+  items: Array<{ description: string; qty: string; unit: string | null; unit_price: string; vat_rate: string | null }>
+}
+
+/**
+ * One invoice, inserted as a DRAFT and then walked through the real status
+ * machine.
+ *
+ * Not a workaround. Two guards refuse the shortcut, and both are right:
+ * `trg_invoice_line_frozen` refuses a line on an invoice that is not a draft,
+ * because the lines of a sent bill ARE the document; and
+ * `trg_invoice_status_machine` refuses `draft → paid`, because a bill nobody
+ * sent cannot have been paid. So the seed does what really happens: a draft,
+ * its lines, sent, then paid or voided. Every seeded row has therefore passed
+ * through the transitions the app's own write paths use.
+ */
+async function insertInvoice(workspaceId: number, owner: { id: number; email: string }, inv: SeedInvoice): Promise<void> {
+  const [row] = await db
+    .insert(billingInvoice)
+    .values({
+      workspace_id: workspaceId,
+      seq: inv.seq,
+      company_id: inv.companyId,
+      seq_no: inv.seqNo,
+      number: inv.number,
+      status: 'draft',
+      issue_date: inv.issue_date,
+      due_date: inv.due_date,
+      currency: inv.currency,
+      language: inv.language,
+      ref_type: inv.ref_type,
+      ref_body: inv.ref_body,
+      client: inv.client,
+      vat_rate: inv.vat_rate,
+      prices_include_vat: inv.prices_include_vat,
+      message: inv.message,
+      created_by: owner.id,
+    })
+    .returning({ id: billingInvoice.id })
+
+  await db.insert(billingInvoiceLine).values(
+    inv.items.map((l, i) => ({
+      invoice_id: row.id,
+      line_no: i + 1,
+      description: l.description,
+      qty: l.qty,
+      unit: l.unit,
+      unit_price: l.unit_price,
+      vat_rate: l.vat_rate,
+    }))
+  )
+
+  // `sent_at` in the same statement: 0007's `invoice_sent_requires_sent_at`
+  // refuses a sent invoice with no moment it was sent. No `sent_message_id` and
+  // no `pdf_sha256` — seeded bills were never emailed by this app, and a null
+  // there is how the record says so, the shape `invoice mark-sent` produces.
+  if (inv.status !== 'draft') {
+    await db
+      .update(billingInvoice)
+      .set({ status: 'sent', sent_at: new Date(`${inv.issue_date}T09:00:00.000Z`) })
+      .where(eq(billingInvoice.id, row.id))
+  }
+  if (inv.status === 'paid') {
+    // `paid_date` in the SAME statement: `invoice_paid_requires_date`.
+    await db
+      .update(billingInvoice)
+      .set({ status: 'paid', paid_date: inv.paid_date! })
+      .where(eq(billingInvoice.id, row.id))
+  }
+  if (inv.status === 'void') {
+    // The record in the same statement: `invoice_void_requires_record` refuses a
+    // void with no reason, because a void without one is a deletion with extra
+    // steps. `by` is the seeding account: the mockup's "andrea" is not one.
+    await db
+      .update(billingInvoice)
+      .set({ status: 'void', void: { ts: inv.void!.ts, by: owner.email, reason: inv.void!.reason } })
+      .where(eq(billingInvoice.id, row.id))
+  }
+}
+
+/** Bring the #number allocators in line with what was inserted directly. */
+async function setCounters(workspaceId: number, counts: { company: number; invoice: number }): Promise<void> {
+  await db.insert(billingCounters).values([
+    { workspace_id: workspaceId, entity_type: 'company', last_value: counts.company },
+    { workspace_id: workspaceId, entity_type: 'invoice', last_value: counts.invoice },
+    { workspace_id: workspaceId, entity_type: 'audit', last_value: 0 },
+  ])
+}
+
+// ---------------------------------------------------------------------------
+// 1. blackcode — the mockup
+// ---------------------------------------------------------------------------
+
+/** The mockup's company ids, as slugs in this app. */
+const MOCKUP_SLUG: Record<number, string> = { 1: 'blackcode', 2: 'aurora', 9: 'demo' }
+
+function companyFromMockup(c: (typeof MOCKUP.companies)[number], seq: number): CompanyValues {
+  const registered = c.vat_registered
+  return {
+    seq,
+    slug: MOCKUP_SLUG[c.id],
+    name: c.name,
+    legal_name: c.legal_name,
+    street: c.street,
+    building: c.building,
+    postal_code: c.postal_code,
+    city: c.city,
+    country: c.country,
+    email: c.email,
+    logo_initials: c.logo.initials,
+    logo_color: c.logo.color,
+    // ⚠ PLACEHOLDERS (P2): the mockup's IBANs and UIDs are not anybody's real
+    // accounts. The screens need them; a real invoice must not carry them.
+    iban: c.iban,
+    qr_iban: c.qr_iban,
+    vat_registered: registered,
+    uid: c.uid,
+    vat_number: c.vat_number,
+    default_currency: c.default_currency,
+    default_language: c.default_language,
+    default_ref_type: c.default_ref_type,
+    // ⚠ P3: 8.1 is the mockup's unverified standard rate.
+    default_vat_rate: registered ? '8.10' : null,
+    default_prices_include_vat: false,
+    payment_terms_days: c.payment_terms_days,
+    // The mockup rounds every line and every VAT amount to five rappen.
+    rounding: 'line_0_05',
+    number_format: c.number_format,
+    next_seq: c.next_seq,
+  }
+}
+
+async function seedMockup(owner: { id: number; email: string }): Promise<{ workspaceId: number; invoices: number; history: number }> {
+  const wsId = await freshWorkspace('blackcode', 'blackcode', owner.id)
+  const mockupWs = MOCKUP.workspaces.find((w) => w.slug === 'blackcode')!
+
+  const companies = MOCKUP.companies.filter((c) => c.workspace_id === mockupWs.id)
+  const companyIds = new Map<number, number>()
+  for (const [i, c] of companies.entries()) {
+    companyIds.set(c.id, await insertCompany(wsId, owner.id, companyFromMockup(c, i + 1)))
+  }
+
+  const invoices = MOCKUP.invoices.filter((i) => i.workspace_id === mockupWs.id).sort((a, b) => a.id - b.id)
+  for (const [i, inv] of invoices.entries()) {
+    const company = companies.find((c) => c.id === inv.company_id)!
+    // The mockup's number is DATA here, and the app renders numbers from a
+    // format. If the two ever disagree, a seeded invoice would carry a number
+    // this app could never have issued — so disagreement stops the seed.
+    const rendered = renderNumber(company.number_format, Number(inv.issue_date.slice(0, 4)), inv.seq)
+    if (rendered !== inv.number) {
+      throw new Error(`mockup invoice ${inv.id} is numbered ${inv.number}, but ${company.number_format} renders ${rendered}`)
+    }
+    const rate = inv.vat_rate === null ? null : inv.vat_rate.toFixed(2)
+    await insertInvoice(wsId, owner, {
+      seq: i + 1,
+      companyId: companyIds.get(inv.company_id)!,
+      seqNo: inv.seq,
+      number: inv.number,
+      status: inv.status as SeedInvoice['status'],
+      issue_date: inv.issue_date,
+      due_date: inv.due_date,
+      paid_date: inv.paid_date,
+      currency: inv.currency,
+      language: inv.language,
+      ref_type: inv.ref_type as SeedInvoice['ref_type'],
+      ref_body: inv.ref_body,
+      client: inv.client,
+      vat_rate: rate,
+      prices_include_vat: false,
+      message: inv.message ?? null,
+      void: inv.void ? { ts: inv.void.ts, reason: inv.void.reason } : undefined,
+      // The mockup has ONE rate per invoice; this app has one per line (D-B7).
+      // Every line takes the invoice's rate, which is what the mockup means.
+      items: inv.items.map((it) => ({
+        description: it.description,
+        qty: String(it.qty),
+        unit: it.unit ?? null,
+        unit_price: it.unit_price.toFixed(2),
+        vat_rate: rate,
+      })),
+    })
+  }
+
+  // `next_seq` is the mockup's, and must lie beyond every number issued, or the
+  // next real create would collide with a seeded one.
+  for (const c of companies) {
+    const highest = Math.max(0, ...invoices.filter((i) => i.company_id === c.id).map((i) => i.seq))
+    if (c.next_seq <= highest) {
+      throw new Error(`mockup company ${c.id} says next_seq ${c.next_seq}, but it has already issued ${highest}`)
+    }
+  }
+  await setCounters(wsId, { company: companies.length, invoice: invoices.length })
+
+  // THROUGH THE REAL WRITE DOOR, as the agent that owns an import would. The
+  // seed is that agent here, so `via` is `token`.
+  const imported = await importHistory(
+    { workspaceId: wsId, actorUserId: owner.id, via: 'token' },
+    { rows: mockupHistoryRows((id) => MOCKUP_SLUG[id]) }
+  )
+
+  return { workspaceId: wsId, invoices: invoices.length, history: imported.imported }
+}
+
+/**
+ * Read every seeded mockup invoice back through `getInvoice` — the app's own
+ * read path, derivations included — and compare it with what the mockup's code
+ * answers. Any difference stops the seed with every mismatch listed.
+ *
+ * This is the half of parity `lib/derive/parity.test.ts` cannot prove: that
+ * the DATA that went in reproduces the numbers, not only that the maths would.
+ */
+async function assertParity(workspaceId: number): Promise<number> {
+  const digits = (s: string) => s.replace(/\s/g, '')
+  const invoices = MOCKUP.invoices.filter((i) => i.workspace_id === 1).sort((a, b) => a.id - b.id)
+  const problems: string[] = []
+  for (const [i, m] of invoices.entries()) {
+    const inv = await getInvoice(workspaceId, String(i + 1))
+    const a = MOCKUP.answers[String(m.id) as keyof typeof MOCKUP.answers]
+    if (!inv) {
+      problems.push(`#${i + 1} (${m.number}) did not read back`)
+      continue
+    }
+    const check = (what: string, ours: string | null, theirs: string | null) => {
+      if (ours !== theirs) problems.push(`${m.number} ${what}: this app ${ours}, the mockup ${theirs}`)
+    }
+    check('number', inv.number, m.number)
+    check('subtotal', inv.totals.subtotal, digits(a.subtotal))
+    check('VAT', inv.totals.vat_total, digits(a.vat))
+    check('total', inv.totals.total, digits(a.total))
+    const ref = invoiceReference(inv.ref_type as ReferenceType, inv.ref_body)
+    check('reference', ref, a.reference)
+    check(
+      'printed reference',
+      ref === null ? null : inv.ref_type === 'QRR' ? formatQRR(ref) : formatSCOR(ref),
+      a.reference_formatted
+    )
+    // The SEEDED company, read back — not the mockup's record, which would be
+    // comparing the mockup with itself.
+    const company = await getCompany(workspaceId, inv.company)
+    if (!company) {
+      problems.push(`${m.number}: its company ${inv.company} did not read back`)
+      continue
+    }
+    const account = invoiceAccount(inv.ref_type as ReferenceType, company)
+    check('account', account === null ? null : formatIban(account), a.account_formatted === '—' ? null : a.account_formatted)
+  }
+  if (problems.length > 0) {
+    throw new Error(`the seeded "blackcode" workspace does NOT reproduce the mockup:\n  ${problems.join('\n  ')}`)
+  }
+  return invoices.length
+}
+
+// ---------------------------------------------------------------------------
+// 2. demo-tenant — one company, nothing else
+// ---------------------------------------------------------------------------
+
+async function seedDemoTenant(owner: { id: number; email: string }): Promise<number> {
+  const wsId = await freshWorkspace('demo-tenant', 'Demo Tenant', owner.id)
+  const demo = MOCKUP.companies.find((c) => c.workspace_id === 2)!
+  await insertCompany(wsId, owner.id, { ...companyFromMockup(demo, 1), footer_fr: null, footer_en: null })
+  await setCounters(wsId, { company: 1, invoice: 0 })
+  return wsId
+}
+
+// ---------------------------------------------------------------------------
+// 3. praxis-demo — decision D-B7's shape
+// ---------------------------------------------------------------------------
+
+async function seedPraxis(owner: { id: number; email: string }): Promise<number> {
+  const wsId = await freshWorkspace('praxis-demo', 'Praxis Demo (D-B7)', owner.id)
+  const format = 'PX-{SEQ4}'
+  const companyId = await insertCompany(wsId, owner.id, {
+    seq: 1,
+    slug: 'praxis',
+    name: 'Praxis Demo',
+    legal_name: 'Praxis Demo SA',
+    street: 'Avenue de la Gare',
+    building: '3',
+    postal_code: '1003',
+    city: 'Lausanne',
+    country: 'CH',
+    email: 'facturation@praxis.example',
+    logo_initials: 'PX',
+    logo_color: '#1d4ed8',
+    // ⚠ PLACEHOLDER IBAN (P2). No QR-IBAN, so QRR is impossible here.
+    iban: 'CH5604835012345678009',
+    qr_iban: null,
+    vat_registered: true,
+    uid: 'CHE-111.111.111',
+    vat_number: 'CHE-111.111.111 TVA',
+    default_currency: 'CHF',
+    default_language: 'fr',
+    default_ref_type: 'SCOR',
+    default_vat_rate: '8.10',
+    default_prices_include_vat: true,
+    payment_terms_days: 15,
+    rounding: 'total_0_05',
+    number_format: format,
+    next_seq: 3,
+  })
+
+  const client = (name: string, street: string, building: string) => ({
+    name,
+    street,
+    building,
+    postal_code: '1004',
+    city: 'Lausanne',
+    country: 'CH',
+  })
+  // The MIXED bill: an exempt line beside taxable ones at two rates, prices
+  // INCLUDING VAT, rounding on the total only. The case that breaks a VAT block
+  // written for one rate.
+  await insertInvoice(wsId, owner, {
+    seq: 1,
+    companyId,
+    seqNo: 1,
+    number: renderNumber(format, 2026, 1),
+    status: 'sent',
+    issue_date: '2026-09-10',
+    due_date: '2026-09-25',
+    currency: 'CHF',
+    language: 'fr',
+    ref_type: 'SCOR',
+    // What `referenceBodyFor` derives from `PX-0001`.
+    ref_body: 'PX0001',
+    client: client('Mme A. Perret', 'Chemin des Vignes', '5'),
+    vat_rate: '8.10',
+    prices_include_vat: true,
+    message: 'Consultation du 10.09.2026',
+    items: [
+      // Exempt: a medical act by a practitioner not liable for VAT on it.
+      { description: 'Consultation', qty: '1', unit: null, unit_price: '250.00', vat_rate: null },
+      // Taxable, and its price already contains the VAT.
+      { description: 'Produit de soin', qty: '2', unit: 'pcs', unit_price: '60.00', vat_rate: '8.10' },
+      // A third rate, so the VAT block renders more than one line.
+      { description: 'Documentation imprimée', qty: '1', unit: 'pcs', unit_price: '18.00', vat_rate: '2.60' },
+    ],
+  })
+  // NON: no reference at all, the third arm of the combination matrix.
+  await insertInvoice(wsId, owner, {
+    seq: 2,
+    companyId,
+    seqNo: 2,
+    number: renderNumber(format, 2026, 2),
+    status: 'draft',
+    issue_date: '2026-09-16',
+    due_date: null,
+    currency: 'CHF',
+    language: 'fr',
+    ref_type: 'NON',
+    ref_body: null,
+    client: client('M. B. Favre', 'Rue Centrale', '22'),
+    vat_rate: '8.10',
+    prices_include_vat: true,
+    message: null,
+    items: [{ description: 'Consultation de suivi', qty: '1', unit: null, unit_price: '180.00', vat_rate: null }],
+  })
+  await setCounters(wsId, { company: 1, invoice: 2 })
+  return wsId
+}
+
 async function main() {
   // FIRST, before a connection is opened.
   assertLocalDatabase(process.env.DATABASE_URL)
 
-  // The owner: whoever is already in this local database. The seed does not
-  // create a platform account — that is identity, shared by four apps, and a
-  // seed inventing one would be a seed that can log in.
-  const [owner] = await db.select({ id: users.id, email: users.email }).from(users).limit(1)
+  // The owner: the OLDEST account in this local database, by id. The seed does
+  // not create a platform account — identity is shared by four apps, and a seed
+  // inventing one would be a seed that can log in.
+  //
+  // `ORDER BY id` is not decoration. The first version took `LIMIT 1` with no
+  // order, and on 2026-09-18 it handed the seeded workspace to a test account
+  // an integration suite had created, so the developer's own login stopped
+  // being a member of it — and `bk billing workspace use blackcode` failed
+  // silently for them.
+  const [owner] = await db
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(sql`${users.deleted_at} IS NULL`)
+    .orderBy(users.id)
+    .limit(1)
   if (!owner) {
     throw new Error(
       'no user in platform.users. Sign up at http://localhost:3300 first, then re-run: ' +
@@ -160,359 +596,17 @@ async function main() {
     )
   }
 
-  const existing = await db
-    .select({ id: billingWorkspaces.id })
-    .from(billingWorkspaces)
-    .where(eq(billingWorkspaces.slug, WORKSPACE_SLUG))
-    .limit(1)
-  if (existing[0]) {
-    await rebuildFrom(existing[0].id)
-    console.log(`• removed the existing "${WORKSPACE_SLUG}" workspace and everything in it`)
-  }
+  const mock = await seedMockup(owner)
+  const checked = await assertParity(mock.workspaceId)
+  await seedDemoTenant(owner)
+  await seedPraxis(owner)
 
-  const [ws] = await db
-    .insert(billingWorkspaces)
-    .values({ name: 'Blackcode', slug: WORKSPACE_SLUG, owner_id: owner.id })
-    .returning({ id: billingWorkspaces.id })
-  await db
-    .insert(billingWorkspaceMembers)
-    .values({ workspace_id: ws.id, user_id: owner.id, role: 'owner' })
-
-  // ── TWO COMPANIES, DIFFERING IN EVERY WAY THAT CHANGES THE ARITHMETIC ────
-  // Not two similar ones. The point of a seed is that a screen built against it
-  // has met the cases that break layouts and totals:
-  //
-  //   blackcode   VAT-registered, prices EXCLUDE VAT, rounds per line
-  //   praxis      VAT-registered, prices INCLUDE VAT, rounds the total only
-  //
-  // The second is the first external customer's shape (decision D-B7), so the
-  // frontend meets `dont TVA` and an `Arrondi` line before either is a surprise.
-  const companies = [
-    {
-      seq: 1,
-      slug: 'blackcode',
-      name: 'Blackcode',
-      legal_name: 'Blackcode Sàrl',
-      street: 'Rue du Mont-Blanc',
-      building: '14',
-      postal_code: '1201',
-      city: 'Genève',
-      country: 'CH',
-      email: 'contact@blackcode.ch',
-      logo_initials: 'BC',
-      logo_color: '#0f6b44',
-      // ⚠ PLACEHOLDERS. Open questions P2: blackcode's real UID and IBANs are
-      // not ours to invent, and the first real invoice cannot be issued until
-      // they are answered. A test IBAN keeps the QR-bill work honest without
-      // pretending to be the real account.
-      iban: 'CH9300762011623852957',
-      qr_iban: 'CH4431999123000889012',
-      vat_registered: true,
-      uid: 'CHE-000.000.000',
-      vat_number: 'CHE-000.000.000 TVA',
-      default_currency: 'CHF',
-      default_language: 'fr',
-      default_ref_type: 'QRR',
-      default_vat_rate: '8.10',
-      default_prices_include_vat: false,
-      payment_terms_days: 30,
-      rounding: 'line_0_05',
-      number_format: 'BC-{YYYY}-{SEQ4}',
-      footer_fr: 'Merci de votre confiance.',
-      footer_en: 'Thank you for your business.',
-    },
-    {
-      seq: 2,
-      slug: 'praxis',
-      name: 'Praxis Demo',
-      legal_name: 'Praxis Demo SA',
-      street: 'Avenue de la Gare',
-      building: '3',
-      postal_code: '1003',
-      city: 'Lausanne',
-      country: 'CH',
-      email: 'facturation@praxis.example',
-      logo_initials: 'PX',
-      logo_color: '#1d4ed8',
-      iban: 'CH5604835012345678009',
-      qr_iban: null,
-      vat_registered: true,
-      uid: 'CHE-111.111.111',
-      vat_number: 'CHE-111.111.111 TVA',
-      default_currency: 'CHF',
-      default_language: 'fr',
-      // No QR-IBAN, so QRR is impossible here — which the write door refuses.
-      default_ref_type: 'SCOR',
-      default_vat_rate: '8.10',
-      default_prices_include_vat: true,
-      payment_terms_days: 15,
-      rounding: 'total_0_05',
-      number_format: 'PX-{SEQ4}',
-      footer_fr: null,
-      footer_en: null,
-    },
-  ] as const
-
-  const companyIds = new Map<string, number>()
-  for (const c of companies) {
-    const [row] = await db
-      .insert(billingCompany)
-      .values({ ...c, workspace_id: ws.id, created_by: owner.id })
-      .returning({ id: billingCompany.id })
-    companyIds.set(c.slug, row.id)
-  }
-
-  // ── THE INVOICES ────────────────────────────────────────────────────────
-  // Chosen to cover every case a screen has to render: each status, both price
-  // modes, a mixed-VAT bill, an exempt-only bill, a foreign currency with no
-  // payment part, and a voided bill whose number stays consumed.
-  const invoices: Array<{
-    company: string
-    status: 'draft' | 'sent' | 'paid' | 'void'
-    issue_date: string
-    due_date: string | null
-    paid_date?: string
-    currency: string
-    ref_type: 'QRR' | 'SCOR' | 'NON'
-    ref_body: string | null
-    client: { name: string; street: string; building: string; postal_code: string; city: string; country: string }
-    message?: string
-    voidReason?: { fr: string; en: string }
-    items: Array<{ description: string; qty: string; unit: string | null; unit_price: string; vat_rate: string | null }>
-  }> = [
-    {
-      company: 'blackcode',
-      status: 'paid',
-      issue_date: '2026-07-03',
-      due_date: '2026-08-02',
-      paid_date: '2026-07-29',
-      currency: 'CHF',
-      ref_type: 'QRR',
-      ref_body: '00000000000000000100000001',
-      client: { name: 'Junod SA', street: 'Route de Berne', building: '12', postal_code: '1010', city: 'Lausanne', country: 'CH' },
-      message: 'Mandat de développement, juin 2026',
-      items: [
-        { description: 'Développement, juin', qty: '12', unit: 'jours', unit_price: '132.50', vat_rate: '8.10' },
-        { description: 'Frais de déplacement', qty: '1', unit: 'forfait', unit_price: '180.00', vat_rate: '8.10' },
-      ],
-    },
-    {
-      company: 'blackcode',
-      status: 'sent',
-      // Deliberately PAST its due date, so the overview's "needs action" and
-      // the `overdue` bucket have something in them. A seed where nothing is
-      // overdue leaves the most important panel empty.
-      issue_date: '2026-08-01',
-      due_date: '2026-08-31',
-      currency: 'CHF',
-      ref_type: 'QRR',
-      ref_body: '00000000000000000100000002',
-      client: { name: 'Métaux Rueff', street: 'Zone Industrielle', building: '8', postal_code: '1214', city: 'Vernier', country: 'CH' },
-      message: 'Maintenance Q3',
-      items: [{ description: 'Maintenance trimestrielle', qty: '1', unit: 'forfait', unit_price: '2400.00', vat_rate: '8.10' }],
-    },
-    {
-      company: 'blackcode',
-      status: 'draft',
-      issue_date: '2026-09-15',
-      due_date: '2026-10-15',
-      currency: 'EUR',
-      // EUR, so QRR is forbidden by the standard and SCOR is the choice. A seed
-      // without a foreign-currency bill lets a screen ship believing every
-      // invoice carries a QR payment part.
-      ref_type: 'SCOR',
-      ref_body: '539007547034',
-      client: { name: 'Atelier Rousseau', street: 'Rue Lafayette', building: '77', postal_code: '75009', city: 'Paris', country: 'FR' },
-      items: [
-        { description: 'Audit technique', qty: '4', unit: 'jours', unit_price: '900.00', vat_rate: null },
-      ],
-    },
-    {
-      company: 'blackcode',
-      status: 'void',
-      issue_date: '2026-08-20',
-      due_date: '2026-09-19',
-      currency: 'CHF',
-      ref_type: 'QRR',
-      ref_body: '00000000000000000100000004',
-      client: { name: 'Junod SA', street: 'Route de Berne', building: '12', postal_code: '1010', city: 'Lausanne', country: 'CH' },
-      voidReason: {
-        fr: 'Adressée à la mauvaise entité; réémise sous BC-2026-0005.',
-        en: 'Addressed to the wrong entity; reissued as BC-2026-0005.',
-      },
-      items: [{ description: 'Développement, juillet', qty: '8', unit: 'jours', unit_price: '132.50', vat_rate: '8.10' }],
-    },
-    {
-      // The MIXED bill, and the reason this seed exists in its current shape:
-      // an exempt line beside a taxable one, prices INCLUDING VAT, rounding on
-      // the total only. This is the first external customer's invoice, and it
-      // is the case that breaks a VAT block written for one rate.
-      company: 'praxis',
-      status: 'sent',
-      issue_date: '2026-09-10',
-      due_date: '2026-09-25',
-      currency: 'CHF',
-      ref_type: 'SCOR',
-      // What `referenceBodyFor` derives from `PX-0001`. Until 2026-09-17 this
-      // was a 24-digit string: 0005's CHECK allowed 25, ISO 11649 allows 21 for
-      // the body, and the seed carried a creditor reference no bank accepts
-      // without anything noticing. Migration 0008 is what refused it.
-      ref_body: 'PX0001',
-      client: { name: 'Mme A. Perret', street: 'Chemin des Vignes', building: '5', postal_code: '1004', city: 'Lausanne', country: 'CH' },
-      message: 'Consultation du 10.09.2026',
-      items: [
-        // Exempt: a medical act by a practitioner who is not liable for VAT on it.
-        { description: 'Consultation', qty: '1', unit: null, unit_price: '250.00', vat_rate: null },
-        // Taxable, and its price already contains the VAT.
-        { description: 'Produit de soin', qty: '2', unit: 'pcs', unit_price: '60.00', vat_rate: '8.10' },
-        // A THIRD rate, so the VAT block has to render more than one line.
-        { description: 'Documentation imprimée', qty: '1', unit: 'pcs', unit_price: '18.00', vat_rate: '2.60' },
-      ],
-    },
-    {
-      company: 'praxis',
-      status: 'draft',
-      issue_date: '2026-09-16',
-      due_date: null,
-      currency: 'CHF',
-      // NON: no reference at all, so the body must be empty. The third arm of
-      // the combination matrix.
-      ref_type: 'NON',
-      ref_body: null,
-      client: { name: 'M. B. Favre', street: 'Rue Centrale', building: '22', postal_code: '1003', city: 'Lausanne', country: 'CH' },
-      items: [{ description: 'Consultation de suivi', qty: '1', unit: null, unit_price: '180.00', vat_rate: null }],
-    },
-  ]
-
-  // The counters are set to match, because the seed inserts rows directly rather
-  // than going through the allocator. Leaving them at zero would make the NEXT
-  // invoice created through the app collide on `uq_invoice_ws_seq` — the exact
-  // failure a seed that bypasses the write path invites.
-  let invoiceSeq = 0
-  const nextSeqNo = new Map<string, number>([['blackcode', 1], ['praxis', 1]])
-
-  for (const inv of invoices) {
-    invoiceSeq += 1
-    const companyId = companyIds.get(inv.company)!
-    const company = companies.find((c) => c.slug === inv.company)!
-    const seqNo = nextSeqNo.get(inv.company)!
-    nextSeqNo.set(inv.company, seqNo + 1)
-
-    // ── INSERT AS A DRAFT, THEN WALK THE REAL STATUS MACHINE ─────────────
-    // Not a workaround. Two guards refuse the shortcut, and both are right:
-    //
-    //   - `trg_invoice_line_frozen` refuses an INSERT of a line onto an invoice
-    //     that is not a draft, because the lines of a sent bill ARE the
-    //     document. Inserting the invoice already `paid` and then its lines
-    //     fails, which is what happened the first time this seed ran.
-    //   - `trg_invoice_status_machine` refuses `draft → paid`, because a bill
-    //     nobody sent cannot have been paid.
-    //
-    // So the seed does what really happens: create a draft, put the lines on
-    // it, send it, then mark it paid. The rows it produces have therefore
-    // passed through every transition the app's own write paths use — which
-    // makes this seed a small, permanent test that those transitions work,
-    // rather than a set of rows assembled around them.
-    const [row] = await db
-      .insert(billingInvoice)
-      .values({
-        workspace_id: ws.id,
-        seq: invoiceSeq,
-        company_id: companyId,
-        seq_no: seqNo,
-        number: renderNumber(company.number_format, Number(inv.issue_date.slice(0, 4)), seqNo),
-        status: 'draft',
-        issue_date: inv.issue_date,
-        due_date: inv.due_date,
-        currency: inv.currency,
-        language: 'fr',
-        ref_type: inv.ref_type,
-        ref_body: inv.ref_body,
-        client: inv.client,
-        vat_rate: company.default_vat_rate,
-        prices_include_vat: company.default_prices_include_vat,
-        message: inv.message ?? null,
-        created_by: owner.id,
-      })
-      .returning({ id: billingInvoice.id })
-
-    await db.insert(billingInvoiceLine).values(
-      inv.items.map((l, i) => ({
-        invoice_id: row.id,
-        line_no: i + 1,
-        description: l.description,
-        qty: l.qty,
-        unit: l.unit,
-        unit_price: l.unit_price,
-        vat_rate: l.vat_rate,
-      }))
-    )
-
-    // `draft` needs nothing further. Everything else is a transition, in order.
-    if (inv.status === 'sent' || inv.status === 'paid') {
-      // `sent_at` in the same statement, for the same reason as `paid_date`
-      // below: migration 0007's `invoice_sent_requires_sent_at` refuses a sent
-      // invoice with no moment it was sent. This walk was the first thing that
-      // CHECK refused — a plain `SET status = 'sent'` is exactly the console
-      // shortcut it exists to stop.
-      //
-      // No `sent_message_id` and no `pdf_sha256`: seeded bills were never
-      // emailed by this app, and a null there is how the record says so — the
-      // same shape `bk billing invoice mark-sent` produces.
-      await db
-        .update(billingInvoice)
-        .set({ status: 'sent', sent_at: new Date(`${inv.issue_date}T09:00:00.000Z`) })
-        .where(eq(billingInvoice.id, row.id))
-    }
-    if (inv.status === 'paid') {
-      // `paid_date` in the SAME statement as the status: the CHECK
-      // `invoice_paid_requires_date` refuses a paid invoice without one, and
-      // setting them separately would be refused at the first half.
-      await db
-        .update(billingInvoice)
-        .set({ status: 'paid', paid_date: inv.paid_date! })
-        .where(eq(billingInvoice.id, row.id))
-    }
-    if (inv.status === 'void') {
-      // `void` from anywhere, and the record in the same statement — the CHECK
-      // `invoice_void_requires_record` refuses a void with no reason, because a
-      // void without one is a deletion with extra steps.
-      await db
-        .update(billingInvoice)
-        .set({
-          status: 'void',
-          void: { ts: `${inv.issue_date}T12:00:00.000Z`, by: owner.email, reason: inv.voidReason! },
-        })
-        .where(eq(billingInvoice.id, row.id))
-    }
-  }
-
-  // Bring the allocators in line with what was inserted, so the next real create
-  // continues the sequence instead of colliding with it.
-  await db.insert(billingCounters).values([
-    { workspace_id: ws.id, entity_type: 'company', last_value: companies.length },
-    { workspace_id: ws.id, entity_type: 'invoice', last_value: invoiceSeq },
-    { workspace_id: ws.id, entity_type: 'audit', last_value: 0 },
-  ])
-  for (const c of companies) {
-    await db
-      .update(billingCompany)
-      .set({ next_seq: nextSeqNo.get(c.slug)! })
-      .where(eq(billingCompany.id, companyIds.get(c.slug)!))
-  }
-
-  // ── NO AUDIT ROWS, AND THAT IS STATED RATHER THAN OVERLOOKED ────────────
-  // The log records what somebody DID. Inventing entries for rows that were
-  // never created through a write path would put fiction in an append-only
-  // table nothing can correct — and the log is the one place in this app where
-  // a plausible lie is worse than a gap.
-  //
-  // So the seeded workspace has an empty log, and the first real edit fills it.
-  // A frontend building the audit panel makes one edit through the app and has
-  // a real row.
-  console.log(`✓ seeded "${WORKSPACE_SLUG}" for ${owner.email}`)
-  console.log(`  ${companies.length} companies, ${invoiceSeq} invoices, 0 audit entries (see the note in this file)`)
-  console.log('  next: npm run dev --workspace=billing, then bk billing overview')
+  console.log(`✓ seeded for ${owner.email} (mockup ${MOCKUP.source.commit?.slice(0, 7)}, file sha256 ${MOCKUP.source.sha256.slice(0, 12)})`)
+  console.log(`  blackcode     2 companies, ${mock.invoices} invoices, ${mock.history} imported bills — ${checked} invoices read back and equal to the mockup`)
+  console.log('  demo-tenant   1 company, nothing else')
+  console.log('  praxis-demo   1 company (prices include VAT, total rounding), 2 invoices')
+  console.log('  0 audit entries anywhere: the log records what somebody did, and nobody has yet')
+  console.log('  next: npm run dev --workspace=billing, then bk billing workspace use blackcode && bk billing overview')
   process.exit(0)
 }
 

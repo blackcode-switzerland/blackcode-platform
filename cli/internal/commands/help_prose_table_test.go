@@ -42,8 +42,18 @@ import (
 // description column is separated by two or more spaces, which is what lets a
 // row with no verbs ("bk books bilan      balance sheet, art. 959a") be told
 // from one with them — otherwise "balance sheet, art" reads as a verb list.
+//
+// A row may also END after its verbs, with no description — b/billing's tour
+// is written that way. The first version required a description, so its
+// trailing `\s{2,}\S` swallowed the newline and the next row's indent, and
+// only every other row of such a table was read (found 2026-09-18: one of
+// billing's three rows). Whitespace inside a row is `[ \t]` for that reason:
+// a row never continues onto the next line. And the space belongs BEFORE each
+// word of the command, not after it: `bk (?:word )+?` spent one of the two
+// spaces between `bk billing workspace` and its verbs, so a row padded with
+// exactly two was never matched at all.
 var proseRowRe = regexp.MustCompile(
-	`(?m)^  (bk (?:[a-z][a-z0-9-]* )+?)\s{2,}(?:([a-z][a-z0-9-]*(?:, [a-z][a-z0-9-]*)*)\s{2,})?\S`)
+	`(?m)^  (bk(?: [a-z][a-z0-9-]*)+?)[ \t]{2,}(?:([a-z][a-z0-9-]*(?:, [a-z][a-z0-9-]*)*)(?:[ \t]{2,}|[ \t]*$))?(?:\S|$)`)
 
 // proseTableClaims reads a Long and returns, per command path, the union of the
 // verbs the prose claims that command has. A path claiming no verbs maps to an
@@ -138,6 +148,19 @@ func proseTableFindings(root *cobra.Command, group *cobra.Command) []string {
 	return bad
 }
 
+// verbRowFindings drops the one finding a noun-and-description tour produces
+// by design: a group named with no verbs listed.
+func verbRowFindings(bad []string) []string {
+	var out []string
+	for _, b := range bad {
+		if strings.Contains(b, "but the table names none of them") {
+			continue
+		}
+		out = append(out, b)
+	}
+	return out
+}
+
 func pluralIsAre(v []string) string {
 	if len(v) == 1 {
 		return "it"
@@ -174,6 +197,51 @@ func TestBooksProseCommandTableMatchesTheTree(t *testing.T) {
 		t.Errorf("`bk books --help`'s hand-written table disagrees with the binary in %d place(s).\n"+
 			"It is the first thing an agent reads; a verb it never names is a capability "+
 			"that agent will report as missing.\n\n  %s", len(bad), strings.Join(bad, "\n  "))
+	}
+}
+
+// Every OTHER top-level group that carries a prose tour, found by reading the
+// tree.
+//
+// The books check above was written for books, and b/billing's `--help` grew a
+// tour of its own (workspace, member, invite) that nothing checked. Adding a
+// "billing" copy of the books test would be finding #22's shape exactly: a
+// per-app list a new app must OPT INTO, whose coverage silently shrinks every
+// time the platform grows. So this one walks `bk`'s top-level groups and checks
+// whichever of them have a tour — an app added tomorrow is covered the moment
+// its help grows a table. (2026-09-18.)
+//
+// ── LESS STRICT THAN THE BOOKS CHECK, ON PURPOSE ──────────────────────────
+// `bk issues` and `bk sales` write their tours as a noun and a description,
+// with no verbs ("bk sales prospect   the deal"). The books rule — a group
+// named without its verbs is a finding — reported nineteen "disagreements" in
+// those two on its first run, every one of them a tour written in that other
+// style rather than a tour gone stale. So here only a row that LISTS verbs is
+// held to them: every verb it names must exist, and it must name them all.
+// That is the half that catches a tour advertising a command the binary does
+// not carry, which is what finding #23 was.
+func TestEveryAppsProseCommandTableMatchesTheTree(t *testing.T) {
+	root := NewRoot()
+	checked := map[string]int{}
+	for _, group := range root.Commands() {
+		if group.Name() == "books" || !group.HasAvailableSubCommands() {
+			continue // books has its own, stricter check above
+		}
+		claims, _ := proseTableClaims(root, group.Long)
+		if len(claims) == 0 {
+			continue
+		}
+		checked[group.Name()] = len(claims)
+		if bad := verbRowFindings(proseTableFindings(root, group)); len(bad) > 0 {
+			t.Errorf("`bk %s --help`'s hand-written table disagrees with the binary in %d place(s):\n  %s",
+				group.Name(), len(bad), strings.Join(bad, "\n  "))
+		}
+	}
+	// ASSERT THE INPUT: billing's tour has three rows today. A scan that found no
+	// tour anywhere would pass the loop above while checking nothing.
+	if checked["billing"] < 3 {
+		t.Fatalf("expected `bk billing --help`'s tour (workspace, member, invite) to be read; "+
+			"found tours in: %v", checked)
 	}
 }
 

@@ -105,7 +105,7 @@ A guide topic must **never** restate a dynamic value. Point at `bk meta`.
 > **A check you have not watched fail is not a check.** Break the thing it
 > guards, watch it go red, restore.
 
-**Twenty-one guardrails in this repo have been found green-but-inert**, each of
+**Twenty-six guardrails in this repo have been found green-but-inert**, each of
 which looked like working protection: three packages with no ESLint config at
 all; a `SECURITY DEFINER` guard comparing `current_user` (the function's owner)
 instead of the caller; an orphan check that structurally could not detect an

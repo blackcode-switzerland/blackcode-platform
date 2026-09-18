@@ -24,6 +24,7 @@
 import { charLength, findDisallowed } from './charset'
 import { isQrIban, isValidIban, isValidQRR, isValidSCOR } from './reference'
 import { QR_PAYLOAD_MAX, serializeQrPayload, payloadLength, type QrAddress, type QrBillFields } from './payload'
+import { PAYMENT_MESSAGE_MAX } from '@/lib/limits'
 
 export interface QrRefusal {
   code: string
@@ -45,7 +46,13 @@ const ADDRESS_LIMITS = { name: 70, street: 70, building: 16, postalCode: 16, tow
 /** No leading zeros, exactly two decimals, `.`, at most 9 integer digits (§4.2.2 line 19). */
 const AMOUNT_RE = /^(0|[1-9]\d{0,8})\.\d{2}$/
 
-export const ADDITIONAL_INFORMATION_BUDGET = 140
+/**
+ * §4.2.2's shared budget for the message and billing information. The SAME
+ * number as the write door's `PAYMENT_MESSAGE_MAX`, and read from it: until
+ * 2026-09-18 each file typed its own 140, so a change to one would have left an
+ * invoice the write door accepted and this check refused (or the reverse).
+ */
+export const ADDITIONAL_INFORMATION_BUDGET = PAYMENT_MESSAGE_MAX
 const ALT_PROCEDURE_MAX = 2
 const ALT_PROCEDURE_LENGTH = 100
 

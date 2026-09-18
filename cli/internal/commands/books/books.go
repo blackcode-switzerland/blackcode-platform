@@ -100,7 +100,7 @@ STARTING AND ENDING A BOOK:
 
 THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
-  bk books workspace  list, show, use
+  bk books workspace  list, show, use, create
   bk books member     list
   bk books invite     send, list, revoke
 

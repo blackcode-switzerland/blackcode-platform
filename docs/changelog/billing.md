@@ -5,6 +5,58 @@ This file is an **agent** surface. It is merged into `bk changelog` and
 entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
+## 2026-09-18 — An unknown `--company` is refused; the pitfalls guide; what still blocks a real invoice
+
+### Breaking for one request, which was already wrong
+
+`GET /api/workspaces/{ws}/invoices`, `…/overview` and `…/history` with a
+`company` that is not in this workspace now answer **404 `company_not_found`**
+instead of an empty page. `bk billing invoice list --company x`,
+`bk billing overview --company x` and `bk billing history list --company x`
+exit non-zero with a hint. An empty answer read as "that company has no
+invoices" when it meant "there is no such company" — a typo in a slug, or a
+slug from another workspace. `company` also accepts a company's `#number` now.
+
+**How to adapt:** a caller that filtered by a company it had not checked now
+gets a 404 to handle. `GET …/invoices` is a public route, so
+`contract_version` changes with its published purpose.
+
+### New
+
+`bk guide billing/pitfalls` — the mistakes specific to this app: a number is
+permanent, null VAT is not zero, EUR never carries a QR reference, paid is an
+assertion, nothing is scheduled, currencies are never summed together, and
+`--company` is the scope at which a wrong answer is a wrong IBAN.
+
+### Known gap, stated so nobody relies on the opposite
+
+**A sent invoice carries no copy of its issuer.** Its document half (client,
+lines, currency, reference) is frozen at send; the issuing company's legal
+name, address and IBAN are read from the company as it is NOW. Editing a
+company's bank details therefore changes the account its unpaid bills point to,
+and a regenerated PDF would no longer match the `pdf_sha256` recorded when it
+was sent. The fix — a snapshot taken at send — lands with the PDF routes.
+Until then, change a company's IBAN only when none of its sent bills is unpaid.
+
+### What still blocks the first real invoice
+
+The app is usable, and a green suite does not mean a real bill can go out. Five
+questions are open, none of them ours to answer:
+
+- **P1** — the real second issuing company.
+- **P2** — blackcode's real UID and IBANs. Every IBAN and UID in the seed is a
+  placeholder.
+- **P3** — the VAT rates, verified against the ESTV. 8.1 is the mockup's
+  unverified figure.
+- **P11** — the QR reference body scheme, agreed with the bank. Changing it
+  after real bills are out means two schemes in the wild.
+- **P8** — the rounding rule, confirmed by the fiduciary.
+
+And one deviation from the brief, recorded rather than hidden: invoices are
+emailed through **Resend** from the platform's own sender with `Reply-To` set to
+the company, not through a Google mailbox — the platform holds no Google
+credential. A customer deployment uses its own Resend account and domain.
+
 ## 2026-09-18 — Imported history: the bills from before this app, as a read-only archive
 
 **Not breaking. New commands, new routes, two new vocabularies, one new limit
