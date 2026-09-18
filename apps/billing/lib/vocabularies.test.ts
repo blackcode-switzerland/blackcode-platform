@@ -45,6 +45,8 @@ import {
   DOCUMENT_LANGUAGES,
   HISTORY_SOURCES,
   HISTORY_STATUSES,
+  RECURRENCE_FREQUENCIES,
+  RECURRENCE_STATUSES,
   INVITATION_STATUSES,
   INVOICE_STATUSES,
   MEMBER_ROLES,
@@ -134,6 +136,16 @@ const TRIPLES: Record<string, Triple> = {
     terms: HISTORY_STATUSES,
     typeName: 'HistoryStatus',
     constraint: 'history_status_check',
+  },
+  RECURRENCE_FREQUENCIES: {
+    terms: RECURRENCE_FREQUENCIES,
+    typeName: 'RecurrenceFrequency',
+    constraint: 'recurrence_frequency_check',
+  },
+  RECURRENCE_STATUSES: {
+    terms: RECURRENCE_STATUSES,
+    typeName: 'RecurrenceStatus',
+    constraint: 'recurrence_status_check',
   },
 }
 

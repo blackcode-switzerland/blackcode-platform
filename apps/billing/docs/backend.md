@@ -649,6 +649,98 @@ without `--confirm` and with `--confirm 11` both exited **2** before any write;
 `--confirm " BC-2026-0007 "` voided it and echoed the number, client and amount;
 `mark-sent` on a sent invoice exited **2** on the server's 409.
 
+## Phase 4, backend: finite recurrence (ticket #91, 2026-09-18)
+
+Migration **0012** (the plan says 0008; the number is only an order),
+`lib/derive/recurrence.ts`, `lib/db/queries/recurrences.ts`, three route files
+under `app/api/workspaces/[ws]/recurrences/`, `bk billing recurrence` (seven
+commands), guide `billing/recurrence`.
+
+### What the database holds
+
+| Guard | Stops |
+|---|---|
+| `occurrences_total NOT NULL`, `recurrence_finite` (`>= 1`, `0 <= done <= total`) | an open-ended series; a counter past its cap |
+| `recurrence_completed_by_the_cap` | `completed` ⇔ `done = total` ⇔ `next_date IS NULL` — completion set by hand, or a finished series with a next date |
+| `uq_invoice_occurrence`, partial on `status <> 'void'` | two LIVE invoices for one (series, period), whatever wrote them. A void frees its period (P7) |
+| `trg_invoice_series_frozen` | an invoice leaving its series or changing its period. Holds on a draft too, which G2 does not reach |
+| `invoice_period_requires_series`, `invoice_occurrence_period_shape` | a period with no series; `2026-13` |
+| `trg_no_hard_delete` + `REVOKE DELETE` | a series vanishing |
+
+`recurrence.template_invoice_id` and `invoice.recurrence_id` point at each
+other, so both are **NO ACTION**, not RESTRICT: the seed's rebuild deletes the
+workspace, which cascades to both tables in one statement, and RESTRICT checks
+row by row mid-cascade.
+
+### Generating: three layers, and which one holds what
+
+`generateOccurrence` locks the series row, checks status, template and period,
+refuses a period that already has a live invoice (naming it), creates the draft
+through **`insertInvoice`** — `createInvoice`'s body, now callable inside a
+caller's transaction — and advances the counter in the same transaction.
+
+Removing layers one at a time against the local catalog, 2026-09-18:
+
+| Removed | Result |
+|---|---|
+| the index only | the integration suite **green** (the lock and check refuse); `invariants.test.ts` I9 **red** |
+| the lock and the check only | **green**: 20 concurrent calls, one invoice, 19 `already_generated` translated from 23505 |
+| both | **red**: two live invoices for one period, sequentially and concurrently |
+
+So neither layer alone is load-bearing for the app's own path — and the index is
+the only one for any other path. The Idempotency-Key is separate: it makes a
+retry *quiet* (same 201, same invoice), verified over HTTP.
+
+### Decisions the plan left open
+
+- **The template may be the first occurrence.** When its issue date is in the
+  start date's period it takes that period and the count starts at 1. Without
+  this, "make this month's invoice recurring, then generate this month" billed
+  the month twice. The mockup's two yearly series are this shape.
+- **The next date steps from the stored one**, anchored to the start date's day,
+  never `start + done × step`. The mockup's Junod series has `2/8` done and its
+  next date in **Q4** — a quarter later than Q1+Q2 would give, with no Q1 or Q3
+  invoice in its data. Seeded as the mockup states it. **Raise with Andrea.**
+- **A period is the one an occurrence's scheduled date falls in.** A replacement
+  names a voided period explicitly; anything neither next nor voided is
+  `period_not_expected` (refused, never substituted).
+- **Generating early is allowed**: the period is explicit.
+- **`occurrences_total` can be lowered to what is done**, which completes the
+  series (a cancelled contract); never below. Frequency and start date never
+  change.
+- **Copied from the template:** client, lines, currency, language, reference
+  type, VAT, price mode, payment message (overridable). **Not copied:** number,
+  reference body, external ref, metadata.
+- **Not public.** The recurrence routes are not in `PUBLIC_ROUTES`.
+- `todayInZurich` moved to `lib/derive/format.ts` (re-exported from
+  `lifecycle.ts`), so the series code does not import the PDF stack for a date.
+
+### The seed
+
+The mockup's four series, as data, and each invoice's period from its issue
+date. `assertParity` reads every series back through `getRecurrence` — status,
+counter, next date, template, invoices — and a period missing on any of them
+fails the seed.
+
+### Verified on 2026-09-18, over HTTP with the built `bk`
+
+A fresh workspace: create without `--occurrences` → exit 2; create from a
+September invoice → `1/3`, template counts; generate `2026-09` → 409 naming the
+template; `2026-11` → 409 naming `2026-10`; `2026-Q4` → 400; generate
+`2026-10`; the same period with a fresh key → 409 naming it; void, regenerate →
+REPLACEMENT, still `2/3`; pause → generate refused naming resume; resume;
+generate to the cap → `completed`, then refused; the same key and body twice →
+one invoice returned twice. `audit list --subject recurrence:1` shows the
+counter, pause, resume, replacement and completion rows.
+
+### Found on the way
+
+`lib/db/queries/history.ts` (phase 5) contained three raw NUL bytes inside
+template strings. They worked, and made `grep` treat the file as binary and
+report **no matches** in it — found when a grep for code known to be there came
+back empty. Replaced with `\u0000`. `apps/issues/lib/storage/drift.ts` has the
+same; another app, reported rather than touched.
+
 ## Phase 5: imported history (ticket #93, 2026-09-18)
 
 Bills from before this app existed, as a read-only archive. Built on
@@ -958,6 +1050,21 @@ Phase 3 added these, on 2026-09-17:
 | `guide_references_test.go` (new) | the referenced topic renamed away | named the help and both topics. Its first run false-positived on the valid bare slug `bk guide files` |
 | `guide_test.go` | (not injected) | caught a REAL restatement in the new topic: `sent, paid or voided` is the audit-action vocabulary |
 | `invoice_sent_requires_sent_at` | (not injected) | refused phase 1's seed walk, `SET status = 'sent'` — confirmed by running the old seed |
+
+Ticket #91 (phase 4) added these, on 2026-09-18 — the per-test detail is in
+each file's header:
+
+| Guard | The mutation | What it said |
+|---|---|---|
+| `recurrences.integration.test.ts` | substitution for the period check; the counter advanced outside the transaction; the template never first; no replacements; `paused` not refused; `--due` ignoring status | each its own case (the counter mutation turned ten red) |
+| the same, and `invariants.test.ts` I9 | the index dropped; the lock and check removed; both; an index counting voids | see "three layers" above |
+| `invariants.test.ts` I9 (catalog) | the series-freeze trigger disabled; `recurrence_completed_by_the_cap` dropped | both red; one inconsistent test row repaired before the CHECK went back |
+| `owner-guards.integration.test.ts` | the recurrence no-delete trigger disabled | "refuses a DELETE from the owner" |
+| `lib/derive/recurrence.test.ts` | the anchor lost (two ways); the quarter off by one; completion at `>` | each named case |
+| the I9 tripwire | (not injected) | fired as written the moment 0012 existed, and became the invariant |
+| `help_flag_drift_test.go` | (not injected) | caught the group help naming `--occurrences`, a flag of `create` only |
+| `pagination_claim_test.go` | (not injected) | caught `recurrence list` paginating without the platform guide saying so |
+| `guide_references_test.go` | (not injected) | caught the help pointing at the topic before it existed |
 
 Ticket #86 added these, on 2026-09-18:
 

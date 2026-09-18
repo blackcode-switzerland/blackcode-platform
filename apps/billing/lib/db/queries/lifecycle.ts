@@ -58,7 +58,7 @@ import {
 import { issuerSnapshot } from '@/lib/issuer'
 import { prepareInvoiceDocument, type DocumentSource } from '@/lib/delivery/document'
 import { emailEnabled, sendDocumentEmail } from '@/lib/email/send'
-import { date as formatDate, money } from '@/lib/derive/format'
+import { date as formatDate, money, todayInZurich } from '@/lib/derive/format'
 import { parseRappen } from '@/lib/derive/money'
 import { DELIVERY_LIMITS } from '@/lib/limits'
 import { APP_SLUG } from '@/lib/app'
@@ -137,13 +137,10 @@ export function parseSendInput(raw: unknown): Required<Pick<SendInvoiceBody, 'to
   return { to, cc, subject: text('subject', DELIVERY_LIMITS.subject_max), body: text('body', DELIVERY_LIMITS.body_max) }
 }
 
-/** Today's date where the businesses using this app are, as YYYY-MM-DD. */
-export function todayInZurich(now: Date = new Date()): string {
-  // `en-CA` formats as YYYY-MM-DD. Zurich, not UTC: between midnight and 01:00
-  // or 02:00 local time, UTC is still yesterday, and "paid today" would be
-  // refused as a future date for an hour every night.
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich' }).format(now)
-}
+// Moved to lib/derive/format.ts in phase 4 (a series is due "today" too, and
+// importing this module for a date pulled the PDF renderer in with it).
+// Re-exported so existing importers keep one name.
+export { todayInZurich } from '@/lib/derive/format'
 
 export function parsePaidInput(raw: unknown, now: Date = new Date()): MarkPaidBody {
   const v = raw && typeof raw === 'object' ? (raw as Record<string, unknown>).paid_date : undefined

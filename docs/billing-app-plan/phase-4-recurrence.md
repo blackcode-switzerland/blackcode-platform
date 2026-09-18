@@ -211,6 +211,26 @@ infinite series.
 - [ ] `grep -rn "cron\|setInterval\|setTimeout\|node-schedule" apps/billing`
       returns nothing on a write path
 
+## Progress
+
+**Backend built 2026-09-18** on `feat/billing-phase-4-be` (ticket #91). Details,
+the three-layer mutation table and the verification are in
+`apps/billing/docs/backend.md` under "Phase 4, backend". What building it
+changed from this doc:
+
+- The migration is **0012**, not 0008.
+- **The template may be the first occurrence**: when its issue date is in the
+  start date's period, it takes that period and the count starts at 1.
+- **`next_date` steps from the stored date**, anchored to the start's day — the
+  mockup's Junod series (2/8 done, next in Q4) contradicts `start + done × step`.
+  Seeded as stated; raise with Andrea.
+- The two circular keys (template ⇄ series) are NO ACTION, not RESTRICT, so the
+  seed's workspace cascade can delete both.
+- The recurrence routes are **not public**.
+- Every item under "Done when" above holds except the frontend's; the plan's
+  "index dropped, two invoices for one period" needed the app's lock removed
+  too, because the lock alone also prevents it — both layers were watched.
+
 ## Frontend gets
 
 The recurrence card, the list badge, and the make-recurring action.

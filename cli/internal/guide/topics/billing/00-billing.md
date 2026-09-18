@@ -20,12 +20,12 @@ bill by email, recording one that went out another way, marking it paid, and
 voiding it with a reason — and the imported archive of bills from the systems
 this app replaces. `bk guide billing/companies-and-numbering`,
 `bk guide billing/invoices`, `bk guide billing/references-and-qr`,
-`bk guide billing/sending-and-status` and `bk guide billing/imported-history`
-cover them. **Read
+`bk guide billing/sending-and-status`, `bk guide billing/recurrence` and
+`bk guide billing/imported-history` cover them. **Read
 `bk guide billing/pitfalls` before your first write**: every mistake in it looks
 like a success from the inside.
 
-**Not built yet:** recurring invoices. `docs/billing-app-plan/` in the repo is the plan, one
+ `docs/billing-app-plan/` in the repo is the plan, one
 document per milestone.
 
 ## Start here

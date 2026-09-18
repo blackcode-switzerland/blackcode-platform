@@ -93,6 +93,10 @@ export type DocumentLanguage = 'fr' | 'de' | 'it' | 'en'
  */
 export type RoundingPolicy = 'line_0_05' | 'total_0_05' | 'none'
 
+export type RecurrenceFrequency = 'monthly' | 'quarterly' | 'yearly'
+
+export type RecurrenceStatus = 'active' | 'paused' | 'completed'
+
 export type AuditAction =
   | 'created'
   | 'field_changed'
@@ -326,6 +330,14 @@ export interface Invoice {
    * company as it is now, so a correction made before sending reaches it.
    */
   issuer: IssuerSnapshot | null
+
+  /**
+   * The `#number` of the series this invoice belongs to — as an occurrence or as
+   * its template. A void keeps it. Null on a one-off.
+   */
+  recurrence: number | null
+  /** The period it bills — `2026-10`, `2026-Q4`, `2026`. Null on a one-off and a template that is not itself an occurrence. */
+  occurrence_period: string | null
 
   /** The lines, as the mockup serves them. */
   items: InvoiceLine[]
@@ -645,4 +657,81 @@ export interface VoidInvoiceBody {
    * EXACTLY, or nothing is voided. `bk` always sends it; an integration may.
    */
   confirm?: string
+}
+
+// ---------------------------------------------------------------------------
+// Recurrence (phase 4)
+// ---------------------------------------------------------------------------
+
+/** One invoice of a series, as the series lists it. */
+export interface RecurrenceOccurrence {
+  seq: number
+  number: string
+  status: InvoiceStatus
+  /** Null only on a template that is not itself an occurrence. */
+  occurrence_period: string | null
+  issue_date: string
+  total: string
+  currency: string
+}
+
+/**
+ * A finite series. **A rule is data; nothing fires on it** — an agent reads
+ * `next_date` (or lists with `?due=true`) and asks for the next occurrence.
+ */
+export interface Recurrence {
+  /** The workspace `#number`. `bc:billing:<ws>/recurrence/<seq>`. */
+  seq: number
+  company: string
+  /** The template's `#number`. Null when the template predates this app. */
+  template: number | null
+  template_number: string | null
+  status: RecurrenceStatus
+  frequency: RecurrenceFrequency
+  start_date: string
+  /** The END CONDITION. There is no open-ended series. */
+  occurrences_total: number
+  /** Live occurrences generated or counted so far. A void and its replacement are ONE. */
+  occurrences_done: number
+  /** Null exactly when completed. */
+  next_date: string | null
+  /** The period the next generation must name. Null exactly when completed. */
+  next_period: string | null
+  /** Active and its next date has arrived, in Zurich. */
+  due: boolean
+  label: { fr: string | null; en: string | null }
+  external_ref: string | null
+  metadata: Record<string, string>
+  /** Every invoice carrying this series, oldest first — voids included. On a single read only. */
+  invoices?: RecurrenceOccurrence[]
+}
+
+export interface CreateRecurrenceBody {
+  /** The invoice every occurrence is copied from: its `#number` or printed number. */
+  template: string
+  frequency: RecurrenceFrequency
+  /** YYYY-MM-DD. Its day of the month is the series' anchor. */
+  start_date: string
+  /** Required. There is no default and no "leave it open". */
+  occurrences_total: number
+  label_fr?: string | null
+  label_en?: string | null
+  external_ref?: string | null
+  metadata?: Record<string, string>
+}
+
+export interface GenerateOccurrenceBody {
+  /** The period to bill — must be the series' next period, or a voided one being replaced. */
+  period: string
+  /** Defaults to today in Zurich. */
+  issue_date?: string
+  /** Defaults to the template's. */
+  message?: string | null
+}
+
+export interface GenerateOccurrenceResult {
+  invoice: Invoice
+  recurrence: Recurrence
+  /** True when this filled a period whose earlier occurrence was voided: the counter did not move. */
+  replacement: boolean
 }

@@ -120,3 +120,27 @@ For the action bar, the send modal and the read-only-with-a-reason rendering.
   offering one.
 - Limits for the modal (subject, body, copies, reason length) are served at
   `GET /api/meta` under `limits.delivery`. Do not copy the numbers.
+
+## What phase 4 put on the wire (backend landed 2026-09-18)
+
+For #92 — the recurrence card, the `↻ n/N` badge, "Make recurring…".
+
+- **Every invoice** carries `recurrence` (the series' #number, or null) and
+  `occurrence_period`. The badge reads `recurrence`; fetch the series for `n/N`.
+  **A void keeps its series** — show the badge on it too.
+- **`GET …/recurrences/{seq}`** is the card: `status`, `frequency`,
+  `start_date`, `occurrences_done`/`occurrences_total`, `next_date`,
+  `next_period`, `due`, `label.{fr,en}`, `template`/`template_number`, and
+  `invoices[]` (every invoice carrying it, voids included, each with its
+  period). State the end condition in words — "stops after 8 occurrences".
+- **`POST …/recurrences`** is "Make recurring…": `template`, `frequency`,
+  `start_date`, **`occurrences_total` (required — the form has no "forever")**.
+  P13's default is 12 × monthly. The response may already count the template as
+  the first occurrence; say so from `occurrences_done`.
+- **Pause/resume** are `PATCH {status: 'paused' | 'active'}`. `completed` is
+  never sent; a completed series shows no actions but "view".
+- **"Generate" is not on the plan's screen list** and the app schedules nothing.
+  If a button is added, it must send the `next_period` it displays, never
+  compute one, and render `409 already_generated` as "already exists: <number>",
+  linking to it.
+- `GET …/audit?subject=recurrence:<seq>` is the card's history.

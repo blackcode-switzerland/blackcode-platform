@@ -15,12 +15,11 @@
 // the rest runs as `billing_app` (TEST_DATABASE_URL) and skips LOUDLY without
 // one, naming itself.
 //
-// ── ONE INVARIANT IS NOT WHOLE YET, AND ITS TEST SAYS SO ───────────────────
-//   I9   recurrence — phase 4 is not built. The case asserts the table is ABSENT,
-//        so it fails the day phase 4 adds it and has to be replaced by the
-//        real check rather than forgotten.
+// ── TWO INVARIANTS WERE NOT WHOLE, AND THEIR TESTS SAID SO ────────────────
+//   I9 asserted until 2026-09-18 that the recurrence table was ABSENT, so it
+//   failed the day phase 4 added it. It did, and is now the real check.
 //
-//   I12 was the second until 2026-09-18: its case read "KNOWN GAP (#86)" and
+//   I12 was the other, also until 2026-09-18: its case read "KNOWN GAP (#86)" and
 //   asserted that a company IBAN edit moved a SENT bill's account. Migration
 //   0011 gave the invoice its own copy of the issuer, that case went red as it
 //   was written to, and it is now the invariant.
@@ -31,6 +30,11 @@
 // file), watched red, restored and re-read from pg_constraint / pg_proc:
 //   - `invoice_issuer_iff_issued` dropped            → "the database holds it" red (the forgetful UPDATE succeeded)
 //   - the `NEW.issuer` line removed from G2's function → the same case red: expected P0001, got no error
+//
+// And I9's, the same way:
+//   - `uq_invoice_occurrence` dropped                 → "…a second live bill for one period" red (23505 expected)
+//   - `trg_invoice_series_frozen` disabled            → the same case red: the period moved (P0001 expected)
+//   - `recurrence_completed_by_the_cap` dropped       → the same case red: a hand-set completion was accepted
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -144,9 +148,17 @@ describe('I6 — totals are derived, never stored', () => {
   })
 })
 
-describe('I9 — recurrence is finite (NOT BUILT: phase 4)', () => {
-  it('has no recurrence table yet — this case fails the day phase 4 adds one, and must become the real check', () => {
-    expect(billingTables()).not.toContain('recurrence')
+describe('I9 — recurrence is finite', () => {
+  // Until 2026-09-18 this group asserted the recurrence table was ABSENT, so
+  // that phase 4 could not land without replacing it. It fired as written.
+  it('the end condition is a required column, and completion is reached by the counter', async () => {
+    const { advance } = await import('@/lib/derive/recurrence')
+    expect(billingTables()).toContain('recurrence')
+    const total = getTableConfig(schema.billingRecurrence).columns.find((c) => c.name === 'occurrences_total')
+    expect(total?.notNull).toBe(true)
+    const rule = { status: 'active' as const, frequency: 'monthly' as const, start_date: '2026-01-31', occurrences_total: 2, next_date: '2026-02-28' }
+    expect(advance({ ...rule, occurrences_done: 0 }).status).toBe('active')
+    expect(advance({ ...rule, occurrences_done: 1 })).toEqual({ status: 'completed', occurrences_done: 2, next_date: null })
   })
 })
 
@@ -183,7 +195,7 @@ describe('I11 — the 140-character budget', () => {
 
 const run = integrationDescribe({
   describe,
-  name: 'billing invariants I1, I2, I4, I7, I8, I12, I13 against the database',
+  name: 'billing invariants I1, I2, I4, I7, I8, I9, I12, I13 against the database',
   databaseUrl: TEST_DB,
   required: process.env.REQUIRE_INTEGRATION_TESTS,
 })
@@ -305,6 +317,39 @@ run('billing invariants (integration)', () => {
       expect(new Set(currencies).size).toBe(currencies.length)
       expect(Object.keys(ov)).not.toContain('total')
       for (const b of ov.by_currency) expect(Object.keys(b)).toContain('currency')
+    })
+  })
+
+  describe('I9 — finite, and idempotent per (series, period), in the database', () => {
+    it('refuses an open-ended series, a hand-set completion, and a second live bill for one period', async () => {
+      const inv = await draft()
+      const row = await exec(sql`SELECT id, company_id FROM billing.invoice WHERE workspace_id = ${ctx.workspaceId} AND seq = ${inv.seq}`)
+      const { id: invoiceId, company_id: companyId } = row.rows[0] as { id: number; company_id: number }
+      const insertRule = (total: unknown, status: string, done: number, next: string | null) =>
+        sql`INSERT INTO billing.recurrence (workspace_id, seq, company_id, template_invoice_id, status, frequency, start_date, occurrences_total, occurrences_done, next_date)
+            VALUES (${ctx.workspaceId}, ${900000 + Math.floor(Math.random() * 99999)}, ${companyId}, ${invoiceId}, ${status}, 'monthly', '2026-01-01', ${total}, ${done}, ${next})`
+
+      // The positive half first: a finite, active rule is accepted.
+      expect(await sqlstate(insertRule(3, 'active', 0, '2026-01-01'))).toBeNull()
+      expect(await sqlstate(insertRule(null, 'active', 0, '2026-01-01'))).toBe('23502')
+      expect(await sqlstate(insertRule(0, 'active', 0, '2026-01-01'))).toBe('23514')
+      expect(await sqlstate(insertRule(3, 'completed', 1, null))).toBe('23514')
+      expect(await sqlstate(insertRule(3, 'active', 3, '2026-04-01'))).toBe('23514')
+
+      // The idempotency index, with no app code in the way.
+      const r = await exec(sql`SELECT id FROM billing.recurrence WHERE workspace_id = ${ctx.workspaceId} ORDER BY id DESC LIMIT 1`)
+      const ruleId = (r.rows[0] as { id: number }).id
+      const a = await draft()
+      const b = await draft()
+      const place = (seq: number) =>
+        sql`UPDATE billing.invoice SET recurrence_id = ${ruleId}, occurrence_period = '2026-01' WHERE workspace_id = ${ctx.workspaceId} AND seq = ${seq}`
+      expect(await sqlstate(place(a.seq))).toBeNull()
+      expect(await sqlstate(place(b.seq))).toBe('23505')
+      // …and a void frees the period (P7).
+      await q.lifecycle.voidInvoice(ctx, String(a.seq), { reason_en: 'invariant I9' })
+      expect(await sqlstate(place(b.seq))).toBeNull()
+      // An occurrence never moves to another period.
+      expect(await sqlstate(sql`UPDATE billing.invoice SET occurrence_period = '2026-02' WHERE workspace_id = ${ctx.workspaceId} AND seq = ${b.seq}`)).toBe('P0001')
     })
   })
 

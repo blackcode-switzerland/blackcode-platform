@@ -193,8 +193,9 @@ backend". What building it changed:
 
 - The seed has **three** workspaces, not two: D-B7's inclusive-VAT company went
   to its own `praxis-demo`, so `blackcode` is exactly the mockup.
-- The mockup's **recurrences** are not seeded (phase 4 is not built) and its
-  **audit trail** is not seeded at all (phase 1's decision: no invented rows in an
+- The mockup's **recurrences** were not seeded until phase 4 landed
+  (2026-09-18); they are now, and read back through the app. Its **audit
+  trail** is not seeded at all (phase 1's decision: no invented rows in an
   append-only log).
 - The seed verifies parity itself, reading every invoice back through the app.
 - `invariants.test.ts` found **I12 half-built**: the issuer is not snapshotted

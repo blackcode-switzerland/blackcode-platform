@@ -272,6 +272,12 @@ type BillingInvoice struct {
 	// sha256 of the PDF bytes actually attached. Empty unless this app emailed it.
 	PdfSha256 string `json:"pdf_sha256,omitempty"`
 
+	// The #number of the series this invoice belongs to, as an occurrence or as
+	// its template. A void keeps it. Nil on a one-off.
+	Recurrence *int `json:"recurrence"`
+	// The period it bills: 2026-10, 2026-Q4, 2026. Nil on a one-off.
+	OccurrencePeriod *string `json:"occurrence_period"`
+
 	// The issuing company AS IT WAS when the invoice left draft. NIL ON A DRAFT,
 	// and only on a draft: a draft renders from the company as it is now. No
 	// omitempty — the null is the statement "not issued yet", and -o json must
@@ -804,6 +810,147 @@ func (c *Client) ImportBillingHistory(ws string, rows json.RawMessage) (*Billing
 	body := map[string]json.RawMessage{"rows": rows}
 	var out BillingHistoryImportResult
 	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/history", ws), body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ---------------------------------------------------------------------------
+// Recurring series (phase 4)
+// ---------------------------------------------------------------------------
+
+// BillingRecurrence is a FINITE series. Nothing on the server fires on
+// NextDate: listing with Due and generating is the whole mechanism.
+type BillingRecurrence struct {
+	// The workspace #number — a series' only address.
+	Number  int    `json:"seq"`
+	Company string `json:"company"`
+	// The template's #number and printed number. Nil when it predates this app.
+	Template       *int    `json:"template"`
+	TemplateNumber *string `json:"template_number"`
+	Status         string  `json:"status"`
+	Frequency      string  `json:"frequency"`
+	StartDate      string  `json:"start_date"`
+	// THE END CONDITION. There is no open-ended series.
+	OccurrencesTotal int `json:"occurrences_total"`
+	OccurrencesDone  int `json:"occurrences_done"`
+	// Nil exactly when completed. No omitempty: the null is the statement.
+	NextDate   *string `json:"next_date"`
+	NextPeriod *string `json:"next_period"`
+	Due        bool    `json:"due"`
+	Label      struct {
+		Fr *string `json:"fr"`
+		En *string `json:"en"`
+	} `json:"label"`
+	ExternalRef *string                       `json:"external_ref"`
+	Metadata    map[string]string             `json:"metadata,omitempty"`
+	Invoices    []BillingRecurrenceOccurrence `json:"invoices,omitempty"`
+}
+
+type BillingRecurrenceOccurrence struct {
+	Number           int     `json:"seq"`
+	Ref              string  `json:"number"`
+	Status           string  `json:"status"`
+	OccurrencePeriod *string `json:"occurrence_period"`
+	IssueDate        string  `json:"issue_date"`
+	Total            string  `json:"total"`
+	Currency         string  `json:"currency"`
+}
+
+type BillingRecurrencePage struct {
+	Data       []BillingRecurrence `json:"data"`
+	NextCursor *int                `json:"next_cursor"`
+}
+
+type ListBillingRecurrencesOptions struct {
+	Company string
+	Status  string
+	Due     bool
+	Limit   int
+	Cursor  int
+}
+
+func (c *Client) ListBillingRecurrences(ws string, o ListBillingRecurrencesOptions) (*BillingRecurrencePage, error) {
+	q := url.Values{}
+	if o.Company != "" {
+		q.Set("company", o.Company)
+	}
+	if o.Status != "" {
+		q.Set("status", o.Status)
+	}
+	if o.Due {
+		q.Set("due", "true")
+	}
+	if o.Limit > 0 {
+		q.Set("limit", strconv.Itoa(o.Limit))
+	}
+	if o.Cursor > 0 {
+		q.Set("cursor", strconv.Itoa(o.Cursor))
+	}
+	path := fmt.Sprintf("/api/workspaces/%s/recurrences", ws)
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var out BillingRecurrencePage
+	if err := c.get(path, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) GetBillingRecurrence(ws string, seq int) (*BillingRecurrence, error) {
+	var out BillingRecurrence
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/recurrences/%d", ws, seq), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type CreateBillingRecurrenceRequest struct {
+	Template         string            `json:"template"`
+	Frequency        string            `json:"frequency"`
+	StartDate        string            `json:"start_date"`
+	OccurrencesTotal int               `json:"occurrences_total"`
+	LabelFr          string            `json:"label_fr,omitempty"`
+	LabelEn          string            `json:"label_en,omitempty"`
+	ExternalRef      string            `json:"external_ref,omitempty"`
+	Metadata         map[string]string `json:"metadata,omitempty"`
+}
+
+func (c *Client) CreateBillingRecurrence(ws string, req CreateBillingRecurrenceRequest, idempotencyKey string) (*BillingRecurrence, error) {
+	var out BillingRecurrence
+	if err := c.postJSONIdempotent(fmt.Sprintf("/api/workspaces/%s/recurrences", ws), req, idempotencyKey, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// EditBillingRecurrence sends a PATCH. `edit`, `pause` and `resume` all use it:
+// pausing is `{"status":"paused"}`, one route and one audit trail.
+func (c *Client) EditBillingRecurrence(ws string, seq int, patch map[string]any) (*BillingRecurrence, error) {
+	var out BillingRecurrence
+	if err := c.patchJSON(fmt.Sprintf("/api/workspaces/%s/recurrences/%d", ws, seq), patch, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type GenerateBillingOccurrenceRequest struct {
+	Period    string  `json:"period"`
+	IssueDate string  `json:"issue_date,omitempty"`
+	Message   *string `json:"message,omitempty"`
+}
+
+type BillingGenerateResult struct {
+	Invoice    BillingInvoice    `json:"invoice"`
+	Recurrence BillingRecurrence `json:"recurrence"`
+	// True when this filled a voided occurrence's period: the counter did not move.
+	Replacement bool `json:"replacement"`
+}
+
+func (c *Client) GenerateBillingOccurrence(ws string, seq int, req GenerateBillingOccurrenceRequest, idempotencyKey string) (*BillingGenerateResult, error) {
+	var out BillingGenerateResult
+	if err := c.postJSONIdempotent(fmt.Sprintf("/api/workspaces/%s/recurrences/%d/generate", ws, seq), req, idempotencyKey, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
