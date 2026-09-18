@@ -58,12 +58,16 @@ has not been retired. A refusal names which, with the command that fixes it.
 | Code | What happened | What to do |
 |---|---|---|
 | `email_not_configured` | this deployment cannot send email. Nothing was read or written | deliver it yourself, then `mark-sent` |
-| `document_renderer_not_built` | this build cannot produce the PDF yet. Nothing was written | deliver it yourself, then `mark-sent` |
+| `payment_part_invalid` | the record would make a payment part a bank rejects. Nothing was written, and every problem is named | fix what it names; `bk billing invoice pdf` is the dry run |
 | `email_delivery_failed` | the mail was refused. The invoice is still a draft | fix the address, send again |
 | `delivered_not_recorded` | the mail **went**, and recording it failed | **do not send again**; `mark-sent` |
 
-`document_renderer_not_built` is today's answer on every deployment: the PDF and
-the QR payload are not built yet.
+`mark-sent` refuses with `payment_part_invalid` too. Once an invoice is sent its
+document is frozen, so one that could not render at that moment never could.
+
+Leaving draft — by either command, or by voiding a draft — is also the moment
+the invoice takes its own copy of the issuing company.
+`bk guide billing/references-and-qr` has what that copy protects.
 
 On a development deployment with no email key, a send completes **without
 delivering** — the server log shows what would have gone, the invoice carries no

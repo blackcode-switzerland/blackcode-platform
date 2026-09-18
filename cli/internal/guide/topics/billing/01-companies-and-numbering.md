@@ -28,20 +28,21 @@ Three consequences you will meet:
 `company show` prints the next number the company will issue. It is read-only on
 every surface: the only thing that moves it is creating an invoice.
 
-## Two settings are read when a bill is rendered, not when it is created
+## One setting is read when a total is derived, not when the invoice is created
 
-Everything under `defaults` is a prefill for new invoices. These two are not:
+Everything under `defaults` is a prefill for new invoices, `prices-include-vat`
+included: each invoice stores its own price mode. **`rounding`** — how
+five-rappen rounding is applied — is the exception.
 
-- **`rounding`** — how five-rappen rounding is applied.
-- **`prices-include-vat`** — whether a line price already contains its VAT.
+Nothing stores a total. Every total is derived from the lines, the invoice's
+price mode and the rounding policy on every read, so **changing `rounding`
+re-totals every draft that company has, at once.** `company edit --rounding`
+says so and points you at a draft to check.
 
-Nothing stores a total. Every total is derived from the lines, the price mode and
-the rounding policy on every read, so **changing either of these changes every
-total that company has ever produced**, including on invoices already issued.
-
-That is what deriving them is for, and it is also why changing one is a
-deliberate act rather than a convenience. `company edit --rounding` says so and
-points you at a recent invoice to check.
+It does not reach an invoice that already left draft. That one carries its own
+copy of the company — rounding policy, names, address, accounts — and totals
+under the policy it was issued with. `bk guide billing/references-and-qr` has
+what else that copy protects.
 
 Run `bk meta --app-server billing` for the policies and what each one does.
 

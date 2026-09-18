@@ -40,6 +40,19 @@ const nextConfig = {
     // locally and 500s in production, which is the failure only a real deploy
     // catches.
     '/api/changelog': ['../../docs/changelog/*.md'],
+
+    // The invoice PDF embeds two TTF files that `lib/pdf/fonts.ts` reads with
+    // `readFileSync(process.cwd() + …)` — a path the tracer cannot follow, so
+    // without this line the files are not shipped and every render 500s in
+    // production while working on every laptop.
+    //
+    // EVERY workspace route, not the three that render today (`…/pdf`, `…/send`,
+    // `…/mark-sent`): the renderer sits behind `lib/db/queries/lifecycle.ts`,
+    // which a dozen routes import, and a per-route list here is a list somebody
+    // forgets when the thirteenth arrives. 800 KB in a function, against a bill
+    // that cannot be sent. `lib/pdf/font-tracing.test.ts` matches this key
+    // against every route that reaches the renderer, the way Next itself does.
+    '/api/workspaces/**': ['./lib/pdf/fonts/*.ttf'],
   },
   images: {
     remotePatterns: [

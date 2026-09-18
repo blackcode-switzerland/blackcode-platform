@@ -121,8 +121,9 @@ Sending, marking paid and voiding are `bk guide billing/sending-and-status`. Onc
 an invoice leaves draft its document half is frozen, and the only correction is a
 void plus a new invoice.
 
-The payment reference check digit, the QR code and the PDF are not built yet;
-`bk billing invoice pdf` does not exist.
+The payment reference, the QR code and the PDF are
+`bk guide billing/references-and-qr`. Fetch the PDF before sending: it refuses
+for exactly the reasons a send would.
 
 Vocabularies and limits are served live by `bk meta --app-server billing`, so
 nothing on this page lists them.

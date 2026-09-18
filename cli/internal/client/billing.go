@@ -272,11 +272,67 @@ type BillingInvoice struct {
 	// sha256 of the PDF bytes actually attached. Empty unless this app emailed it.
 	PdfSha256 string `json:"pdf_sha256,omitempty"`
 
+	// The issuing company AS IT WAS when the invoice left draft. NIL ON A DRAFT,
+	// and only on a draft: a draft renders from the company as it is now. No
+	// omitempty — the null is the statement "not issued yet", and -o json must
+	// say it rather than drop the key.
+	Issuer *BillingIssuer `json:"issuer"`
+
 	Items  []BillingInvoiceLine `json:"items"`
 	Totals BillingTotals        `json:"totals"`
+	// What the payment part says, computed by the code the PDF uses.
+	Derived BillingDerived `json:"derived"`
 
 	ExternalRef string            `json:"external_ref,omitempty"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
+// BillingIssuer is the copy of the company taken at issue. Nullable strings are
+// pointers so that -o json round-trips a null as a null: "this company had no
+// QR-IBAN when the bill went out" is part of the record.
+type BillingIssuer struct {
+	Name          string  `json:"name"`
+	LegalName     string  `json:"legal_name"`
+	Street        *string `json:"street"`
+	Building      *string `json:"building"`
+	PostalCode    *string `json:"postal_code"`
+	City          *string `json:"city"`
+	Country       *string `json:"country"`
+	Email         *string `json:"email"`
+	LogoInitials  *string `json:"logo_initials"`
+	LogoColor     *string `json:"logo_color"`
+	Iban          *string `json:"iban"`
+	QrIban        *string `json:"qr_iban"`
+	VatRegistered bool    `json:"vat_registered"`
+	UID           *string `json:"uid"`
+	VatNumber     *string `json:"vat_number"`
+	Rounding      string  `json:"rounding"`
+	FooterFr      *string `json:"footer_fr"`
+	FooterEn      *string `json:"footer_en"`
+	CapturedAt    string  `json:"captured_at"`
+	// True only on a row a migration filled in after the fact: the company as it
+	// was on migration day, never evidence of what a client received.
+	Backfilled bool `json:"backfilled,omitempty"`
+}
+
+type BillingPaymentPartProblem struct {
+	Code       string `json:"code"`
+	Field      string `json:"field,omitempty"`
+	Message    string `json:"message"`
+	Suggestion string `json:"suggestion"`
+}
+
+type BillingDerived struct {
+	// The FULL reference, with its check digits. Nil for NON.
+	Reference          *string `json:"reference"`
+	ReferenceFormatted *string `json:"reference_formatted"`
+	// The account the bill settles on: the issuer's QR-IBAN for QRR, else its IBAN.
+	Account          *string        `json:"account"`
+	AccountFormatted *string        `json:"account_formatted"`
+	Creditor         BillingAddress `json:"creditor"`
+	HasPaymentPart   bool           `json:"has_payment_part"`
+	// Why `invoice pdf`, `invoice qr` and `invoice send` would refuse today.
+	Problems []BillingPaymentPartProblem `json:"problems"`
 }
 
 // CreateBillingInvoiceLineRequest is one `--item` on the command line.
@@ -365,6 +421,50 @@ func (c *Client) GetBillingInvoice(ws, ref string) (*BillingInvoice, error) {
 		return nil, err
 	}
 	return &out, nil
+}
+
+// BillingInvoicePdf is the rendered document and the two fingerprints the
+// route sends beside it.
+type BillingInvoicePdf struct {
+	Bytes []byte
+	// sha256 of Bytes, as the SERVER computed it. The command recomputes it
+	// locally and refuses to write a file whose bytes do not match.
+	Sha256 string
+	// sha256 of the bytes this app EMAILED. Empty unless `send` delivered it.
+	SentSha256 string
+	Status     string
+}
+
+// GetBillingInvoicePdf fetches the invoice as a PDF — the first response in this
+// client that is not JSON; see RawResponse for why it is a mode of do() and not
+// a second request path.
+func (c *Client) GetBillingInvoicePdf(ws, ref string) (*BillingInvoicePdf, error) {
+	var raw RawResponse
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/invoices/%s/pdf", ws, url.PathEscape(ref)), &raw); err != nil {
+		return nil, err
+	}
+	if !strings.HasPrefix(raw.ContentType, "application/pdf") {
+		return nil, fmt.Errorf("expected a PDF from %s and got %q (%d bytes)", c.BaseURL, raw.ContentType, len(raw.Body))
+	}
+	return &BillingInvoicePdf{
+		Bytes:      raw.Body,
+		Sha256:     raw.Header.Get("X-Billing-Pdf-Sha256"),
+		SentSha256: raw.Header.Get("X-Billing-Sent-Pdf-Sha256"),
+		Status:     raw.Header.Get("X-Billing-Invoice-Status"),
+	}, nil
+}
+
+// GetBillingInvoiceQrPayload fetches the Swiss QR Code payload, UNTOUCHED: LF
+// line endings, no trailing newline. The bytes are the contract.
+func (c *Client) GetBillingInvoiceQrPayload(ws, ref string) (string, error) {
+	var raw RawResponse
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/invoices/%s/qr", ws, url.PathEscape(ref)), &raw); err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(raw.ContentType, "text/plain") {
+		return "", fmt.Errorf("expected a text payload from %s and got %q", c.BaseURL, raw.ContentType)
+	}
+	return string(raw.Body), nil
 }
 
 // CreateBillingInvoice drafts an invoice, consuming a number that cannot be
@@ -608,7 +708,7 @@ type BillingImportFlag struct {
 // invoice number, and `Number` is this app's address for the row.
 type BillingHistoryEntry struct {
 	// The workspace #number — the ADDRESS (`bk billing history show 12`).
-	Number int `json:"seq"`
+	Number int    `json:"seq"`
 	Source string `json:"source"`
 	// The source system's own id, byte for byte as imported. Never trimmed.
 	SourceRef string `json:"source_ref"`

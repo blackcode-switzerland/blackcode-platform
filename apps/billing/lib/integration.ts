@@ -81,7 +81,28 @@ export const PUBLIC_ROUTES: readonly PublicRoute[] = [
     path: '/api/workspaces/{ws}/invoices/{ref}',
     since: '2026-09-17',
     purpose:
-      'One invoice by #number or by its printed number, with its lines and its derived totals.',
+      'One invoice by #number or by its printed number, with its lines, its derived totals, the ' +
+      'derived payment block (full reference, account, creditor, and the problems that would make ' +
+      '…/pdf refuse) and, once issued, its own copy of the issuing company.',
+  },
+  {
+    method: 'GET',
+    path: '/api/workspaces/{ws}/invoices/{ref}/pdf',
+    since: '2026-09-18',
+    purpose:
+      'The invoice as application/pdf, with the QR-bill payment part for CHF and EUR. Rendered on ' +
+      'demand and byte-stable: X-Billing-Pdf-Sha256 is this response, X-Billing-Sent-Pdf-Sha256 the ' +
+      'bytes that were emailed. 422 payment_part_invalid names every problem. A void invoice ' +
+      'renders stamped, with no payment part.',
+  },
+  {
+    method: 'GET',
+    path: '/api/workspaces/{ws}/invoices/{ref}/qr',
+    since: '2026-09-18',
+    purpose:
+      'The Swiss QR Code payload as text/plain, exactly what the PDF encodes: LF line endings, no ' +
+      'trailing newline, elements identified by line number. 409 no_payment_part for a currency ' +
+      'the QR-bill does not carry and for a void invoice; 422 payment_part_invalid otherwise.',
   },
   {
     method: 'PATCH',
@@ -98,7 +119,8 @@ export const PUBLIC_ROUTES: readonly PublicRoute[] = [
     purpose:
       'Email the invoice PDF and mark it sent; records the message id and the PDF sha256. Send an ' +
       'Idempotency-Key: a retry must not put a second bill in the client’s inbox. Refuses 503 ' +
-      'email_not_configured before anything happens, and 501 document_renderer_not_built until the PDF exists.',
+      'email_not_configured before anything happens, and 422 payment_part_invalid — the refusal ' +
+      'GET …/pdf gives, so fetch the PDF first as a dry run. Copies the issuing company onto the invoice.',
   },
   {
     method: 'POST',
@@ -106,7 +128,8 @@ export const PUBLIC_ROUTES: readonly PublicRoute[] = [
     since: '2026-09-17',
     purpose:
       'Record that a draft was delivered outside this app. sent_message_id stays null, which is how ' +
-      'the record says so permanently.',
+      'the record says so permanently. Validated like a send (422 payment_part_invalid), and copies ' +
+      'the issuing company onto the invoice.',
   },
   {
     method: 'POST',

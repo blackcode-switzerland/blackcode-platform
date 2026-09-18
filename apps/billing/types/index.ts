@@ -320,13 +320,85 @@ export interface Invoice {
   /** sha256 (hex) of the PDF bytes actually attached. Null unless this app emailed it. */
   pdf_sha256: string | null
 
+  /**
+   * The issuing company AS IT WAS when this invoice left `draft` (invariant
+   * I12). **Null on a draft, and only on a draft**: a draft renders from the
+   * company as it is now, so a correction made before sending reaches it.
+   */
+  issuer: IssuerSnapshot | null
+
   /** The lines, as the mockup serves them. */
   items: InvoiceLine[]
   /** Derived. Never stored. */
   totals: InvoiceTotals
+  /**
+   * Derived. Never stored. What the payment part says, computed by the same
+   * code the PDF uses — so a screen and a PDF cannot disagree.
+   */
+  derived: InvoiceDerived
 
   external_ref: string | null
   metadata: Record<string, string>
+}
+
+/**
+ * The company columns a document prints or derives from, copied at issue.
+ * The keys are `ISSUER_FIELDS` in lib/issuer.ts plus `captured_at`.
+ */
+export interface IssuerSnapshot {
+  name: string
+  legal_name: string
+  street: string | null
+  building: string | null
+  postal_code: string | null
+  city: string | null
+  country: string | null
+  email: string | null
+  logo_initials: string | null
+  logo_color: string | null
+  iban: string | null
+  qr_iban: string | null
+  vat_registered: boolean
+  uid: string | null
+  vat_number: string | null
+  rounding: RoundingPolicy
+  footer_fr: string | null
+  footer_en: string | null
+  /** ISO timestamp of the copy. */
+  captured_at: string
+  /**
+   * Present and true ONLY on a row migration 0011 filled in: the company as it
+   * was on migration day, not on the day the bill went out. Never evidence of
+   * what a client received.
+   */
+  backfilled?: true
+}
+
+/** One thing that stops the payment part being valid, in words a person can act on. */
+export interface PaymentPartProblem {
+  code: string
+  field?: string
+  message: string
+  suggestion: string
+}
+
+export interface InvoiceDerived {
+  /** The FULL reference with its check digits. Null for NON, or when `ref_body` is malformed. */
+  reference: string | null
+  /** As printed: `21 00000 …` for QRR, blocks of four for SCOR. */
+  reference_formatted: string | null
+  /** The account the bill settles on: the issuer's `qr_iban` for QRR, else its `iban`. */
+  account: string | null
+  account_formatted: string | null
+  /** The creditor block of the payment part: the issuer's LEGAL name and address. */
+  creditor: StructuredAddress
+  /** `false` for a currency the QR-bill does not carry, and for a void invoice. */
+  has_payment_part: boolean
+  /**
+   * Why `…/pdf` and `…/qr` would refuse this invoice today. Empty means they
+   * will serve it. Always empty when `has_payment_part` is false.
+   */
+  problems: PaymentPartProblem[]
 }
 
 // ---------------------------------------------------------------------------

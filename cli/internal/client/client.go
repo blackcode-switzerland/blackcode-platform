@@ -308,11 +308,36 @@ func (c *Client) doFollowingOurOwnRedirect(req *http.Request) (*http.Response, e
 	}
 }
 
+// RawResponse is what a caller passes as `out` when the answer is NOT JSON — a
+// PDF, a plain-text payload. do() then hands back the bytes untouched instead of
+// decoding them.
+//
+// It is a mode of do() and not a second request path ON PURPOSE. Everything
+// do() does around the body still has to happen for a PDF: the bearer token,
+// following this deployment's own redirect (and only its own), recording the
+// version headers, the hard version floor, and turning a 4xx — which IS JSON,
+// whatever the success type — into an APIError with its hint. A second client
+// would have been a second copy of all of that, drifting.
+type RawResponse struct {
+	Body        []byte
+	ContentType string
+	// Header is the response's, for a caller that reads a named header. Never
+	// printed: -v shows no headers in either direction.
+	Header http.Header
+}
+
 func (c *Client) do(req *http.Request, out any) error {
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
-	req.Header.Set("Accept", "application/json")
+	raw, wantsRaw := out.(*RawResponse)
+	if wantsRaw {
+		// The success body is whatever the route serves; an error is still the
+		// JSON envelope, which `*/*` admits.
+		req.Header.Set("Accept", "*/*")
+	} else {
+		req.Header.Set("Accept", "application/json")
+	}
 	req.Header.Set("User-Agent", "bk-cli/"+version.Version)
 
 	if Verbose {
@@ -381,7 +406,11 @@ func (c *Client) do(req *http.Request, out any) error {
 			fmt.Fprintf(os.Stderr, "  redirected to %s — that host is now the canonical address for this app\n",
 				RedirectedOrigin)
 		}
-		if len(body) > 0 {
+		if ct := resp.Header.Get("Content-Type"); len(body) > 0 && wantsRaw && resp.StatusCode < 400 && !strings.HasPrefix(ct, "text/") {
+			// A PDF on stderr buries the session in binary, the same reason
+			// logRequestBody describes an upload instead of dumping it.
+			fmt.Fprintf(os.Stderr, "  body: %s, %d bytes (not shown)\n", ct, len(body))
+		} else if len(body) > 0 {
 			fmt.Fprintf(os.Stderr, "  %s\n", truncate(string(body), 2000))
 		}
 	}
@@ -413,6 +442,12 @@ func (c *Client) do(req *http.Request, out any) error {
 	}
 
 	if out == nil {
+		return nil
+	}
+	if wantsRaw {
+		raw.Body = body
+		raw.ContentType = resp.Header.Get("Content-Type")
+		raw.Header = resp.Header
 		return nil
 	}
 	if len(body) == 0 {

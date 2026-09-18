@@ -86,7 +86,12 @@ const COL = {
 } as const
 
 export async function renderInvoiceDocument({ invoice, company }: RenderInput): Promise<RenderedInvoice> {
-  const withSlip = hasPaymentPart(invoice.currency)
+  // A VOID invoice keeps its number and its document, and LOSES ITS PAYMENT
+  // PART. A cancelled bill with a scannable QR code on it is the one PDF this
+  // app could serve that moves money by mistake: it looks exactly like the bill
+  // it replaced, and a banking app reads the code, not the status in a database.
+  const isVoid = invoice.status === 'void'
+  const withSlip = hasPaymentPart(invoice.currency) && !isVoid
   const fields = withSlip ? qrBillFieldsFor(invoice, company) : null
   if (fields) {
     const refusals = validateQrBill(fields)
@@ -153,6 +158,7 @@ export async function renderInvoiceDocument({ invoice, company }: RenderInput): 
 
   // ── title and dates ────────────────────────────────────────────────────────
   y = 85
+  if (isVoid) sheet.text(copy.void, MARGIN, y, { ...B(14), alignRightWithin: RIGHT - MARGIN })
   y += sheet.text(`${copy.invoice} ${invoice.number}`, MARGIN, y, B(14)) + 2
   const meta: Array<[string, string]> = [[copy.issue_date, printDate(invoice.issue_date)]]
   if (invoice.due_date) meta.push([copy.due_date, printDate(invoice.due_date)])

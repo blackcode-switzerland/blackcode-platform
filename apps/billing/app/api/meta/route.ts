@@ -195,9 +195,9 @@ export const GET = apiHandler(async (req: NextRequest) => {
       note:
         'Companies, invoices and imported history are workspace-scoped, so this unauthenticated ' +
         'route cannot list them. Read them with `bk billing company list`, `bk billing invoice list` ' +
-        'and `bk billing history list`. Sending, paid and void exist; the QR payload and the PDF ' +
-        'are built but not yet served, so a send refuses with document_renderer_not_built and ' +
-        '`bk billing invoice mark-sent` records a bill delivered another way.',
+        'and `bk billing history list`. An invoice renders as a PDF with its QR-bill payment part ' +
+        '(`bk billing invoice pdf`, `invoice qr`) and is sent, marked paid or voided from there. ' +
+        'Recurrence is not built yet.',
     },
   })
 })

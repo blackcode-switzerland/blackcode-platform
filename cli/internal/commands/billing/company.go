@@ -40,13 +40,17 @@ Each company owns its own INVOICE SEQUENCE. The numbers are contiguous per
 company with no holes and no reuse, so "company" is the level at which a wrong
 choice is a wrong number on a legal document, not just a wrong label.
 
-Two settings here are read when a bill is RENDERED rather than when it is
-created, so changing either changes every total that company has ever derived:
+ONE setting here is read when a total is DERIVED rather than when an invoice is
+created:
 
   rounding              how five-rappen rounding is applied
-  prices-include-vat    whether a line price already contains its VAT
 
-Everything else under "defaults" is a prefill for NEW invoices only.
+Changing it changes the total of every DRAFT this company has, at once. It does
+not reach an invoice that already left draft: that one carries its own copy of
+the company — rounding policy, names, address, accounts — taken at that moment.
+
+Everything under "defaults" — whether prices include VAT among them — is a
+prefill for NEW invoices only. Each invoice stores its own price mode.
 
 There is no "company delete". A company is RETIRED — it issues no new invoices
 and still renders its old ones — because past invoices reference it.
@@ -118,9 +122,10 @@ func newCompanyShowCmd() *cobra.Command {
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/companies/{slug}"},
 		Args:        cobra.ExactArgs(1),
 		Short:       "One company in full",
-		Long: `Everything about one company, including the two settings that are read at
-RENDER time rather than at create time — "rounding" and whether its prices
-include VAT. Those two decide what every one of its invoices totals.
+		Long: `Everything about one company, including "rounding" — the one setting read
+when a total is derived rather than when an invoice is created. It decides what
+every DRAFT of this company totals; an issued invoice keeps the policy it was
+issued under.
 
 "next number" is what the next invoice from this company will be numbered. It
 is read-only everywhere: the sequence is moved only by creating an invoice.`,
@@ -190,8 +195,9 @@ func newCompanyCreateCmd() *cobra.Command {
 --legal-name defaults to --name. It is the one that goes on the payment part and
 MUST match the holder of the credit account.
 
---rounding decides how five-rappen rounding is applied and is read when a bill
-is RENDERED, so changing it later changes every total that company has derived.
+--rounding decides how five-rappen rounding is applied and is read whenever a
+DRAFT's total is derived, so changing it later changes every draft this company
+has. Issued invoices keep the policy they were issued under.
 Run "bk meta --app-server billing" for the policies and what each one does.
 
 The IBAN flags are OWNER-ONLY. If you are not the workspace owner, create the
@@ -296,9 +302,15 @@ Neither can the number sequence — that is moved only by creating an invoice.
 --iban and --qr-iban are OWNER-ONLY, because changing one redirects real money
 and the bill would look entirely normal afterwards.
 
-Changing --rounding or --prices-include-vat changes every total this company has
-ever derived, because nothing stores a total. That is the point of deriving
-them, and it is why this is a deliberate act rather than a default.`,
+WHAT AN EDIT REACHES. An invoice takes its own copy of its company the moment it
+leaves draft, and renders from that copy forever. So an edit here — a new IBAN, a
+corrected legal name, a different --rounding — changes this company's DRAFTS and
+its future bills, and no invoice already issued: not its account, not its
+creditor name, not its totals. A sent bill that names the wrong account is fixed
+by voiding it and issuing a new one.
+
+Changing --rounding re-totals every draft at once, because nothing stores a
+total. --prices-include-vat is a prefill for new invoices and changes none.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -363,8 +375,8 @@ them, and it is why this is a deliberate act rather than a default.`,
 				}
 				fmt.Fprintf(w, "updated %s: %s\n", co.Slug, strings.Join(fields, ", "))
 				if _, touched := patch["rounding"]; touched {
-					fmt.Fprintf(w, "every total this company derives has changed, including on past invoices\n")
-					nextStep(w, "bk billing invoice list --company %s   and check a recent one", co.Slug)
+					fmt.Fprintf(w, "every DRAFT of this company is re-totalled; invoices already issued keep the policy they were issued under\n")
+					nextStep(w, "bk billing invoice list --company %s --status draft   and check one", co.Slug)
 					return nil
 				}
 				nextStep(w, "bk billing company show %s", co.Slug)
@@ -392,7 +404,7 @@ them, and it is why this is a deliberate act rather than a default.`,
 	f.String("vat-rate", "", "Rate prefilled onto new lines")
 	f.Bool("prices-include-vat", false, "New invoices' prices already contain their VAT")
 	f.Int("payment-terms", 0, "Days until a new invoice is due")
-	f.String("rounding", "", "Rounding policy; changes every total this company derives")
+	f.String("rounding", "", "Rounding policy; re-totals every draft, and no issued invoice")
 	f.String("number-format", "", "Invoice number format")
 	f.String("footer-fr", "", "Footer printed on French invoices")
 	f.String("footer-en", "", "Footer printed on English invoices")

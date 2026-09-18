@@ -51,9 +51,11 @@ import {
   assertMessage,
   assertRefTypeAgainstCompany,
   getInvoice,
+  getInvoiceDocumentSource,
   InvoiceRefused,
   type WriteCtx,
 } from './invoices'
+import { issuerSnapshot } from '@/lib/issuer'
 import { prepareInvoiceDocument, type DocumentSource } from '@/lib/delivery/document'
 import { emailEnabled, sendDocumentEmail } from '@/lib/email/send'
 import { date as formatDate, money } from '@/lib/derive/format'
@@ -398,10 +400,22 @@ async function companyOf(tx: Tx, companyId: number): Promise<CompanyRow> {
   return company
 }
 
-async function readInTx(tx: Tx, workspaceId: number, seq: number): Promise<Invoice> {
-  const invoice = await getInvoice(workspaceId, String(seq), tx)
-  if (!invoice) throw new Error(`invoice #${seq} vanished under its own row lock`)
-  return invoice
+/**
+ * The draft that is about to be issued, and the copy of its company that goes
+ * with it (invariant I12, migration 0011).
+ *
+ * ONE read of the company row feeds everything: the readiness checks, the
+ * snapshot, the totals (through `rounding`), the PDF and the stored `issuer`.
+ * The invoice is shaped AS ISSUED BY that snapshot rather than by its own join,
+ * so a company edit committing mid-send cannot produce a PDF from one version
+ * of the company and a stored copy of another.
+ */
+async function draftToIssue(tx: Tx, workspaceId: number, locked: Locked) {
+  const company = await companyOf(tx, locked.company_id)
+  const issuer = issuerSnapshot(company)
+  const src = await getInvoiceDocumentSource(workspaceId, String(locked.seq), tx, issuer)
+  if (!src) throw new Error(`invoice #${locked.seq} vanished under its own row lock`)
+  return { invoice: src.invoice, company, issuer }
 }
 
 async function freshRead(workspaceId: number, seq: number): Promise<Invoice> {
@@ -455,8 +469,7 @@ export async function sendInvoice(
     const seq = await getDb().transaction(async (tx) => {
       const locked = await lockInvoice(tx, ctx.workspaceId, ref)
       assertDraft(locked, 'send')
-      const invoice = await readInTx(tx, ctx.workspaceId, locked.seq)
-      const company = await companyOf(tx, locked.company_id)
+      const { invoice, company, issuer } = await draftToIssue(tx, ctx.workspaceId, locked)
       assertReadyToIssue(invoice, company)
       if (!company.email) {
         throw new InvoiceRefused(
@@ -467,7 +480,7 @@ export async function sendInvoice(
         )
       }
 
-      const pdf = await deps.prepareDocument({ invoice, company })
+      const pdf = await deps.prepareDocument({ invoice, issuer })
       const pdfSha256 = createHash('sha256').update(pdf).digest('hex')
       const copy = defaultEmailCopy(invoice, company.name)
       const subject = input.subject ?? copy.subject
@@ -539,6 +552,8 @@ export async function sendInvoice(
           sent_at: new Date(),
           sent_message_id: messageId,
           pdf_sha256: fingerprint,
+          // The SAME object the PDF above was rendered from.
+          issuer,
           updated_at: new Date(),
         })
         .where(eq(billingInvoice.id, locked.id))
@@ -595,18 +610,26 @@ export async function sendInvoice(
 }
 
 /** Record that a bill went out some other way: paper, another mailbox, by hand. */
-export async function markInvoiceSent(ctx: LifecycleCtx, ref: string): Promise<Invoice> {
+export async function markInvoiceSent(
+  ctx: LifecycleCtx,
+  ref: string,
+  deps: Pick<DeliveryDeps, 'prepareDocument'> = defaultDeps
+): Promise<Invoice> {
   const seq = await getDb().transaction(async (tx) => {
     const locked = await lockInvoice(tx, ctx.workspaceId, ref)
     assertDraft(locked, 'mark-sent')
-    const invoice = await readInTx(tx, ctx.workspaceId, locked.seq)
-    assertReadyToIssue(invoice, await companyOf(tx, locked.company_id))
+    const { invoice, company, issuer } = await draftToIssue(tx, ctx.workspaceId, locked)
+    assertReadyToIssue(invoice, company)
+    // Validated like a send, and for the same reason: whatever went out "another
+    // way" was this app's PDF, and from now on this invoice's PDF is served to
+    // anyone who asks. A bill the standard refuses must not become `sent`.
+    await deps.prepareDocument({ invoice, issuer })
 
     await tx
       .update(billingInvoice)
       // `sent_message_id` and `pdf_sha256` stay NULL, and that is the record:
       // this app did not send it and did not attach anything.
-      .set({ status: 'sent', sent_at: new Date(), updated_at: new Date() })
+      .set({ status: 'sent', sent_at: new Date(), issuer, updated_at: new Date() })
       .where(eq(billingInvoice.id, locked.id))
     await appendAudit(tx, {
       workspaceId: ctx.workspaceId,
@@ -683,11 +706,18 @@ export async function voidInvoice(ctx: LifecycleCtx, ref: string, raw: unknown):
       throw new InvoiceRefused('already_void', `invoice ${locked.number} is already void`, `bk billing invoice show ${locked.seq}`, 409)
     }
 
+    // A draft voided without ever being sent still leaves `draft`, so it takes
+    // its issuer copy here (0011's CHECK holds the iff). Its number is consumed
+    // and its document still renders — stamped void, with no payment part — and
+    // that document must not start changing when the company is next edited.
+    const issuer = locked.status === 'draft' ? issuerSnapshot(await companyOf(tx, locked.company_id)) : undefined
+
     await tx
       .update(billingInvoice)
       .set({
         status: 'void',
         void: { ts: new Date().toISOString(), by: ctx.actorEmail, reason },
+        ...(issuer ? { issuer } : {}),
         updated_at: new Date(),
       })
       .where(eq(billingInvoice.id, locked.id))

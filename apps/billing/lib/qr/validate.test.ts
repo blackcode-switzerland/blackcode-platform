@@ -38,7 +38,7 @@ function invoice(refType: ReferenceType, refBody: string | null, currency = 'CHF
     sent_at: null, sent_message_id: null, pdf_sha256: null, items: [],
     totals: { subtotal: '1590.60', vat: [], vat_total: '0.00', rounding: '0.00', total: '1590.60' },
     external_ref: null, metadata: {},
-  } as Invoice
+  } as unknown as Invoice
 }
 
 describe('the bills that must pass', () => {

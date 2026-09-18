@@ -56,6 +56,25 @@ export const ADDITIONAL_INFORMATION_BUDGET = PAYMENT_MESSAGE_MAX
 const ALT_PROCEDURE_MAX = 2
 const ALT_PROCEDURE_LENGTH = 100
 
+/**
+ * Where the offending text lives, as a command. Never substituted for the
+ * caller: a changed creditor name can fail to match the account holder, and
+ * once the rule is "we do not rewrite what you typed" it holds for every field —
+ * a message that was silently altered is a message nobody approved.
+ */
+function characterFix(field: string): string {
+  if (field === 'unstructuredMessage') {
+    return 'bk billing invoice edit <ref> --message "…" with the character replaced (an em dash becomes "-") — the message stays editable after sending'
+  }
+  if (field.startsWith('creditor.')) {
+    return 'bk billing company edit <slug> with the character replaced; the legal name must still match the account holder'
+  }
+  if (field.startsWith('debtor.')) {
+    return 'bk billing invoice edit <ref> with the character replaced in the client block (a draft only: the client is frozen once sent)'
+  }
+  return 'replace the character; it is not substituted for you'
+}
+
 function checkAddress(
   role: 'creditor' | 'debtor',
   a: QrAddress,
@@ -252,7 +271,7 @@ export function validateQrBill(fields: QrBillFields): QrRefusal[] {
         code: 'character_not_allowed',
         field,
         message: `${field} contains ${shown} (${bad.codepoint}) at character ${bad.position}, which a Swiss QR Code cannot carry (§4.1.1)`,
-        suggestion: 'replace it yourself — it is not substituted for you, because a changed creditor name can fail to match the account holder',
+        suggestion: characterFix(field),
       })
     }
   }

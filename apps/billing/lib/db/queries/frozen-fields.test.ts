@@ -28,7 +28,10 @@ import { describe, expect, it } from 'vitest'
 import { DOCUMENT_FIELDS } from './invoices'
 
 const MIGRATIONS = join(__dirname, '..', 'migrations')
-const DELIVERY_COLUMNS = ['sent_at', 'sent_message_id', 'pdf_sha256']
+// `issuer` joined them in 0011: the copy of the company taken at issue. Like the
+// delivery facts it is refused on EVERY invoice by `NEVER_EDITABLE`, so it is
+// not in `DOCUMENT_FIELDS` and the trigger's list is a superset by it too.
+const DELIVERY_COLUMNS = ['sent_at', 'sent_message_id', 'pdf_sha256', 'issuer']
 
 function triggerFrozenColumns(): { file: string; columns: string[] } {
   const files = readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort()
