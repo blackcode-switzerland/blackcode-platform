@@ -62,6 +62,16 @@ export interface IntegrationSuiteOptions {
   /** `process.env.TEST_DATABASE_URL`, passed in rather than read here. */
   databaseUrl: string | undefined
   /**
+   * The variable `databaseUrl` was read from, for the notice. Defaults to
+   * `TEST_DATABASE_URL`.
+   *
+   * A suite that needs a DIFFERENT credential — the migration owner rather than
+   * an app role, because the statement under test is one no app role may issue —
+   * is gated on its own variable, and a notice naming the wrong one tells the
+   * reader how to run something other than what was skipped.
+   */
+  envVar?: string
+  /**
    * `process.env.REQUIRE_INTEGRATION_TESTS`. When `'1'`, a missing database is
    * a THROWN error rather than a skip — option (b), available the moment an
    * environment exists that can honour it.
@@ -101,6 +111,7 @@ export function integrationDescribe(opts: IntegrationSuiteOptions): DescribeLike
     name,
     databaseUrl,
     required,
+    envVar = 'TEST_DATABASE_URL',
     // Raw stderr, deliberately — see the field's doc comment.
     warn = (m: string) => process.stderr.write(m),
   } = opts
@@ -108,15 +119,15 @@ export function integrationDescribe(opts: IntegrationSuiteOptions): DescribeLike
 
   if (required === '1') {
     throw new Error(
-      `REQUIRE_INTEGRATION_TESTS=1 but TEST_DATABASE_URL is unset — refusing to skip "${name}". ` +
+      `REQUIRE_INTEGRATION_TESTS=1 but ${envVar} is unset — refusing to skip "${name}". ` +
         'This environment declared that its integration suites must run; a skipped suite reports success.'
     )
   }
 
   warn(
-    `\n  ⚠ SKIPPING INTEGRATION SUITE "${name}" — TEST_DATABASE_URL is unset.\n` +
+    `\n  ⚠ SKIPPING INTEGRATION SUITE "${name}" — ${envVar} is unset.\n` +
       '    Nothing below this line was checked. A skipped check reports success.\n' +
-      '    To run it:   TEST_DATABASE_URL=postgres://… npm test\n' +
+      `    To run it:   ${envVar}=postgres://… npm test\n` +
       '    To make a missing database an ERROR here: REQUIRE_INTEGRATION_TESTS=1\n'
   )
   return describe.skip

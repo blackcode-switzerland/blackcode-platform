@@ -360,6 +360,28 @@ against the Style Guide grid sheet stays a manual step (`qr-bill.md` §8).
   same invoice, accents (`à é è`) intact. This is a machine scan of a rendered
   page, not a banking app — the two-app scan is still owed.
 
+## Migration 0009: an audit author can be hard-deleted (2026-09-18)
+
+Found while designing phase 5's history table, which has the same shape. The
+audit log's `actor_user_id` is `ON DELETE SET NULL`, and 0005's append-only
+trigger refused the UPDATE that SET NULL is carried out as — so a hard
+`DELETE FROM platform.users` failed for anybody who had written a billing audit
+row. **Account close is a soft delete** (`softDeleteUser`, an UPDATE), so no
+close through the product was ever affected; only a manual hard delete was, and
+because `platform.users` is shared, that meant one started from any app.
+
+0009 re-creates `billing.audit_append_only()` to permit exactly one UPDATE: a
+non-null actor becoming null with every other column unchanged (compared as
+`to_jsonb` rows minus that column). `billing_app` still cannot issue it — UPDATE
+is revoked — and a foreign-key action runs as the table's owner.
+
+`lib/db/owner-guards.integration.test.ts` checks it as the OWNER, the identity
+the trigger exists to stop, in transactions it rolls back. It needs its own
+credential, `TEST_OWNER_DATABASE_URL`, and skips loudly naming that variable
+(`integrationDescribe` gained `envVar` for it). Watched failing: before 0009
+(the erasure case), and with an exemption that forgot "nothing else changed"
+(the combined-change case).
+
 ## Phase 3: lifecycle and delivery
 
 Built on 2026-09-17, **before phase 2**. Four write paths in
