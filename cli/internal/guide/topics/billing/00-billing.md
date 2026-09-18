@@ -15,17 +15,19 @@ send`, `bk billing invite list`, `bk billing invite revoke`.
 
 ## What exists today
 
-Companies, invoices with their lines, the audit log, and the lifecycle — sending
-a bill by email, recording one that went out another way, marking it paid, and
-voiding it with a reason. `bk guide billing/companies-and-numbering`,
-`bk guide billing/invoices` and `bk guide billing/sending-and-status` cover them.
+Companies, invoices with their lines, the audit log, the lifecycle — sending a
+bill by email, recording one that went out another way, marking it paid, and
+voiding it with a reason — and the imported archive of bills from the systems
+this app replaces. `bk guide billing/companies-and-numbering`,
+`bk guide billing/invoices`, `bk guide billing/sending-and-status` and
+`bk guide billing/imported-history` cover them.
 
-**Not built yet:** the payment reference check digit, the QR payload and the PDF.
-Until they exist `bk billing invoice send` refuses with
+**Not served yet:** the PDF and its QR payload. They are built but no command
+reaches them, so `bk billing invoice send` still refuses with
 `document_renderer_not_built` before anything happens, and
 `bk billing invoice mark-sent` is how a bill delivered another way is recorded.
-After those come recurrence, then imported history. `docs/billing-app-plan/` in
-the repo is the plan, one document per milestone.
+Recurrence comes after. `docs/billing-app-plan/` in the repo is the plan, one
+document per milestone.
 
 ## Start here
 

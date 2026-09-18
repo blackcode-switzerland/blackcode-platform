@@ -231,3 +231,39 @@ export const ACTOR_VIA: Term[] = [
   { value: 'session', label: 'Browser' },
   { value: 'token', label: 'Token' },
 ]
+
+/**
+ * Where an imported bill came from (phase 5). Two systems, both being retired.
+ *
+ * A new source is a CHECK change in a migration AND a line here — the pair is
+ * what `lib/vocabularies.test.ts` checks. Two values, so `guide_test.go` does not
+ * count it; it is still one list in one place.
+ */
+export const HISTORY_SOURCES: Term[] = [
+  { value: 'zoho', label: 'Zoho Books', color: '#1d4ed8' },
+  { value: 'invoicely', label: 'Invoicely', color: '#6d28d9' },
+]
+
+/**
+ * An imported bill's status, as its source recorded it, mapped onto three words.
+ *
+ * **Deliberately not the native lifecycle.** There is no `draft` (an archive
+ * holds what was issued) and no `sent`: a source's "sent", "overdue" or
+ * "partially paid" is `unpaid` here, and anything the three words lose — a
+ * partial payment, a void with no reason — goes in the import flag, in words.
+ *
+ * **An `unpaid` archived bill is not a receivable in this app.** Nothing sums
+ * it into the overview and nothing chases it: that is b/books' question, and
+ * mixing the archive into live receivables would make the dashboard's numbers
+ * depend on a seven-year-old export.
+ */
+export const HISTORY_STATUSES: Term[] = [
+  { value: 'paid', label: 'Paid', color: '#0f6b44' },
+  {
+    value: 'unpaid',
+    label: 'Unpaid',
+    color: '#b8860b',
+    note: 'As the source recorded it. Not a receivable here — the archive is never summed into the overview.',
+  },
+  { value: 'void', label: 'Void', color: '#8b1a1a', note: 'Cancelled in the source. A missing reason is in the import flag.' },
+]

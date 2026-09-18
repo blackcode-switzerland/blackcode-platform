@@ -414,7 +414,54 @@ export const billingIdempotencyKeys = billingSchema.table('idempotency_keys', {
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
+/**
+ * The imported archive (phase 5, migration 0010): bills issued before this app
+ * existed, in Zoho Books and Invoicely.
+ *
+ * **Read-only.** Inserted once by `importHistory`, read forever; the database
+ * refuses UPDATE and DELETE (a trigger for the owner, a revoke for the app).
+ * Its numbers are its own namespace and never enter the native sequence (P6).
+ *
+ * `total` is the one stored amount in this app — there are no imported lines
+ * to derive it from. See 0010's header before "fixing" that.
+ */
+export const billingHistory = billingSchema.table('history', {
+  id: serial('id').primaryKey(),
+  workspace_id: integer('workspace_id')
+    .notNull()
+    .references(() => billingWorkspaces.id, { onDelete: 'cascade' }),
+  seq: integer('seq').notNull(),
+
+  source: varchar('source', { length: 16 }).notNull(),
+  /** The source system's own id, VERBATIM — never trimmed or reformatted. */
+  source_ref: varchar('source_ref', { length: 64 }).notNull(),
+
+  company_id: integer('company_id')
+    .notNull()
+    .references(() => billingCompany.id),
+  /** The historical number as issued. Not unique against `invoice.number`. */
+  number: varchar('number', { length: 40 }).notNull(),
+  client_name: varchar('client_name', { length: 200 }).notNull(),
+
+  issue_date: date('issue_date').notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  /** Stored, not derived: the source's total, with nothing here to derive it from. */
+  total: numeric('total', { precision: 14, scale: 2 }).notNull(),
+  status: varchar('status', { length: 10 }).notNull(),
+
+  /** Both languages or neither (CHECK). Never cleared once set. */
+  import_flag_fr: text('import_flag_fr'),
+  import_flag_en: text('import_flag_en'),
+  /** A path or id on Google Drive. Never the blob store — a CHECK refuses its host. */
+  drive_path: text('drive_path'),
+
+  imported_at: timestamp('imported_at', { withTimezone: true }).defaultNow().notNull(),
+  imported_by: integer('imported_by').references(() => users.id, { onDelete: 'set null' }),
+  imported_via: varchar('imported_via', { length: 8 }).notNull(),
+})
+
 export type BillingCompany = typeof billingCompany.$inferSelect
 export type BillingInvoiceRow = typeof billingInvoice.$inferSelect
 export type BillingInvoiceLineRow = typeof billingInvoiceLine.$inferSelect
 export type BillingAuditRow = typeof billingAudit.$inferSelect
+export type BillingHistoryRow = typeof billingHistory.$inferSelect

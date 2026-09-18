@@ -76,11 +76,11 @@ invoices, and those carry a ten-year retention duty (art. 958f CO). That is the
 same doctrine that keeps "trash" and "label" off this group entirely — an
 invoice is voided, never binned, so there is no purge path to expose.
 
-NOT HERE YET. Companies, invoices, line items, the audit log and the lifecycle
-(send, mark-sent, paid, void) exist. The payment reference check digit, the
-QR-bill payload and the PDF do not, so "invoice send" refuses before doing
-anything and "invoice mark-sent" records a bill delivered another way. See
-docs/billing-app-plan/. This paragraph is the one thing in this
+NOT HERE YET. Companies, invoices, line items, the audit log, the lifecycle
+(send, mark-sent, paid, void) and the imported archive ("history") exist. The
+PDF and its QR payload are built but no command serves them, so "invoice send"
+refuses before doing anything and "invoice mark-sent" records a bill delivered
+another way. See docs/billing-app-plan/. This paragraph is the one thing in this
 help text that is expected to go out of date, and the table below is generated
 from the commands this binary actually carries — so where it and this prose
 disagree, the table is right.
@@ -122,6 +122,7 @@ func nouns() []*cobra.Command {
 		newInvoiceCmd(),
 		newAuditCmd(),
 		newOverviewCmd(),
+		newHistoryCmd(),
 	}
 }
 

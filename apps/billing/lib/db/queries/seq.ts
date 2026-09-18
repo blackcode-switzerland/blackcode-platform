@@ -107,6 +107,39 @@ export async function allocateSeq(
 }
 
 /**
+ * `count` consecutive workspace `#number`s in ONE statement, for a batch insert.
+ * Returns the first; the block is `first … first + count - 1`.
+ *
+ * The same upsert and the same row lock as `allocateSeq`, so a concurrent writer
+ * of the same entity type waits and then takes the numbers after this block —
+ * the block cannot interleave with anybody else's. Written for phase 5's import,
+ * where 500 rows one upsert at a time would be 500 round trips inside one
+ * transaction holding that lock.
+ */
+export async function allocateSeqBlock(
+  tx: Tx,
+  workspaceId: number,
+  entityType: 'history',
+  count: number
+): Promise<number> {
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error(`allocateSeqBlock needs a positive count, got ${count}`)
+  }
+  const rows = await tx.execute<{ last_value: number }>(sql`
+    INSERT INTO ${billingCounters} (workspace_id, entity_type, last_value)
+    VALUES (${workspaceId}, ${entityType}, ${count})
+    ON CONFLICT (workspace_id, entity_type)
+      DO UPDATE SET last_value = ${billingCounters}.last_value + ${count}
+    RETURNING last_value
+  `)
+  const v = rows.rows[0]?.last_value
+  if (v === undefined) {
+    throw new Error(`allocateSeqBlock returned no row for workspace ${workspaceId}/${entityType}`)
+  }
+  return Number(v) - count + 1
+}
+
+/**
  * The gapless STATUTORY number for one company.
  *
  * `next_seq` holds the value the NEXT invoice will take, so this returns

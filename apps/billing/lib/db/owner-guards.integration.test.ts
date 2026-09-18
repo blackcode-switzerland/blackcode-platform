@@ -36,7 +36,7 @@ const OWNER_DB = process.env.TEST_OWNER_DATABASE_URL
 
 const run = integrationDescribe({
   describe,
-  name: 'billing owner-only guards: audit erasure',
+  name: 'billing owner-only guards: audit erasure, history read-only',
   databaseUrl: OWNER_DB,
   envVar: 'TEST_OWNER_DATABASE_URL',
   required: process.env.REQUIRE_INTEGRATION_TESTS,
@@ -96,6 +96,81 @@ run('billing owner-only guards (integration, rolled back)', () => {
     )
     return r.rows[0].id
   }
+
+  async function historyRow(c: PoolClient, workspaceId: number, userId: number): Promise<number> {
+    const co = await c.query<{ id: number }>(
+      `INSERT INTO billing.company (workspace_id, seq, slug, name, legal_name) VALUES ($1, 1, 'probe', 'Probe', 'Probe SA') RETURNING id`,
+      [workspaceId]
+    )
+    const r = await c.query<{ id: number }>(
+      `INSERT INTO billing.history (workspace_id, seq, source, source_ref, company_id, number, client_name,
+                                    issue_date, currency, total, status, imported_by, imported_via)
+       VALUES ($1, 1, 'zoho', 'ZB-PROBE', $2, '2020-001', 'Client', '2020-01-01', 'CHF', '100.00', 'paid', $3, 'token')
+       RETURNING id`,
+      [workspaceId, co.rows[0].id, userId]
+    )
+    return r.rows[0].id
+  }
+
+  describe('billing.history (0010)', () => {
+    it('refuses an UPDATE from the owner', async () => {
+      const out = await rolledBack(async (c) => {
+        const { userId, workspaceId } = await fixture(c)
+        const id = await historyRow(c, workspaceId, userId)
+        await c.query(`UPDATE billing.history SET total = '1.00' WHERE id = $1`, [id])
+        return 'updated'
+      })
+      expect(out).toBeInstanceOf(Error)
+      expect((out as Error).message).toMatch(/read-only archive \(UPDATE/)
+    })
+
+    it('refuses a DELETE from the owner', async () => {
+      const out = await rolledBack(async (c) => {
+        const { userId, workspaceId } = await fixture(c)
+        const id = await historyRow(c, workspaceId, userId)
+        await c.query(`DELETE FROM billing.history WHERE id = $1`, [id])
+        return 'deleted'
+      })
+      expect(out).toBeInstanceOf(Error)
+      expect((out as Error).message).toMatch(/read-only archive \(DELETE/)
+    })
+
+    it('lets a hard DELETE of the importer clear imported_by, and keeps the row', async () => {
+      const out = await rolledBack(async (c) => {
+        const { userId, workspaceId } = await fixture(c)
+        const id = await historyRow(c, workspaceId, userId)
+        await c.query('DELETE FROM platform.users WHERE id = $1', [userId])
+        const r = await c.query('SELECT imported_by, source_ref, total FROM billing.history WHERE id = $1', [id])
+        return r.rows[0]
+      })
+      expect(out).not.toBeInstanceOf(Error)
+      expect(out).toEqual({ imported_by: null, source_ref: 'ZB-PROBE', total: '100.00' })
+    })
+
+    it('refuses a drive_path on the blob store, and a flag in one language, at the CHECK', async () => {
+      for (const [col, val, constraint] of [
+        ['drive_path', 'https://x.public.blob.vercel-storage.com/a.pdf', 'history_drive_path_shape'],
+        ['import_flag_en', 'only English', 'history_flag_both_languages'],
+      ] as const) {
+        const out = await rolledBack(async (c) => {
+          const { userId, workspaceId } = await fixture(c)
+          const co = await c.query<{ id: number }>(
+            `INSERT INTO billing.company (workspace_id, seq, slug, name, legal_name) VALUES ($1, 1, 'probe', 'Probe', 'Probe SA') RETURNING id`,
+            [workspaceId]
+          )
+          await c.query(
+            `INSERT INTO billing.history (workspace_id, seq, source, source_ref, company_id, number, client_name,
+                                          issue_date, currency, total, status, imported_by, imported_via, ${col})
+             VALUES ($1, 1, 'zoho', 'ZB-PROBE', $2, '2020-001', 'Client', '2020-01-01', 'CHF', '100.00', 'paid', $3, 'token', $4)`,
+            [workspaceId, co.rows[0].id, userId, val]
+          )
+          return 'inserted'
+        })
+        expect(out, col).toBeInstanceOf(Error)
+        expect((out as Error & { constraint?: string }).constraint, col).toBe(constraint)
+      }
+    })
+  })
 
   describe('billing.audit (0009)', () => {
     it('lets a hard DELETE of the author clear actor_user_id, and keeps the row', async () => {

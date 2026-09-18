@@ -43,6 +43,8 @@ import {
   ACTOR_VIA,
   AUDIT_ACTIONS,
   DOCUMENT_LANGUAGES,
+  HISTORY_SOURCES,
+  HISTORY_STATUSES,
   INVITATION_STATUSES,
   INVOICE_STATUSES,
   MEMBER_ROLES,
@@ -82,6 +84,13 @@ interface Triple {
   terms: Term[]
   typeName: string
   constraint: string
+  /**
+   * Further CHECKs that enforce the SAME list on another column. A vocabulary
+   * reused by a later table is a fourth copy, and without this line nothing
+   * would notice that copy drifting — `history_imported_via_check` (0010)
+   * restates `audit_via_check`'s two values.
+   */
+  alsoConstraints?: string[]
 }
 
 const TRIPLES: Record<string, Triple> = {
@@ -110,7 +119,22 @@ const TRIPLES: Record<string, Triple> = {
     typeName: 'AuditAction',
     constraint: 'audit_action_check',
   },
-  ACTOR_VIA: { terms: ACTOR_VIA, typeName: 'ActorVia', constraint: 'audit_via_check' },
+  ACTOR_VIA: {
+    terms: ACTOR_VIA,
+    typeName: 'ActorVia',
+    constraint: 'audit_via_check',
+    alsoConstraints: ['history_imported_via_check'],
+  },
+  HISTORY_SOURCES: {
+    terms: HISTORY_SOURCES,
+    typeName: 'HistorySource',
+    constraint: 'history_source_check',
+  },
+  HISTORY_STATUSES: {
+    terms: HISTORY_STATUSES,
+    typeName: 'HistoryStatus',
+    constraint: 'history_status_check',
+  },
 }
 
 /**
@@ -184,6 +208,12 @@ describe('every closed vocabulary agrees in all three places', () => {
 
       expect(union, `types/index.ts's ${t.typeName} disagrees with lib/vocabularies.ts`).toEqual(served)
       expect(check, `migration CHECK ${t.constraint} disagrees with lib/vocabularies.ts`).toEqual(served)
+
+      for (const also of t.alsoConstraints ?? []) {
+        const more = constraintValues(also).sort()
+        expect(more.length, `no \`CONSTRAINT ${also} … IN (…)\` found in any migration`).toBeGreaterThan(0)
+        expect(more, `migration CHECK ${also} disagrees with lib/vocabularies.ts`).toEqual(served)
+      }
     })
   }
 

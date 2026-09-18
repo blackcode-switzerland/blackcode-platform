@@ -510,6 +510,112 @@ without `--confirm` and with `--confirm 11` both exited **2** before any write;
 `--confirm " BC-2026-0007 "` voided it and echoed the number, client and amount;
 `mark-sent` on a sent invoice exited **2** on the server's 409.
 
+## Phase 5: imported history (ticket #93, 2026-09-18)
+
+Bills from before this app existed, as a read-only archive. Built on
+`feat/billing-phase-5-be`. Migration **0010** (not the plan's 0009: phase 2
+took 0008 and the audit fix above took 0009), `lib/db/queries/history.ts`, three
+routes, `bk billing history list|show|import`, guide topic
+`06-imported-history.md`.
+
+| Route | `bk billing` |
+|---|---|
+| `GET …/history` (`source`, `currency`, `year`, `flagged`, `company`, `limit`, `cursor`) | `history list` |
+| `POST …/history` (`{rows: […]}`) | `history import --file rows.json` / `--file -` |
+| `GET …/history/{seq}` | `history show <#>` |
+
+None is public (`lib/integration.ts`): an import is a one-off an agent runs for
+the business that owns the archive.
+
+### What building it decided, where the plan left room
+
+- **Status is a closed vocabulary of three: `paid`, `unpaid`, `void`.** The
+  plan said "as the source recorded it"; a free-text column is one the screen
+  cannot render and the CHECK cannot guard. A source's `sent`, `overdue` or
+  `partially paid` is `unpaid` here, and what the word loses goes in the flag.
+  An unpaid archived bill is not a receivable: nothing sums it into the overview.
+- **Who imported a row is on the row** (`imported_by`, `imported_via`), not in
+  `billing.audit`. The audit log is a PUBLIC event feed, an archive import is not
+  an event an integration polls for, and a row that is never edited has no edit
+  workflow to log. `imported_by` is `ON DELETE SET NULL` with 0009's exemption,
+  in the table's own trigger function.
+- **All or nothing, and a repeat is a 409, not a skip.** One import is one
+  transaction; every row problem is reported at once; a `(source, source_ref)`
+  already archived refuses the whole batch naming its `#number`. Re-importing a
+  file changes nothing and says which rows were there. The unique index is the
+  mechanism; the read before the insert only turns it into a sentence, and a race
+  loser's unique violation is caught and answered with the same 409.
+- **`drive_path` refuses the blob store's host at a CHECK** rather than carrying
+  a `platform.blob_references` trigger. A column that cannot hold one of our files
+  needs no entry in the index of our files, and 0002's "complete" flag stays true.
+- **A flag is both languages or neither**, at the CHECK and at the door. A flag
+  in one language is hidden from every reader of the other.
+- **Numbers for an import come from one allocation** (`allocateSeqBlock`), so a
+  batch is contiguous and 500 rows are not 500 round trips under the counter lock.
+- **Unknown keys are refused**, and the CLI sends the rows as raw JSON rather
+  than through a Go struct, so a mapper's typo reaches the server to be refused.
+- **Money is a string**; a JSON number is refused with the string it should have
+  been.
+- **The list is newest bill first; the cursor is a `#number`** whose row's date
+  is read back to continue. Stable because the rows cannot move.
+- **Addressed by `#number` only.** The historical number is not unique (two
+  systems, two companies) and is refused as an address rather than resolved to
+  one of several bills.
+
+`fixtures/mockup.json` is new: `scripts/extract-mockup.mjs` runs the mockup's
+`billing-data.js` in a sandbox and writes its data and its own derived answers,
+stamped with the mockup commit (`e406174`) and the file's sha256. Phase 5 uses
+its fourteen history rows; phase 6's parity test uses the answers.
+
+### Verified on 2026-09-18, working tree on `0e0f3b5`
+
+- **As `billing_app`** (`history.integration.test.ts`, 12 cases): the mockup's
+  fourteen rows import as #n…#n+13 with 5 flagged and 2 without a PDF, and what
+  is read back is what was sent; the second import is a 409 naming all fourteen;
+  a batch with one archived row writes nothing; **twenty concurrent imports of
+  one row insert exactly one, and the nineteen losers get the named 409**; a
+  padded `source_ref` comes back byte for byte; `billing_app` can SELECT and gets
+  42501 for UPDATE and DELETE; the list pages through everything once in order and
+  filters by year, source, currency, company and flag.
+- **As the owner** (`owner-guards.integration.test.ts`, rolled back): the
+  trigger refuses UPDATE and DELETE; a hard delete of the importer clears
+  `imported_by` and keeps the row; the blob host and a one-language flag are
+  refused by their CHECKs. **That last case failed on its first run** — see below.
+- **Over HTTP with the real binary**, against `next dev` on 3300 and a one-hour
+  local token (deleted afterwards): `history import` of the fourteen rows; the
+  same file again → exit 2 naming ten rows and "4 more"; `--file -` with a
+  wrapped object and five problems across two rows → one 400 listing all five;
+  a padded ref shown in quotes and returned intact by `-o json`; `--flagged`,
+  `--year 2024 --source zoho`, `--limit 5` then `--cursor 10`; `show` by #number,
+  by historical number (refused before any request) and missing (404);
+  `--source quickbooks` → 400 naming the two sources. `/api/meta` serves both
+  vocabularies and `limits.history`.
+
+### What checking it found
+
+- **A CHECK that passed a one-language flag.** The first `history_flag_both_languages`
+  was `(fr IS NULL AND en IS NULL) OR (fr ~ '\S' AND en ~ '\S')`. With `fr`
+  NULL the second branch is `NULL AND true`, which is NULL, and a CHECK treats
+  NULL as satisfied — so `('only English', NULL)` inserted. The owner-side test
+  caught it on its first run; the branch now tests `IS NOT NULL` first.
+- **`holds-covers-entities.test.ts` was satisfied by an import line.** It searched
+  `footprint.ts` for a table's identifier anywhere in the code, and the file's
+  `import { … } from '../schema'` names every table it uses — so removing the
+  history count and keeping the import stayed green. It now requires the
+  identifier as the argument of `.from()`. Finding #11's mechanism, a second time
+  in this one file.
+- **The seed hid its own failures.** It printed `e.message`, which Drizzle makes
+  "Failed query: delete from billing.workspaces …"; the database's reason was on
+  the `cause`. It prints the chain now. And its rebuild needed the history
+  trigger added to the ones it disables, or the first import into the seeded
+  workspace would have made it impossible to re-seed — confirmed both ways.
+- **The local database was one shared migration behind** (`apps/issues` 0048,
+  `platform.users.locale`), so every authenticated request 500'd. Not this
+  phase's code; applied with `npm run db:migrate --workspace=issues`.
+- **`vocabularies.test.ts` checked one CHECK per vocabulary.** `imported_via`
+  restates `audit_via_check`'s two values on a second table; `alsoConstraints`
+  covers it now.
+
 ## The guards, watched failing
 
 A check nobody has watched fail is not a check (CLAUDE.md's standing rule).
@@ -569,6 +675,23 @@ Phase 2 (ticket #85) added these, on 2026-09-18:
 | the same | `setCreationDate(new Date())` | 1 case: the two-process byte comparison |
 | the same | the receipt printing the additional-information heading | 2 cases: "never on the receipt" and "no heading whose value is absent" |
 | the same | `hasPaymentPart` forced true | 2 cases: both USD ones — red because validation then refused the bill, which is the barrier between a USD invoice and a slip |
+
+Phase 5 added these, on 2026-09-18:
+
+| Guard | The mutation | What it said |
+|---|---|---|
+| `history.test.ts` | a JSON-number total accepted; a one-language flag accepted; the blob-host check case-sensitive; the in-batch duplicate check off | one case each, by name |
+| `history.integration.test.ts` | `source_ref` trimmed on insert | the byte-for-byte case |
+| the same | the race loser's unique violation not translated | the twenty-way race: raw constraint errors instead of the named 409 |
+| the same | `uq_history_source_ref` dropped (owner) | the race: more than one row. The second-import case stayed GREEN, because the read before the insert still saw the rows — which is why the race case exists. Restored by deleting the duplicates with the trigger off in one transaction, recreating the index, and reading `pg_indexes` and `pg_trigger` back |
+| the same | `GRANT UPDATE … TO billing_app` | "cannot UPDATE": the trigger's P0001 instead of the privilege's 42501. Revoked, `table_privileges` read back: `INSERT,SELECT` |
+| `owner-guards.integration.test.ts` | `trg_history_read_only` dropped | the owner UPDATE and DELETE cases. Recreated, `pg_trigger` read back |
+| the same | (not injected) | the one-language flag case failed on its FIRST run — a real CHECK bug, above |
+| `vocabularies.test.ts` | `'sent'` added to `history_status_check`; `'cron'` to `history_imported_via_check` | the history-status triple; the ACTOR_VIA triple through `alsoConstraints` |
+| `holds-covers-entities.test.ts` | the history count removed, the import kept | stayed GREEN — the guard's own defect, above. After the fix: red, naming `billing.history` |
+| `cli-parity.test.ts` | `history show`'s annotation set to `none` | the route named as unreachable |
+| `pagination_claim_test.go` | (not injected) | caught a REAL gap: the platform guide's list of paginating commands did not name `history list` |
+| the seed | (not injected) | with a row in the seeded workspace, the old rebuild failed on the history trigger; confirmed through the new cause-chain output |
 
 Phase 3 added these, on 2026-09-17:
 

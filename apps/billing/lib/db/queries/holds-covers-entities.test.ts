@@ -146,6 +146,22 @@ function declaredTables(): Array<{ table: string; ident: string }> {
   ].map((m) => ({ ident: m[1], table: m[2] }))
 }
 
+/**
+ * Does `footprint.ts` QUERY this table — `.from(billingX)` — rather than merely
+ * mention it?
+ *
+ * ── THIS GUARD HAD FINDING #11's DEFECT A SECOND TIME ─────────────────────
+ * After comments were stripped it still searched for the identifier ANYWHERE in
+ * the code, and the file's own `import { … } from '../schema'` line names every
+ * table it uses. Phase 5 added `billingHistory` to that import and to a count;
+ * deleting the count and leaving the import kept this guard GREEN — watched on
+ * 2026-09-18, the mutation it was written for. The identifier has to be the
+ * argument of `.from()`, which is the one place naming a table means counting it.
+ */
+function countsFrom(ident: string): boolean {
+  return new RegExp(`\\.from\\(\\s*${ident}\\s*\\)`).test(FOOTPRINT)
+}
+
 describe('the account footprint covers every person-facing table', () => {
   const tables = declaredTables()
 
@@ -172,7 +188,7 @@ describe('the account footprint covers every person-facing table', () => {
 
   it('references every table in `countIn`, or exempts it with a reason', () => {
     const unaccounted = tables.filter(
-      (t) => !NOT_PERSON_FACING.has(t.table) && !FOOTPRINT.includes(t.ident)
+      (t) => !NOT_PERSON_FACING.has(t.table) && !countsFrom(t.ident)
     )
     expect(
       unaccounted.map((t) => `billing.${t.table}`),

@@ -135,3 +135,26 @@ export const DELIVERY_LIMITS = {
   /** Per language. A void reason is a sentence a fiduciary reads in five years. */
   void_reason_max: 500,
 } as const
+
+// ---------------------------------------------------------------------------
+// Imported history (phase 5)
+// ---------------------------------------------------------------------------
+// Served under `limits.history`. The widths are migration 0010's columns, typed
+// once more here so the import route can refuse a row with a reason naming the
+// field, rather than letting Postgres throw an error naming a column the
+// mapper has never seen.
+
+export const HISTORY_LIMITS = {
+  /**
+   * Rows per import. One import is one transaction, and a batch this size is
+   * one a person can still check the output of. A larger export is several
+   * imports — each all-or-nothing, so a split never half-lands.
+   */
+  import_max_rows: 500,
+  source_ref_max: 64,
+  number_max: 40,
+  client_name_max: 200,
+  /** Per language. A flag is a sentence about one row, not a report. */
+  import_flag_max: 500,
+  drive_path_max: 1000,
+} as const

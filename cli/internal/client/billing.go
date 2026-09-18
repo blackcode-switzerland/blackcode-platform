@@ -591,3 +591,120 @@ func (c *Client) GetBillingOverview(ws, company string) (*BillingOverview, error
 	}
 	return &out, nil
 }
+
+// ===========================================================================
+// IMPORTED HISTORY (phase 5)
+// ===========================================================================
+
+// BillingImportFlag is an ambiguity the mapper could not resolve, in both
+// languages or neither.
+type BillingImportFlag struct {
+	Fr string `json:"fr"`
+	En string `json:"en"`
+}
+
+// BillingHistoryEntry is one bill from before this app existed. Read-only, and
+// in its own namespace: `Ref` is the historical number as issued, never a native
+// invoice number, and `Number` is this app's address for the row.
+type BillingHistoryEntry struct {
+	// The workspace #number — the ADDRESS (`bk billing history show 12`).
+	Number int `json:"seq"`
+	Source string `json:"source"`
+	// The source system's own id, byte for byte as imported. Never trimmed.
+	SourceRef string `json:"source_ref"`
+	Company   string `json:"company"`
+	// The historical number AS ISSUED. Not unique, so not an address.
+	Ref        string `json:"number"`
+	ClientName string `json:"client_name"`
+	IssueDate  string `json:"issue_date"`
+	Currency   string `json:"currency"`
+	// Stored, not derived — the source's total. A string, like every amount.
+	Total  string             `json:"total"`
+	Status string             `json:"status"`
+	Flag   *BillingImportFlag `json:"import_flag"`
+	// NIL means the export had no PDF — and it stays `null` in `-o json`
+	// rather than vanishing, because "no PDF" is a fact the row states.
+	DrivePath  *string           `json:"drive_path"`
+	ImportedAt string            `json:"imported_at"`
+	ImportedBy BillingAuditActor `json:"imported_by"`
+}
+
+type BillingHistoryPage struct {
+	Data       []BillingHistoryEntry `json:"data"`
+	NextCursor *int                  `json:"next_cursor"`
+}
+
+type ListBillingHistoryOptions struct {
+	Source   string
+	Currency string
+	Company  string
+	Year     int
+	Flagged  bool
+	Limit    int
+	Cursor   int
+}
+
+func (c *Client) ListBillingHistory(ws string, o ListBillingHistoryOptions) (*BillingHistoryPage, error) {
+	q := url.Values{}
+	if o.Source != "" {
+		q.Set("source", o.Source)
+	}
+	if o.Currency != "" {
+		q.Set("currency", o.Currency)
+	}
+	if o.Company != "" {
+		q.Set("company", o.Company)
+	}
+	if o.Year > 0 {
+		q.Set("year", strconv.Itoa(o.Year))
+	}
+	if o.Flagged {
+		q.Set("flagged", "true")
+	}
+	if o.Limit > 0 {
+		q.Set("limit", strconv.Itoa(o.Limit))
+	}
+	if o.Cursor > 0 {
+		q.Set("cursor", strconv.Itoa(o.Cursor))
+	}
+	path := fmt.Sprintf("/api/workspaces/%s/history", ws)
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var out BillingHistoryPage
+	if err := c.get(path, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetBillingHistory takes the #number only. The historical number is not
+// unique — two companies, two systems — so it is not an address.
+func (c *Client) GetBillingHistory(ws string, seq int) (*BillingHistoryEntry, error) {
+	var out BillingHistoryEntry
+	if err := c.get(fmt.Sprintf("/api/workspaces/%s/history/%d", ws, seq), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// BillingHistoryImportResult names what an import wrote, not just how much.
+type BillingHistoryImportResult struct {
+	Imported   int                   `json:"imported"`
+	Flagged    int                   `json:"flagged"`
+	WithoutPdf int                   `json:"without_pdf"`
+	Rows       []BillingHistoryEntry `json:"rows"`
+}
+
+// ImportBillingHistory posts mapped rows, all or nothing. `rows` is sent as
+// raw JSON, unparsed: a Go struct would drop a key it did not declare, and the
+// server refuses unknown keys on purpose — a mapper's typo must reach it to be
+// refused, not vanish on the way.
+func (c *Client) ImportBillingHistory(ws string, rows json.RawMessage) (*BillingHistoryImportResult, error) {
+	body := map[string]json.RawMessage{"rows": rows}
+	var out BillingHistoryImportResult
+	if err := c.postJSON(fmt.Sprintf("/api/workspaces/%s/history", ws), body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
