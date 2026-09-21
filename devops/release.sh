@@ -53,7 +53,7 @@ app_registry() {
 issues|bc-issues|prj_bueHX5y2f7uaemskB5Q1Plwbry2p|https://issues.blackcode.ch
 sales|bc-sales|prj_p5A74QYKnig8696ES87bT6rvHMdZ|https://sales.blackcode.ch
 books|bc-books|prj_OjkZc6y1oRGkCw3fFtTglIMCN9Ec|https://books.blackcode.ch
-billing|bc-billing|PROJECT_ID_NOT_YET_CREATED|https://billing.blackcode.ch
+billing|bc-billing|prj_nHqNQjjlHbUDdQ1aZgDSbCrxcrRz|https://billing.blackcode.ch
 APPS
 }
 

@@ -18,11 +18,10 @@ project, and means "set on issues". This table is the THREE-app truth
 (`bc-books` added 2026-08-20). Re-audit it with `vercel env ls` rather than
 trusting it; it is a snapshot, not a mechanism.
 
-**`bc-billing` is not in the table because the project does not exist yet.**
-b/billing's phase 0 registered the app in the repo and in `platform.apps`;
-creating its Vercel project is a human step
-(`docs/billing-app-plan/phase-0-register-the-app.md` §9). It needs the same
-variables as `bc-books` plus three of its own:
+**`bc-billing` was created 2026-09-21** (`prj_nHqNQjjlHbUDdQ1aZgDSbCrxcrRz`,
+root `apps/billing`, the same settings as `bc-books`). It carries the same
+variables as `bc-books` except the blob ones, all Production only, and three
+optional ones of its own:
 
 | Variable | Note |
 |---|---|
