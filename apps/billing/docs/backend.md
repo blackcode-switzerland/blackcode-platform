@@ -1123,3 +1123,21 @@ Ticket #86 added these, on 2026-09-18:
 ## Frontend
 
 `apps/billing/docs/frontend.md`.
+
+## Production provisioning (2026-09-21, commit 40694da)
+
+Run against Neon as `neondb_owner`, in the order `docs/billing-app-plan/local-database.md` gives:
+
+1. `docs/sql/billing-app-role.sql` → `billing_app` (LOGIN), schema `billing` owned by `neondb_owner`;
+   `billing_app` has USAGE on `platform` and `billing`, none on `issues`.
+2. `docs/sql/billing-app-register.sql` → `platform.apps` row, `enabled = f`.
+3. First `bc-billing` deploy → postbuild applied all 12 migrations
+   (`drizzle.__drizzle_migrations_billing` = 12, 11 tables); `maintains_blob_index = t`.
+4. The register file again → `enabled = t`.
+
+`docs/sql/app-boundary-probe.sql`, connected **as `billing_app`** (not `SET ROLE`):
+positive checks (1) own schema readable, (4a) index readable, (4e) own purge
+succeeded; (2) `issues.workspace_counters` refused 42501; (4b)/(4c) forging or
+erasing a blob reference refused; **(4d) refused by `blob_refs_purge` itself**
+("may not purge references held by app not-this-app"), not by a schema denial;
+(5) the migration ledger refused.
