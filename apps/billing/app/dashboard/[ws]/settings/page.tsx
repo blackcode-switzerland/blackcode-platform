@@ -1,4 +1,5 @@
-// Workspace settings — name/slug/role (read-only), members, invitations.
+// Workspace settings — rename, members (remove / transfer / leave),
+// invitations, and the danger zone (phase 2, 2026-09-21).
 //
 // Same pattern as the rest of `[ws]/**`: the server resolves WHICH workspace
 // and WHETHER the caller owns it, because the slug is user input and
@@ -33,7 +34,7 @@ export default async function Page({ params }: { params: Promise<{ ws: string }>
       <PageHeader title="Settings" titleTestId="page-title" />
       <PageBody>
         <div className="mx-auto max-w-3xl">
-          <WorkspaceSettings ws={here.slug} isOwner={here.member_role === 'owner'} />
+          <WorkspaceSettings ws={here.slug} isOwner={here.member_role === 'owner'} userId={user.id} />
         </div>
       </PageBody>
     </>

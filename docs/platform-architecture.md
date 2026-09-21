@@ -597,6 +597,17 @@ bug.
 > at all — those are separate, unrelated capability decisions this change did
 > not touch. Both directions are checked against `app/api/**` by that app's
 > `lib/cli-parity.test.ts`.
+>
+> **`apps/billing` joined the same set on 2026-09-21** (its phase 2): `workspace`
+> with `create|edit|transfer|delete`, `member` with `remove` and no `leave` (a
+> member removes THEMSELVES to leave), `invite` with `candidates` and the
+> invitee's half (`show|accept|decline|pending`). Its `delete` is the first to
+> be served and usually REFUSED: a workspace holding any retained record
+> (company, invoice, series, imported bill, audit row) answers 409
+> `workspace_retained`, because the app's retention triggers would abort the
+> cascade anyway (`apps/billing/docs/backend.md`). A verb that is present but
+> refuses with a reason is still a served verb — the subset rule is about
+> routes, and the refusal is the route's answer.
 
 **The active workspace is per app**, keyed by slug in `~/.config/bk/config.json`.
 Two apps' workspace tables have overlapping ids by construction (migration 0004

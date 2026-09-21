@@ -68,7 +68,7 @@ export interface AppFootprint {
    * This is `deleteAccountReport`'s existing rule, extended rather than
    * replaced.
    */
-  blocked_by: Array<{ workspace_id: number; name: string; member_count: number }>
+  blocked_by: Array<BlockedWorkspace>
 
   /** Workspaces they solely own — a purge destroys these and their content. */
   will_delete: Array<{ workspace_id: number; name: string }>
@@ -83,6 +83,66 @@ export interface AppFootprint {
    * to hold. Empty is a legitimate answer.
    */
   holds: Array<{ label: string; count: number }>
+}
+
+/**
+ * One workspace that stops a purge, and WHY.
+ *
+ * ── `reason` WAS ADDED 2026-09-21, AND IS OPTIONAL SO NOTHING ELSE MOVES ────
+ * Until then the only reason was "other people are in it", and every reader
+ * phrased the refusal as "transfer ownership first". b/billing found a second
+ * one: a workspace that holds invoices can never be deleted by anybody —
+ * ten-year retention (art. 958f CO), enforced by `BEFORE DELETE` triggers that
+ * fire on the cascade too — and "transfer ownership" is the wrong recovery for
+ * it. Reporting it here is what makes the purge refuse CLEANLY (a 409 with the
+ * reason) instead of attempting the delete and surfacing a trigger's exception
+ * as a 500 half-way through an account close.
+ *
+ * Absent means `'members'`, which is what every app that predates the field
+ * already meant. `detail` is the app's own sentence ("holds 3 invoices, 1
+ * company"), in its own nouns, because the platform cannot know them.
+ */
+export interface BlockedWorkspace {
+  workspace_id: number
+  name: string
+  member_count: number
+  reason?: 'members' | 'retention'
+  detail?: string
+}
+
+/**
+ * The 409 a blocked purge answers with — one wording for the per-app delete
+ * and the whole-account close, so the two cannot disagree about why.
+ *
+ * `owner_with_members` stays the code whenever any workspace is blocked by
+ * members, so a client switching on it is unchanged; `retention_hold` is used
+ * only when retention is the whole reason.
+ */
+export function blockedRefusal(
+  blocked: Array<BlockedWorkspace & { app_name?: string }>,
+  scope: string
+): { code: string; message: string } {
+  const byMembers = blocked.filter((w) => (w.reason ?? 'members') === 'members')
+  const byRetention = blocked.filter((w) => w.reason === 'retention')
+  const name = (w: BlockedWorkspace & { app_name?: string }) =>
+    w.app_name ? `${w.name} (${w.app_name})` : w.name
+  const parts: string[] = []
+  if (byMembers.length > 0) {
+    parts.push(
+      `transfer ownership of ${byMembers.map(name).join(', ')} first — other people are in ` +
+        (byMembers.length === 1 ? 'it' : 'them')
+    )
+  }
+  if (byRetention.length > 0) {
+    parts.push(
+      `${byRetention.map((w) => (w.detail ? `${name(w)} ${w.detail}` : name(w))).join('; ')} — ` +
+        'records under a legal retention duty are kept, and cannot be deleted by anybody'
+    )
+  }
+  return {
+    code: byMembers.length > 0 ? 'owner_with_members' : 'retention_hold',
+    message: `Cannot delete ${scope}: ${parts.join('; and ')}`,
+  }
 }
 
 /** An empty footprint for a person this app has never seen. */
@@ -114,7 +174,8 @@ export interface FootprintSource {
    * would let any app close an account from a button that says something else.
    *
    * Must REFUSE (throw) while `blocked_by` is non-empty: a workspace with other
-   * members in it survives, and that decision is not a per-app one.
+   * members in it survives, and that decision is not a per-app one. So does one
+   * under a retention hold (`reason: 'retention'`), which no decision can lift.
    */
   purge(userId: number): Promise<AppFootprint>
 }

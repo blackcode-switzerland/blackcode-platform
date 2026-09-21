@@ -252,7 +252,8 @@ export function useImportHistory(ws: string) {
 
 export interface InvitationCreated {
   invitation: Invitation
-  /** Always false today: this app sends no invitation email. Say so. */
+  invitee_has_account: boolean
+  /** The REAL delivery result (phase 2). False = not sent; the link below still works. */
   email_sent: boolean
   accept_url: string
 }
@@ -261,7 +262,7 @@ export interface InvitationCreated {
 export function useCreateInvitation(ws: string) {
   return useWrite(
     (body: { email: string }) => call<InvitationCreated>(wsApi(ws, '/invitations'), { method: 'POST', body }),
-    () => [keys.invitations(ws)]
+    () => [keys.invitations(ws), keys.inviteCandidates(ws)]
   )
 }
 
@@ -270,6 +271,71 @@ export function useRevokeInvitation(ws: string) {
   return useWrite(
     ({ id }: { id: number }) => call<{ deleted: true }>(wsApi(ws, `/invitations/${enc(id)}`), { method: 'DELETE' }),
     () => [keys.invitations(ws)]
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Workspace administration (phase 2) — the routes `bk billing workspace
+// edit|transfer|delete` and `member remove` call. The shell's workspace list is
+// loaded server-side, so callers follow a rename/delete/leave with
+// `router.refresh()` (or a navigation) as well.
+// ---------------------------------------------------------------------------
+
+/** `PATCH /api/workspaces/{ws}` — name only; a slug is refused (400 `slug_immutable`). */
+export function useRenameWorkspace(ws: string) {
+  return useWrite(
+    (body: { name: string }) => call<WorkspaceSummary>(wsApi(ws), { method: 'PATCH', body }),
+    () => [keys.workspaceShow(ws), keys.workspaces(), keys.footprint()]
+  )
+}
+
+/** `DELETE /api/workspaces/{ws}` — 409 `workspace_retained` when it holds any retained record. */
+export function useDeleteWorkspace(ws: string) {
+  return useWrite(
+    () => call<{ deleted: true }>(wsApi(ws), { method: 'DELETE' }),
+    () => [keys.workspaces(), keys.footprint(), keys.meta()]
+  )
+}
+
+/** `POST …/transfer` — the target must already be a member (400 `not_a_member`). */
+export function useTransferWorkspace(ws: string) {
+  return useWrite(
+    (body: { new_owner_user_id: number }) =>
+      call<{ ok: true; new_owner_user_id: number }>(wsApi(ws, '/transfer'), { method: 'POST', body }),
+    () => [keys.workspaceShow(ws), keys.members(ws), keys.workspaces(), keys.footprint()]
+  )
+}
+
+/** `DELETE …/members/{userId}` — the owner for anyone, a member for themselves (leaving). */
+export function useRemoveMember(ws: string) {
+  return useWrite(
+    ({ userId }: { userId: number }) =>
+      call<{ removed: true; left: boolean }>(wsApi(ws, `/members/${enc(userId)}`), { method: 'DELETE' }),
+    () => [keys.members(ws), keys.workspaceShow(ws), keys.inviteCandidates(ws), keys.workspaces()]
+  )
+}
+
+// ---------------------------------------------------------------------------
+// The invitee's half (phase 2) — `/invitations/{token}` and `bk billing invite accept|decline`
+// ---------------------------------------------------------------------------
+
+/** `POST /api/invitations/accept` → the workspace to land in. */
+export function useAcceptInvitation() {
+  return useWrite(
+    (body: { token: string }) =>
+      call<{ accepted: true; workspace_id: number; workspace_slug: string; already_member: boolean }>(
+        '/api/invitations/accept',
+        { method: 'POST', body }
+      ),
+    () => [keys.workspaces(), keys.pendingInvitations(), keys.meta()]
+  )
+}
+
+/** `POST /api/invitations/decline` — the row ends `revoked`. */
+export function useDeclineInvitation() {
+  return useWrite(
+    (body: { token: string }) => call<{ declined: true }>('/api/invitations/decline', { method: 'POST', body }),
+    () => [keys.pendingInvitations()]
   )
 }
 

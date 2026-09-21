@@ -7,6 +7,22 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-09-21 — Footprint: a workspace can be blocked by a retention hold, not only by members
+
+**Not breaking.** `AppFootprint.blocked_by[]` entries (`GET /api/me/footprint`,
+and each app's entry in the account-close census) may now carry two optional
+fields: `reason` — `"members"` (the old and default meaning: other people are
+in it) or `"retention"` (it holds records the app must keep, e.g. b/billing's
+invoices under art. 958f CO) — and `detail`, the app's own sentence naming what
+is held. An entry without `reason` means `"members"`, exactly as before.
+
+`DELETE /api/me/footprint` and the whole-account close word their 409 from the
+reasons (`blockedRefusal` in `packages/platform-api`). The code stays
+**`owner_with_members`** whenever any workspace is blocked by members; it is
+**`retention_hold`** only when retention is the whole reason. Clients should
+render `detail` for a retention entry and must not suggest transferring
+ownership for it — no transfer lifts a retention hold.
+
 ## 2026-09-17 — `platform-email` sends documents: attachments, reply-to, a message id
 
 **Not breaking.** The invitation and password-reset emails are byte-for-byte what

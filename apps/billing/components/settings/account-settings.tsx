@@ -193,13 +193,15 @@ function DeleteMyData() {
   if (footprint.error) return <ErrorState error={footprint.error} retry={footprint.refetch} />
 
   const f = footprint.data.footprint
+  const byMembers = f.blocked_by.filter((w) => (w.reason ?? 'members') === 'members')
+  const byRetention = f.blocked_by.filter((w) => w.reason === 'retention')
   const blocked = f.blocked_by.length > 0
   const willDelete = f.will_delete
 
   async function onDelete() {
     const typed = await prompt({
       title: 'Delete your billing data',
-      description: 'Type DELETE to confirm. This removes your workspace and everything in it — permanently.',
+      description: 'Type DELETE to confirm. This permanently removes the workspaces listed, with their members and invitations.',
       confirmLabel: 'Permanently delete',
       destructive: true,
       inputLabel: 'Confirmation',
@@ -218,9 +220,17 @@ function DeleteMyData() {
 
   return (
     <div className="space-y-3 text-sm">
+      {/* Rewritten 2026-09-21. It used to promise to delete "your workspace
+          and all of its companies, invoices, recurring series and imported
+          history" — which the database has always refused (ten-year retention,
+          BEFORE DELETE triggers that fire on the cascade), so the button
+          answered with a 500. What can be deleted is a workspace nothing was
+          ever issued from; the footprint reports the rest as a retention hold. */}
       <p className="text-muted-foreground">
-        Deletes everything you have in {APP_NAME} — your workspace and all of its companies, invoices,
-        recurring series and imported history.{' '}
+        Deletes the workspaces you alone own in {APP_NAME} that nothing was ever issued from.
+        Invoices, companies and their audit trail are{' '}
+        <strong className="text-foreground">kept for ten years</strong> (art. 958f CO) and are never
+        deleted — a workspace holding them stays.{' '}
         <strong className="text-foreground">Your blackcode account stays open</strong>, and so does
         anything you have in other apps. You will be signed out.
       </p>
@@ -237,10 +247,27 @@ function DeleteMyData() {
         </ul>
       )}
 
-      {blocked ? (
+      {byRetention.length > 0 && (
+        <ul className="space-y-1 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground" data-testid="footprint-retained">
+          {byRetention.map((w) => (
+            <li key={w.workspace_id}>
+              <strong className="font-medium text-foreground">{w.name}</strong> {w.detail ?? 'holds retained records'} —
+              kept for ten years, so it can&rsquo;t be deleted.
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {byMembers.length > 0 && (
         <p className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-warning">
-          Other people are in {f.blocked_by.map((w) => w.name).join(', ')}. Ownership must transfer
+          Other people are in {byMembers.map((w) => w.name).join(', ')}. Ownership must transfer
           first — deleting it would take their data with it.
+        </p>
+      )}
+
+      {blocked ? (
+        <p className="text-xs text-muted-foreground" data-testid="footprint-blocked">
+          Nothing is deleted while any workspace above is held — the delete is all or nothing.
         </p>
       ) : willDelete.length === 0 ? null : (
         <Button variant="destructive" data-testid="delete-footprint" onClick={onDelete} disabled={remove.isPending}>

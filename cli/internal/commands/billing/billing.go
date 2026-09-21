@@ -19,21 +19,14 @@
 // the wrong deployment would not fail — it would succeed somewhere else.
 //
 // ---------------------------------------------------------------------------
-// PHASE 0 HAS NO NOUNS OF ITS OWN, AND THAT IS THE WHOLE POINT
+// THE TENANCY VERBS ARE THE SHARED ONES; THE NOUNS ARE THIS PACKAGE'S
 // ---------------------------------------------------------------------------
-// This group carries the app-owned platform verbs and nothing else. Companies,
-// invoices and the audit log arrive in phase 1
-// (docs/billing-app-plan/phase-1-companies-and-invoices.md) together with their
-// routes, in the same commit, because `lib/cli-parity.test.ts` fails the build
-// otherwise.
-//
-// It is still a real group with a real claim: `bk billing workspace list`,
-// `member list` and the three invite verbs are attributed to THIS app by
-// `bk __routes`, which is what satisfies `appOwnClaims` in the parity guard.
-// Verified with `bk __routes` on 2026-09-16 before the scaffold's placeholder
-// entity was dropped rather than copied — b/books kept a `notes` table through
-// its whole phase 0 believing it was needed for this, and then spent phase 1
-// dropping it.
+// Companies, invoices, the audit log, the overview, recurring series and the
+// imported archive are built here (company.go, invoice.go, …). The workspace,
+// member and invite verbs come from `internal/appverbs`, declared verb by verb
+// in `appOwnedVerbs` below — since phase 2 (2026-09-21) the whole set
+// `apps/sales` serves, with delete narrowed by the server to a workspace that
+// holds no retained record.
 package billing
 
 import (
@@ -58,11 +51,17 @@ holes, it is never reused, and it is never deleted — a mistake is voided and
 reissued, and the void keeps its number forever. Every change to any of it is
 attributable to a person or a token.
 
+WHAT THIS GROUP HAS: companies (the issuing entities and their numbering),
+invoices with their line items, the PDF with its QR-bill payment part, the
+lifecycle (send, mark-sent, paid, void), the audit log, the overview, finite
+recurring series and the imported archive of bills issued elsewhere. Start with
+"bk guide billing"; every command's --help says what it does and how it fails.
+
 THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
-  bk billing workspace  list, show, use, create
-  bk billing member     list
-  bk billing invite     send, list, revoke
+  bk billing workspace  list, show, use, create, edit, transfer, delete
+  bk billing member     list, remove
+  bk billing invite     send, list, revoke, candidates, show, accept, decline, pending
 
 "bk billing workspace use x" sets THIS app's active workspace and no other's:
 two apps' workspace tables have overlapping ids, so one shared setting would
@@ -70,19 +69,17 @@ mean selecting here silently retargeted another app.
 
 A WORKSPACE is a tenant. The company that issues a bill is a row inside it, so
 a second issuing entity is not a second workspace — that is
-"bk billing company create". "workspace create" exists for a genuinely separate
-tenant, and there is deliberately no "workspace delete": a workspace holds
-invoices, and those carry a ten-year retention duty (art. 958f CO). That is the
-same doctrine that keeps "trash" and "label" off this group entirely — an
-invoice is voided, never binned, so there is no purge path to expose.
+"bk billing company create". "workspace edit" renames (the slug is fixed: it is
+in every URN this app has printed). "workspace delete" works ONLY for a
+workspace nothing was ever issued from — no company, invoice, series, imported
+bill or audit row. Anything else is refused with 409 workspace_retained:
+invoices carry a ten-year retention duty (art. 958f CO) and the database
+refuses the delete for everybody. That is the same doctrine that keeps "trash"
+and "label" off this group — an invoice is voided, never binned. To stop using
+such a workspace, retire its companies or transfer it.
 
-NOT HERE YET. Companies, invoices, line items, the PDF with its QR-bill payment
-part ("invoice pdf", "invoice qr"), the audit log, the lifecycle (send,
-mark-sent, paid, void), finite recurring series ("recurrence") and the imported
-archive ("history") exist. See docs/billing-app-plan/. This paragraph is the one thing in this
-help text that is expected to go out of date, and the table below is generated
-from the commands this binary actually carries — so where it and this prose
-disagree, the table is right.
+"member remove <your own id>" is how you LEAVE a workspace; the owner cannot be
+removed until ownership is transferred.
 
 Vocabularies and limits are served live by "bk meta --app-server billing". They
 change without a release of this binary, so this help text does not list them.
@@ -143,32 +140,40 @@ func nouns() []*cobra.Command {
 // so there is no soft-delete state to list and no purge path to expose. Art.
 // 958f CO's ten-year retention applies to invoices as much as to ledgers.
 //
-// `Invites` is the owner's half only — send, list, revoke — because that is what
-// this app serves. `InviteCandidates` and `InviteAccept` are off: there is no
-// `/invite-candidates`, no `/api/invitations/accept` and no
-// `/api/me/pending-invitations` here. Flipping a flag without its route claims
-// something that can only 404, and the honest consequence is stated on the
-// dashboard rather than hidden: an invitation can be sent and nobody can redeem
-// it yet.
+// THE TENANCY SUBSET — all of `apps/sales`' since phase 2 (2026-09-21):
 //
-// `WorkspaceCreate`, not `WorkspaceAdmin`: this app serves GET and POST on
-// /api/workspaces and no other method. Create is what closes the empty-workspace
-// dead end for somebody arriving on a cookie from another blackcode app — see
-// `createWorkspaceForUser` in the app, where phase 0's decision is written down.
-// Edit and transfer wait for somebody to need them; DELETE is permanently
-// absent. `MemberLeave` is off because there is no /leave route, and
-// `MemberRemove` because removing the last member of a workspace holding
-// invoices is not a thing this app knows how to do safely yet.
+//	Workspace        yes — list, show, use
+//	WorkspaceAdmin   yes — create, edit, transfer, delete. Until phase 2 this
+//	                 was `WorkspaceCreate` alone, with "DELETE is permanently
+//	                 absent" — because a workspace holds invoices. The server
+//	                 now serves DELETE and REFUSES it (409 workspace_retained)
+//	                 for any workspace holding a company, invoice, series,
+//	                 imported bill or audit row; only an empty tenant can go.
+//	                 The shared `edit --slug` flag compiles and sends, and the
+//	                 server answers 400 slug_immutable — the same deliberate
+//	                 asymmetry `commands/sales/appverbs.go` documents.
+//	Members          yes — list
+//	MemberRemove     yes — DELETE …/members/{userId}. The owner removes anyone
+//	                 but themselves; a member may remove THEMSELVES, which is
+//	                 how you leave here
+//	MemberLeave      NO  — there is no POST …/leave route; see MemberRemove
+//	Invites          yes — send, list, revoke
+//	InviteCandidates yes — GET …/invite-candidates (owner only)
+//	InviteAccept     yes — show, accept, decline, pending: /api/invitations/*
+//	                 and /api/me/pending-invitations, plus the
+//	                 /invitations/{token} page the email links to
 func appOwnedVerbs() []*cobra.Command {
 	return appverbs.New(appverbs.Config{
-		App:             Slug,
-		Workspace:       true,
-		WorkspaceCreate: true,
-		Members:         true,
-		Invites:         true,
+		App:              Slug,
+		Workspace:        true,
+		WorkspaceAdmin:   true,
+		Members:          true,
+		MemberRemove:     true,
+		Invites:          true,
+		InviteCandidates: true,
+		InviteAccept:     true,
 	}).All()
 }
-
 // clientAndWorkspace resolves the credential and THIS app's active workspace.
 //
 // One helper for every command in this package, because the failure it prevents

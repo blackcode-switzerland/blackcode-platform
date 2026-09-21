@@ -19,7 +19,10 @@
 // ===========================================================================
 // THE THREE CASES
 // ===========================================================================
-//   0 workspaces        → the no-workspace screen (an anomaly; see its header)
+//   0 workspaces        → a pending invitation for this address? open it.
+//                          Otherwise BOOTSTRAP one (below) and redirect into
+//                          it. The no-workspace screen is only the fallback
+//                          for a bootstrap that threw, and shows the error.
 //   1 workspace          → redirect straight there, unless `?new=1`
 //   several workspaces   → redirect to the REMEMBERED one
 //                          (`platform.users.active_workspace_id`, resolved
@@ -31,11 +34,46 @@
 //   `?new=1`              → always shows the create-workspace screen instead
 //                          of redirecting, regardless of count — the
 //                          workspace switcher's "Create workspace" link uses it
+//
+// ===========================================================================
+// A PAGE THAT WRITES — THE ONE EXCEPTION, AND WHY IT IS SAFE (phase 2)
+// ===========================================================================
+// Somebody signed in on another blackcode app arrives here on the shared
+// session cookie having never taken THIS app's sign-in path, which is where
+// `ensureWorkspaceForUser` runs. In production (2026-09-21) that person got a
+// "No workspace yet" screen and a forced step. So when a validated user with no
+// billing workspace reaches `/dashboard`, this page runs the SAME bootstrap
+// sign-in runs, and redirects into the result.
+//
+// Server components in this app otherwise only read. This one may write because:
+//   - it is the same function as sign-in and register — not a second
+//     implementation of workspace creation (`mintWorkspace` is shared);
+//   - it is idempotent: it keys on MEMBERSHIP and re-checks inside its
+//     transaction, so a reload, two tabs, or a race with a sign-in cannot
+//     mint two workspaces;
+//   - membership is the whole gate (`lib/api.ts`), so minting one grants this
+//     person nothing but a tenant of their own — no other app's data, and
+//     nobody else's;
+//   - it runs only for `getValidatedSessionUser()`, i.e. a real, unrevoked
+//     account that reached this app's own dashboard — the act of opening it.
+//
+// This REVERSES the phase-0 position written at `createWorkspaceForUser`
+// ("bootstrapping on first authenticated request … is wrong for this app"):
+// that argued a tenant appearing because somebody loaded a page is one nobody
+// decided to create. Loading `/dashboard` of this app IS the decision — the same
+// one signing in at `/login` already was — and the explicit alternative cost
+// every cross-app visitor a dead-end screen. Nothing is minted for `/api/*`,
+// for another app's pages, or for `?new=1` (an explicit create, which shows the
+// named-workspace form instead).
+//
+// A pending invitation wins over a mint: somebody invited into an existing
+// workspace should land on the invitation, not in an empty tenant of their own.
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Building2, Plus } from 'lucide-react'
 import { getValidatedSessionUser } from '@/lib/auth/session'
-import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { ensureWorkspaceForUser, listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { listPendingInvitationsForEmail } from '@/lib/db/queries/invitations'
 import { NoWorkspace } from '@/components/no-workspace'
 import { CreateWorkspaceForm } from '@/components/create-workspace-form'
 
@@ -54,11 +92,25 @@ export default async function DashboardPage({
 
   const mine = await listWorkspacesForUser(user.id)
 
-  if (mine.length === 0) {
-    // Reaching here with none means the sign-in bootstrap did not run or did
-    // not finish; `?new=1` makes no difference — the empty screen already
-    // offers the same create form.
-    return <NoWorkspace email={user.email} />
+  if (mine.length === 0 && !wantsCreate) {
+    // `redirect()` throws, so it stays OUTSIDE the try: a caught NEXT_REDIRECT
+    // would be reported as a failed bootstrap.
+    let target: string | null = null
+    let failure: string | null = null
+    try {
+      const pending = await listPendingInvitationsForEmail(user.email)
+      if (pending[0]) {
+        target = `/invitations/${pending[0].token}`
+      } else {
+        const { workspace } = await ensureWorkspaceForUser(user.id, user.name ?? null, user.email)
+        target = `/dashboard/${workspace.slug}`
+      }
+    } catch (err) {
+      console.error('ensureWorkspaceForUser failed on /dashboard:', err)
+      failure = err instanceof Error ? err.message : String(err)
+    }
+    if (target) redirect(target)
+    return <NoWorkspace email={user.email} error={failure} />
   }
 
   if (!wantsCreate) {
