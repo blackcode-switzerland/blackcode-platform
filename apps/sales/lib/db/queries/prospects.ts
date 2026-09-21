@@ -5,17 +5,19 @@
 // in one row.
 //
 // ---------------------------------------------------------------------------
-// EVERY WRITE OWES THREE THINGS, IN ONE TRANSACTION
+// EVERY WRITE OWES TWO THINGS, IN ONE TRANSACTION
 // ---------------------------------------------------------------------------
 //   allocateSeq     the #number, for a create        lib/db/queries/counters.ts
 //   recordEvent     the activity spine               lib/db/queries/events.ts
-//   projectEntity   the cross-app URN                lib/db/queries/entities.ts
 //
-// All three take a transaction handle and none of them opens one, so the
-// enclosing `db.transaction()` is what makes them atomic with the row they
-// describe. A projection written outside it commits even when the source write
-// rolls back, and the result is a `bk search` hit that 404s weeks later —
-// `entities.integration.test.ts` asserts that case directly.
+// Both take a transaction handle and neither opens one, so the enclosing
+// `db.transaction()` is what makes them atomic with the row they describe.
+//
+// There used to be a third, `projectEntity` into `platform.entities`. This app
+// stopped projecting on 2026-08-10 (multiAppFinalRefactor Phase 3) and its
+// `entities.ts` is gone; this header kept naming it, and an integration test
+// that only `apps/issues` has, until a citation guard stopped resolving one
+// app's comments to another app's tests (2026-09-18).
 //
 // ---------------------------------------------------------------------------
 // `seq`, NEVER `id`

@@ -1,0 +1,460 @@
+// DATA-MODEL §11's thirteen invariants, as thirteen named groups, in the spec's
+// own numbering (b-mockups/bbilling/dev-handoff/DATA-MODEL.md §11).
+//
+// ===========================================================================
+// AN INDEX, SO THE INVARIANTS STAY AUDITED
+// ===========================================================================
+// Most of these are also proved at length elsewhere — the allocator race in
+// `write-paths.integration.test.ts`, the check digits in `reference.test.ts`,
+// the archive in `history.integration.test.ts`. This file is the one place a
+// reader can see all thirteen and find that each is ASSERTED, not remembered.
+// The first case below fails if a number goes missing, so a phase that adds an
+// invariant adds a group here or turns this file red.
+//
+// Two halves: what can be checked without a database runs on every `npm test`;
+// the rest runs as `billing_app` (TEST_DATABASE_URL) and skips LOUDLY without
+// one, naming itself.
+//
+// ── TWO INVARIANTS WERE NOT WHOLE, AND THEIR TESTS SAID SO ────────────────
+//   I9 asserted until 2026-09-18 that the recurrence table was ABSENT, so it
+//   failed the day phase 4 added it. It did, and is now the real check.
+//
+//   I12 was the other, also until 2026-09-18: its case read "KNOWN GAP (#86)" and
+//   asserted that a company IBAN edit moved a SENT bill's account. Migration
+//   0011 gave the invoice its own copy of the issuer, that case went red as it
+//   was written to, and it is now the invariant.
+//
+// WATCHED FAILING, 2026-09-18 — each restored; recorded in apps/billing/docs/backend.md
+//
+// I12's two database guards were each removed from the LOCAL CATALOG (not from a
+// file), watched red, restored and re-read from pg_constraint / pg_proc:
+//   - `invoice_issuer_iff_issued` dropped            → "the database holds it" red (the forgetful UPDATE succeeded)
+//   - the `NEW.issuer` line removed from G2's function → the same case red: expected P0001, got no error
+//
+// And I9's, the same way:
+//   - `uq_invoice_occurrence` dropped                 → "…a second live bill for one period" red (23505 expected)
+//   - `trg_invoice_series_frozen` disabled            → the same case red: the period moved (P0001 expected)
+//   - `recurrence_completed_by_the_cap` dropped       → the same case red: a hand-set completion was accepted
+
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { getTableConfig } from 'drizzle-orm/pg-core'
+import { integrationDescribe } from '@blackcode/platform-testing'
+import * as schema from '@/lib/db/schema'
+import { computeTotals, hasVatBlock } from '@/lib/derive/totals'
+import { refQRR, refSCOR, isValidQRR, isValidSCOR } from '@/lib/qr/reference'
+import { validateQrBill, ADDITIONAL_INFORMATION_BUDGET } from '@/lib/qr/validate'
+import { qrBillFieldsFor } from '@/lib/qr/payload'
+import { renderInvoiceDocument } from '@/lib/pdf/invoice'
+import { sampleCompany, sampleInvoice } from '@/lib/pdf/fixtures'
+import { PAYMENT_MESSAGE_MAX } from '@/lib/limits'
+
+const TEST_DB = process.env.TEST_DATABASE_URL
+if (TEST_DB) process.env.DATABASE_URL = TEST_DB
+
+/** Every column name on a billing table, from the Drizzle mirror (itself checked by schema-parity.test.ts). */
+function columnsOf(table: string): string[] {
+  for (const v of Object.values(schema)) {
+    let cfg: ReturnType<typeof getTableConfig>
+    try {
+      cfg = getTableConfig(v as never)
+    } catch {
+      continue
+    }
+    if (cfg.schema === 'billing' && cfg.name === table) return cfg.columns.map((c) => c.name)
+  }
+  return []
+}
+
+const billingTables = (): string[] =>
+  Object.values(schema).flatMap((v) => {
+    try {
+      const cfg = getTableConfig(v as never)
+      return cfg.schema === 'billing' ? [cfg.name] : []
+    } catch {
+      return []
+    }
+  })
+
+describe('the index', () => {
+  it('names all thirteen invariants, and no fourteenth', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8')
+    const found = [...src.matchAll(/describe\(\s*'(I\d+) — /g)].map((m) => Number(m[1].slice(1)))
+    // A set, sorted numerically: I4 has a group in each half, and the database
+    // half comes after the rest.
+    expect([...new Set(found)].sort((a, b) => a - b)).toEqual(Array.from({ length: 13 }, (_, i) => i + 1))
+  })
+})
+
+// ===========================================================================
+// Without a database
+// ===========================================================================
+
+describe('I3 — VAT null is not VAT zero', () => {
+  it('an unset rate carries no VAT block; a zero rate carries one reading 0%', () => {
+    const none = [{ qty: '1', unit_price: '100.00', vat_rate: null }]
+    const zero = [{ qty: '1', unit_price: '100.00', vat_rate: '0' }]
+    expect(hasVatBlock(none)).toBe(false)
+    expect(hasVatBlock(zero)).toBe(true)
+    expect(computeTotals(none, false, 'line_0_05').vat).toEqual([])
+    expect(computeTotals(zero, false, 'line_0_05').vat).toEqual([{ rate: '0', base: '100.00', amount: '0.00' }])
+  })
+})
+
+describe('I4 — the combination matrix', () => {
+  it('refuses EUR on a QR reference, and a QR reference on an ordinary IBAN', () => {
+    const inv = sampleInvoice()
+    const eurQrr = validateQrBill({ ...qrBillFieldsFor(inv, sampleCompany), currency: 'EUR' })
+    expect(eurQrr.map((r) => r.code)).toContain('qrr_chf_only')
+    const qrrOnIban = validateQrBill({ ...qrBillFieldsFor(inv, sampleCompany), account: sampleCompany.iban! })
+    expect(qrrOnIban.length).toBeGreaterThan(0)
+  })
+
+  it('accepts the three shapes it allows', () => {
+    expect(validateQrBill(qrBillFieldsFor(sampleInvoice(), sampleCompany))).toEqual([])
+    const scor = sampleInvoice({ currency: 'EUR', ref_type: 'SCOR', ref_body: '539007547034' })
+    expect(validateQrBill(qrBillFieldsFor(scor, sampleCompany))).toEqual([])
+    const non = sampleInvoice({ ref_type: 'NON', ref_body: null })
+    expect(validateQrBill(qrBillFieldsFor(non, sampleCompany))).toEqual([])
+  })
+})
+
+describe('I5 — check digits are derived, never stored', () => {
+  it('reproduces the standard’s vectors', () => {
+    expect(refQRR('21000000000313947143000901')).toBe('210000000003139471430009017')
+    expect(refSCOR('539007547034')).toBe('RF18539007547034')
+    expect(isValidQRR('210000000003139471430009017')).toBe(true)
+    expect(isValidSCOR('RF18539007547034')).toBe(true)
+  })
+
+  it('stores the BODY only: no reference or check-digit column on an invoice', () => {
+    const cols = columnsOf('invoice')
+    expect(cols).toContain('ref_body')
+    expect(cols.filter((c) => /reference|check|^ref$/.test(c))).toEqual([])
+  })
+})
+
+describe('I6 — totals are derived, never stored', () => {
+  it('no subtotal, VAT or total column on an invoice or a line', () => {
+    const money = /total|subtotal|^vat$|vat_amount|amount/
+    expect(columnsOf('invoice').filter((c) => money.test(c))).toEqual([])
+    expect(columnsOf('invoice_line').filter((c) => money.test(c))).toEqual([])
+  })
+
+  it('the ONE stored amount is the archive’s, which has no lines to derive it from', () => {
+    const stored = billingTables().filter((t) => columnsOf(t).includes('total'))
+    expect(stored).toEqual(['history'])
+  })
+})
+
+describe('I9 — recurrence is finite', () => {
+  // Until 2026-09-18 this group asserted the recurrence table was ABSENT, so
+  // that phase 4 could not land without replacing it. It fired as written.
+  it('the end condition is a required column, and completion is reached by the counter', async () => {
+    const { advance } = await import('@/lib/derive/recurrence')
+    expect(billingTables()).toContain('recurrence')
+    const total = getTableConfig(schema.billingRecurrence).columns.find((c) => c.name === 'occurrences_total')
+    expect(total?.notNull).toBe(true)
+    const rule = { status: 'active' as const, frequency: 'monthly' as const, start_date: '2026-01-31', occurrences_total: 2, next_date: '2026-02-28' }
+    expect(advance({ ...rule, occurrences_done: 0 }).status).toBe('active')
+    expect(advance({ ...rule, occurrences_done: 1 })).toEqual({ status: 'completed', occurrences_done: 2, next_date: null })
+  })
+})
+
+describe('I10 — the document’s language is not the operator’s', () => {
+  it('prints the invoice’s own Annex C literals, and the renderer takes no UI locale at all', async () => {
+    const de = await renderInvoiceDocument({ invoice: sampleInvoice({ language: 'de' }), company: sampleCompany })
+    const words = de.log.flat().filter((e) => e.kind === 'text').map((e) => e.text)
+    expect(words).toContain('Zahlteil')
+    expect(words).toContain('Empfangsschein')
+    expect(words).not.toContain('Section paiement')
+    expect(words).not.toContain('Payment part')
+    // The signature is the guarantee: one argument, holding the invoice and the company.
+    expect(renderInvoiceDocument.length).toBe(1)
+  })
+})
+
+describe('I11 — the 140-character budget', () => {
+  it('is one number, read by the write door and the QR-bill check alike', () => {
+    expect(ADDITIONAL_INFORMATION_BUDGET).toBe(PAYMENT_MESSAGE_MAX)
+    expect(PAYMENT_MESSAGE_MAX).toBe(140)
+  })
+
+  it('refuses a message one character over it', () => {
+    const inv = sampleInvoice({ message: 'x'.repeat(PAYMENT_MESSAGE_MAX + 1) })
+    expect(validateQrBill(qrBillFieldsFor(inv, sampleCompany)).length).toBeGreaterThan(0)
+    const ok = sampleInvoice({ message: 'x'.repeat(PAYMENT_MESSAGE_MAX) })
+    expect(validateQrBill(qrBillFieldsFor(ok, sampleCompany))).toEqual([])
+  })
+})
+
+// ===========================================================================
+// Against the database, as billing_app
+// ===========================================================================
+
+const run = integrationDescribe({
+  describe,
+  name: 'billing invariants I1, I2, I4, I7, I8, I9, I12, I13 against the database',
+  databaseUrl: TEST_DB,
+  required: process.env.REQUIRE_INTEGRATION_TESTS,
+})
+
+run('billing invariants (integration)', () => {
+  type Ctx = { workspaceId: number; actorUserId: number; via: 'token'; actorEmail: string; isOwner: boolean }
+  let ctx: Ctx
+  let q: {
+    invoices: typeof import('@/lib/db/queries/invoices')
+    lifecycle: typeof import('@/lib/db/queries/lifecycle')
+    companies: typeof import('@/lib/db/queries/companies')
+    overview: typeof import('@/lib/db/queries/overview')
+    history: typeof import('@/lib/db/queries/history')
+  }
+  let exec: (s: import('drizzle-orm').SQL) => Promise<{ rows: Record<string, unknown>[] }>
+  let sql: typeof import('drizzle-orm')['sql']
+
+  /** The SQLSTATE a statement fails with, or null if it succeeded. */
+  const sqlstate = async (s: import('drizzle-orm').SQL): Promise<string | null> => {
+    try {
+      await exec(s)
+      return null
+    } catch (e) {
+      for (let x = e as { code?: unknown; cause?: unknown } | undefined; x; x = x.cause as typeof x) {
+        if (typeof x.code === 'string' && /^[0-9A-Z]{5}$/.test(x.code)) return x.code
+      }
+      return 'unknown'
+    }
+  }
+
+  const draft = (extra: Record<string, unknown> = {}) =>
+    q.invoices.createInvoice(ctx, {
+      company: 'inv',
+      ref_type: 'SCOR',
+      client: { name: 'Client SA', street: 'Rue', building: '1', postal_code: '1200', city: 'Genève', country: 'CH' },
+      items: [{ description: 'Work', qty: '1', unit_price: '100.00', vat_rate: '8.10' }],
+      ...extra,
+    } as never)
+
+  beforeAll(async () => {
+    const { getDb } = await import('@/lib/db/client')
+    ;({ sql } = await import('drizzle-orm'))
+    exec = (s) => getDb().execute(s) as never
+    q = {
+      invoices: await import('@/lib/db/queries/invoices'),
+      lifecycle: await import('@/lib/db/queries/lifecycle'),
+      companies: await import('@/lib/db/queries/companies'),
+      overview: await import('@/lib/db/queries/overview'),
+      history: await import('@/lib/db/queries/history'),
+    }
+    const workspaces = await import('@/lib/db/queries/workspaces')
+    const u = await exec(sql`SELECT id, email FROM platform.users WHERE deleted_at IS NULL ORDER BY id LIMIT 1`)
+    const user = u.rows[0] as { id: number; email: string } | undefined
+    if (!user) throw new Error('no user in platform.users — sign up locally first')
+    const ws = await workspaces.createWorkspaceForUser(user.id, `itest-invariants-${Date.now()}`)
+    ctx = { workspaceId: ws.id, actorUserId: user.id, via: 'token', actorEmail: user.email, isOwner: true }
+    await q.companies.createCompany(ctx, {
+      slug: 'inv',
+      name: 'Invariant SA',
+      legal_name: 'Invariant SA',
+      address: { street: 'Rue du Test', building: '1', postal_code: '1200', city: 'Genève', country: 'CH' },
+      iban: 'CH9300762011623852957',
+      qr_iban: 'CH4431999123000889012',
+      vat_registered: true,
+      number_format: 'INV-{SEQ4}',
+    })
+  })
+
+  describe('I1 — the sequence is gapless and never renumbered', () => {
+    it('five concurrent creates take five contiguous numbers', async () => {
+      const made = await Promise.all(Array.from({ length: 5 }, () => draft()))
+      const nos = made.map((m) => m.seq_no).sort((a, b) => a - b)
+      expect(nos).toEqual(Array.from({ length: 5 }, (_, i) => nos[0] + i))
+    }, 30_000)
+
+    it('a void keeps its number consumed, and a number cannot be rewritten', async () => {
+      const a = await draft()
+      await q.lifecycle.voidInvoice(ctx, String(a.seq), { reason_en: 'invariant I1' })
+      const b = await draft()
+      expect(b.seq_no).toBe(a.seq_no + 1)
+      expect(await sqlstate(sql`UPDATE billing.invoice SET seq_no = seq_no + 100 WHERE workspace_id = ${ctx.workspaceId} AND seq = ${b.seq}`)).not.toBeNull()
+    })
+  })
+
+  describe('I2 — a void is not a delete', () => {
+    it('refuses a void with no reason, keeps the voided record, and cannot delete', async () => {
+      const a = await draft()
+      await expect(q.lifecycle.voidInvoice(ctx, String(a.seq), {})).rejects.toThrow()
+      const v = await q.lifecycle.voidInvoice(ctx, String(a.seq), { reason_en: 'invariant I2', reason_fr: 'invariant I2' })
+      expect(v.status).toBe('void')
+      expect(v.void?.reason.en).toBe('invariant I2')
+      expect((await q.invoices.getInvoice(ctx.workspaceId, String(a.seq)))?.number).toBe(a.number)
+      expect(await sqlstate(sql`DELETE FROM billing.invoice WHERE workspace_id = ${ctx.workspaceId} AND seq = ${a.seq}`)).toBe('42501')
+    })
+  })
+
+  describe('I4 — the combination matrix, at the write door', () => {
+    it('refuses an EUR invoice on a QR reference', async () => {
+      await expect(draft({ currency: 'EUR', ref_type: 'QRR' })).rejects.toThrow()
+    })
+  })
+
+  describe('I7 — the audit log is append-only and every write appends', () => {
+    it('an edit appends one row per field, and the app role cannot rewrite one', async () => {
+      const a = await draft()
+      const before = await exec(sql`SELECT COUNT(*)::int AS n FROM billing.audit WHERE workspace_id = ${ctx.workspaceId}`)
+      await q.invoices.editInvoice(ctx, String(a.seq), { message: 'changed', due_date: '2030-01-31' })
+      const after = await exec(sql`SELECT COUNT(*)::int AS n FROM billing.audit WHERE workspace_id = ${ctx.workspaceId}`)
+      expect(Number(after.rows[0].n) - Number(before.rows[0].n)).toBe(2)
+      expect(await sqlstate(sql`UPDATE billing.audit SET detail_en = 'x' WHERE workspace_id = ${ctx.workspaceId}`)).toBe('42501')
+    })
+  })
+
+  describe('I8 — per-currency sums are never merged', () => {
+    it('reports CHF and EUR as two lines and no grand total', async () => {
+      await draft({ currency: 'EUR' })
+      const ov = await q.overview.getOverview(ctx.workspaceId)
+      const currencies = ov.by_currency.map((b) => b.currency)
+      expect(new Set(currencies).size).toBe(currencies.length)
+      expect(Object.keys(ov)).not.toContain('total')
+      for (const b of ov.by_currency) expect(Object.keys(b)).toContain('currency')
+    })
+  })
+
+  describe('I9 — finite, and idempotent per (series, period), in the database', () => {
+    it('refuses an open-ended series, a hand-set completion, and a second live bill for one period', async () => {
+      const inv = await draft()
+      const row = await exec(sql`SELECT id, company_id FROM billing.invoice WHERE workspace_id = ${ctx.workspaceId} AND seq = ${inv.seq}`)
+      const { id: invoiceId, company_id: companyId } = row.rows[0] as { id: number; company_id: number }
+      const insertRule = (total: unknown, status: string, done: number, next: string | null) =>
+        sql`INSERT INTO billing.recurrence (workspace_id, seq, company_id, template_invoice_id, status, frequency, start_date, occurrences_total, occurrences_done, next_date)
+            VALUES (${ctx.workspaceId}, ${900000 + Math.floor(Math.random() * 99999)}, ${companyId}, ${invoiceId}, ${status}, 'monthly', '2026-01-01', ${total}, ${done}, ${next})`
+
+      // The positive half first: a finite, active rule is accepted.
+      expect(await sqlstate(insertRule(3, 'active', 0, '2026-01-01'))).toBeNull()
+      expect(await sqlstate(insertRule(null, 'active', 0, '2026-01-01'))).toBe('23502')
+      expect(await sqlstate(insertRule(0, 'active', 0, '2026-01-01'))).toBe('23514')
+      expect(await sqlstate(insertRule(3, 'completed', 1, null))).toBe('23514')
+      expect(await sqlstate(insertRule(3, 'active', 3, '2026-04-01'))).toBe('23514')
+
+      // The idempotency index, with no app code in the way.
+      const r = await exec(sql`SELECT id FROM billing.recurrence WHERE workspace_id = ${ctx.workspaceId} ORDER BY id DESC LIMIT 1`)
+      const ruleId = (r.rows[0] as { id: number }).id
+      const a = await draft()
+      const b = await draft()
+      const place = (seq: number) =>
+        sql`UPDATE billing.invoice SET recurrence_id = ${ruleId}, occurrence_period = '2026-01' WHERE workspace_id = ${ctx.workspaceId} AND seq = ${seq}`
+      expect(await sqlstate(place(a.seq))).toBeNull()
+      expect(await sqlstate(place(b.seq))).toBe('23505')
+      // …and a void frees the period (P7).
+      await q.lifecycle.voidInvoice(ctx, String(a.seq), { reason_en: 'invariant I9' })
+      expect(await sqlstate(place(b.seq))).toBeNull()
+      // An occurrence never moves to another period.
+      expect(await sqlstate(sql`UPDATE billing.invoice SET occurrence_period = '2026-02' WHERE workspace_id = ${ctx.workspaceId} AND seq = ${b.seq}`)).toBe('P0001')
+    })
+  })
+
+  describe('I12 — frozen at issue', () => {
+    it('once sent, the document half refuses an edit and the payment message does not', async () => {
+      const a = await draft()
+      await q.lifecycle.markInvoiceSent(ctx, String(a.seq))
+      await expect(q.invoices.editInvoice(ctx, String(a.seq), { client: { name: 'Someone Else' } })).rejects.toThrow()
+      const ok = await q.invoices.editInvoice(ctx, String(a.seq), { message: 'still open' })
+      expect(ok.message).toBe('still open')
+    })
+
+    it('the ISSUER is frozen too: a company edit changes the next bill, and never one already sent', async () => {
+      // Until 2026-09-18 this case read "KNOWN GAP (#86)" and asserted the
+      // opposite: that a company IBAN edit moved the account of a SENT bill,
+      // because the invoice carried no copy of its issuer. Migration 0011 added
+      // the copy; the tripwire fired, and this is the invariant it became.
+      const { prepareInvoiceDocument } = await import('@/lib/delivery/document')
+      const { createHash } = await import('node:crypto')
+      const sha = async (seq: number) => {
+        const src = (await q.invoices.getInvoiceDocumentSource(ctx.workspaceId, String(seq)))!
+        return createHash('sha256').update(await prepareInvoiceDocument(src)).digest('hex')
+      }
+      const read = async (seq: number) => (await q.invoices.getInvoice(ctx.workspaceId, String(seq)))!
+
+      // 0.03 so the rounding policy visibly matters: 100.03 → 100.05 under
+      // `line_0_05`, and stays 100.03 under `none`.
+      const odd = { items: [{ description: 'Work', qty: '1', unit_price: '100.03', vat_rate: null }] }
+      const a = await draft(odd)
+      await q.lifecycle.markInvoiceSent(ctx, String(a.seq))
+      const stillDraft = await draft(odd)
+      const before = await read(a.seq)
+      const shaBefore = await sha(a.seq)
+      expect(before.issuer?.iban).toBe('CH9300762011623852957')
+      expect(before.issuer?.captured_at).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+      expect(before.totals.total).toBe('100.05')
+      expect((await read(stillDraft.seq)).issuer).toBeNull()
+
+      await q.companies.editCompany(ctx, 'inv', { iban: 'CH5604835012345678009', legal_name: 'Renamed SA', rounding: 'none' })
+      try {
+        // THE POSITIVE HALF, FIRST: the edit really took, and a DRAFT sees all of
+        // it. Without this, "the sent one did not move" is also what a company
+        // edit that silently did nothing looks like.
+        const d = await read(stillDraft.seq)
+        expect(d.derived.account).toBe('CH5604835012345678009')
+        expect(d.derived.creditor.name).toBe('Renamed SA')
+        expect(d.totals.total).toBe('100.03')
+
+        const after = await read(a.seq)
+        expect(after.derived.account).toBe('CH9300762011623852957')
+        expect(after.derived.creditor.name).toBe('Invariant SA')
+        expect(after.totals.total).toBe('100.05')
+        expect(after.issuer).toEqual(before.issuer)
+        // …and the DOCUMENT is the same bytes (position P10).
+        expect(await sha(a.seq)).toBe(shaBefore)
+      } finally {
+        await q.companies.editCompany(ctx, 'inv', { iban: 'CH9300762011623852957', legal_name: 'Invariant SA', rounding: 'line_0_05' })
+      }
+    })
+
+    it('the database holds it: no issued invoice without a copy, no draft with one, no revision', async () => {
+      const a = await draft()
+      const where = sql`workspace_id = ${ctx.workspaceId} AND seq = ${a.seq}`
+      // A status change that forgets the copy — what a future write path would do.
+      expect(await sqlstate(sql`UPDATE billing.invoice SET status = 'sent', sent_at = now() WHERE ${where}`)).toBe('23514')
+      // A draft carrying one would render from a company as it WAS.
+      expect(await sqlstate(sql`UPDATE billing.invoice SET issuer = '{"legal_name":"x"}'::jsonb WHERE ${where}`)).toBe('23514')
+      // The positive half: the real transition is accepted…
+      const sent = await q.lifecycle.markInvoiceSent(ctx, String(a.seq))
+      expect(sent.issuer?.legal_name).toBe('Invariant SA')
+      // …and from then on the copy is part of the sent document (G2).
+      expect(
+        await sqlstate(sql`UPDATE billing.invoice SET issuer = jsonb_set(issuer, '{iban}', '"CH5604835012345678009"') WHERE ${where}`)
+      ).toBe('P0001')
+      // A void from DRAFT leaves draft too, and takes its copy.
+      const v = await draft()
+      const voided = await q.lifecycle.voidInvoice(ctx, String(v.seq), { reason_en: 'invariant I12' })
+      expect(voided.issuer?.legal_name).toBe('Invariant SA')
+      expect(voided.derived.has_payment_part).toBe(false)
+    })
+  })
+
+  describe('I13 — history is read-only and never enters the native sequence', () => {
+    it('an archived number equal to a native one is accepted, changes no sequence, and cannot be rewritten', async () => {
+      const native = await draft()
+      const nextBefore = await exec(sql`SELECT next_seq FROM billing.company WHERE workspace_id = ${ctx.workspaceId} AND slug = 'inv'`)
+      const res = await q.history.importHistory(ctx, {
+        rows: [
+          {
+            source: 'zoho',
+            source_ref: `I13-${Date.now()}`,
+            company: 'inv',
+            number: native.number,
+            client_name: 'Archive SA',
+            issue_date: '2020-01-02',
+            currency: 'CHF',
+            total: '10.00',
+            status: 'paid',
+          },
+        ],
+      })
+      expect(res.imported).toBe(1)
+      const nextAfter = await exec(sql`SELECT next_seq FROM billing.company WHERE workspace_id = ${ctx.workspaceId} AND slug = 'inv'`)
+      expect(nextAfter.rows[0].next_seq).toBe(nextBefore.rows[0].next_seq)
+      expect(await sqlstate(sql`UPDATE billing.history SET number = 'x' WHERE workspace_id = ${ctx.workspaceId}`)).toBe('42501')
+    })
+  })
+})

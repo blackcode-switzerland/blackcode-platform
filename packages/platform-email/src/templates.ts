@@ -51,9 +51,14 @@ const C = {
 
 // Wraps content in the shared shell: centered brand header, white card,
 // left-aligned footer. `contentHtml` decides its own internal alignment.
+//
+// `replyTo` changes ONE line of the footer. A document email's replies go to the
+// business that issued the document (see `DocumentDelivery.replyTo`), and a
+// footer saying "contact us at <the platform's address>" beside a reply-to that
+// reaches someone else would send a client's question to the wrong company.
 function renderEmail(
   identity: EmailIdentity,
-  opts: { previewText: string; contentHtml: string }
+  opts: { previewText: string; contentHtml: string; replyTo?: string }
 ): string {
   const brand = escapeHtml(identity.name)
   const base = identity.appUrl.replace(/\/$/, '')
@@ -108,10 +113,17 @@ function renderEmail(
                   This is an automated message from ${brand}.
                 </p>
                 <p style="margin:0;color:${C.faint};font-size:12px;line-height:1.5;">
-                  Need help or want to reply? Contact us at
+                  ${
+                    opts.replyTo
+                      ? `Questions about this document? Reply to this email and it reaches
+                  <a href="mailto:${escapeHtml(opts.replyTo)}" style="color:${C.muted};">${escapeHtml(
+                    opts.replyTo
+                  )}</a>.`
+                      : `Need help or want to reply? Contact us at
                   <a href="mailto:${identity.contactEmail}" style="color:${C.muted};">${escapeHtml(
                     identity.contactEmail
-                  )}</a>.
+                  )}</a>.`
+                  }
                 </p>
               </td>
             </tr>
@@ -273,4 +285,81 @@ export function passwordResetEmail(
   ].join('\n')
 
   return { subject, html, text }
+}
+
+// ---------- document ----------
+//
+// A message whose point is the file attached to it. Added 2026-09-17 for
+// b/billing's invoice PDF, and deliberately not named for invoices: the COPY is
+// the caller's (subject, heading, body), the SHELL is shared. See send.ts's
+// header and identity.ts note 1 for why this is one parameterised template
+// rather than an app's own.
+//
+// No button. A document email asks the reader to open an attachment, and a
+// call-to-action linking into an app the recipient has no account on would be a
+// dead end dressed as a next step.
+
+export interface DocumentEmailInput {
+  subject: string
+  heading: string
+  /**
+   * PLAIN TEXT. Paragraphs are separated by a blank line and single newlines are
+   * kept. It is escaped, never interpreted as HTML: the body is typically typed
+   * by a person or an agent, and a template that rendered it as markup would be
+   * an injection point in a mail sent under the platform's own domain.
+   */
+  body: string
+  /** Named in the mail, so a reader whose client hides attachments knows one exists. */
+  attachmentName: string
+  /** Set by `sendDocumentEmail` from the delivery; changes the footer. */
+  replyTo?: string
+}
+
+export function documentEmail(identity: EmailIdentity, input: DocumentEmailInput): RenderedEmail {
+  const paragraphs = input.body
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+
+  const bodyHtml = paragraphs
+    .map(
+      (p) =>
+        `<p style="margin:0 0 12px;color:${C.body};font-size:14px;line-height:1.6;">${escapeHtml(p)
+          .split('\n')
+          .join('<br/>')}</p>`
+    )
+    .join('\n      ')
+
+  const content = `
+    <h1 class="bc-heading" style="margin:0 0 14px;color:${C.heading};font-size:20px;font-weight:600;line-height:1.3;">
+      ${escapeHtml(input.heading)}
+    </h1>
+      ${bodyHtml}
+    <div style="margin:18px 0 0;padding:12px 14px;background:${C.codeBg};border:1px solid ${C.border};border-radius:10px;">
+      <span style="color:${C.muted};font-size:12px;">Attached</span><br/>
+      <span style="color:${C.heading};font-size:14px;font-weight:600;word-break:break-all;">${escapeHtml(
+        input.attachmentName
+      )}</span>
+    </div>`
+
+  const html = renderEmail(identity, {
+    previewText: input.heading,
+    contentHtml: content,
+    replyTo: input.replyTo,
+  })
+
+  const text = [
+    input.heading,
+    ``,
+    paragraphs.join('\n\n'),
+    ``,
+    `Attached: ${input.attachmentName}`,
+    ``,
+    input.replyTo
+      ? `Questions about this document? Reply to this email and it reaches ${input.replyTo}.`
+      : `Need help or want to reply? Contact us at ${identity.contactEmail}.`,
+  ].join('\n')
+
+  return { subject: input.subject, html, text }
 }

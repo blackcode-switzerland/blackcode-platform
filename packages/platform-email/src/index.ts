@@ -40,9 +40,16 @@ export { canDeliverEmail, emailEnabled, getResend, resetResendClient } from './c
 export { fromAddress } from './identity'
 export type { EmailIdentity } from './identity'
 export { createEmailSender } from './send'
-export type { EmailSender, EmailSenderConfig, SendResult } from './send'
-export { invitationEmail, passwordResetEmail } from './templates'
 export type {
+  DocumentDelivery,
+  EmailAttachment,
+  EmailSender,
+  EmailSenderConfig,
+  SendResult,
+} from './send'
+export { documentEmail, invitationEmail, passwordResetEmail } from './templates'
+export type {
+  DocumentEmailInput,
   InvitationEmailInput,
   PasswordResetEmailInput,
   RenderedEmail,

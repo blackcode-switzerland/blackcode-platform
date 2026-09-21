@@ -4,6 +4,198 @@
     {
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/invitations/{id}",
+      "command": "bk billing invite revoke",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "command": "bk billing workspace list, bk billing workspace use",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk billing workspace show",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/audit",
+      "command": "bk billing audit list",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/companies",
+      "command": "bk billing company list",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/companies/{slug}",
+      "command": "bk billing company show",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/history",
+      "command": "bk billing history list",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/history/{seq}",
+      "command": "bk billing history show",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk billing invite list",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invoices",
+      "command": "bk billing invoice list",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invoices/{ref}",
+      "command": "bk billing invoice show, bk billing invoice void",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invoices/{ref}/pdf",
+      "command": "bk billing invoice pdf",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/invoices/{ref}/qr",
+      "command": "bk billing invoice qr",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/members",
+      "command": "bk billing member list",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/overview",
+      "command": "bk billing overview",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/recurrences",
+      "command": "bk billing recurrence list",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{ws}/recurrences/{seq}",
+      "command": "bk billing recurrence show",
+      "app": "billing"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/companies/{slug}",
+      "command": "bk billing company edit, bk billing company retire",
+      "app": "billing"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/invoices/{ref}",
+      "command": "bk billing invoice edit, bk billing invoice line set",
+      "app": "billing"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/workspaces/{ws}/recurrences/{seq}",
+      "command": "bk billing recurrence edit, bk billing recurrence pause, bk billing recurrence resume",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/active-workspace",
+      "command": "bk billing workspace use",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces",
+      "command": "bk billing workspace create",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/companies",
+      "command": "bk billing company create",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/history",
+      "command": "bk billing history import",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invitations",
+      "command": "bk billing invite send",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invoices",
+      "command": "bk billing invoice create",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invoices/{ref}/mark-sent",
+      "command": "bk billing invoice mark-sent",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invoices/{ref}/paid",
+      "command": "bk billing invoice paid",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invoices/{ref}/send",
+      "command": "bk billing invoice send",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/invoices/{ref}/void",
+      "command": "bk billing invoice void",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/recurrences",
+      "command": "bk billing recurrence create",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/recurrences/{seq}/generate",
+      "command": "bk billing recurrence generate",
+      "app": "billing"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/invitations/{id}",
       "command": "bk books invite revoke",
       "app": "books"
     },

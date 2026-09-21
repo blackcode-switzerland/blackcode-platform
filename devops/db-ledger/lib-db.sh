@@ -102,7 +102,13 @@ db_current_database() {
 #   schema.table<TAB>count<TAB>min_id<TAB>max_id
 # min_id/max_id are the literal string NULL when the table is empty, or NOID
 # when the table has no integer `id` column (recorded, never silently skipped).
-TRACKED_SCHEMAS="'platform','issues','sales','scaffold'"
+# `books` was MISSING here from the day that app shipped until 2026-09-16, when
+# `billing` was added and the list was read. A baseline that silently omits a
+# schema is a baseline that reports no drift in it, forever — the same shape as
+# the per-app registries in CLAUDE.md findings #22 and #23. Re-run
+# capture-baseline.sh after changing this line, or the omission just moves from
+# the list to the stored baseline.
+TRACKED_SCHEMAS="'platform','issues','sales','books','billing','scaffold'"
 db_capture_stats() {
   local url="$1"
   local tables id_tables sql t schema table has_id rc

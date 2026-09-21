@@ -16,6 +16,9 @@ A **monorepo** (npm workspaces + Turborepo) of Blackcode's internal apps:
 - **`apps/sales`** — prospects, meetings, communications. The second app, and the
   reason the platform is shaped the way it is: it was the second question every
   shared thing had ever been asked.
+- **`apps/billing`** — **b/billing**, Swiss QR-bill invoicing. The fourth app,
+  **in build**: phase 0 registered it, phase 1 brings companies and invoices.
+  Plan in `docs/billing-app-plan/`.
 - **`apps/books`** — **b/books**, Swiss statutory bookkeeping. The third app, and
   the first whose **web surface is read-only**: every write goes through
   `bk books`, so the CLI is the product rather than a companion to it.
@@ -32,7 +35,7 @@ Run every command from the **repo root**; Turborepo delegates into the workspace
 nine, `platform-email` since 2026-08-11 and `platform-i18n` since 2026-08-20
 (the locale vocabulary, the one resolution order, the typed dictionary lookup —
 and **no product copy**; each app supplies its own strings). The database is `platform.*` + `issues.*` +
-`sales.*` + `books.*` (never `public`), one bounded role per app. Apps are real data
+`sales.*` + `books.*` + `billing.*` (never `public`), one bounded role per app. Apps are real data
 (`platform.apps` is the address book). The CLI, guide, changelog, `bk meta` and
 docs are split per app; everything is addressable by URN; the blob STORE is
 shared and reference-counted across apps while each app keeps its own upload
@@ -102,7 +105,7 @@ A guide topic must **never** restate a dynamic value. Point at `bk meta`.
 > **A check you have not watched fail is not a check.** Break the thing it
 > guards, watch it go red, restore.
 
-**Twenty-one guardrails in this repo have been found green-but-inert**, each of
+**Twenty-six guardrails in this repo have been found green-but-inert**, each of
 which looked like working protection: three packages with no ESLint config at
 all; a `SECURITY DEFINER` guard comparing `current_user` (the function's owner)
 instead of the caller; an orphan check that structurally could not detect an

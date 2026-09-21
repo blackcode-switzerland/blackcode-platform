@@ -1005,7 +1005,8 @@ on Windows (mode `0600`, directory mode `0700`, where the OS has them):
   "app_servers": {
     "issues": "https://issues.blackcode.ch",
     "sales":  "https://sales.blackcode.ch",
-    "books":  "https://books.blackcode.ch"
+    "books":  "https://books.blackcode.ch",
+    "billing": "https://billing.blackcode.ch"
   },
   "user_id": 7,
   "email":  "alice@example.com",

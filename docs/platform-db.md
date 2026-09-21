@@ -238,10 +238,37 @@ password_reset_otps,email_whitelist,blob_references}`. It is the first app to
 follow `docs/adding-an-app.md` end to end, which is the only evidence that
 checklist works.
 
-Its role is **`books_app`**, created by `docs/sql/app-role.sql` with the schema
-substituted — and per finding #15 in CLAUDE.md, run it AFTER the first migration
-has created the schema, never before: every grant names a schema the file does
-not create, and `psql` exits 0 having skipped them.
+Its role is **`books_app`**, created by `docs/sql/books-app-role.sql` — the
+SUBSTITUTED copy, never `docs/sql/app-role.sql`, whose second half carries
+literal `issues` / `issues_app` names and would silently configure issues
+instead (CLAUDE.md finding #15).
+
+> ### THE ORDER, CORRECTED 2026-09-16
+>
+> **Role → register part 1 → migrate → register part 2 → probe → enable.**
+>
+> This section used to say the opposite — run the role script AFTER the first
+> migration, "never before" — and three places in this repo disagreed about it.
+> The per-app role scripts (`books-app-role.sql`, now `billing-app-role.sql`)
+> and `adding-an-app.md` both say role first, and they are right, because **two
+> migrations depend on the role already existing and NEITHER fails loudly:**
+>
+> - `0002` grants `EXECUTE` on `platform.blob_refs_purge` to every `<slug>_app`
+>   role that exists at that moment. A missing role is silently skipped.
+> - the app-role-grants migration grants the in-schema DML. A missing role
+>   raises a `WARNING`, not an error, and Drizzle records the migration applied.
+>
+> A grant skipped that way is **not fixed by re-running**, which is what made
+> this ordering matter: recovery is replaying the migration by hand. `books_app`
+> reached phase 1 with zero privileges in its own schema this way, and its
+> boundary probe passed anyway, because a role granted nothing denies everything
+> (finding #16).
+>
+> The old advice was written from finding #15 — a grant naming a schema that
+> does not exist yet. The per-app scripts solve that by creating the schema
+> themselves (`CREATE SCHEMA IF NOT EXISTS <app> AUTHORIZATION neondb_owner`,
+> idempotent against the migration that repeats it), which is why role-first is
+> both safe and necessary.
 
 Two things about `books.*` are worth knowing at root altitude, because they are
 unlike the other two apps:

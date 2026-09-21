@@ -53,7 +53,43 @@ app_registry() {
 issues|bc-issues|prj_bueHX5y2f7uaemskB5Q1Plwbry2p|https://issues.blackcode.ch
 sales|bc-sales|prj_p5A74QYKnig8696ES87bT6rvHMdZ|https://sales.blackcode.ch
 books|bc-books|prj_OjkZc6y1oRGkCw3fFtTglIMCN9Ec|https://books.blackcode.ch
+billing|bc-billing|PROJECT_ID_NOT_YET_CREATED|https://billing.blackcode.ch
 APPS
+}
+
+# ---------------------------------------------------------------------------
+# A REGISTRY LINE WITHOUT A REAL PROJECT ID IS REFUSED, LOUDLY
+# ---------------------------------------------------------------------------
+# `billing` is listed above because the app EXISTS — it is in the repo, it has a
+# schema, a role and a command group, and `release.sh apps` should say so. Its
+# Vercel project does not exist yet: creating one needs dashboard access and is
+# a human step in docs/billing-app-plan/phase-0-register-the-app.md §9.
+#
+# The id is therefore a placeholder, and the placeholder is checked rather than
+# hoped about. `project_id` is passed straight to VERCEL_PROJECT_ID, which
+# OVERRIDES whatever .vercel/project.json happens to be linked (see the note
+# above app_registry) — so a garbage value does not fail cleanly. It deploys to
+# whichever project the working copy was last linked to, which is the mistake
+# that is only visible after it is live.
+#
+# So this refuses, and it names the one step that fixes it. When the project is
+# created, replace the placeholder with its real `prj_…` and this check goes
+# quiet on its own.
+PLACEHOLDER_PROJECT_ID='PROJECT_ID_NOT_YET_CREATED'
+
+require_real_project_id() {
+  local slug="$1" project_id="$2"
+  if [[ "$project_id" == "$PLACEHOLDER_PROJECT_ID" ]]; then
+    error "App '${slug}' has no Vercel project yet."
+    echo
+    echo "  Its registry line carries a placeholder id, so deploying it would send this"
+    echo "  build to whichever project this working copy was last linked to."
+    echo
+    echo "  Create the project first (root directory apps/${slug}, no blob store), then"
+    echo "  replace ${PLACEHOLDER_PROJECT_ID} in app_registry() with its prj_… id."
+    echo "  The environment it needs is in docs/billing-app-plan/phase-0-register-the-app.md §9."
+    exit 1
+  fi
 }
 
 VERCEL_ORG_ID_VALUE="team_b4wX7DvsnUaeqJyLi5cGrlbQ"
@@ -226,6 +262,7 @@ release_web() {
   local entry slug project project_id prod_url
   entry=$(resolve_app "$app")
   IFS='|' read -r slug project project_id prod_url <<< "$entry"
+  require_real_project_id "$slug" "$project_id"
 
   header "🌐  Web release: ${slug} → Vercel production"
   echo -e "  Project:     ${BOLD}${project}${RESET}"

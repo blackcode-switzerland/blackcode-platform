@@ -170,11 +170,34 @@ var vocabularySources = map[string]string{
 	// not checked"), sitting in the file that predicted it. The module has the
 	// same `value: '…'` shape as the other two, so nothing else had to change.
 	"books": "apps/books/lib/vocabularies.ts",
+	// Added 2026-09-16 IN THE SAME COMMIT as this app's first guide topic, which
+	// is the whole lesson of the books line above it. An app added here later
+	// than its topics is an app whose topics were never checked, and the section
+	// header reads `--- PASS` either way.
+	"billing": "apps/billing/lib/vocabularies.ts",
 }
 
-// optionValue matches `{ value: 'in_progress', …` — the shape both modules use
-// for every vocabulary whose values are strings.
-var optionValue = regexp.MustCompile(`\bvalue:\s*'([a-z_][a-z0-9_]*)'`)
+// optionValue matches `{ value: 'in_progress', …` — the shape every vocabulary
+// module uses for a string-valued term.
+//
+// ── UPPERCASE IS INCLUDED, AND THAT WAS A GAP RATHER THAN A CHOICE ─────────
+// The pattern was `[a-z_][a-z0-9_]*` until 2026-09-17, so it silently skipped
+// every value that was not all-lowercase. Measured across the four apps, that
+// was eight values: b/issues' priority codes `P0`–`P4` and b/billing's Swiss
+// reference types `QRR`, `SCOR`, `NON`.
+//
+// The reference types are the ones that matter: they are the spec's own
+// spellings, they appear in the payment-part rules, and a topic restating them
+// would go stale the day EUR stopped permitting QRR — which is a real dated
+// change (IG v2.4, 14 November 2026). So the one vocabulary most likely to move
+// was the one this guard could not see.
+//
+// Found by injecting "Use QRR, SCOR or NON." into a billing topic and watching
+// the suite stay green — not by reading the regex.
+//
+// The case-insensitive comparison happens downstream: the topic body is
+// lowercased before matching, so the extracted values are lowercased with it.
+var optionValue = regexp.MustCompile(`\bvalue:\s*'([A-Za-z_][A-Za-z0-9_]*)'`)
 
 // optionLabel is the FALLBACK, and it exists because of one real vocabulary.
 //
@@ -214,7 +237,11 @@ func appVocabularies() map[string][]string {
 			block := src[loc[1]:end]
 			var values []string
 			for _, m := range optionValue.FindAllStringSubmatch(block, -1) {
-				values = append(values, m[1])
+				// Lowercased because the topic body is lowercased before
+				// matching. Without this, the uppercase values the widened
+				// pattern now captures would never match anything — a guard
+				// that looked stricter and checked less.
+				values = append(values, strings.ToLower(m[1]))
 			}
 			// A numeric-valued vocabulary yields nothing above; its restatable
 			// form is its labels. See optionLabel.
@@ -262,6 +289,71 @@ func TestVocabularySourcesAreReal(t *testing.T) {
 	}
 }
 
+// shortestCountedValue is the length below which a vocabulary value cannot be
+// told from ordinary prose, so this guard does not look for it.
+//
+// ---------------------------------------------------------------------------
+// WHY THIS EXISTS, MEASURED 2026-09-17
+// ---------------------------------------------------------------------------
+// The match below used to be a bare `strings.Contains`, which was latent for as
+// long as every vocabulary value happened to be a long word. b/billing's
+// DOCUMENT_LANGUAGES broke that: its values are ISO 639-1 codes — `fr`, `de`,
+// `it`, `en` — and as substrings those appear in "under", "with", "when",
+// "limits", "write", "entry" and most other English.
+//
+// The result was 30-odd findings in `topics/platform/*`, none of them a
+// restatement of anything, on topics written before this app existed. That is
+// worse than no guard: an un-passable check gets made green by deleting a line
+// from `vocabularySources`, which is exactly the coverage loss finding #22 is
+// about.
+//
+// It is also finding #9's shape — that version of this guard banned the CORRECT
+// spelling of a limit while passing a stale one, because it was matching the
+// wrong thing rather than matching too little.
+//
+// TWO CHANGES, and they are separate:
+//
+//  1. `matchesAsWord` instead of `strings.Contains`. `sent` should not match
+//     "absent" and `done` should not match "abandoned". This alone is a strict
+//     improvement to every vocabulary.
+//  2. This floor. Even with word boundaries, `it` IS an English word and `en`
+//     and `de` are French and German ones that appear in this repo's prose. A
+//     value that short carries no signal.
+//
+// COVERAGE COST, counted rather than assumed: of the 182 values and labels the
+// four apps declare, exactly five are shorter than three characters — `in`
+// (a sales stage's label fragment) and billing's four language codes. Every
+// status, stage, tier, state and recognition value is longer. So the floor gives
+// up five tokens that could never have been checked and keeps 177 that can.
+const shortestCountedValue = 3
+
+// matchesAsWord reports whether `v` appears in `line` as a whole word.
+//
+// Word characters are letters, digits and underscore, because vocabulary values
+// look like `in_progress` and `known_recurring` — treating `_` as a boundary
+// would make `progress` match `in_progress` and report a hit nobody wrote.
+func matchesAsWord(line, v string) bool {
+	if len(v) < shortestCountedValue {
+		return false
+	}
+	isWord := func(b byte) bool {
+		return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
+	}
+	for i := 0; i+len(v) <= len(line); i++ {
+		if line[i:i+len(v)] != v {
+			continue
+		}
+		if i > 0 && isWord(line[i-1]) {
+			continue
+		}
+		if i+len(v) < len(line) && isWord(line[i+len(v)]) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 func TestTopicsDoNotHardcodeDynamicValues(t *testing.T) {
 	for _, section := range Sections() {
 		t.Run(section, func(t *testing.T) {
@@ -298,7 +390,7 @@ func TestTopicsDoNotHardcodeDynamicValues(t *testing.T) {
 					for i, line := range lines {
 						var hits []string
 						for _, v := range vocab {
-							if strings.Contains(line, v) {
+							if matchesAsWord(line, v) {
 								hits = append(hits, v)
 							}
 						}

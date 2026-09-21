@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
-# capture-baseline.sh — snapshot row counts + id ranges for the platform,
-# issues and sales schemas, into a file verify.sh can diff against later.
+# capture-baseline.sh — snapshot row counts + id ranges for every TRACKED
+# SCHEMA, into a file verify.sh can diff against later.
+#
+# **WHICH schemas is `TRACKED_SCHEMAS` in lib-db.sh, not this comment.** This
+# line used to name "platform, issues and sales" and was stale from the day
+# b/books shipped — and so was the list itself, which had no `books` entry at
+# all until 2026-09-16. A prose copy of a list one file over is the shape of
+# CLAUDE.md finding #23, and this is that comment corrected rather than a second
+# copy kept in step by hand.
 #
 # Usage:
 #   ./capture-baseline.sh <connection-url> <output-file>
@@ -10,9 +17,21 @@
 #     "postgresql://blackcode:blackcode_dev@localhost:5434/blackcode_issues" \
 #     baseline.local-example.txt
 #
-# Refuses to write a baseline if it finds zero tables in those three schemas —
+# Refuses to write a baseline if it finds zero tables in the tracked schemas —
 # an empty baseline would make verify.sh compare nothing against nothing,
 # forever, and report green. See CLAUDE.md finding #16.
+#
+# ── THE COMMITTED baseline.txt IS OWED A RECAPTURE ─────────────────────────
+# `baseline.txt` was captured from PRODUCTION on 2026-08-11, before b/books
+# existed and long before b/billing. It therefore contains no `books.*` or
+# `billing.*` rows, and verify.sh cannot report drift in a table the baseline
+# never mentioned. Recapturing needs production access and is a human step:
+#
+#   ./capture-baseline.sh "$PROD_URL" baseline.txt
+#
+# Until then, treat a clean verify.sh as covering platform, issues and sales
+# only. That is the most reassuring wrong answer this directory can give, and it
+# is the same failure shape as `blob-drift`'s `unreconciled_count`.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
