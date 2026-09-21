@@ -1,11 +1,25 @@
-// The minimal test UI's frame: a row of links, nothing else. See lib/web.ts.
+// The workspace frame: membership decided here, then the shell.
 //
-// No database read here. Membership is decided by every route the pages call
-// (a non-member gets their 404), so this layout cannot let a page show data the
-// API would refuse — it has none to show.
-import Link from 'next/link'
-import { redirect } from 'next/navigation'
+// A slug in the URL is user input. One this person is not a member of is a
+// **404**, never a 403 — a 403 would confirm the workspace exists, which is the
+// fact that must not leak. The API answers the same question the same way
+// (`getWorkspaceForUser` is null for both), so the two surfaces agree.
+//
+// ── THIS APP'S OWN MEMBERSHIPS, NEVER THE PLATFORM'S ────────────────────────
+// `listWorkspacesForUser` reads `billing.workspaces`. apps/sales' version of
+// this file read the shared `platform.workspaces` for four phases after its
+// workspaces moved, and 404'd every sales-only account while every API route
+// returned 200. `lib/app-isolation.test.ts` fails the build if a file here
+// imports a platform tenancy reader.
+//
+// The switcher's list comes from the SAME query as the 404, so the sidebar
+// paints with the right names on first render and can never disagree with it.
+
+import { notFound, redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
+import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { APP_NAME } from '@/lib/app'
+import { BillingShell } from '@/components/shell/billing-shell'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,46 +30,24 @@ export default async function WorkspaceLayout({
   children: React.ReactNode
   params: Promise<{ ws: string }>
 }) {
+  const { ws } = await params
   const user = await getValidatedSessionUser()
   if (!user) redirect('/login')
-  const { ws } = await params
-  const base = `/dashboard/${encodeURIComponent(ws)}`
-  const links: Array<[string, string]> = [
-    ['overview', base],
-    ['invoices', `${base}/invoices`],
-    ['companies', `${base}/companies`],
-    ['recurrences', `${base}/recurrences`],
-    ['history', `${base}/history`],
-  ]
+
+  const memberships = await listWorkspacesForUser(user.id)
+  if (!memberships.some((w) => w.slug === ws)) notFound()
+
+  // Only what the client needs — no `owner_id`, no timestamps across the wire.
+  const workspaces = memberships.map((w) => ({
+    id: w.id,
+    name: w.name,
+    slug: w.slug,
+    member_role: w.member_role,
+  }))
+
   return (
-    <div className="min-ui" style={{ fontFamily: 'system-ui' }}>
-      {/* Just enough to undo Tailwind's reset so a person can see what is a
-          button and what is a field. Scoped to this frame; the real design is
-          the frontend tickets'. */}
-      <style>{`
-        .min-ui h1 { font-size: 22px; font-weight: 700; margin: 8px 0 12px }
-        .min-ui h2 { font-size: 16px; font-weight: 600; margin: 20px 0 6px }
-        .min-ui button { border: 1px solid #888; border-radius: 3px; padding: 2px 10px; background: #f3f3f3; margin: 4px 4px 4px 0; cursor: pointer }
-        .min-ui button:disabled { opacity: .5 }
-        .min-ui input, .min-ui select, .min-ui textarea { border: 1px solid #aaa; border-radius: 2px }
-        .min-ui fieldset { border: 1px solid #ddd; padding: 6px 12px; max-width: 720px }
-        .min-ui legend { font-weight: 600; padding: 0 4px }
-        .min-ui a { color: #0645ad; text-decoration: underline }
-        .min-ui th { background: #f6f6f6 }
-      `}</style>
-      <nav data-testid="nav" style={{ padding: '8px 24px', borderBottom: '1px solid #ccc', fontSize: 14 }}>
-        <strong data-testid="nav-workspace">{ws}</strong>
-        {links.map(([name, href]) => (
-          <Link key={name} href={href} data-testid={`nav-${name}`} style={{ marginLeft: 16 }}>
-            {name}
-          </Link>
-        ))}
-        <Link href="/dashboard" style={{ marginLeft: 16 }}>
-          workspaces
-        </Link>
-        <span style={{ float: 'right', color: '#666' }}>{user.email}</span>
-      </nav>
+    <BillingShell ws={ws} workspaces={workspaces} appName={APP_NAME}>
       {children}
-    </div>
+    </BillingShell>
   )
 }

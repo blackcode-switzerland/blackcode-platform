@@ -5,6 +5,26 @@ This file is an **agent** surface. It is merged into `bk changelog` and
 entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
+## 2026-09-21 — The real web UI replaces the test scaffold
+
+Every page is redesigned to the platform's standard: a left sidebar with the
+workspace switcher, a company switcher in the header (`?company=<slug>`), a
+landing page, sign in / sign up / forgot password, account settings (profile,
+password, API tokens) and workspace settings (members, invitations). Same
+functionality as before. A Google sign-in the whitelist refuses now lands on
+a `/blocked` page instead of a 404. **No route, command or response changed**, so nothing
+changes for an agent or an integration.
+
+**For browser tests that drove the scaffold:** the `data-testid`s were kept on
+the equivalent elements, except these:
+
+- `filter-company` is gone — use the header's `company-switcher`.
+- `input-lines` (one textarea) is now a line editor: `line-row-<n>`,
+  `line-description-<n>`, … saved with `edit-lines`.
+- `send` opens a dialog; its submit is `send-submit`.
+- a series' `generate` opens a dialog holding `input-period`, `input-message`
+  and the submit.
+
 ## 2026-09-18 — A minimal web UI, for testing in a browser
 
 Bare pages under `/dashboard/<workspace>/`: overview, companies, invoices (with

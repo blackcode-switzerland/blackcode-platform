@@ -3,52 +3,69 @@
 This app only. Platform-wide theme tokens, primitives and data-fetching
 conventions are in the root `docs/frontend.md`.
 
-## Phase 0 ships four pages and no design
+## The web UI (2026-09-21)
+
+The bare test scaffold of 2026-09-18 is gone (`components/min/**`, `lib/web.ts`).
+The app now has the same skeleton as `apps/sales` — fixed left sidebar with the
+workspace switcher, a slim sticky `PageHeader` per page, a drawer below `lg`,
+Google Sans, Tailwind v4 tokens, `next-themes` (dark default), `sonner`,
+`useConfirm()` — and its **own skin**: violet primary (`#7c5cff` dark /
+`#6d4aff` light), cool violet-tinted neutrals, radius `0.625rem`, money and
+numbers in tabular mono. The measured contrast ratios are in
+`app/globals.css`'s header; dark mode's white-on-primary is 4.35:1, short of AA
+body text, and is a known open point.
 
 | Page | What it is |
 |---|---|
-| `/` | the public landing page. Every name on it reads `APP_NAME` |
-| `/login` | the sign-in form, copied from the scaffold |
-| `/dashboard` | the members page, and the empty state that matters |
+| `/` | landing page (signed-out); signed-in goes to `/dashboard` |
+| `/login` | sign in / sign up tabs, forgot-password flow, Google if configured |
 | `/cli/authorize` | the browser half of `bk login` |
+| `/dashboard` | chooser: the active workspace, a list, or the no-workspace screen with the create form (`?new=1` forces it) |
+| `/dashboard/[ws]` | overview: outstanding / overdue / drafts / paid (one line per currency, never summed), to handle, recent invoices, recent changes |
+| `/dashboard/[ws]/invoices` · `/[ref]` | list with filters and create; detail with every lifecycle action, lines, payment part, document preview, recurrence, issuer copy, history |
+| `/dashboard/[ws]/recurrences` · `/[seq]` | series list (due / status); series detail with generate, pause/resume, total |
+| `/dashboard/[ws]/companies` · `/[slug]` | issuing companies: list, create, edit, retire |
+| `/dashboard/[ws]/history` · `/[seq]` | the imported archive, read-only, with the JSON import |
+| `/dashboard/[ws]/settings` | the workspace: members, invitations (send / revoke; accepting is not built yet) |
+| `/dashboard/settings/*` | the account: profile, password, API tokens |
 
-**Inline styles, no shell, no theme, no toast library, no query client.** That is
-a decision, not a shortcut: phase 1 brings the real shell, the company switcher
-and five screens, and a design shipped here is a design phase 1 has to undo.
-`package.json` therefore does not carry `@tanstack/react-query`, `sonner`,
-`lucide-react`, `clsx` or `next-themes` yet.
+**The company switcher** in the header writes `?company=<slug>`; overview,
+invoices, recurrences and history pass it to their route. No param = all
+companies.
 
-`app/globals.css` keeps the scaffold's `@source` line **exactly as it is**.
-`transpilePackages` in `next.config.js` makes the shared UI package's TypeScript
-compile; `@source` makes its CSS exist. Neither implies the other and only one
-fails loudly — 151 classes were missing in production for months (D-30).
+### Where things live
 
-## The empty state is the page that matters most
+- `lib/client.ts` — **the only `fetch`**. Errors are `WebError` carrying the
+  server's `error`, `code` and `suggestion`; every POST gets a fresh
+  `Idempotency-Key`, as `bk` does.
+- `lib/queries.ts` / `lib/query-keys.ts` — one TanStack Query hook per GET.
+- `lib/mutations.ts` — one hook per write. `mutateAsync` resolves only after the
+  affected queries have refetched, so a success toast never sits beside the old
+  values (the bug the test scaffold's Playwright walk caught on 2026-09-18).
+- `lib/ui-vocab.ts` — status → label + tone. Colours come from tokens only.
+- `components/shell/**` — `BillingShell`, `PageHeader`/`PageBody`, the two
+  switchers. `components/ui-kit/**` — sections, tiles, `DataTable` (a table on
+  `md+`, cards below), states, `Money`, `DateText`, form fields.
+- one folder per screen under `components/`.
 
-A new tenant's first hour is entirely empty states, and `/dashboard` has two:
+### The rules the screens keep
 
-- **No workspace at all.** The normal state for somebody arriving on a session
-  cookie from another blackcode app. It explains why, offers
-  `CreateWorkspaceForm`, and says what a workspace is — a tenant, not an issuing
-  entity. It also says that an invitation cannot be redeemed yet, because a
-  person who sends one and hears nothing deserves to have been told.
-- **No pending invitations.** Names the command and says the response carries
-  the link, because this app sends no invitation email in phase 0.
+- **Client components calling the routes `bk` calls.** No server actions. The
+  only database reads in pages are the membership checks in
+  `app/dashboard/page.tsx`, `app/dashboard/[ws]/layout.tsx` and
+  `app/dashboard/settings/layout.tsx` (see the next section).
+- **Nothing the server derives is computed in the browser** — totals, the
+  reference, the account, the next period, the problems list. `Money` prints
+  the API's string; its only change is display grouping (`15’209.80`).
+- **Errors show the server's sentence and suggestion**; success is a toast
+  after the refetch.
+- **`data-testid`s from the test scaffold are kept** on the equivalent
+  elements (`input-<field>`, `invoice-row-<number>`, `field-<name>`, `error`,
+  `done`, …); the few that changed are listed in the 2026-09-21 changelog entry.
+- **No rendered string contains the literal product name** — `APP_NAME`,
+  passed from the server where a client component needs it
+  (`lib/no-brand-literal.test.ts`).
 
-## `CreateWorkspaceForm` is the only write
-
-It posts to `POST /api/workspaces` — the same route `bk billing workspace
-create` calls. **Not a server action**, deliberately: a server action here would
-be a capability the CLI could not reach and the parity guard could not see,
-which is CLAUDE.md's "start anywhere, finish in sync" read backwards.
-
-It renders the server's `suggestion` beside the message, which is the same
-recovery contract the CLI prints as a `hint:` line.
-
-`CliAuthorizeForm` is the other client component that writes, and it is an
-ACCOUNT write rather than a billing one. When phase 1 adds `lib/mutations.ts`,
-it must not move there: an invoicing permission that could stop somebody signing
-a terminal in would be a preference that had quietly become a permission.
 
 ## A page is not a route, and this app already has the risky shape
 
@@ -65,18 +82,6 @@ standing between this page and another app's tenancy. It was copied from
 `apps/sales` because **the scaffold does not carry it**, and it was watched
 failing on both the named-import and namespace-import spellings before being
 kept.
-
-## What phase 1 brings
-
-The shell with the company switcher in the top bar, `lib/client.ts` as the only
-`fetch`, `lib/mutations.ts` with one hook per write, `lib/query-keys.ts` with a
-tested key helper, and five screens. Decision D-B1 is full write parity: every
-field of an invoice editable in the browser and the same field editable by `bk`.
-
-This app does **not** copy `apps/books/lib/read-only.test.ts`' read-only
-assertion — that is a different product decision for a different app. It copies
-its module-graph half, so a stray `fetch` outside `lib/client.ts` fails the
-build.
 
 ## What phase 3 put on the wire (backend landed 2026-09-17)
 
@@ -144,53 +149,3 @@ For #92 — the recurrence card, the `↻ n/N` badge, "Make recurring…".
   compute one, and render `409 already_generated` as "already exists: <number>",
   linking to it.
 - `GET …/audit?subject=recurrence:<seq>` is the card's history.
-
-## The minimal test UI (2026-09-18) — scaffolding, to be replaced
-
-A bare, deliberately unstyled web surface so the backend can be driven in a
-browser with Playwright before the real screens exist. **It is not the design
-and not a starting point for one**; #79 onward replace it.
-
-| Page | Routes it calls |
-|---|---|
-| `/dashboard` (existing) — now links each workspace | — (server component, as before) |
-| `/dashboard/[ws]` overview | `GET …/overview` |
-| `/dashboard/[ws]/companies` list + create | `GET/POST …/companies` |
-| `/dashboard/[ws]/invoices` list, filter, create | `GET/POST …/invoices`, `GET …/companies` |
-| `/dashboard/[ws]/invoices/[ref]` detail and every action | `GET/PATCH …/invoices/{ref}`, `…/pdf`, `…/qr`, `…/send`, `…/mark-sent`, `…/paid`, `…/void`, `GET …/audit?subject=invoice:` |
-| `/dashboard/[ws]/recurrences` list (`due`), create | `GET/POST …/recurrences` |
-| `/dashboard/[ws]/recurrences/[seq]` detail, generate, pause/resume, total | `GET/PATCH …/recurrences/{seq}`, `POST …/generate`, `GET …/audit?subject=recurrence:` |
-| `/dashboard/[ws]/history` list + import (paste JSON) | `GET/POST …/history` |
-
-**The rules it keeps, which the real screens should keep too:**
-
-- **Client components calling the same routes `bk` calls.** No server actions,
-  no database reads in a page — so nothing here is a capability the CLI lacks,
-  and a route test covers what the page does. One `fetch`, in `lib/web.ts`.
-- **Every POST sends a fresh `Idempotency-Key`**, as `bk` does.
-- **Errors show the server's `error` and `suggestion`**, with the code. The
-  envelope is `{ error, code, suggestion }`; the phase-0 create-workspace form
-  read `message`, which never exists, and showed only the status — fixed here.
-- **A success line appears only after the data has reloaded.** The first
-  version announced "marked sent" beside the old status; a Playwright walk
-  caught it on its second run. `useLoad().reload()` returns a promise for that.
-- **Nothing is computed in the browser that the server derives**: totals, the
-  reference, the account, the next period, the problems list are all read from
-  the response. `generate` sends the period as typed, never a default.
-
-**For tests:** every element a script needs has a `data-testid`
-(`input-<field>`, `invoice-row-<number>`, `field-<name>`, `error`, `done`, …).
-That attribute is the contract, not the markup. `lib/web.ts`' header says the
-same, so a later refactor keeps them.
-
-**What it does not do:** i18n, the company switcher, the payment-part preview,
-empty states beyond one line, any styling beyond undoing Tailwind's reset (a
-`<style>` block scoped to the workspace layout).
-
-**Verified 2026-09-18** with a Playwright script (Chromium, outside the repo):
-register a throwaway account, sign in through `/login`, and walk the empty
-overview → company → a refused em-dash message → a draft (total, no problems,
-QR payload, PDF with the session) → mark sent (issuer copied) → paid → a series
-refused without a count → created → generated → the same period refused →
-pause/resume → a history import → the overview. 21 steps, five consecutive
-green runs; watched failing with error lines hidden.

@@ -285,6 +285,14 @@ their redirect URIs, not by separate clients:
     redirect  https://issues.blackcode.ch/api/auth/callback/google
               https://sales.blackcode.ch/api/auth/callback/google
 
+**b/billing (2026-09-21):** its login page and `lib/auth.ts` already carry the
+Google button and provider, shown only when both variables are set. To turn it
+on, add `https://billing.blackcode.ch` (origin) and
+`https://billing.blackcode.ch/api/auth/callback/google` (redirect) to the same
+client — plus `http://localhost:3300` and its callback for local use — then set
+the two variables on `bc-billing` and in `apps/billing/.env.local`. A refused
+email lands on `/blocked`, which billing has since 2026-09-21.
+
 > **Which project a client belongs to is the number in front of its id**, and
 > nothing else — not its name, not the folder you downloaded it into. A client id
 > beginning `740837313186-` is on `blackcode-platform`; `431515708156-` is the

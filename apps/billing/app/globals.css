@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════
@@ -31,41 +32,218 @@
  */
 @source "../../../packages/platform-ui/src";
 
+/* Class-based dark mode (next-themes flips a `dark` class on <html>). */
+@custom-variant dark (&:is(.dark *));
+
 /*
- * The scaffold defines the smallest token set that makes the shared UI
- * primitives render: they read `--background`, `--foreground` and `--primary`.
- * A real app replaces this block with its own palette — see
- * `apps/issues/app/globals.css` for the full one, and `docs/frontend.md` for
- * what each token is for.
+ * ── BILLING'S VISUAL IDENTITY ───────────────────────────────────────────────
  *
- * `--primary: #007bd3` is the platform's one brand colour and is the one value
- * here a new app should think twice before changing.
+ * Same skeleton as `apps/sales` — fixed left sidebar, slim sticky header,
+ * Google Sans, Tailwind v4 tokens, `@blackcode/platform-ui` primitives.
+ * **Different skin**, so the four apps cannot be mistaken for one another:
+ *
+ *   primary    violet  #7c5cff dark / #6d4aff light
+ *                        (issues #007bd3 blue, sales #10a37f emerald,
+ *                         books #e8b84b gold)
+ *   neutrals   COOL, OKLCH hue 285 (a faint violet tint), chroma ≤ 0.012
+ *                        (issues cool blue-grey 264, sales warm 85)
+ *   radius     0.625rem  (issues 0.5rem, sales 0.75rem)
+ *   density    sales'   — h-12 header, roomy rows
+ *   numbers    money, references and invoice numbers are `font-mono
+ *              tabular-nums`, so columns of amounts line up
+ *
+ * ── THE CONTRAST, MEASURED (WCAG 2.x relative luminance, 2026-09-21) ────────
+ *   white on #7c5cff = 4.35:1  — the plan's violet. Passes 3:1 (large text,
+ *                                UI components), SHORT of 4.5:1 for body text.
+ *                                Kept for dark mode as decided; #7c5cff on the
+ *                                dark background is 4.44:1.
+ *   white on #6d4aff = 5.15:1  — light mode's primary, deepened so a filled
+ *                                button's label passes AA. 5.04:1 on the light
+ *                                background as link text.
+ * Recompute both if either hex changes — hand arithmetic is not evidence
+ * (lib/app.ts' EMAIL_ACCENT note says why).
+ *
+ * `:root` / `.dark` define VALUES; `@theme inline` maps utilities onto them.
+ * **Never hardcode a colour in a component.** Invoice and series status tones
+ * are vocabulary, not tokens: they live in `lib/ui-vocab.ts`, built from the
+ * `--success` / `--warning` / `--info` / `--destructive` roles below.
  */
+
 :root {
-  --background: #ffffff;
-  --foreground: #0a0a0a;
-  --primary: #007bd3;
-  --primary-foreground: #ffffff;
-  --border: #e5e5e5;
+  --background: oklch(0.992 0.003 285);
+  --foreground: oklch(0.17 0.01 285);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.17 0.01 285);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.17 0.01 285);
+
+  --primary: #6d4aff;
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.962 0.006 285);
+  --secondary-foreground: oklch(0.22 0.01 285);
+  --muted: oklch(0.962 0.006 285);
+  --muted-foreground: oklch(0.52 0.012 285);
+  --accent: oklch(0.948 0.008 285);
+  --accent-foreground: oklch(0.22 0.01 285);
+
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+
+  /* Status roles — text on the background AND on a /10 tint of themselves.
+     Measured ≥ 4.7:1 against the light background. */
+  --success: oklch(0.5 0.13 155);
+  --warning: oklch(0.56 0.14 60);
+  --info: oklch(0.52 0.16 255);
+
+  --border: oklch(0.915 0.006 285);
+  --input: oklch(0.915 0.006 285);
+  --ring: #6d4aff;
+
+  /* Chart series roles `@blackcode/platform-ui/charts` reads; undefined ones
+     silently drop a stroke, so they are defined even before a chart exists. */
+  --chart-series-created: var(--primary);
+  --chart-series-completed: #14b8a6;
+  --chart-series-activity: #f0b66b;
+  --chart-series-ideal: #a1a1aa;
+
+  /* violet → teal → amber → sky → rose */
+  --chart-1: #6d4aff;
+  --chart-2: #14b8a6;
+  --chart-3: #f0b66b;
+  --chart-4: #0ea5e9;
+  --chart-5: #e11d48;
+
+  --sidebar: oklch(0.972 0.006 285);
+  --sidebar-foreground: oklch(0.17 0.01 285);
+  --sidebar-primary: #6d4aff;
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.938 0.01 285);
+  --sidebar-accent-foreground: oklch(0.17 0.01 285);
+  --sidebar-border: oklch(0.915 0.006 285);
+  --sidebar-ring: #6d4aff;
+
+  --radius: 0.625rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #fafafa;
-    --border: #262626;
-  }
+.dark {
+  /* Cool dark: hue 285 at low chroma — an ink with a violet cast, not the
+     neutral black issues uses nor sales' warm charcoal. */
+  --background: oklch(0.165 0.008 285);
+  --foreground: oklch(0.97 0.004 285);
+  --card: oklch(0.205 0.01 285);
+  --card-foreground: oklch(0.97 0.004 285);
+  --popover: oklch(0.215 0.01 285);
+  --popover-foreground: oklch(0.97 0.004 285);
+
+  --primary: #7c5cff;
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.255 0.01 285);
+  --secondary-foreground: oklch(0.97 0.004 285);
+  --muted: oklch(0.255 0.01 285);
+  --muted-foreground: oklch(0.71 0.012 285);
+  --accent: oklch(0.265 0.012 285);
+  --accent-foreground: oklch(0.97 0.004 285);
+
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+
+  /* Lifted for the dark surface; ≥ 8:1 on the background. */
+  --success: oklch(0.78 0.15 155);
+  --warning: oklch(0.82 0.14 80);
+  --info: oklch(0.76 0.13 250);
+
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 13%);
+  --ring: #7c5cff;
+
+  --chart-1: #9b85ff;
+  --chart-2: #2dd4bf;
+  --chart-3: #f3c583;
+  --chart-4: #38bdf8;
+  --chart-5: #fb7185;
+
+  --sidebar: oklch(0.145 0.008 285);
+  --sidebar-foreground: oklch(0.97 0.004 285);
+  --sidebar-primary: #9b85ff;
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.24 0.012 285);
+  --sidebar-accent-foreground: oklch(0.97 0.004 285);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: #7c5cff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
   --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: "Google Sans", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  button, [role="button"], a, select, label[for], [tabindex]:not([tabindex="-1"]) {
+    cursor: pointer;
+  }
+  button:disabled, [disabled] {
+    cursor: not-allowed;
+  }
+}
+
+/* Toast bridge — sonner reads these via inline style on the <Toaster>. */
+:root {
+  --toast-bg: var(--popover);
+  --toast-text: var(--popover-foreground);
+  --toast-border: var(--border);
 }
