@@ -36,6 +36,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireSessionResolver, type AppContext } from '../app-context'
+import { blockedRefusal } from '../account-footprint'
 import { Errors } from '../errors'
 import { createApiHandler } from '../handler'
 
@@ -71,11 +72,10 @@ export function footprintRoute(app: AppContext) {
 
     const before = await app.footprint.read(user.id)
     if (before.blocked_by.length > 0) {
-      throw Errors.conflict(
-        'owner_with_members',
-        `You must transfer ownership of these ${app.appSlug} workspaces before deleting your data here`,
-        before.blocked_by
-      )
+      // Members AND retention holds (see `BlockedWorkspace`): one wording for
+      // this route and the account close, so the two cannot disagree about why.
+      const { code, message } = blockedRefusal(before.blocked_by, `your ${app.appSlug} data`)
+      throw Errors.conflict(code, message, before.blocked_by)
     }
 
     const remaining = await app.footprint.purge(user.id)

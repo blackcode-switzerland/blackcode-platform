@@ -10,13 +10,15 @@
 // you are and the next `/dashboard` opens there. Navigating without it would
 // make the choice last one page load.
 //
-// "Create workspace" goes to `/dashboard?new=1`, where the create form lives.
+// "Create workspace" opens `WorkspaceCreateModal` in place (phase 2) rather than
+// navigating away; `/dashboard?new=1` still renders the same form for a link.
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Building2, Check, ChevronsUpDown, Loader2, Plus, Settings } from 'lucide-react'
 import { useSetActiveWorkspace, toastError } from '@/lib/mutations'
+import { WorkspaceCreateModal } from '@/components/workspace-create-modal'
 import { cn } from '@/lib/utils'
 
 export interface SwitcherWorkspace {
@@ -48,6 +50,7 @@ export function WorkspaceSwitcher({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const setActive = useSetActiveWorkspace()
 
@@ -162,15 +165,18 @@ export function WorkspaceSwitcher({
             </>
           )}
           <div className="border-t border-sidebar-border py-1">
-            <Link
-              href="/dashboard?new=1"
-              onClick={() => setOpen(false)}
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                setCreating(true)
+              }}
               data-testid="workspace-create"
-              className="flex w-full items-center gap-2 px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               <Plus size={15} className="shrink-0" />
               Create workspace
-            </Link>
+            </button>
             {active && (
               <Link
                 href={`/dashboard/${encodeURIComponent(active.slug)}/settings`}
@@ -184,6 +190,7 @@ export function WorkspaceSwitcher({
           </div>
         </div>
       )}
+      <WorkspaceCreateModal open={creating} onClose={() => setCreating(false)} />
     </div>
   )
 }

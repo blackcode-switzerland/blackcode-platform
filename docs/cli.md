@@ -491,6 +491,14 @@ full; `--reference` prints only the baseline reference.
 | `bk issues workspace transfer [slug\|id] --to <user>` | `POST /api/workspaces/:ref/transfer` | Owner only; you become a regular member. |
 | `bk issues workspace delete <slug\|id> --confirm <slug\|id>` | `DELETE /api/workspaces/:ref` | Owner only, irreversible. `--confirm` must repeat the argument and is required even with `--yes` / `BK_NO_PROMPT=1`. Never defaults to the active workspace. Clears the active selection if it deleted it. |
 
+The same verbs exist under every app group that SERVES them (`appverbs.Config`,
+per app). Two server-side narrowings worth knowing, both answered by the route
+rather than by a forked command: `bk sales workspace edit` and `bk billing workspace edit`
+refuse `--slug` (400 `slug_immutable`), and `bk billing workspace delete` works
+only for a workspace nothing was ever issued from — anything else is 409
+`workspace_retained` (ten-year retention). `bk billing member remove <own id>` is
+leaving; there is no `member leave` there.
+
 ### Apps — the address book (not workspace-scoped)
 
 **Per-app access was removed on 2026-08-10** (multiAppFinalRefactor Phase 5).

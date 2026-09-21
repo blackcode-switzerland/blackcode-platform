@@ -81,6 +81,7 @@ export const keys = {
   workspaceShow: (ws: string) => [...root(ws), 'show'] as const,
   members: (ws: string) => [...root(ws), 'members'] as const,
   invitations: (ws: string) => [...root(ws), 'invitations'] as const,
+  inviteCandidates: (ws: string) => [...root(ws), 'invite-candidates'] as const,
 
   // Account-level — the same answer in every workspace.
   me: () => ['me'] as const,
@@ -88,4 +89,5 @@ export const keys = {
   meta: () => ['meta'] as const,
   workspaces: () => ['workspaces'] as const,
   footprint: () => ['footprint'] as const,
+  pendingInvitations: () => ['pending-invitations'] as const,
 }

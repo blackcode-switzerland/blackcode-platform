@@ -28,14 +28,23 @@
 // exactly one app, and "is this person a member?" answers "may they use this
 // app?" completely.
 
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import type {
   WorkspaceMemberRef,
   WorkspaceMembershipRef,
   WorkspaceRef,
 } from '@blackcode/platform-api'
 import { getDb } from '../client'
-import { billingWorkspaceMembers, billingWorkspaces, users } from '../schema'
+import {
+  billingAudit,
+  billingCompany,
+  billingHistory,
+  billingInvoice,
+  billingRecurrence,
+  billingWorkspaceMembers,
+  billingWorkspaces,
+  users,
+} from '../schema'
 
 /**
  * The five columns shared code reads. Projected explicitly, never `SELECT *`.
@@ -164,6 +173,10 @@ export interface EnsureWorkspaceResult {
  * ---------------------------------------------------------------------------
  * WHY IT IS SAFE TO CALL ON EVERY SIGN-IN
  * ---------------------------------------------------------------------------
+ * Callers: the sign-in callback (`lib/auth.ts`), `POST /api/auth/register`,
+ * and — since phase 2 — `app/dashboard/page.tsx`, for a session that arrived
+ * from another blackcode app without taking this app's sign-in path.
+ *
  * It returns the existing workspace when there is one, so it is idempotent
  * rather than "call it only for new accounts". That is not a convenience: the
  * callers cannot both know. The Google provider learns `was_new` from
@@ -291,19 +304,21 @@ export class WorkspaceRefused extends Error {
  * visitor takes neither path. Their only way out was to sign out and back in.
  *
  * `docs/billing-app-plan/phase-0-register-the-app.md` lists three candidate
- * answers and says to pick one here. **b/billing picks the explicit route: this
- * function, reachable from a button and from `bk`.**
+ * answers and says to pick one here. Phase 0 picked the explicit route — this
+ * function, reachable from a button and from `bk` — and rejected bootstrapping
+ * on first authenticated request, arguing that "a tenant appearing because
+ * somebody loaded a page is a tenant nobody decided to create".
  *
- * The one that was rejected is bootstrapping on first authenticated request. It
- * is the cheapest and it is wrong for this app specifically: it would mean any
- * person holding a blackcode account for any reason silently acquires tenancy in
- * the app that sends real payment slips, without ever having asked for it. A
- * workspace here is a tenant, and a tenant appearing because somebody loaded a
- * page is a tenant nobody decided to create.
+ * **Phase 2 (2026-09-21) reversed half of that, deliberately.** In production a
+ * person signed in on another blackcode app who opened this app's dashboard got
+ * a "No workspace yet" dead end and a forced step. Opening THIS app's
+ * `/dashboard` is as much a decision to use it as signing in at its `/login`,
+ * so `app/dashboard/page.tsx` now runs `ensureWorkspaceForUser` — the sign-in
+ * bootstrap, not a second one — for a validated user with no workspace, and the
+ * reasoning is written there. Nothing is minted by `/api/*` or by another app.
  *
- * Keeping the SIGN-IN bootstrap and adding this is not a contradiction: signing
- * in at this app's own login IS asking to use it. What this closes is the dead
- * end, and it closes it with an act rather than a side effect.
+ * This function remains the EXPLICIT act: a named workspace, a second tenant,
+ * `bk billing workspace create`, and the `?new=1` screen.
  *
  * ===========================================================================
  * WHY THERE IS NO ONE-WORKSPACE-PER-PERSON CAP, UNLIKE b/books
@@ -312,9 +327,8 @@ export class WorkspaceRefused extends Error {
  * its invitation-accept flow is not open and a second workspace would be a room
  * only its creator can enter.
  *
- * The same invitation gap exists here — `Invites` is on in the CLI and
- * `InviteAccept` is off, so an invitation can be sent and not yet accepted — and
- * the cap is still wrong for this app, because a second workspace is a genuinely
+ * The same invitation gap existed here until phase 2 (an invitation could be
+ * sent and not accepted) — and the cap was wrong for this app even then, because a second workspace is a genuinely
  * separate TENANT rather than a second entity. A second company inside one
  * tenant is `bk billing company create`, which is the `--company` scope
  * dimension in phase 1 and is where "one more entity to bill from" belongs.
@@ -322,10 +336,10 @@ export class WorkspaceRefused extends Error {
  * workspaces owned by one person — a full one and a near-empty `demo-tenant` —
  * to prove isolation and force every empty state, which a cap would forbid.
  *
- * **The standing obligation:** when the invitation-accept flow lands, a second
- * workspace becomes shareable and nothing here needs to change. Until then, a
- * workspace somebody creates is theirs alone, and that is stated on the screen
- * that creates it rather than discovered.
+ * **The standing obligation was met on 2026-09-21** (phase 2): the
+ * invitation-accept flow landed (`/invitations/[token]`, `POST
+ * /api/invitations/accept`), so a second workspace is shareable, and nothing
+ * here needed to change.
  */
 export async function createWorkspaceForUser(
   userId: number,
@@ -376,4 +390,338 @@ export async function getMembership(
     )
     .limit(1)
   return rows[0] ?? null
+}
+
+// ---------------------------------------------------------------------------
+// Administration — rename, transfer, remove a member, delete (phase 2)
+// ---------------------------------------------------------------------------
+//
+// Ported from `apps/sales/lib/db/queries/workspaces.ts` (never imported — apps
+// do not import each other, `lib/app-isolation.test.ts`). Two differences, both
+// deliberate:
+//
+//   1. **No event row.** Sales records these in `sales.events`. This app's only
+//      log is `billing.audit`, whose `audit_subject_type_check` (0005) admits
+//      `invoice`, `company` and `recurrence` and nothing else: the audit log is
+//      the record of the legal documents, not of tenancy. Widening it is a
+//      migration and a decision about what the statutory log is FOR, and
+//      neither is this phase's.
+//   2. **Delete refuses instead of cascading** — see `deleteWorkspace`.
+
+/** The whole-row projection a PATCH answers with — the bare entity. */
+export async function updateWorkspace(
+  workspaceId: number,
+  patch: { name: string }
+): Promise<WorkspaceRef | null> {
+  const [row] = await getDb()
+    .update(billingWorkspaces)
+    .set({ name: patch.name, updated_at: new Date() })
+    .where(eq(billingWorkspaces.id, workspaceId))
+    .returning(WS_COLUMNS)
+  return row ?? null
+}
+
+/**
+ * What a workspace holds that this app may never delete, by table.
+ *
+ * Every one of these five tables has a `BEFORE DELETE` trigger that raises
+ * (`trg_no_hard_delete` on company, invoice, audit, recurrence — 0005, 0012;
+ * `trg_history_read_only` on history — 0010), and a row-level trigger FIRES ON
+ * AN `ON DELETE CASCADE` as well as on a direct DELETE. So a workspace holding
+ * any row in any of them cannot be deleted by anybody, the owner role included:
+ * the cascade reaches the row and the trigger aborts the whole statement.
+ *
+ * `invoice_line`, `counters`, `idempotency_keys`, `workspace_members` and
+ * `invitations` are not here: they cascade cleanly, and an invoice line cannot
+ * exist without an invoice anyway.
+ */
+export interface WorkspaceHoldings {
+  companies: number
+  invoices: number
+  audit_rows: number
+  imported_bills: number
+  recurring_series: number
+}
+
+export async function workspaceHoldings(workspaceId: number): Promise<WorkspaceHoldings> {
+  const r = await getDb().execute<{
+    companies: number
+    invoices: number
+    audit_rows: number
+    imported_bills: number
+    recurring_series: number
+  }>(sql`
+    SELECT
+      (SELECT COUNT(*)::int FROM ${billingCompany}    WHERE workspace_id = ${workspaceId}) AS companies,
+      (SELECT COUNT(*)::int FROM ${billingInvoice}    WHERE workspace_id = ${workspaceId}) AS invoices,
+      (SELECT COUNT(*)::int FROM ${billingAudit}      WHERE workspace_id = ${workspaceId}) AS audit_rows,
+      (SELECT COUNT(*)::int FROM ${billingHistory}    WHERE workspace_id = ${workspaceId}) AS imported_bills,
+      (SELECT COUNT(*)::int FROM ${billingRecurrence} WHERE workspace_id = ${workspaceId}) AS recurring_series
+  `)
+  const row = r.rows[0]
+  return {
+    companies: Number(row?.companies ?? 0),
+    invoices: Number(row?.invoices ?? 0),
+    audit_rows: Number(row?.audit_rows ?? 0),
+    imported_bills: Number(row?.imported_bills ?? 0),
+    recurring_series: Number(row?.recurring_series ?? 0),
+  }
+}
+
+/** True when any retained record exists — i.e. the workspace can never be deleted. */
+export function holdsRetainedRecords(h: WorkspaceHoldings): boolean {
+  return (
+    h.companies + h.invoices + h.audit_rows + h.imported_bills + h.recurring_series > 0
+  )
+}
+
+/** "2 companies, 14 invoices, 31 audit rows" — only the non-zero ones. */
+export function describeHoldings(h: WorkspaceHoldings): string {
+  const parts: string[] = []
+  const add = (n: number, one: string, many: string) => {
+    if (n > 0) parts.push(`${n} ${n === 1 ? one : many}`)
+  }
+  add(h.companies, 'company', 'companies')
+  add(h.invoices, 'invoice', 'invoices')
+  add(h.recurring_series, 'recurring series', 'recurring series')
+  add(h.imported_bills, 'imported bill', 'imported bills')
+  add(h.audit_rows, 'audit row', 'audit rows')
+  return parts.join(', ')
+}
+
+/** Why a delete was refused, with the counts that caused it. */
+export class WorkspaceRetained extends Error {
+  constructor(public holdings: WorkspaceHoldings) {
+    super(`this workspace holds ${describeHoldings(holdings)}`)
+  }
+}
+
+/**
+ * Delete a workspace — ONLY one that holds no retained record.
+ *
+ * ===========================================================================
+ * THE DECISION: REFUSE, DO NOT CASCADE (phase 2, 2026-09-21)
+ * ===========================================================================
+ * `apps/sales` deletes a workspace with one statement and lets the cascade take
+ * everything. Here that statement would be an attempt to destroy numbered legal
+ * documents under a ten-year retention duty (art. 958f CO), and the database
+ * already refuses it twice over: `REVOKE DELETE` on invoice/audit/company (0006)
+ * — which a cascade does NOT consult, since referential actions run as the table
+ * owner — and the `BEFORE DELETE` triggers listed at `workspaceHoldings`, which
+ * a cascade DOES fire. So the cascade raises, the transaction rolls back, and
+ * without this check the caller would see a 500 carrying a trigger message.
+ *
+ * So the check comes first and the refusal is a sentence (409
+ * `workspace_retained` at the route). What IS deletable is a workspace nobody
+ * ever issued from: no company, no invoice, no series, no imported bill, no
+ * audit row. That is a real case — the "created by mistake" tenant, a second
+ * tenant made to try things, the `demo-tenant` shape — and it is the only one.
+ *
+ * ── WHAT THE GRANTS ALLOW ──────────────────────────────────────────────────
+ * `billing_app` holds DELETE on `billing.workspaces`, `workspace_members`,
+ * `invitations`, `counters` and `idempotency_keys` (0003's blanket grant; 0006
+ * revokes only invoice/audit/company, 0010 history, 0012 recurrence). Every
+ * table an EMPTY workspace can have rows in is therefore deletable by the app
+ * role, and the delete below works as that role — the integration suite
+ * `workspace-admin.integration.test.ts` runs it as `billing_app` and reads the
+ * rows back.
+ *
+ * ── THE RACE ───────────────────────────────────────────────────────────────
+ * A company created between the check and the DELETE is caught by its own
+ * trigger: the cascade reaches it and the statement aborts. Mapped to the same
+ * refusal, with a fresh count, so the caller never sees the trigger's text.
+ */
+export async function deleteWorkspace(workspaceId: number): Promise<boolean> {
+  const before = await workspaceHoldings(workspaceId)
+  if (holdsRetainedRecords(before)) throw new WorkspaceRetained(before)
+  try {
+    const rows = await getDb()
+      .delete(billingWorkspaces)
+      .where(eq(billingWorkspaces.id, workspaceId))
+      .returning({ id: billingWorkspaces.id })
+    return rows.length > 0
+  } catch (e) {
+    const after = await workspaceHoldings(workspaceId)
+    if (holdsRetainedRecords(after)) throw new WorkspaceRetained(after)
+    throw e
+  }
+}
+
+/**
+ * Hand the workspace to another MEMBER. The previous owner stays, as a member.
+ *
+ * One transaction: a workspace whose `owner_id` and membership roles disagree
+ * has two people who each look like the owner to a different check.
+ */
+export async function transferOwnership(workspaceId: number, newOwnerUserId: number): Promise<void> {
+  await getDb().transaction(async (tx) => {
+    const wsRows = await tx
+      .select({ id: billingWorkspaces.id, owner_id: billingWorkspaces.owner_id })
+      .from(billingWorkspaces)
+      .where(eq(billingWorkspaces.id, workspaceId))
+      .for('update')
+      .limit(1)
+    if (!wsRows[0]) throw new Error('workspace_not_found')
+
+    const memberRow = await tx
+      .select({ id: billingWorkspaceMembers.id })
+      .from(billingWorkspaceMembers)
+      .where(
+        and(
+          eq(billingWorkspaceMembers.workspace_id, workspaceId),
+          eq(billingWorkspaceMembers.user_id, newOwnerUserId)
+        )
+      )
+      .limit(1)
+    if (!memberRow[0]) throw new Error('not_a_member')
+    if (wsRows[0].owner_id === newOwnerUserId) return
+
+    await tx
+      .update(billingWorkspaceMembers)
+      .set({ role: 'member' })
+      .where(
+        and(
+          eq(billingWorkspaceMembers.workspace_id, workspaceId),
+          eq(billingWorkspaceMembers.user_id, wsRows[0].owner_id)
+        )
+      )
+    await tx
+      .update(billingWorkspaceMembers)
+      .set({ role: 'owner' })
+      .where(
+        and(
+          eq(billingWorkspaceMembers.workspace_id, workspaceId),
+          eq(billingWorkspaceMembers.user_id, newOwnerUserId)
+        )
+      )
+    await tx
+      .update(billingWorkspaces)
+      .set({ owner_id: newOwnerUserId, updated_at: new Date() })
+      .where(eq(billingWorkspaces.id, workspaceId))
+  })
+}
+
+/**
+ * Remove somebody from a workspace. False when they were not in it.
+ *
+ * Refusing to remove the OWNER is the route's job — it has the workspace row
+ * and can name the recovery (transfer first).
+ *
+ * The invoices they created stay, attributed: `created_by` and the audit log's
+ * `actor_user_id` reference `platform.users`, not the membership, so removing
+ * somebody from a workspace does not rewrite who issued what.
+ */
+export async function removeMember(workspaceId: number, userId: number): Promise<boolean> {
+  const rows = await getDb()
+    .delete(billingWorkspaceMembers)
+    .where(
+      and(
+        eq(billingWorkspaceMembers.workspace_id, workspaceId),
+        eq(billingWorkspaceMembers.user_id, userId)
+      )
+    )
+    .returning({ id: billingWorkspaceMembers.id })
+  return rows.length > 0
+}
+
+/**
+ * Who this owner could invite without retyping an address: everyone they share
+ * a BILLING workspace with — plus, for a super admin, every live account
+ * (`from_platform: true`, rendered as a separate section).
+ *
+ * Ported from `apps/sales`' `listInviteCandidates`, whose route header argues
+ * the super-admin widening. The privacy guard for an ordinary owner is the JOIN:
+ * a person you share no billing workspace with is not discoverable here.
+ */
+export interface InviteCandidate {
+  user_id: number
+  email: string
+  name: string | null
+  avatar_url: string | null
+  already_member: boolean
+  invited: boolean
+  shared_workspaces: string[]
+  from_platform: boolean
+}
+
+export async function listInviteCandidates(input: {
+  userId: number
+  currentWorkspaceId: number
+  /** Decided by the caller — who is a super admin is platform-auth's question. */
+  includePlatform: boolean
+}): Promise<InviteCandidate[]> {
+  const db = getDb()
+  const [currentRows, pendingRows, sharedRows] = await Promise.all([
+    db
+      .select({ user_id: billingWorkspaceMembers.user_id })
+      .from(billingWorkspaceMembers)
+      .where(eq(billingWorkspaceMembers.workspace_id, input.currentWorkspaceId)),
+    db.execute<{ email: string }>(sql`
+      SELECT email FROM billing.invitations
+      WHERE workspace_id = ${input.currentWorkspaceId} AND status = 'pending'
+    `),
+    db.execute<{
+      user_id: number
+      email: string
+      name: string | null
+      avatar_url: string | null
+      workspace_name: string
+    }>(sql`
+      SELECT u.id AS user_id, u.email, u.name, u.avatar_url, w.name AS workspace_name
+      FROM billing.workspace_members mine
+      JOIN billing.workspace_members theirs ON theirs.workspace_id = mine.workspace_id
+      JOIN billing.workspaces w ON w.id = mine.workspace_id
+      JOIN platform.users u ON u.id = theirs.user_id
+      WHERE mine.user_id = ${input.userId}
+        AND theirs.user_id <> ${input.userId}
+        AND u.deleted_at IS NULL
+    `),
+  ])
+
+  const memberIds = new Set(currentRows.map((r) => r.user_id))
+  const pendingEmails = new Set(pendingRows.rows.map((r) => r.email.toLowerCase()))
+
+  const byUser = new Map<number, InviteCandidate>()
+  for (const r of sharedRows.rows) {
+    const entry = byUser.get(r.user_id) ?? {
+      user_id: r.user_id,
+      email: r.email,
+      name: r.name,
+      avatar_url: r.avatar_url,
+      already_member: memberIds.has(r.user_id),
+      invited: pendingEmails.has(r.email.toLowerCase()),
+      shared_workspaces: [],
+      from_platform: false,
+    }
+    if (!entry.shared_workspaces.includes(r.workspace_name)) entry.shared_workspaces.push(r.workspace_name)
+    byUser.set(r.user_id, entry)
+  }
+
+  if (input.includePlatform) {
+    const platformRows = await db.execute<{
+      user_id: number
+      email: string
+      name: string | null
+      avatar_url: string | null
+    }>(sql`
+      SELECT u.id AS user_id, u.email, u.name, u.avatar_url
+      FROM platform.users u
+      WHERE u.deleted_at IS NULL AND u.id <> ${input.userId}
+    `)
+    for (const r of platformRows.rows) {
+      if (byUser.has(r.user_id)) continue
+      byUser.set(r.user_id, {
+        ...r,
+        already_member: memberIds.has(r.user_id),
+        invited: pendingEmails.has(r.email.toLowerCase()),
+        shared_workspaces: [],
+        from_platform: true,
+      })
+    }
+  }
+
+  return [...byUser.values()].sort((a, b) => {
+    if (a.already_member !== b.already_member) return a.already_member ? 1 : -1
+    return (a.name ?? a.email).localeCompare(b.name ?? b.email)
+  })
 }

@@ -14,7 +14,7 @@ The build plan is `docs/billing-app-plan/`, one document per milestone.
 |---|---|
 | `workspaces` | this app's tenants. `slug` is UNIQUE and appears in every URN this app prints |
 | `workspace_members` | **the access gate.** Membership of a workspace IS permission to use this app; `platform.workspace_apps` and `platform.app_access` were dropped on 2026-08-10 |
-| `invitations` | offers. Nothing redeems them yet — there is no accept route |
+| `invitations` | offers into one workspace. Redeemed by `POST /api/invitations/accept` since phase 2 (2026-09-21); a decline writes `revoked` |
 | `counters` | `(workspace_id, entity_type, last_value)` — the workspace `#number` allocator |
 
 `counters` is deliberately not the scaffold's `note_counters`, which is one
@@ -57,6 +57,14 @@ The rejected option was bootstrapping on first authenticated request. It is
 cheapest and it is wrong for this app: it would mean anyone holding a blackcode
 account for any reason silently acquires tenancy in the app that sends real
 payment slips.
+
+> **Revised 2026-09-21 (phase 2).** Half of that reasoning did not survive
+> production: the explicit act was a forced step for every cross-app visitor.
+> `/dashboard` now runs `ensureWorkspaceForUser` for a validated user with no
+> workspace (or opens their pending invitation), and redirects. Still nothing
+> is minted by `/api/*` or by another app — only by opening THIS app's
+> dashboard, which is the decision. The argument is in
+> `apps/billing/docs/frontend.md` and at `createWorkspaceForUser`.
 
 **No one-workspace-per-person cap, unlike b/books.** A second workspace here is
 a genuinely separate TENANT; a second issuing entity is a company inside one
@@ -1119,6 +1127,83 @@ Ticket #86 added these, on 2026-09-18:
 - **`/api/me/footprint`'s `holds` array now counts companies and invoices**, and
   `holds-covers-entities.test.ts` went red the moment 0004's tables were
   mirrored, which is how it came to be written rather than forgotten.
+
+## Phase 2 (web): workspace administration and invitation acceptance (2026-09-21)
+
+Billing now serves the tenancy surface `apps/sales` has, each route this app's
+own (never a shared factory — they read `platform.workspace_*`):
+
+| Route | `bk billing …` | Who |
+|---|---|---|
+| `PATCH /api/workspaces/{ws}` | `workspace edit --name` | owner. Name only: a `slug` field is 400 `slug_immutable` — the slug is in every URN this app has printed |
+| `DELETE /api/workspaces/{ws}` | `workspace delete <slug> --confirm <slug>` | owner. **Empty workspaces only** — below |
+| `POST /api/workspaces/{ws}/transfer` | `workspace transfer --to <user_id>` | owner; target must already be a member |
+| `DELETE /api/workspaces/{ws}/members/{userId}` | `member remove <id>` | owner for anyone but the owner; **a member for themselves (leave)**. No `/leave` route |
+| `GET /api/workspaces/{ws}/invite-candidates` | `invite candidates` | owner; super admins also see every live account, flagged `from_platform` |
+| `GET /api/invitations/{token}` | `invite show` | signed-in invitee; refusal order accepted → not-pending → expired → not-yours (names the caller, never the invitee) |
+| `POST /api/invitations/accept` · `decline` | `invite accept` · `decline` | signed-in invitee |
+| `GET /api/me/pending-invitations` | `invite pending` | anyone signed in |
+
+Plus the page `app/invitations/[token]/page.tsx`, which the invitation email and
+`accept_url` point at (`NEXTAUTH_URL` first, the request origin otherwise).
+`POST …/invitations` now **sends** the email through `platform-email` and
+reports the real `email_sent`; the link is returned either way.
+
+**No event rows for these.** `billing.audit`'s `audit_subject_type_check`
+admits `invoice`, `company`, `recurrence` only — it is the record of the legal
+documents, not of tenancy — and widening it is a migration and a decision this
+phase did not take. Renames, transfers and removals are therefore not audited.
+
+### Deleting a workspace: refuse, do not cascade
+
+Every table that holds a retained record — `company`, `invoice`, `audit`
+(`trg_no_hard_delete`, 0005), `recurrence` (0012), `history`
+(`trg_history_read_only`, 0010) — has a `BEFORE DELETE` row trigger that
+raises, and **row triggers fire on an `ON DELETE CASCADE`**. So a DELETE of a
+workspace holding any such row aborts for everybody, owner role included.
+(`REVOKE DELETE` on invoice/audit/company in 0006 does NOT stop a cascade —
+referential actions run as the table owner — the triggers do.)
+
+So `deleteWorkspace` counts those five tables first (`workspaceHoldings`) and
+refuses with **409 `workspace_retained`**, naming the counts and the art. 958f
+CO reason, with a suggestion (retire the companies, or transfer). A race with a
+concurrent company create is caught by the trigger and mapped to the same
+refusal. Since every retained table hangs off a company, "deletable" means "has
+never had a company".
+
+**The grants allow the empty case.** `billing_app` holds DELETE on
+`workspaces`, `workspace_members`, `invitations`, `counters` and
+`idempotency_keys` (0003's blanket grant; the revokes in 0006/0010/0012 touch
+only the retained tables) — read from `information_schema.table_privileges` on
+the local database, 2026-09-21. Those are the only tables an empty workspace
+has rows in.
+
+**The account footprint agrees.** `readFootprint` used to put every sole-owned
+workspace in `will_delete`, and `DELETE /api/me/footprint` then 500'd on the
+trigger for anyone who had issued an invoice, while the settings page promised
+to delete "your invoices". A sole-owned workspace holding retained records is
+now in `blocked_by` with `reason: 'retention'` and a `detail` naming the counts
+(`packages/platform-api`'s `BlockedWorkspace`), so the purge and the account
+close refuse with a 409 — `retention_hold` when retention is the only reason —
+instead of attempting a delete that cannot succeed. A consequence worth
+stating: **somebody who has issued an invoice cannot close their blackcode
+account** until the retention question has a product answer (an account close
+that soft-deletes the user and leaves retained records attributed). That is
+not decided here.
+
+### Verified on 2026-09-21
+
+`lib/db/queries/workspace-admin.integration.test.ts`, against the local Docker
+Postgres **as the owner credential** (`blackcode`) — the local `billing_app`
+has no USAGE on `platform` (`nspacl` for `platform` lists `sales_app` and
+`issues_app` only), so the app's own queries cannot run as it locally; the
+grant question above was answered from the catalog instead. 6/6: an empty
+workspace deleted with its members, invitations and counters (rows read back);
+a workspace with one company refused by the pre-check with the count; the same
+DELETE with the pre-check skipped refused by the database; transfer and remove;
+accept / decline / stranger; the footprint reporting the held workspace as
+`retention`-blocked and the purge refusing. Watched failing: the header lists
+the two mutations.
 
 ## Frontend
 

@@ -47,6 +47,19 @@ would have taught the next app a bug:
   workspace this app cannot see — and by then nobody would connect it to a line
   they copied from a scaffold.
 
+## Phase 2 (2026-09-21): the rest of the tenancy surface, all this app's own
+
+`workspaces/[ws]` PATCH + DELETE, `workspaces/[ws]/transfer`,
+`workspaces/[ws]/members/[userId]`, `workspaces/[ws]/invite-candidates`,
+`invitations/[token]`, `invitations/accept`, `invitations/decline`,
+`me/pending-invitations`. **None is a shared factory**, for this file's rule:
+`workspaceMemberRoute` deletes from `platform.workspace_members`, and the
+invitation factories read `platform.workspace_invitations` — both
+`apps/issues`' tables. Each is ported from `apps/sales` over `billing.*`.
+`DELETE workspaces/[ws]` deliberately differs from every other app's: it
+refuses a workspace holding retained records (409 `workspace_retained`)
+instead of cascading — see `apps/billing/docs/backend.md`.
+
 ## What IS safe to mount, and why
 
 `workspaceMembersRoute`, `workspacesRoute`, `workspaceShowRoute`,

@@ -32,8 +32,8 @@ export type { UploadLedger, UploadAttribution, UploadRecord } from './upload-led
 // account close silently skips — which is how another app's data got STRANDED
 // behind an account that could no longer sign in. Read account-footprint.ts
 // before implementing one; `purge` must never touch `platform.users`.
-export { UNKNOWN_FOOTPRINT } from './account-footprint'
-export type { FootprintSource, AppFootprint } from './account-footprint'
+export { UNKNOWN_FOOTPRINT, blockedRefusal } from './account-footprint'
+export type { FootprintSource, AppFootprint, BlockedWorkspace } from './account-footprint'
 export { accountCensus, purgeRemoteApp, stillHolds } from './account-census'
 export type { AppCensusEntry } from './account-census'
 

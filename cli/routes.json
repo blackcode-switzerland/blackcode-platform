@@ -3,8 +3,32 @@
   "routes": [
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk billing workspace delete",
+      "app": "billing"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/invitations/{id}",
       "command": "bk billing invite revoke",
+      "app": "billing"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/members/{userId}",
+      "command": "bk billing member remove",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/invitations/{token}",
+      "command": "bk billing invite show",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/pending-invitations",
+      "command": "bk billing invite pending",
       "app": "billing"
     },
     {
@@ -57,6 +81,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/invite-candidates",
+      "command": "bk billing invite candidates",
+      "app": "billing"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/invoices",
       "command": "bk billing invoice list",
       "app": "billing"
@@ -105,6 +135,12 @@
     },
     {
       "method": "PATCH",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk billing workspace edit",
+      "app": "billing"
+    },
+    {
+      "method": "PATCH",
       "path": "/api/workspaces/{ws}/companies/{slug}",
       "command": "bk billing company edit, bk billing company retire",
       "app": "billing"
@@ -119,6 +155,18 @@
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/recurrences/{seq}",
       "command": "bk billing recurrence edit, bk billing recurrence pause, bk billing recurrence resume",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/invitations/accept",
+      "command": "bk billing invite accept",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/invitations/decline",
+      "command": "bk billing invite decline",
       "app": "billing"
     },
     {
@@ -191,6 +239,12 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/recurrences/{seq}/generate",
       "command": "bk billing recurrence generate",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/transfer",
+      "command": "bk billing workspace transfer",
       "app": "billing"
     },
     {

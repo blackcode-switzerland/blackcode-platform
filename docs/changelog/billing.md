@@ -5,6 +5,57 @@ This file is an **agent** surface. It is merged into `bk changelog` and
 entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
+## 2026-09-21 — Workspace administration, invitation acceptance, and a default workspace
+
+**Not breaking** for existing calls. New routes and commands, one changed
+response, and one refusal that used to be a 500.
+
+### New commands (and their routes)
+
+- `bk billing workspace edit --name "…"` — `PATCH /api/workspaces/{ws}`. Name
+  only: `--slug` is refused with **400 `slug_immutable`** (the slug is in every
+  URN this app has printed).
+- `bk billing workspace transfer --to <user_id>` — `POST …/transfer`. The target
+  must already be a member (400 `not_a_member`). Pass the numeric id from
+  `bk billing member list`.
+- `bk billing workspace delete <slug> --confirm <slug>` — `DELETE
+  /api/workspaces/{ws}`. **Only for a workspace nothing was ever issued from.**
+  A workspace holding any company, invoice, recurring series, imported bill or
+  audit row answers **409 `workspace_retained`** with the counts and a
+  suggestion: those records carry a ten-year retention duty (art. 958f CO) and
+  the database refuses the delete for everybody. Do not retry it.
+- `bk billing member remove <user_id>` — `DELETE …/members/{userId}`. The owner
+  removes anyone but themselves; **a member may remove themselves — that is how
+  you leave** (there is no `member leave` here). The owner gets 400
+  `cannot_remove_owner`: transfer first.
+- `bk billing invite candidates` — `GET …/invite-candidates` (owner only).
+- `bk billing invite show | accept | decline <token>` and `bk billing invite
+  pending` — `GET /api/invitations/{token}`, `POST /api/invitations/accept`,
+  `POST /api/invitations/decline`, `GET /api/me/pending-invitations`.
+  **Invitations can be accepted now**, in the browser at the link or with `bk`.
+  You must be signed in as the address the invitation was sent to.
+
+### Changed
+
+- `POST …/invitations` **sends the invitation email** and reports the real
+  result in `email_sent` (it was always `false`); it also returns
+  `invitee_has_account`. `accept_url` is still returned, and points at this
+  app's own `/invitations/{token}` page.
+- `DELETE /api/me/footprint` no longer 500s for somebody who has issued an
+  invoice. A sole-owned workspace holding retained records is reported in
+  `footprint.blocked_by` with `reason: "retention"` and a `detail`, and the
+  delete answers **409 `retention_hold`** (or `owner_with_members` when other
+  people are in a workspace too). Only workspaces nothing was issued from are in
+  `will_delete`.
+- Opening the dashboard with no billing workspace — typically after signing in
+  on another blackcode app — now creates one and lands you in it (or opens your
+  pending invitation), instead of a "No workspace yet" screen.
+
+- Web only, from the production audit: the invoice list with no company yet
+  says "Add a company first" and links there (it used to offer a create form
+  with nothing to pick); the landing page no longer borrows b/books' ledger
+  wording.
+
 ## 2026-09-21 — The real web UI replaces the test scaffold
 
 Every page is redesigned to the platform's standard: a left sidebar with the

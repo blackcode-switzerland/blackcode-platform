@@ -35,6 +35,7 @@ import type { AppFootprint, FootprintSource } from '@blackcode/platform-api'
 import { getDb } from '../client'
 import { billingCompany, billingHistory, billingInvoice, billingRecurrence, billingWorkspaceMembers, billingWorkspaces } from '../schema'
 import { APP_SLUG } from '@/lib/app'
+import { describeHoldings, holdsRetainedRecords, workspaceHoldings } from './workspaces'
 
 export const billingFootprintSource: FootprintSource = {
   read: (userId) => readFootprint(userId),
@@ -46,7 +47,7 @@ export const billingFootprintSource: FootprintSource = {
       // from ANOTHER app's account close over HTTP. A workspace with other
       // people in it is not one app's to destroy.
       throw new Error(
-        `refusing to purge ${APP_SLUG}: ${before.blocked_by.length} workspace(s) still have other members`
+        `refusing to purge ${APP_SLUG}: ${before.blocked_by.length} workspace(s) have other members or are under a retention hold`
       )
     }
     const ids = before.will_delete.map((w) => w.workspace_id)
@@ -82,6 +83,28 @@ async function readFootprint(userId: number): Promise<AppFootprint> {
         workspace_id: r.workspace_id,
         name: r.name,
         member_count: Number(r.member_count),
+        reason: 'members',
+      })
+      continue
+    }
+    // ── A SOLE-OWNED WORKSPACE THAT HOLDS RETAINED RECORDS IS BLOCKED TOO ──
+    // (2026-09-21.) It used to go into `will_delete`, and `purge` then issued
+    // the DELETE — which cascades into company/invoice/audit/history/recurrence,
+    // each with a BEFORE DELETE trigger that raises (0005, 0010, 0012). So the
+    // erase answered 500 with a trigger message, half-way through what the
+    // settings page had promised would delete "your invoices". It can never
+    // succeed, for anybody: ten-year retention (art. 958f CO). Reported as
+    // `reason: 'retention'` so the refusal is a 409 naming the records, and so
+    // `DELETE /api/workspaces/{ws}` and this purge agree on one rule
+    // (`holdsRetainedRecords`).
+    const h = await workspaceHoldings(r.workspace_id)
+    if (holdsRetainedRecords(h)) {
+      blocked.push({
+        workspace_id: r.workspace_id,
+        name: r.name,
+        member_count: Number(r.member_count),
+        reason: 'retention',
+        detail: `holds ${describeHoldings(h)}`,
       })
     } else {
       willDelete.push({ workspace_id: r.workspace_id, name: r.name })

@@ -11,12 +11,13 @@
 // `filter-company` testid). `CompanySwitcher` carries `data-testid="company-switcher"`.
 
 import { useEffect, useState } from 'react'
-import { Plus, Receipt } from 'lucide-react'
+import Link from 'next/link'
+import { Building2, Plus, Receipt } from 'lucide-react'
 import { Button } from '@blackcode/platform-ui/ui/button'
 import { Input } from '@blackcode/platform-ui/ui/input'
 import { PageHeader, PageBody, useCompanyParam } from '@/components/shell'
 import { DataTable, EmptyState, ErrorState, LoadingState, Money, DateText, StatusBadge, Select, Toolbar } from '@/components/ui-kit'
-import { useInvoices } from '@/lib/queries'
+import { useCompanies, useInvoices } from '@/lib/queries'
 import { INVOICE_STATUS_OPTIONS, amountClassFor } from '@/lib/ui-vocab'
 import type { Invoice } from '@/types'
 import { CreateInvoiceDialog } from './create-invoice-dialog'
@@ -29,6 +30,10 @@ export function InvoiceListPage({ ws }: { ws: string }) {
   const [cursor, setCursor] = useState<string | number | null>(null)
   const [rows, setRows] = useState<Invoice[]>([])
   const [createOpen, setCreateOpen] = useState(false)
+  // An invoice needs an issuing company. With none, "New invoice" would open a
+  // form with nothing to pick — send the person to create the company instead.
+  const companies = useCompanies(ws)
+  const noCompany = companies.data !== undefined && companies.data.length === 0
 
   // A cursor belongs to the previous filter set — starting over resets it.
   useEffect(() => setCursor(null), [status, currency, externalRef, company])
@@ -55,7 +60,7 @@ export function InvoiceListPage({ ws }: { ws: string }) {
         titleTestId="page-title"
         companySwitcher
         actions={
-          <Button size="sm" data-testid="invoice-create-open" onClick={() => setCreateOpen(true)}>
+          <Button size="sm" data-testid="invoice-create-open" onClick={() => setCreateOpen(true)} disabled={noCompany}>
             <Plus size={14} />
             New invoice
           </Button>
@@ -101,18 +106,35 @@ export function InvoiceListPage({ ws }: { ws: string }) {
               rowTestId={(i) => `invoice-row-${i.number}`}
               rowMuted={(i) => i.status === 'void'}
               empty={
-                <EmptyState
-                  testId="invoices-empty"
-                  title="No invoices yet"
-                  hint="Create one here, or run `bk billing invoice create --company <slug>`."
-                  icon={Receipt}
-                  action={
-                    <Button size="sm" onClick={() => setCreateOpen(true)}>
-                      <Plus size={14} />
-                      New invoice
-                    </Button>
-                  }
-                />
+                noCompany ? (
+                  <EmptyState
+                    testId="invoices-empty"
+                    title="Add a company first"
+                    hint="Every invoice is issued by one of your companies — its name, address and bank account go on the bill."
+                    icon={Building2}
+                    action={
+                      <Button size="sm" asChild>
+                        <Link href={`/dashboard/${ws}/companies`}>
+                          <Plus size={14} />
+                          Add a company
+                        </Link>
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <EmptyState
+                    testId="invoices-empty"
+                    title="No invoices yet"
+                    hint="Create the first one — it starts as a draft you can edit until it is sent."
+                    icon={Receipt}
+                    action={
+                      <Button size="sm" onClick={() => setCreateOpen(true)}>
+                        <Plus size={14} />
+                        New invoice
+                      </Button>
+                    }
+                  />
+                )
               }
               columns={[
                 {

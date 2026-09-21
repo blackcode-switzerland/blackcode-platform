@@ -194,6 +194,10 @@ Three things to know before you call it:
 - The target is always an explicit argument. Unlike most commands this never
   falls back to your active workspace.
 - Owner only. To hand a workspace over instead, use `bk <app> workspace transfer`.
+- An app may refuse to delete a workspace that still holds records it is
+  legally required to keep. The refusal is a 409 naming what is held, with a
+  suggestion — it is not an outage, and repeating the call will not change it.
+  That app's own guide says what can be deleted there.
 
 If you delete that app's active workspace, its active selection is cleared — run
 `bk <app> workspace use <slug>` before the next scoped command in that app.

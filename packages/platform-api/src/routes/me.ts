@@ -22,6 +22,7 @@ import {
 import { isSuperAdmin } from '@blackcode/platform-auth'
 import { LOCALES, parseLocale } from '@blackcode/platform-i18n'
 import { accountCensus, purgeRemoteApp, stillHolds } from '../account-census'
+import { blockedRefusal } from '../account-footprint'
 import type { AppContext } from '../app-context'
 import { Errors } from '../errors'
 import { createApiHandler } from '../handler'
@@ -227,11 +228,8 @@ export function meRoute(app: AppContext) {
       a.footprint.blocked_by.map((w) => ({ ...w, app: a.app, app_name: a.name }))
     )
     if (blocked.length > 0) {
-      throw Errors.conflict(
-        'owner_with_members',
-        'You must transfer ownership of these workspaces before deleting your account',
-        blocked
-      )
+      const { code, message } = blockedRefusal(blocked, 'your account')
+      throw Errors.conflict(code, message, blocked)
     }
 
     // ── THE ORDER IS THE RECOVERY STORY. DO NOT REORDER THIS. ────────────────

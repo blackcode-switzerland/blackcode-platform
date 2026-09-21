@@ -76,14 +76,11 @@ export const MEMBER_ROLES: Term[] = [
 /**
  * The lifecycle of an invitation into one of this app's workspaces.
  *
- * ── `accepted` HAS NO WRITER YET, AND THAT IS STATED RATHER THAN HIDDEN ─────
- * `Invites` is on in the CLI (`send`, `list`, `revoke`) and `InviteAccept` is
- * off, because no accept route is mounted. So an invitation can be created and
- * not yet redeemed, and this value describes a state the app cannot currently
- * reach.
- *
- * It is declared anyway, for the same reason the CHECK constraint in 0001
- * permits it: the constraint and this list are one pair, and a value the
+ * ── `accepted` HAS HAD A WRITER SINCE PHASE 2 (2026-09-21) ──────────────────
+ * `POST /api/invitations/accept` (`bk billing invite accept`, and the
+ * `/invitations/{token}` page) writes it; a decline writes `revoked`. Before
+ * phase 2 this value described a state the app could not reach, and was
+ * declared anyway, for the same reason the CHECK constraint in 0001 permits it: the constraint and this list are one pair, and a value the
  * database allows and the vocabulary omits is how a row becomes unrenderable.
  * `expired` is the same case — nothing sweeps `expires_at` today.
  */

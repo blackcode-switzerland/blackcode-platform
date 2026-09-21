@@ -10,8 +10,13 @@ record. Its number is contiguous with no holes, it is never reused, it is never
 deleted, and every change to it is attributable to a person or a token.
 
 Related commands: `bk billing workspace list`, `bk billing workspace use`,
-`bk billing workspace create`, `bk billing member list`, `bk billing invite
-send`, `bk billing invite list`, `bk billing invite revoke`.
+`bk billing workspace create`, `bk billing workspace edit`,
+`bk billing workspace transfer`, `bk billing workspace delete`,
+`bk billing member list`, `bk billing member remove`, `bk billing invite send`,
+`bk billing invite list`, `bk billing invite revoke`,
+`bk billing invite candidates`, `bk billing invite pending`,
+`bk billing invite show`, `bk billing invite accept`,
+`bk billing invite decline`.
 
 ## What exists today
 
@@ -51,37 +56,73 @@ one shared setting meant selecting a workspace in one app silently retargeted
 the others — a command that then succeeded against the wrong tenant. The CLI
 keys the active workspace by app slug for that reason.
 
-## Creating and not deleting
+## Your first workspace
+
+Opening the dashboard in a browser gives you a workspace of your own if you have
+none — signing in on another blackcode app and coming here is enough. From the
+CLI, `bk billing workspace list` shows what you have.
+
+## Creating, renaming, handing over
 
 ```
 bk billing workspace create --name "Acme SA"
+bk billing workspace edit --name "Acme Holding SA"
+bk billing workspace transfer --to <user_id>
 ```
 
-Use this for a genuinely separate tenant. It is **not** how you add a second
-entity to bill from — that is a company inside an existing workspace
+Create a workspace for a genuinely separate tenant. It is **not** how you add a
+second entity to bill from — that is a company inside an existing workspace
 (`bk billing company create`).
 
-There is deliberately no `bk billing workspace delete`, and there will not be
-one. A workspace holds invoices, and an invoice carries a ten-year retention duty
-under art. 958f CO. The same reasoning keeps `trash` and `label` off this app
-entirely: a bill is voided with a reason, never binned, so there is no
-soft-deleted state to list and no purge path to expose.
+`edit` changes the name only. The slug is fixed: it is part of every URN this app
+has printed, and those live in other systems. `edit --slug` is refused with
+`slug_immutable`.
 
-## Inviting somebody
+`transfer` needs the new owner's user id (`bk billing member list` shows it), and
+they must already be a member. You stay in the workspace as a member.
+
+## Deleting — only a workspace nothing was issued from
 
 ```
-bk billing invite send --email someone@example.com
+bk billing workspace delete <slug> --confirm <slug>
+```
+
+This succeeds only for a workspace that has never had a company, invoice,
+recurring series, imported bill or audit row — a tenant made by mistake. Any
+other workspace is refused with `workspace_retained` and the counts that caused
+it: an invoice and its records carry a ten-year retention duty under art. 958f
+CO, and the database refuses the delete for everybody, owners included. Retire
+its companies (`bk billing company retire`) or hand it over instead.
+
+The same reasoning keeps `trash` and `label` off this app entirely: a bill is
+voided with a reason, never binned, so there is no soft-deleted state to list and
+no purge path to expose.
+
+## Members and invitations
+
+```
+bk billing invite send someone@example.com
+bk billing invite candidates            # people you already share a workspace with
 bk billing invite list
 bk billing invite revoke <id>
+bk billing member remove <user_id>      # owner only — or your own id, to leave
 ```
 
-**The invitation cannot be accepted yet.** There is no accept route in this app,
-so `invite send` records an offer and returns its link, and nothing can redeem
-it. That is stated here rather than discovered: a command that reports success
-against a flow with no other end is the kind of thing an agent builds on and
-then cannot explain.
+`invite send` emails a link to this app's `/invitations/<token>` page and prints
+the link too; `email_sent: false` in `-o json` output means the email did not go
+and you should pass the link on yourself. The invitee accepts in the browser or
+with:
 
-Until it lands, a workspace somebody creates is theirs alone.
+```
+bk billing invite pending               # invitations addressed to your email
+bk billing invite show <token>          # who invited you, and where
+bk billing invite accept <token>
+bk billing invite decline <token>
+```
+
+They must be signed in as the address the invitation was sent to; holding the
+token is not enough. The owner cannot be removed and cannot leave — transfer the
+workspace first. Invoices a removed member created stay, attributed to them.
 
 ## What is served live, and why this page does not list it
 

@@ -20,13 +20,14 @@ body text, and is a known open point.
 | `/` | landing page (signed-out); signed-in goes to `/dashboard` |
 | `/login` | sign in / sign up tabs, forgot-password flow, Google if configured |
 | `/cli/authorize` | the browser half of `bk login` |
-| `/dashboard` | chooser: the active workspace, a list, or the no-workspace screen with the create form (`?new=1` forces it) |
+| `/dashboard` | lands you in a workspace: the only one, the remembered one, or a chooser. **With none, it creates one and redirects** (see below); `?new=1` shows the create form instead |
+| `/invitations/[token]` | an invitation link lands here: who invited you, to which workspace, Accept / Decline. Signed-out → `/login?callbackUrl=…` |
 | `/dashboard/[ws]` | overview: outstanding / overdue / drafts / paid (one line per currency, never summed), to handle, recent invoices, recent changes |
 | `/dashboard/[ws]/invoices` · `/[ref]` | list with filters and create; detail with every lifecycle action, lines, payment part, document preview, recurrence, issuer copy, history |
 | `/dashboard/[ws]/recurrences` · `/[seq]` | series list (due / status); series detail with generate, pause/resume, total |
 | `/dashboard/[ws]/companies` · `/[slug]` | issuing companies: list, create, edit, retire |
 | `/dashboard/[ws]/history` · `/[seq]` | the imported archive, read-only, with the JSON import |
-| `/dashboard/[ws]/settings` | the workspace: members, invitations (send / revoke; accepting is not built yet) |
+| `/dashboard/[ws]/settings` | the workspace: rename, members (make owner / remove, or leave), invitations (send, candidates, copy link, revoke), danger zone (delete — refused with the reason when it holds records) |
 | `/dashboard/settings/*` | the account: profile, password, API tokens |
 
 **The company switcher** in the header writes `?company=<slug>`; overview,
@@ -53,7 +54,9 @@ companies.
 - **Client components calling the routes `bk` calls.** No server actions. The
   only database reads in pages are the membership checks in
   `app/dashboard/page.tsx`, `app/dashboard/[ws]/layout.tsx` and
-  `app/dashboard/settings/layout.tsx` (see the next section).
+  `app/dashboard/settings/layout.tsx` (see the next section), and the
+  invitation lookup in `app/invitations/[token]/page.tsx`. **The one page that
+  writes** is `/dashboard`'s default-workspace bootstrap — next section but one.
 - **Nothing the server derives is computed in the browser** — totals, the
   reference, the account, the next period, the problems list. `Money` prints
   the API's string; its only change is display grouping (`15’209.80`).
@@ -82,6 +85,71 @@ standing between this page and another app's tenancy. It was copied from
 `apps/sales` because **the scaffold does not carry it**, and it was watched
 failing on both the named-import and namespace-import spellings before being
 kept.
+
+## The default workspace: `/dashboard` writes, once (phase 2, 2026-09-21)
+
+A person signed in on another blackcode app arrives here on the shared session
+cookie without ever taking this app's sign-in path — which is where the
+workspace bootstrap (`ensureWorkspaceForUser`) runs. In production they got a
+"No workspace yet" screen and a forced step.
+
+So when a validated user with **no** billing workspace opens `/dashboard`
+(without `?new=1`), the page:
+
+1. opens their newest pending invitation, if they have one — somebody invited
+   into an existing workspace should not land in an empty one of their own;
+2. otherwise runs `ensureWorkspaceForUser` and redirects into the result.
+
+**Why a page may write here, when no other page does:**
+
+- it is the same function sign-in and `POST /api/auth/register` call, not a
+  second implementation of workspace creation;
+- it is idempotent — keyed on membership, re-checked inside its transaction —
+  so a reload, two tabs or a race with a sign-in cannot mint two;
+- membership is the whole gate (`lib/api.ts`), so it grants a tenant of their
+  own and nothing else — no other app's data, nobody else's workspace;
+- it runs only for `getValidatedSessionUser()`, on this app's own dashboard,
+  which is as much a decision to use the app as signing in at its `/login`.
+
+This reverses the phase-0 position at `createWorkspaceForUser` ("a tenant
+appearing because somebody loaded a page is a tenant nobody decided to
+create"); that function's header records the reversal. `NoWorkspace` is now a
+failure screen only — the bootstrap threw — and shows the error, a retry, and
+the manual create form.
+
+`redirect()` throws `NEXT_REDIRECT`, so the page computes the target inside a
+`try` and redirects outside it; a redirect inside the `try` would be caught and
+reported as a failed bootstrap.
+
+## Workspace administration and invitations (phase 2, 2026-09-21)
+
+Every control is a route `bk` also calls — the table is in
+`components/settings/workspace-settings.tsx`'s header.
+
+- **Rename** is name-only; the slug is shown as fixed (the route answers 400
+  `slug_immutable`).
+- **Delete is refused-with-reason, not hidden.** The danger zone reads
+  `GET …/companies?include_retired=true`: a workspace that has ever had a
+  company cannot be deleted (every retained table hangs off a company), so the
+  section explains the ten-year retention instead of offering a button. The
+  route's 409 `workspace_retained` is still the authority; the read only saves
+  somebody typing the slug for nothing. Delete confirms with `useConfirm`'s
+  prompt and `requireMatch: <slug>` — never `window.prompt`.
+- **Leave** is `DELETE …/members/{your id}` — the same route the owner uses to
+  remove somebody. There is no `/leave` route. The owner has no Leave button:
+  they transfer first.
+- **Invitations are emailed** (`platform-email`, `email_sent` is the real
+  result) and the link is still shown and copyable, per row too.
+  `invite-candidates` feeds a `<datalist>` for the address field and a row of
+  "people you already work with" chips; a super admin's platform-wide
+  candidates go only into the datalist, never into that row.
+- **The switcher's "Create workspace" opens `WorkspaceCreateModal`**, which
+  wraps the same `CreateWorkspaceForm` as `/dashboard?new=1`, then writes the
+  active workspace and navigates. Two forms for one route would be two places
+  for validation to drift.
+- **Account settings → delete my data** lists retention-held workspaces
+  separately (`blocked_by[].reason === 'retention'`), and says invoices are
+  kept for ten years; it no longer promises to delete them.
 
 ## What phase 3 put on the wire (backend landed 2026-09-17)
 

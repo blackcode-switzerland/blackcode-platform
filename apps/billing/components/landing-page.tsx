@@ -80,7 +80,7 @@ function Hero() {
       </h1>
       <p className="mt-5 max-w-2xl text-balance text-lg text-muted-foreground">
         {APP_NAME} issues QR-bill invoices for every company you bill under, keeps
-        the numbering gapless, and explains every transaction — draft to sent to
+        the numbering gapless, and records every change — from draft to sent to
         paid, with nothing ever deleted.
       </p>
       <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -114,7 +114,7 @@ function WhatItIsFor() {
       icon: FileCheck2,
       title: 'Gapless numbering, by construction',
       copy:
-        'An invoice number is assigned once and never reused, and the statutory chain of custody is derived, not stored — so it cannot drift from what actually happened.',
+        'Each company numbers its invoices in one unbroken sequence. A number is assigned once, never reused, and a voided invoice keeps its number — so the sequence always adds up.',
     },
     {
       icon: QrCode,
@@ -138,7 +138,7 @@ function WhatItIsFor() {
       icon: History,
       title: 'Imported history, not a second bookkeeping',
       copy:
-        'Invoices issued before this app came online land in the same record, flagged as imported, so the ledger reads as one continuous history.',
+        'Bills from the systems you used before are kept as a read-only archive beside your invoices, with anything ambiguous flagged rather than guessed.',
     },
   ]
   return (

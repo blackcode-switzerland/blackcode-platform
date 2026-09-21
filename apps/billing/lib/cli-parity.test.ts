@@ -131,19 +131,13 @@ const UNSERVED_OPERATIONS = new Map<string, string>([
   // tenant and the issuing company is a row inside it — see the route file and
   // `createWorkspaceForUser`. An entry here would have removed a route this app
   // really has from the set drift compares against.
-  [
-    'PATCH /api/workspaces/{ws}',
-    'renaming a workspace is company-level administration and `updateWorkspace` ' +
-      'is still app-local to issues. This app READS the workspace it works in and ' +
-      'does not administer it. `bk workspace edit` is answered by issues.',
-  ],
-  [
-    'DELETE /api/workspaces/{ws}',
-    'destroying a workspace carries a cascade with exactly one implementation, on ' +
-      'purpose. Two deployments able to run it is two places for that cascade to ' +
-      'diverge, and the failure would be unrecoverable. `bk workspace delete` is ' +
-      'answered by issues.',
-  ],
+  // `PATCH` and `DELETE /api/workspaces/{ws}` WERE here until phase 2
+  // (2026-09-21), with "this app reads the workspace it works in and does not
+  // administer it" and "a delete cascade with exactly one implementation".
+  // Both went: this app serves them now (`bk billing workspace edit|delete`),
+  // and its DELETE is not a second cascade — it refuses any workspace holding a
+  // retained record and deletes only an empty one. Leaving the entries would
+  // have removed two real routes from the set drift compares against.
 ])
 
 describe('CLI ↔ routes parity', () => {

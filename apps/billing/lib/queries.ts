@@ -77,6 +77,19 @@ export interface Invitation {
   invited_by_email: string
 }
 
+/** `GET …/invite-candidates` row — people you already share a workspace with. */
+export interface InviteCandidate {
+  user_id: number
+  email: string
+  name: string | null
+  avatar_url: string | null
+  already_member: boolean
+  invited: boolean
+  shared_workspaces: string[]
+  /** Here only because the caller is a super admin — render apart. */
+  from_platform: boolean
+}
+
 export interface Me {
   id: number
   email: string
@@ -107,7 +120,8 @@ export interface Footprint {
   app: string
   footprint: {
     known: boolean
-    blocked_by: Array<{ workspace_id: number; name: string; member_count: number }>
+    /** `reason: 'retention'` = holds records kept for ten years; absent/'members' = other people are in it. */
+    blocked_by: Array<{ workspace_id: number; name: string; member_count: number; reason?: 'members' | 'retention'; detail?: string }>
     will_delete: Array<{ workspace_id: number; name: string }>
     [k: string]: unknown
   }
@@ -273,6 +287,15 @@ export function useInvitations(ws: string, opts: QueryOpts = {}) {
   return useQuery({
     queryKey: keys.invitations(ws),
     queryFn: () => list<Invitation>(wsApi(ws, '/invitations')),
+    ...opts,
+  })
+}
+
+/** `GET …/invite-candidates` — OWNER ONLY, like the invitations list. */
+export function useInviteCandidates(ws: string, opts: QueryOpts = {}) {
+  return useQuery({
+    queryKey: keys.inviteCandidates(ws),
+    queryFn: () => list<InviteCandidate>(wsApi(ws, '/invite-candidates')),
     ...opts,
   })
 }
