@@ -27,7 +27,7 @@ export const en = {
   'chrome.closedTitle':
     'This fiscal year has been closed. Nothing can be posted into it, and there is no reopen.',
   'chrome.yearClosed': '{year} — closed',
-  'chrome.appName': 'b/books',
+  'chrome.appName': '{app}',
 
   // ── the three shared screen states ──────────────────────────────────────
   'state.loading': 'Loading',
@@ -66,7 +66,7 @@ export const fr: Record<keyof typeof en, string> = {
   'chrome.closedTitle':
     'Cet exercice a été clôturé. Plus rien ne peut y être comptabilisé, et il n’y a pas de réouverture.',
   'chrome.yearClosed': '{year} — clôturé',
-  'chrome.appName': 'b/books',
+  'chrome.appName': '{app}',
 
   'state.loading': 'Chargement',
   'state.loadingThing': 'Chargement — {thing}',

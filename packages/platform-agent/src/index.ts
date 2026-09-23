@@ -50,4 +50,4 @@ export {
 } from './changelog'
 export type { ChangelogEntry, ChangelogPayload } from './changelog'
 
-export { CLI_LATEST_VERSION, CLI_MIN_VERSION } from './cli-version'
+export { CLI_LATEST_VERSION, CLI_MIN_VERSION, CLI_NPM_PACKAGE } from './cli-version'

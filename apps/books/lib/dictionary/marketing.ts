@@ -10,15 +10,15 @@
 // knows better.
 
 export const en = {
-  'site.footer': 'b/books — a blackcode product.',
-  'site.home': 'b/books home',
+  'site.footer': '{app} — a {platform} product.',
+  'site.home': '{app} home',
   'site.signIn': 'Sign in',
   'site.createAccount': 'Create an account',
 
   'landing.eyebrow': 'Statutory bookkeeping',
   'landing.headline': 'Books you can defend, line by line.',
   'landing.lede':
-    'b/books keeps double-entry accounts for as many books as you have. Every entry says what it means, what evidence stands behind it, and where that evidence lives — because in ten years’ time that is the only thing anybody will ask.',
+    '{app} keeps double-entry accounts for as many books as you have. Every entry says what it means, what evidence stands behind it, and where that evidence lives — because in ten years’ time that is the only thing anybody will ask.',
   'landing.whatItDoes': 'What it does.',
   'landing.f1.title': 'One book, or several',
   'landing.f1.copy':
@@ -41,7 +41,7 @@ export const en = {
   'landing.agentEyebrow': 'Agent-first',
   'landing.agentHeadline': 'The work happens outside. This is where you check it.',
   'landing.agentP1':
-    'b/books is operated by people in this web app and by agents through {bk}, one Go binary on npm. There is no HTTP API to learn and no reference to keep in sync: {guide} ships inside the binary, so it describes exactly the version you are running, offline.',
+    '{app} is operated by people in this web app and by agents through {bk}, one Go binary on npm. There is no HTTP API to learn and no reference to keep in sync: {guide} ships inside the binary, so it describes exactly the version you are running, offline.',
   'landing.agentP2':
     'Anything that changes without a release — the vocabularies, the VAT rates, which books you have — comes from {meta}, live. That is why none of it is printed on this page.',
   'landing.agentP3':
@@ -57,7 +57,7 @@ export const en = {
   'landing.law3.def':
     'A fixed structure, in a fixed order. The balance sheet and income statement here are that structure, not a report built on top of it.',
   'landing.ctaHeadline': 'Open the books.',
-  'landing.ctaBody': 'Sign in with your blackcode account — the same one the other blackcode apps use.',
+  'landing.ctaBody': 'Sign in with your {platform} account — the same one the other {platform} apps use.',
 
   // ── the login card ──────────────────────────────────────────────────────
   'login.tagline': 'Swiss statutory bookkeeping',
@@ -75,12 +75,12 @@ export const en = {
   'login.or': 'or',
   'login.badCredentials': 'That email and password do not match an account.',
   'login.passwordHint': 'At least 8 characters',
-  'login.emailPlaceholder': 'you@blackcode.ch',
+  'login.emailPlaceholder': 'you@{contactDomain}',
   'login.accountCreated': 'Account created. Please sign in.',
   'login.passwordUpdated':
-    'Password updated. Sign in with your new password — every other blackcode app was signed out too.',
+    'Password updated. Sign in with your new password — every other {platform} app was signed out too.',
   'login.shared':
-    'Your blackcode account is the same one across every blackcode app. New addresses have to be approved by a super admin before they can sign up, and a password reset here is a password reset everywhere.',
+    'Your {platform} account is the same one across every {platform} app. New addresses have to be approved by a super admin before they can sign up, and a password reset here is a password reset everywhere.',
 
   // ── the password reset / change flow ────────────────────────────────────
   'reset.title': 'Reset your password',
@@ -88,7 +88,7 @@ export const en = {
   'reset.askBody':
     'Enter your account email and we will send you a 6-digit code to reset your password.',
   'reset.askBodyAuthenticated':
-    'We will send a 6-digit code to your account email. Setting a new password signs you out of every blackcode app, including this session.',
+    'We will send a 6-digit code to your account email. Setting a new password signs you out of every {platform} app, including this session.',
   'reset.send': 'Send code',
   'reset.sending': 'Sending…',
   'reset.sent': 'We sent a 6-digit code to {email}. It expires shortly.',
@@ -119,9 +119,9 @@ export const en = {
   'reset.mismatch': 'Passwords do not match.',
 
   // ── /cli/authorize ──────────────────────────────────────────────────────
-  'cli.title': 'Authorize the b/books CLI',
+  'cli.title': 'Authorize the {app} CLI',
   'cli.body':
-    'A terminal on this machine asked to sign in as you. Approving this mints an API token and hands it back — the same token every blackcode app accepts, not a b/books-only one.',
+    'A terminal on this machine asked to sign in as you. Approving this mints an API token and hands it back — the same token every {platform} app accepts, not a {app}-only one.',
   'cli.approve': 'Authorize',
   'cli.approving': 'Authorizing…',
   'cli.deny': 'Cancel',
@@ -129,26 +129,26 @@ export const en = {
   'cli.badCallback':
     'This link does not name a loopback address, so it is not a request from a terminal on this machine. Nothing was authorized.',
   'cli.tokenName': 'Token name',
-  'cli.revokeLater': 'You can revoke it later from Settings → API tokens, in any blackcode app.',
+  'cli.revokeLater': 'You can revoke it later from Settings → API tokens, in any {platform} app.',
   'cli.noRedirect': 'The server authorized the request but returned no callback URL.',
   'cli.signedInAs': 'Signed in as {email}',
   'cli.willSendTo': 'A new API token will be created and sent to your terminal at:',
   'cli.notBooksSpecific':
-    'This token is not specific to b/books. It is your blackcode token and it works against every app your account can reach. Revoke it from Settings → API tokens, in any of them.',
+    'This token is not specific to {app}. It is your {platform} token and it works against every app your account can reach. Revoke it from Settings → API tokens, in any of them.',
   'cli.missingParams': 'Missing parameters',
   'cli.missingParamsBody':
     'This authorization request has no callback URL or no state token. Re-run {login} from your terminal.',
   'cli.invalidCallback': 'Invalid callback',
   'cli.invalidCallbackBody':
-    'The callback is not a localhost loopback. Refusing to send a token to an external host — the credential this page mints works against every blackcode app, not only this one.',
-  'cli.back': '← Back to b/books',
+    'The callback is not a localhost loopback. Refusing to send a token to an external host — the credential this page mints works against every {platform} app, not only this one.',
+  'cli.back': '← Back to {app}',
 
   // ── no books ────────────────────────────────────────────────────────────
   'noBooks.title': 'You have no books yet',
   'noBooks.p1':
     'A book is one legal entity’s complete set of accounts — a company, or a self-employment activity. It has its own chart of accounts, its own fiscal year and its own balance sheet, and it never mixes with another one.',
   'noBooks.p2':
-    'You can have as many as you need. Everything else in b/books — the ledger, the statements, the recognition queue — is scoped to whichever one you are looking at.',
+    'You can have as many as you need. Everything else in {app} — the ledger, the statements, the recognition queue — is scoped to whichever one you are looking at.',
   'noBooks.openingOne': 'Opening one',
   'noBooks.openingBody':
     'From a terminal, with the {bk} CLI. It is not a form in this app on purpose: the legal form fixes which bookkeeping rules the entity is kept under for its whole life, and the registered seat decides the cantonal and communal tax parameters every later figure is computed with. Neither can be changed afterwards by editing a field.',
@@ -157,7 +157,7 @@ export const en = {
     '{sa} for a capital company, which is always double-entry, or {ri} for a sole proprietorship, which is kept simplified unless you say otherwise. The book arrives with the Swiss PME chart of accounts already in it. Then open its first fiscal year with {exercice} — nothing can be posted until there is one.',
   'noBooks.noCli': 'No {bk} yet? Run {login} once and it will bring you back here to authorize it.',
   'noBooks.signedInAs':
-    'Signed in as {email}. Your blackcode account works across every blackcode app.',
+    'Signed in as {email}. Your {platform} account works across every {platform} app.',
 
   // ── no exercice ─────────────────────────────────────────────────────────
   'noExercice.thisBook': 'This book',
@@ -168,15 +168,15 @@ export const en = {
 } as const
 
 export const fr: Record<keyof typeof en, string> = {
-  'site.footer': 'b/books — un produit blackcode.',
-  'site.home': 'Accueil b/books',
+  'site.footer': '{app} — un produit {platform}.',
+  'site.home': 'Accueil {app}',
   'site.signIn': 'Se connecter',
   'site.createAccount': 'Créer un compte',
 
   'landing.eyebrow': 'Comptabilité légale',
   'landing.headline': 'Des livres que vous pouvez défendre, ligne par ligne.',
   'landing.lede':
-    'b/books tient une comptabilité en partie double pour autant de livres que vous en avez. Chaque écriture dit ce qu’elle signifie, quelle pièce la justifie et où cette pièce se trouve — parce que dans dix ans, c’est la seule chose qu’on vous demandera.',
+    '{app} tient une comptabilité en partie double pour autant de livres que vous en avez. Chaque écriture dit ce qu’elle signifie, quelle pièce la justifie et où cette pièce se trouve — parce que dans dix ans, c’est la seule chose qu’on vous demandera.',
   'landing.whatItDoes': 'Ce qu’il fait.',
   'landing.f1.title': 'Un livre, ou plusieurs',
   'landing.f1.copy':
@@ -199,7 +199,7 @@ export const fr: Record<keyof typeof en, string> = {
   'landing.agentEyebrow': 'Conçu pour les agents',
   'landing.agentHeadline': 'Le travail se fait ailleurs. Ici, vous le vérifiez.',
   'landing.agentP1':
-    'b/books s’utilise par des personnes dans cette application web et par des agents via {bk}, un binaire Go publié sur npm. Il n’y a pas d’API HTTP à apprendre ni de référence à maintenir : {guide} est embarqué dans le binaire et décrit donc exactement la version que vous exécutez, hors ligne.',
+    '{app} s’utilise par des personnes dans cette application web et par des agents via {bk}, un binaire Go publié sur npm. Il n’y a pas d’API HTTP à apprendre ni de référence à maintenir : {guide} est embarqué dans le binaire et décrit donc exactement la version que vous exécutez, hors ligne.',
   'landing.agentP2':
     'Tout ce qui change sans nouvelle version — les vocabulaires, les taux de TVA, la liste de vos livres — vient de {meta}, en direct. C’est pourquoi rien de tout cela n’est imprimé sur cette page.',
   'landing.agentP3':
@@ -216,7 +216,7 @@ export const fr: Record<keyof typeof en, string> = {
     'Une structure fixe, dans un ordre fixe. Le bilan et le compte de résultat présentés ici SONT cette structure, et non un rapport construit par-dessus.',
   'landing.ctaHeadline': 'Ouvrez les livres.',
   'landing.ctaBody':
-    'Connectez-vous avec votre compte blackcode — le même que celui des autres applications blackcode.',
+    'Connectez-vous avec votre compte {platform} — le même que celui des autres applications {platform}.',
 
   'login.tagline': 'Comptabilité légale suisse',
   'login.tabSignIn': 'Se connecter',
@@ -233,19 +233,19 @@ export const fr: Record<keyof typeof en, string> = {
   'login.or': 'ou',
   'login.badCredentials': 'Cette adresse et ce mot de passe ne correspondent à aucun compte.',
   'login.passwordHint': 'Au moins 8 caractères',
-  'login.emailPlaceholder': 'vous@blackcode.ch',
+  'login.emailPlaceholder': 'vous@{contactDomain}',
   'login.accountCreated': 'Compte créé. Veuillez vous connecter.',
   'login.passwordUpdated':
-    'Mot de passe mis à jour. Connectez-vous avec le nouveau — toutes les autres applications blackcode ont également été déconnectées.',
+    'Mot de passe mis à jour. Connectez-vous avec le nouveau — toutes les autres applications {platform} ont également été déconnectées.',
   'login.shared':
-    'Votre compte blackcode est le même dans toutes les applications blackcode. Les nouvelles adresses doivent être approuvées par un super administrateur avant de pouvoir s’inscrire, et une réinitialisation du mot de passe ici vaut pour partout.',
+    'Votre compte {platform} est le même dans toutes les applications {platform}. Les nouvelles adresses doivent être approuvées par un super administrateur avant de pouvoir s’inscrire, et une réinitialisation du mot de passe ici vaut pour partout.',
 
   'reset.title': 'Réinitialiser votre mot de passe',
   'reset.titleChange': 'Changer votre mot de passe',
   'reset.askBody':
     'Saisissez l’adresse e-mail de votre compte et nous vous enverrons un code à 6 chiffres pour réinitialiser votre mot de passe.',
   'reset.askBodyAuthenticated':
-    'Nous enverrons un code à 6 chiffres à l’adresse de votre compte. Définir un nouveau mot de passe vous déconnecte de toutes les applications blackcode, y compris de cette session.',
+    'Nous enverrons un code à 6 chiffres à l’adresse de votre compte. Définir un nouveau mot de passe vous déconnecte de toutes les applications {platform}, y compris de cette session.',
   'reset.send': 'Envoyer le code',
   'reset.sending': 'Envoi…',
   'reset.sent': 'Nous avons envoyé un code à 6 chiffres à {email}. Il expire rapidement.',
@@ -276,9 +276,9 @@ export const fr: Record<keyof typeof en, string> = {
   'reset.tooShort': 'Le mot de passe doit comporter au moins 8 caractères.',
   'reset.mismatch': 'Les mots de passe ne correspondent pas.',
 
-  'cli.title': 'Autoriser le CLI b/books',
+  'cli.title': 'Autoriser le CLI {app}',
   'cli.body':
-    'Un terminal sur cette machine a demandé à se connecter en votre nom. En approuvant, vous émettez un jeton API qui lui est transmis — le même jeton qu’acceptent toutes les applications blackcode, pas un jeton propre à b/books.',
+    'Un terminal sur cette machine a demandé à se connecter en votre nom. En approuvant, vous émettez un jeton API qui lui est transmis — le même jeton qu’acceptent toutes les applications {platform}, pas un jeton propre à {app}.',
   'cli.approve': 'Autoriser',
   'cli.approving': 'Autorisation…',
   'cli.deny': 'Annuler',
@@ -287,25 +287,25 @@ export const fr: Record<keyof typeof en, string> = {
     'Ce lien ne désigne pas une adresse de boucle locale : il ne provient donc pas d’un terminal de cette machine. Rien n’a été autorisé.',
   'cli.tokenName': 'Nom du jeton',
   'cli.revokeLater':
-    'Vous pourrez le révoquer plus tard depuis Réglages → Jetons API, dans n’importe quelle application blackcode.',
+    'Vous pourrez le révoquer plus tard depuis Réglages → Jetons API, dans n’importe quelle application {platform}.',
   'cli.noRedirect': 'Le serveur a autorisé la demande mais n’a renvoyé aucune URL de rappel.',
   'cli.signedInAs': 'Connecté en tant que {email}',
   'cli.willSendTo': 'Un nouveau jeton API sera créé et envoyé à votre terminal à l’adresse :',
   'cli.notBooksSpecific':
-    'Ce jeton n’est pas propre à b/books. C’est votre jeton blackcode et il fonctionne avec toutes les applications accessibles à votre compte. Révoquez-le depuis Réglages → Jetons API, dans l’une d’elles.',
+    'Ce jeton n’est pas propre à {app}. C’est votre jeton {platform} et il fonctionne avec toutes les applications accessibles à votre compte. Révoquez-le depuis Réglages → Jetons API, dans l’une d’elles.',
   'cli.missingParams': 'Paramètres manquants',
   'cli.missingParamsBody':
     'Cette demande d’autorisation n’a ni URL de rappel ni jeton d’état. Relancez {login} depuis votre terminal.',
   'cli.invalidCallback': 'Rappel invalide',
   'cli.invalidCallbackBody':
-    'Le rappel n’est pas une adresse de boucle locale. Envoi du jeton à un hôte externe refusé — l’identifiant émis par cette page fonctionne avec toutes les applications blackcode, pas seulement celle-ci.',
-  'cli.back': '← Retour à b/books',
+    'Le rappel n’est pas une adresse de boucle locale. Envoi du jeton à un hôte externe refusé — l’identifiant émis par cette page fonctionne avec toutes les applications {platform}, pas seulement celle-ci.',
+  'cli.back': '← Retour à {app}',
 
   'noBooks.title': 'Vous n’avez encore aucun livre',
   'noBooks.p1':
     'Un livre est l’ensemble complet des comptes d’une entité juridique — une société, ou une activité indépendante. Il a son propre plan comptable, son propre exercice et son propre bilan, et il ne se mélange jamais avec un autre.',
   'noBooks.p2':
-    'Vous pouvez en avoir autant que nécessaire. Tout le reste de b/books — le grand livre, les états, la file de reconnaissance — porte sur celui que vous consultez.',
+    'Vous pouvez en avoir autant que nécessaire. Tout le reste de {app} — le grand livre, les états, la file de reconnaissance — porte sur celui que vous consultez.',
   'noBooks.openingOne': 'En ouvrir un',
   'noBooks.openingBody':
     'Depuis un terminal, avec le CLI {bk}. Ce n’est volontairement pas un formulaire dans cette application : la forme juridique fixe pour toute la vie de l’entité les règles comptables qui lui sont applicables, et le siège inscrit détermine les paramètres fiscaux cantonaux et communaux avec lesquels toute figure ultérieure est calculée. Ni l’un ni l’autre ne se corrige ensuite en modifiant un champ.',
@@ -315,7 +315,7 @@ export const fr: Record<keyof typeof en, string> = {
   'noBooks.noCli':
     'Pas encore de {bk} ? Lancez {login} une fois et vous serez ramené ici pour l’autoriser.',
   'noBooks.signedInAs':
-    'Connecté en tant que {email}. Votre compte blackcode fonctionne dans toutes les applications blackcode.',
+    'Connecté en tant que {email}. Votre compte {platform} fonctionne dans toutes les applications {platform}.',
 
   'noExercice.thisBook': 'Ce livre',
   'noExercice.title': '{book} n’a encore aucun exercice ouvert.',

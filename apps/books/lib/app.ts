@@ -36,8 +36,46 @@ export const APP_SLUG = 'books'
  * Added 2026-08-19 with this app's email binding: `EmailIdentity.name` is the
  * From line and the wordmark inside the message, and `packages/platform-email`
  * asks apps to read it from here so the mail and the screen cannot drift apart.
+ *
+ * ── ENVIRONMENT SINCE 2026-09-23 (ticket #756), THE SAME SHAPE AS b/billing ──
+ * A copy of this app can run under another company's name. What varies there is
+ * what a PERSON reads — this name, the contact address, the family name in "your
+ * blackcode account" — and none of it is the slug (see above).
+ *
+ * ── THESE VALUES ARE INLINED AT BUILD TIME, NOT READ AT REQUEST TIME ────────
+ * `lib/dictionary/index.ts` substitutes them into the dictionary, and the
+ * dictionary is imported by a CLIENT module (`lib/i18n.tsx`), so the browser
+ * bundle needs them too. A plain `process.env.X` is `undefined` in a browser
+ * bundle unless it is `NEXT_PUBLIC_` — which would rename every variable — or
+ * listed under `env` in `next.config.js`, which is what this app does. The
+ * consequence: changing one of these on a deployment needs a REBUILD, not a
+ * restart. `bk meta` and the routes read the same inlined value, so the two
+ * front doors cannot disagree.
  */
-export const APP_NAME = 'b/books'
+export const APP_NAME = process.env.BOOKS_DISPLAY_NAME ?? 'b/books'
+
+/** Where a human replies to mail this app sends, and the footer's address. */
+export const CONTACT_EMAIL = process.env.BOOKS_CONTACT_EMAIL ?? 'contact@blackcode.ch'
+
+/**
+ * The FAMILY name — the word in "your blackcode account is the same one across
+ * every blackcode app". It is not the product name: b/books is one app of the
+ * family, and the sentences that use this word are about the account every app
+ * shares. A rebranded deployment sets it to its own company.
+ */
+export const PLATFORM_NAME = process.env.BOOKS_PLATFORM_NAME ?? 'blackcode'
+
+/**
+ * `you@<the contact address's domain>` — the login form's placeholder, derived
+ * rather than a fourth variable: a placeholder on another company's domain is
+ * the kind of leak nobody sets a variable for.
+ */
+export const EMAIL_PLACEHOLDER = `you@${CONTACT_EMAIL.slice(CONTACT_EMAIL.indexOf('@') + 1)}`
+
+/** The word beside the mark: `b/books` → `books`, because the mark already says `b/`. */
+export function wordmark(appName: string): string {
+  return appName.replace(/^b\//, '')
+}
 
 /**
  * The button fill in this app's email templates — **not `--primary`.**

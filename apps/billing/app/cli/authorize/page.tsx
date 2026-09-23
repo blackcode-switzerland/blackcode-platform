@@ -19,7 +19,7 @@ import { Terminal } from 'lucide-react'
 import { parseCallbackURL } from '@blackcode/platform-auth/cli-callback'
 import { getValidatedSessionUser } from '@/lib/auth/session'
 import { CliAuthorizeForm } from '@/components/cli-authorize-form'
-import { APP_NAME } from '@/lib/app'
+import { APP_NAME, PLATFORM_NAME } from '@/lib/app'
 
 export const dynamic = 'force-dynamic'
 
@@ -99,7 +99,7 @@ export default async function CliAuthorizePage({
             assume otherwise — "I authorized here, so I got an app-scoped
             token" is a reasonable guess and a wrong one. */}
         <p className="mb-6 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          This mints one <strong className="text-foreground">blackcode-wide</strong> token, not a{' '}
+          This mints one <strong className="text-foreground">{PLATFORM_NAME}-wide</strong> token, not a{' '}
           {APP_NAME} token. It reaches every app your account can reach, and you can revoke it from
           any of them.
         </p>

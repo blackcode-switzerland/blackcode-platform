@@ -37,5 +37,17 @@
 // "update available" nudge yet. Fix with either a redeploy or BK_CLI_LATEST=1.10.0
 // in Vercel — the env override exists for exactly this.
 
+/**
+ * The npm package that IS the binary. One name for the whole platform, because
+ * there is one binary (`§6`), so it lives beside the version pair rather than in
+ * any app: `bk meta` advertises it, the deprecation header names it, and an
+ * app's landing page prints the install line from it. It is not brand copy and
+ * it is not environment — it is the package a person has to type to get `bk`,
+ * and a deployment that showed a different name here would be advertising an
+ * install that does not exist. A fork that publishes its own binary changes
+ * this line, and every surface that prints it moves together. (Ticket #756.)
+ */
+export const CLI_NPM_PACKAGE = '@blackcode_sa/bc-issues'
+
 export const CLI_LATEST_VERSION = process.env.BK_CLI_LATEST ?? '5.0.0'
 export const CLI_MIN_VERSION = process.env.BK_CLI_MIN ?? '5.0.0'

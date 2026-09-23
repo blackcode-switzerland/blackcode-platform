@@ -48,6 +48,7 @@ import Image from 'next/image'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
+import { APP_NAME } from '@/lib/app'
 import { GoogleMark } from '@blackcode/platform-ui/ui/google-mark'
 import { useRegisterAccount } from '@/lib/account'
 import { PasswordResetFlow } from '@/components/password-reset-flow'
@@ -207,13 +208,13 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
               and no future size can get it wrong. */}
           <Image
             src="/logo.png"
-            alt="b/"
+            alt=""
             width={44}
             height={44}
             priority
             className="mx-auto mb-4 rounded-[14%]"
           />
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">b/books</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">{APP_NAME}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t('login.tagline')}</p>
         </div>
 

@@ -966,11 +966,14 @@ restored, on 2026-09-17:
 | `lib/db/queries/holds-covers-entities.test.ts` | a `probe` table added to the schema with no `holds` line | "billing.probe … an app that under-reports its footprint is silently SKIPPED" |
 | the same, vacuous-pass case | the declaration regex changed so it matches nothing | "has been passing without a subject" |
 | `lib/no-brand-literal.test.ts` | `b/billing` in JSX text; then in a string literal; then an empty file list | each reported, including "scanned 0 files" |
+| the same, widened 2026-09-23 (#756) | `contact@blackcode.ch` as JSX text in the footer; `you@blackcode.ch` as a placeholder string; `b/books` back in `lifecycle.ts`'s audit prose | `site-chrome.tsx:39 renders the family name, the domain or the npm scope`; `login-form.tsx:206 …`; `lifecycle.ts:622 renders a sibling product` |
+| `packages/platform-email/test/no-brand-literal.test.ts` (new) | `, a Blackcode product` appended to the shared footer; then `const brand = ""` (the positive case) | `invitationEmail.html renders "Blackcode"` ×3; `documentEmail: HTML lacks the identity name` |
 | `migration-journal.test.ts` | one journal entry deleted | "these migrations … will never apply … this is exactly what shipped on 2026-08-17" |
 | `migration-ledger.test.ts` | the ledger table name reverted to drizzle's default | "two apps would migrate into the SAME drizzle ledger … SILENTLY SKIPPED" |
 | `guide_test.go` `vocabularySources` | a topic restating three invitation statuses | `--- FAIL: …/billing` — the app-specific section that b/books never had |
 | the same, source path | `vocabularySources["billing"]` pointed at a missing file | `TestVocabularySourcesAreReal` |
 | `help_app_roster_test.go` (new) | the billing row deleted from the root help tour; then a row naming an app the binary lacks | both directions reported |
+| `no-brand-literal.test.ts`'s **comment stripper** (found 2026-09-23, CLAUDE.md finding #27) | `you@blackcode.ch` put in the code a line comment quoting `/*` had hidden — 3,161 characters of `apps/books/components/login-form.tsx` that the two-regex stripper read as one block comment | **nothing: 7/7 green.** The guard could not see the region it had stripped. Replaced by `@blackcode/platform-testing`'s `readableText`, a scanner that knows strings, `${…}` holes and regex literals from comments; the same mutation now says `components/login-form.tsx:61 renders the family name…` |
 | `devops/release.sh` | `release.sh web billing` with the placeholder project id | refused, naming the step that fixes it |
 
 Phase 1 added these, on 2026-09-17:
@@ -1226,3 +1229,108 @@ succeeded; (2) `issues.workspace_counters` refused 42501; (4b)/(4c) forging or
 erasing a blob reference refused; **(4d) refused by `blob_refs_purge` itself**
 ("may not purge references held by app not-this-app"), not by a schema denial;
 (5) the migration ledger refused.
+
+## Branding: what a person sees comes from the environment (ticket #756, 2026-09-23)
+
+This app ships as a separate, rebranded product for an outside company whose
+users are patients and clinic staff. The rule is one sentence: **nothing a
+person reads is a literal.** The slug is not a person's word and never moves
+(`lib/app.ts` says why). Everything else below reads `lib/app.ts`.
+
+### The inventory, as found on 2026-09-23 at `a469fab`
+
+Every rendered Blackcode string in this app, where it went, and what reads it
+now. Comments were not counted — a comment reaches nobody, and the scan strips
+them. The spec (phase-2-branding in the customer's plan) listed five; the grep
+found seventeen, and the scan then found one more in b/books that the grep had
+excluded as a code block.
+
+| Surface | Was (file:line at `a469fab`) | Reads now |
+|---|---|---|
+| Landing footer `mailto:` and its text | `components/landing/site-chrome.tsx:38-39` `contact@blackcode.ch` | `CONTACT_EMAIL` |
+| Landing CTA | `components/landing-page.tsx:222` "your blackcode account … every blackcode app" | `PLATFORM_NAME` |
+| Landing install line | `components/landing-page.tsx:202` `npm install -g @blackcode_sa/bc-issues` | `CLI_NPM_PACKAGE` (platform-agent) — the value `bk meta` advertises |
+| Login placeholder | `components/login-form.tsx:206` `you@blackcode.ch` | `EMAIL_PLACEHOLDER`, derived from `CONTACT_EMAIL`'s domain |
+| Login footnote | `components/login-form.tsx:263` "Your blackcode account is the same one across every blackcode app" | `PLATFORM_NAME` |
+| Password-reset placeholder | `components/password-reset-flow.tsx:184` `you@blackcode.ch` | `EMAIL_PLACEHOLDER` |
+| `/cli/authorize` | `app/cli/authorize/page.tsx:102` "blackcode-wide token" | `PLATFORM_NAME` |
+| Settings → tokens | `components/settings/token-settings.tsx:89` "Tokens are how agents reach blackcode" | `PLATFORM_NAME` |
+| Settings → profile | `components/settings/profile-settings.tsx:59-60` "Your blackcode profile", "every blackcode app" | `PLATFORM_NAME` |
+| Settings → account | `components/settings/account-settings.tsx:52, 62, 72, 234, 301` five sentences naming "blackcode" | `PLATFORM_NAME` |
+| `paid` audit detail (EN/FR) | `lib/db/queries/lifecycle.ts:688-689` "b/billing does not reconcile, b/books does" | `APP_NAME`; "the bookkeeping does" — a deployment without b/books must not name it |
+| `void` refusal hint | `lib/db/queries/lifecycle.ts:670` "b/books records it" | "the bookkeeping records it" |
+| Mail From line, wordmark, footer, logo | `lib/email/send.ts` — already `APP_NAME`, `CONTACT_EMAIL`, `EMAIL_ACCENT`, `NEXTAUTH_URL/logo.png` | unchanged; `packages/platform-email` carries no literal (its new render test proves it) |
+| Invoice PDF footer | `lib/pdf/invoice.ts:239` — the issuing COMPANY's `footer_fr`/`footer_en` columns | unchanged: data, not brand. `lib/pdf/fixtures.ts` names "Blackcode Sàrl" and is test data only |
+| Browser tab, shell wordmark, page titles | already `APP_NAME` | unchanged |
+| b/books: name, `<title>`, login card, sidebar, footer, mail, ~60 dictionary strings | `apps/books/lib/app.ts:40` `'b/books'`; `lib/email/send.ts:60`; `lib/dictionary/{marketing,settings,chrome,documents}.ts` | `BOOKS_DISPLAY_NAME`, `BOOKS_CONTACT_EMAIL`, `BOOKS_PLATFORM_NAME` — `apps/books/docs/backend.md` §9 |
+
+Not brand, and left alone: `lib/db/seed*.ts` (the seed workspace is slugged
+`blackcode`, for a developer's database), migration comments, and every `bk
+billing …` example — `billing` is the slug.
+
+### The five values, and the one that is not a value
+
+| `lib/app.ts` export | Environment | Default | Where it lands |
+|---|---|---|---|
+| `APP_NAME` | `BILLING_DISPLAY_NAME` | `b/billing` | tab title, wordmark, mail From line, audit prose |
+| `CONTACT_EMAIL` | `BILLING_CONTACT_EMAIL` | `contact@blackcode.ch` | mail footer, landing footer |
+| `EMAIL_ACCENT` | `BILLING_EMAIL_ACCENT` | `#0f6b44` | the mail button (measure the contrast — the note in `lib/app.ts`) |
+| `PLATFORM_NAME` | `BILLING_PLATFORM_NAME` | `blackcode` | every "your … account", "every … app", "…-wide token" |
+| `EMAIL_PLACEHOLDER` | derived: `you@<CONTACT_EMAIL's domain>` | `you@blackcode.ch` | the two email inputs |
+
+**The logo is a file, not a variable**: `public/logo.png`, served by this
+deployment and linked from the mail as `<NEXTAUTH_URL>/logo.png` (Gmail blocks
+data URIs, and a logo hosted elsewhere is a logo another company controls). A
+rebranded copy swaps the file. No legal footer line was added: nothing renders
+one today, and the invoice's footer is the issuing company's own columns, which
+is where a clinic's payment terms belong.
+
+### Why the values are inlined at build time — measured
+
+`login-form.tsx`, the settings pages and `billing-shell.tsx` are client
+components importing `APP_NAME` directly. In a browser bundle `process.env.X`
+is `undefined` unless it is `NEXT_PUBLIC_` or listed under `env` in
+`next.config.js`. So the design in place since phase 0 — "the name is
+environment-driven" — was true on the server and false in the browser, and
+nobody had built with the variable set to look.
+
+Built on 2026-09-23 with `BILLING_DISPLAY_NAME=Zedbrand`, before the change:
+**14 server chunks read the variable, 0 client chunks carried the value**, and
+the login chunk held `process.env.BILLING_DISPLAY_NAME??"b/billing"` against a
+`process.env` polyfill that has only `NEXT_PUBLIC_` keys. A rebranded deployment
+would have rendered its own name on the server and `b/billing` after hydration.
+
+After: `next.config.js` lists the four `BILLING_*` variables under `env`, only
+those that are set. The same build shows **5 client chunks carrying all three
+values, 0 carrying `b/billing` or `blackcode`; 22 server files carrying the
+inlined value and 0 reading the variable at runtime** (the eight files that
+still spell `process.env.BILLING_DISPLAY_NAME` are source maps). The price is
+stated in `lib/app.ts` and `docs/env.md`: a change needs a redeploy. The gain is
+that the routes, `bk meta`, the mail and the browser read one value.
+
+With nothing set, `npm run build` produces what it produced before — the
+defaults are the previous literals, byte for byte.
+
+### Redaction
+
+`lib/api.ts` sets `redactBody: true`. What it does: `ApiError.details`, the only
+request-derived value that reaches `platform.error_events.context`, is replaced
+by `{ redacted: 'body' }`. What it does not do: touch `message` or `stack`
+(`packages/platform-api/src/handler.ts`, `errorLogContext`'s header). Today
+every billing `details` is a string suggestion, so nothing structured was being
+kept; the flag is per-app so that the first route to attach a structured
+payload cannot forget it.
+
+### What still needs the customer
+
+- Their display name, contact address, accent and family name — four Vercel
+  variables (`docs/env.md`), set before the first production build.
+- Their logo, as `public/logo.png` in their copy.
+- Whether they publish their own `bk` binary. If they do, `CLI_NPM_PACKAGE` in
+  `packages/platform-agent/src/cli-version.ts` is the one line to change; until
+  then the install line correctly names the only package that exists.
+- The invoice mail's fixed frame ("Attached", "This is an automated message
+  from …", the reply-to sentence) is English whatever the invoice's language.
+  Not a brand leak — the shared templates carry no literal — but the customer's
+  plan (phase 2.3) wants it in the document's language, as a parameter from
+  this app. Not done here.

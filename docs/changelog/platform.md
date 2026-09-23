@@ -7,6 +7,23 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-09-23 — The CLI's npm package name has one source (ticket #756)
+
+Not breaking; no value changed. `CLI_NPM_PACKAGE` in
+`packages/platform-agent/src/cli-version.ts` is now the one place the binary's
+package name (`@blackcode_sa/bc-issues`) is spelled: `bk meta`'s `cli.package`,
+`cli.install` and `cli.update`, the HTTP deprecation warning header, and an
+app's landing-page install line all read it. It is a constant, not environment —
+there is one binary, and a deployment advertising a different package would be
+advertising an install that does not exist. A fork that publishes its own binary
+changes that line and every surface moves with it.
+
+`packages/platform-email` also gained `test/no-brand-literal.test.ts`: it renders
+the three templates with a non-Blackcode identity and asserts the output names
+that identity and no brand of its own. It found, and recorded rather than
+changed, that `documentEmail`'s plain-text part identifies the sender only by
+the From header and the reply-to line, never by name.
+
 ## 2026-09-21 — Footprint: a workspace can be blocked by a retention hold, not only by members
 
 **Not breaking.** `AppFootprint.blocked_by[]` entries (`GET /api/me/footprint`,

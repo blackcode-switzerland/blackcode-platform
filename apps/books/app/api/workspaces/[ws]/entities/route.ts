@@ -36,8 +36,8 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   const name = str('name')
   const legal_form = str('legal_form')
 
-  if (!slug) throw Errors.badRequest('missing_slug', 'slug is required', 'pass --slug blackcode')
-  if (!name) throw Errors.badRequest('missing_name', 'name is required', 'pass --name "blackcode SA"')
+  if (!slug) throw Errors.badRequest('missing_slug', 'slug is required', 'pass --slug acme')
+  if (!name) throw Errors.badRequest('missing_name', 'name is required', 'pass --name "Acme SA"')
   if (!legal_form) {
     throw Errors.badRequest('missing_legal_form', 'legal_form is required', 'pass --legal-form SA or RI')
   }

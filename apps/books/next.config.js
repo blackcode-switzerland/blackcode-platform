@@ -1,7 +1,22 @@
 const path = require('node:path')
 
+// ── THE BRAND VARIABLES ARE INLINED AT BUILD TIME (ticket #756) ─────────────
+// `lib/app.ts` reads these, and `lib/dictionary/index.ts` substitutes them into
+// the dictionary that `lib/i18n.tsx` — a CLIENT module — imports. In a browser
+// bundle `process.env.X` is `undefined` for anything not `NEXT_PUBLIC_`, so
+// without this block a rebranded deployment renders its own name on the server
+// and `b/books` in the browser. Listing them here makes Next inline the value
+// into every bundle. Only SET variables are listed: an `undefined` under `env`
+// is dropped by Next, and being explicit about that is cheaper than relying on
+// it. The price is stated in `lib/app.ts`: a change needs a rebuild.
+const BRAND_ENV = ['BOOKS_DISPLAY_NAME', 'BOOKS_CONTACT_EMAIL', 'BOOKS_PLATFORM_NAME']
+const env = Object.fromEntries(
+  BRAND_ENV.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])
+)
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  env,
   // Monorepo: this app lives at apps/books, but it reads and bundles files
   // from the repo root (docs/). Next must be told where the workspace root is,
   // or it infers it from the nearest lockfile and refuses to trace files above

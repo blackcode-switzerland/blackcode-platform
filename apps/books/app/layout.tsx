@@ -9,13 +9,15 @@
 import type { Metadata } from 'next'
 import { Toaster } from 'sonner'
 import { getLocale } from '@blackcode/platform-i18n/server'
+import { APP_NAME } from '@/lib/app'
 import { getValidatedSessionUser } from '@/lib/auth/session'
 import { Providers } from './providers'
 import './globals.css'
 
 export const metadata: Metadata = {
-  // `b/<app> — <what it is>`, the same shape as the other two apps.
-  title: 'b/books — Swiss statutory bookkeeping',
+  // `b/<app> — <what it is>`, the same shape as the other two apps. `APP_NAME`,
+  // never a literal: a rebranded copy shows the tab title before anything else.
+  title: `${APP_NAME} — Swiss statutory bookkeeping`,
   description: 'Double-entry books that can be defended: every entry explained, every entry evidenced.',
   // `public/logo.png` — the same blackcode mark both other apps carry. Without
   // this the tab shows Next.js's default. The file is opaque (a white `b/` on

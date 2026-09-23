@@ -1,4 +1,4 @@
-// The product name reaches a person through `APP_NAME` and nowhere else.
+// The brand reaches a person through `lib/app.ts` and nowhere else.
 //
 // ===========================================================================
 // WHY THIS IS A TEST AND NOT THE GREP THE PLAN ASKED FOR
@@ -20,62 +20,89 @@
 // vouch for another, and its replacement then matched the WORD `focus` and
 // passed against `const focus = null`).
 //
-// This checks the thing that matters: no rendered string contains the default
-// product name. Comments are stripped first; string literals and JSX text are
-// what remain.
+// This checks the thing that matters: no rendered string contains the brand.
+// Comments are stripped first, then module specifiers; string literals and JSX
+// text are what remain.
 //
 // ===========================================================================
-// WHY IT MATTERS BEYOND TIDINESS
+// WIDENED 2026-09-23 (TICKET #756): THE BRAND IS MORE THAN THE PRODUCT NAME
 // ===========================================================================
-// A copy of this app runs as another company's invoicing product
-// (`docs/billing-app-plan/standalone-deployment.md`). A literal in a page is
-// the first thing that deployment shows wrong, and the browser tab renders
-// before anything else on the screen — `app/layout.tsx` carried
-// `title: 'Scaffold app'` when it was copied, which is exactly that failure one
-// app earlier.
+// The first version looked for `b/billing` only, and it was green while the
+// login form said `you@blackcode.ch`, the footer said `contact@blackcode.ch`,
+// the landing page said "your blackcode account", the authorize page said
+// "blackcode-wide token" and the install line named `@blackcode_sa/bc-issues`.
+// Every one of those is what a patient or a clinic sees on a deployment that
+// must not say Blackcode. So the list now has the family name, the domain, the
+// npm scope, the old binary name and the sibling product — and it scans the
+// non-UI surfaces a person still reads: the mail, the PDF, and the sentences
+// the queries put into refusals and the audit log.
 //
-// It is also the narrow, per-app ancestor of the brand-leak guard the
-// extraction script ships INSIDE the customer's artifact. That one scans every
-// text file for `[Bb]lackcode`, the old npm scope and the old binary name. This
-// one scans the rendered surface of this app for this app's own name, which is
-// the half that can be checked here.
+// ── THE ALLOWLIST IS ONE SHAPE, NOT A LIST OF LINES ────────────────────────
+// `import … from '@blackcode/platform-ui/…'` contains the word and reaches
+// nobody. Rather than exempt the word inside a package name (which would exempt
+// `'@blackcode/platform-' + x` in a string too), the scan REMOVES module
+// specifiers before looking: `from '…'`, `import '…'` and `import('…')`. It then
+// asserts that removal actually took something out, because an allowlist that
+// matched nothing is one that has quietly stopped describing the code.
 //
 // ── WHAT IT DELIBERATELY DOES NOT CHECK ────────────────────────────────────
-// `lib/`, `docs/` and the migrations. `lib/app.ts` MUST contain the default —
-// it is the declaration — and `lib/vocabularies.ts`' header naming the app is
-// prose in a module no browser renders. Widening this to `lib/` would be
-// banning the one place the value is allowed to live.
+// `lib/app.ts` MUST contain the defaults — it is the declaration — and
+// `lib/db/seed*.ts` names the seed workspace `blackcode` for a database only a
+// developer sees. `lib/pdf/fixtures.ts` is a sample issuer for two test files.
+// Widening to those would ban the one place a value is allowed to live.
 //
 // It also cannot see a name assembled at runtime (`'b/' + 'billing'`) or one
 // read from a different env var. A text scan cannot, and pretending otherwise
-// is finding #11 again. The `has something to look for` assertion keeps the
-// pattern list from silently emptying; it cannot know about a spelling nobody
-// told it about.
+// is finding #11 again. The input assertions keep the pattern list, the
+// directory list and the allowlist from silently emptying; they cannot know
+// about a spelling nobody told them about.
 
 import { describe, it, expect } from 'vitest'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readableText } from '@blackcode/platform-testing'
 
 const APP_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 
 /**
- * The directories whose contents a browser renders.
+ * The directories whose contents a person reads.
  *
- * `lib/` is absent on purpose — see the header. So are `docs/` and
- * `lib/db/migrations/`, which are read by people and by Postgres, not by a
- * browser.
+ * `app` and `components` are what a browser renders. `lib/email` builds the
+ * mail identity, `lib/pdf` the invoice a customer holds, `lib/delivery` the
+ * covering note, and `lib/db/queries` the refusal sentences and the audit-log
+ * prose that `bk billing … show` prints to clinic staff.
+ *
+ * `lib/` as a whole is absent on purpose — see the header.
  */
-const RENDERED_DIRS = ['app', 'components']
+const RENDERED_DIRS = ['app', 'components', 'lib/email', 'lib/pdf', 'lib/delivery', 'lib/db/queries']
+
+/** Files under those directories that are not a rendered surface, each with why. */
+const NOT_RENDERED: ReadonlyArray<{ file: string; why: string }> = [
+  {
+    file: 'lib/pdf/fixtures.ts',
+    why: 'A sample issuer ("Blackcode Sàrl") imported by two test files and nothing else; it is test data, not a template.',
+  },
+]
 
 /**
- * Spellings of the product name that must not appear in rendered output.
+ * Spellings of the brand that must not appear in rendered output.
  *
  * `billing` alone is NOT here and must not be: it is the slug, which appears
  * legitimately in every `bk billing …` example on every page. The slug is not
  * branded and does not move with a rebrand (`lib/app.ts` says why).
  */
-const BRAND_LITERALS = ['b/billing', 'Blackcode Billing']
+const BRAND_LITERALS: ReadonlyArray<{ re: RegExp; what: string; instead: string }> = [
+  { re: /b\/billing/, what: 'the product name', instead: 'APP_NAME' },
+  { re: /Blackcode Billing/, what: 'the product name', instead: 'APP_NAME' },
+  {
+    re: /blackcode/i,
+    what: 'the family name, the domain or the npm scope',
+    instead: 'PLATFORM_NAME, CONTACT_EMAIL, EMAIL_PLACEHOLDER or CLI_NPM_PACKAGE',
+  },
+  { re: /bc-issues/, what: 'the binary’s npm name', instead: 'CLI_NPM_PACKAGE from @blackcode/platform-agent' },
+  { re: /b\/books/, what: 'a sibling product a rebranded deployment does not have', instead: 'a sentence that does not name it' },
+]
 
 /**
  * Strip `//` line comments and block comments, so a comment explaining the rule
@@ -84,30 +111,21 @@ const BRAND_LITERALS = ['b/billing', 'Blackcode Billing']
  * ── THE ORDER MATTERS AND THE NAIVETY IS BOUNDED ───────────────────────────
  * Block comments first, then line comments. It is a regex, not a parser, so it
  * also blanks anything that LOOKS like a comment inside a string literal — a
- * URL like `https://x` would lose its tail. That direction of error makes the
- * scan see LESS, which could hide a violation, so it is worth stating rather
- * than glossing.
+ * URL like `https://x` keeps its tail only because of the `[^:]` guard. That
+ * direction of error makes the scan see LESS, which could hide a violation, so
+ * it is worth stating rather than glossing.
  *
- * It is acceptable here because the pattern being hunted contains a slash and a
- * word (`b/billing`), and the mutation test below injects it into real JSX and
- * into a real string literal to prove both are still seen. A parser for this
- * would be a second, weaker TypeScript reader beside `tsc`, which is a worse
- * trade than a stated limit.
+ * It is acceptable here because the mutation runs recorded in
+ * `docs/backend.md` inject a literal into real JSX and into a real string
+ * literal and both are seen. A parser for this would be a second, weaker
+ * TypeScript reader beside `tsc`, which is a worse trade than a stated limit.
  */
-function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
-}
+
 
 function renderedFiles(): string[] {
   const out: string[] = []
   const walk = (dir: string) => {
-    let entries
-    try {
-      entries = readdirSync(dir, { withFileTypes: true })
-    } catch {
-      return
-    }
-    for (const e of entries) {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
       if (e.name.startsWith('.') || e.name === 'node_modules') continue
       const p = join(dir, e.name)
       if (e.isDirectory()) {
@@ -118,10 +136,24 @@ function renderedFiles(): string[] {
     }
   }
   for (const d of RENDERED_DIRS) walk(join(APP_ROOT, d))
-  return out
+  const skip = new Set(NOT_RENDERED.map((n) => join(APP_ROOT, n.file)))
+  return out.filter((f) => !skip.has(f))
 }
 
-describe('no rendered string carries the product name', () => {
+describe('no rendered string carries the brand', () => {
+  it('every directory it scans exists (a renamed directory would shrink coverage silently)', () => {
+    for (const d of RENDERED_DIRS) {
+      expect(statSync(join(APP_ROOT, d)).isDirectory(), `${d} is not a directory`).toBe(true)
+    }
+  })
+
+  it('every exemption names a file that exists', () => {
+    for (const n of NOT_RENDERED) {
+      expect(statSync(join(APP_ROOT, n.file)).isFile(), `${n.file} is exempted but does not exist`).toBe(true)
+      expect(n.why.length, `${n.file} is exempted without a reason`).toBeGreaterThan(20)
+    }
+  })
+
   const files = renderedFiles()
 
   it('has files to scan (guards against a vacuous pass)', () => {
@@ -139,24 +171,33 @@ describe('no rendered string carries the product name', () => {
     ).toBeGreaterThan(0)
   })
 
-  it('reads the name from APP_NAME, never a literal', () => {
+  it('the allowlist removes something (else it has stopped describing the code)', () => {
+    let removed = 0
+    for (const file of files) removed += readableText(readFileSync(file, 'utf8')).specifiersRemoved
+    expect(removed, 'no module specifier was stripped from any scanned file').toBeGreaterThan(0)
+  })
+
+  it('reads the brand from lib/app.ts, never a literal', () => {
     const offenders: string[] = []
     for (const file of files) {
-      const code = stripComments(readFileSync(file, 'utf8'))
+      const { code } = readableText(readFileSync(file, 'utf8'))
       for (const brand of BRAND_LITERALS) {
-        if (code.includes(brand)) {
-          const line = code.split('\n').findIndex((l) => l.includes(brand)) + 1
-          offenders.push(`${relative(APP_ROOT, file)}:${line} renders "${brand}"`)
+        const lines = code.split('\n')
+        const at = lines.findIndex((l) => brand.re.test(l))
+        if (at >= 0) {
+          offenders.push(
+            `${relative(APP_ROOT, file)}:${at + 1} renders ${brand.what} (${brand.re}); use ${brand.instead}`
+          )
         }
       }
     }
     expect(
       offenders,
-      'these files put the product name into rendered output:\n' +
+      'these files put the brand into something a person reads:\n' +
         offenders.join('\n') +
-        '\n\nImport `APP_NAME` from `@/lib/app` instead. A copy of this app runs under ' +
-        "another company's name (docs/billing-app-plan/standalone-deployment.md), and a " +
-        'literal here is the first thing that deployment shows wrong.'
+        '\n\nA copy of this app runs under another company’s name ' +
+        '(docs/backend.md → Branding), and a literal here is the first thing that ' +
+        'deployment shows wrong.'
     ).toEqual([])
   })
 })

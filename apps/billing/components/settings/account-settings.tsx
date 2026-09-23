@@ -34,7 +34,7 @@ import { Input } from '@blackcode/platform-ui/ui/input'
 import { useMe, useFootprint } from '@/lib/queries'
 import { useRequestPasswordOtp, useConfirmPassword, useDeleteFootprint, toastError } from '@/lib/mutations'
 import { Section, FormField, ErrorState, LoadingState } from '@/components/ui-kit'
-import { APP_NAME } from '@/lib/app'
+import { APP_NAME, PLATFORM_NAME } from '@/lib/app'
 
 export interface OtherApp {
   name: string
@@ -49,7 +49,7 @@ export function AccountSettings({ otherApps }: { otherApps: OtherApp[] }) {
 
   return (
     <div className="space-y-6">
-      <Section title="Signed in" description="One account, one sign-in, every blackcode app. Signing out here signs you out everywhere.">
+      <Section title="Signed in" description={`One account, one sign-in, every ${PLATFORM_NAME} app. Signing out here signs you out everywhere.`}>
         <p className="text-sm text-foreground" data-testid="account-signed-in-email">
           {me.data.email}
         </p>
@@ -59,7 +59,7 @@ export function AccountSettings({ otherApps }: { otherApps: OtherApp[] }) {
         </Button>
       </Section>
 
-      <Section title="Password" description="One password for every blackcode app. Changing it here signs you out everywhere, including this session.">
+      <Section title="Password" description={`One password for every ${PLATFORM_NAME} app. Changing it here signs you out everywhere, including this session.`}>
         <ChangePassword email={me.data.email} />
       </Section>
 
@@ -69,7 +69,7 @@ export function AccountSettings({ otherApps }: { otherApps: OtherApp[] }) {
 
       <Section title="Closing your account">
         <Elsewhere icon={<ShieldAlert size={15} />} apps={otherApps} where="Settings → Account">
-          Closing a blackcode account is irreversible and reaches every app: it revokes all your API
+          Closing a {PLATFORM_NAME} account is irreversible and reaches every app: it revokes all your API
           tokens and permanently deletes workspaces you solely own,{' '}
           <strong className="text-foreground">including the billing data above</strong>. It is
           deliberately done in one place, with a typed confirmation, rather than from each app that
@@ -231,7 +231,7 @@ function DeleteMyData() {
         Invoices, companies and their audit trail are{' '}
         <strong className="text-foreground">kept for ten years</strong> (art. 958f CO) and are never
         deleted — a workspace holding them stays.{' '}
-        <strong className="text-foreground">Your blackcode account stays open</strong>, and so does
+        <strong className="text-foreground">Your {PLATFORM_NAME} account stays open</strong>, and so does
         anything you have in other apps. You will be signed out.
       </p>
 
@@ -298,7 +298,7 @@ function Elsewhere({
         {children}{' '}
         {apps.length === 0 ? (
           <>
-            It is done from another blackcode app, under{' '}
+            It is done from another {PLATFORM_NAME} app, under{' '}
             <strong className="font-medium text-foreground">{where}</strong> — you do not currently
             have access to one.
           </>

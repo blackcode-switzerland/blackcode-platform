@@ -33,7 +33,7 @@ import { inArray, eq, sql } from 'drizzle-orm'
 import type { AppFootprint, FootprintSource } from '@blackcode/platform-api'
 import { getDb } from '../client'
 import { booksWorkspaceMembers, booksWorkspaces } from '../schema'
-import { APP_SLUG } from '@/lib/app'
+import { APP_NAME, APP_SLUG } from '@/lib/app'
 
 export const booksFootprintSource: FootprintSource = {
   read: (userId) => readFootprint(userId),
@@ -47,7 +47,7 @@ export const booksFootprintSource: FootprintSource = {
       // not one app's to destroy either.
       throw new Error(
         `refusing to purge ${APP_SLUG}: ${before.blocked_by.length} workspace(s) hold statutory records retained under art. 958f CO or still have other members. ` +
-          `b/books keeps books ten years; the account may close, the books stay.`
+          `${APP_NAME} keeps books ten years; the account may close, the books stay.`
       )
     }
     const ids = before.will_delete.map((w) => w.workspace_id)
