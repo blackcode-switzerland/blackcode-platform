@@ -75,6 +75,7 @@ import {
 } from '@/lib/vocabularies'
 import {
   DELIVERY_LIMITS,
+  EXTERNAL_REF_MAX,
   HISTORY_LIMITS,
   LIST_LIMIT_DEFAULT,
   LIST_LIMIT_MAX,
@@ -115,6 +116,7 @@ function currentApp() {
     limits: {
       workspace_name_max: WORKSPACE_NAME_MAX,
       payment_message_max: PAYMENT_MESSAGE_MAX,
+      external_ref_max: EXTERNAL_REF_MAX,
       page_size_default: LIST_LIMIT_DEFAULT,
       page_size_max: LIST_LIMIT_MAX,
       metadata: METADATA_LIMITS,

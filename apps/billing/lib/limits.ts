@@ -111,6 +111,30 @@ export function validateMetadata(meta: unknown): string | null {
 export const PAYMENT_MESSAGE_MAX = 140
 
 /**
+ * `external_ref` is `varchar(80)` on `company`, `invoice` and `recurrence`.
+ *
+ * Declared once and checked at the write door by every path that stores one,
+ * because a value longer than the column reaches Postgres as sqlstate `22001`
+ * — which `apiHandler` does not translate, so an 81-character reference was a
+ * 500 with no code until 2026-09-23 (ticket #757).
+ */
+export const EXTERNAL_REF_MAX = 80
+
+/**
+ * The reason an `external_ref` is refused, or null.
+ *
+ * An empty string is not a value here: both front doors send an empty field to
+ * mean "none", so the caller normalises `''` to `null` before asking.
+ */
+export function externalRefProblem(v: unknown): string | null {
+  if (typeof v !== 'string') return 'external_ref is text'
+  if (v.length > EXTERNAL_REF_MAX) {
+    return `external_ref is ${v.length} characters; the limit is ${EXTERNAL_REF_MAX}`
+  }
+  return null
+}
+
+/**
  * How many rows a list route returns at most, whatever `?limit=` says.
  *
  * Served by `/api/meta` so an agent paginating knows the ceiling rather than

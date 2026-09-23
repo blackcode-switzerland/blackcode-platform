@@ -260,6 +260,8 @@ run('billing invariants (integration)', () => {
       iban: 'CH9300762011623852957',
       qr_iban: 'CH4431999123000889012',
       vat_registered: true,
+      // Required since ticket #757: a registered company carries its number.
+      vat_number: 'CHE-000.000.000 TVA',
       number_format: 'INV-{SEQ4}',
     })
   })

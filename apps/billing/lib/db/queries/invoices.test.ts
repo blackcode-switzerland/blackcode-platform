@@ -32,8 +32,11 @@ import {
   assertMessage,
   assertRefTypeAgainstCompany,
   assertVocabulary,
+  defaultIssueDate,
   InvoiceRefused,
+  normaliseExternalRef,
 } from './invoices'
+import { EXTERNAL_REF_MAX } from '@/lib/limits'
 import type { CreateInvoiceLineBody } from '@/types'
 
 /** Pull the code and suggestion off a refusal, or fail loudly. */
@@ -187,5 +190,41 @@ describe('the vocabularies are checked at the door, not only by the CHECK', () =
 
   it('refuses an unknown reference type', () => {
     expect(refusal(() => assertVocabulary('fr', 'IBAN')).code).toBe('invalid_ref_type')
+  })
+})
+
+describe('the default issue date is today in Zurich, not in UTC (ticket #757)', () => {
+  // The clock is passed in rather than faked globally: `todayInZurich` takes a
+  // `now`, and a test that faked `Date` for the whole file would also fake it
+  // for vitest's own timers.
+  it('dates a bill created at 00:30 CEST on the 2nd as the 2nd, when UTC still says the 1st', () => {
+    const lateOnTheFirstUtc = new Date('2026-07-01T22:30:00Z') // 00:30 on 2 July in Zurich
+    expect(lateOnTheFirstUtc.toISOString().slice(0, 10)).toBe('2026-07-01') // what the old code stored
+    expect(defaultIssueDate(undefined, lateOnTheFirstUtc)).toBe('2026-07-02')
+  })
+
+  it('crosses the fiscal year the same way: 23:30 UTC on 31 December is 1 January in Zurich', () => {
+    expect(defaultIssueDate(null, new Date('2026-12-31T23:30:00Z'))).toBe('2027-01-01')
+  })
+
+  it('agrees with UTC at noon, and never overrides a supplied date', () => {
+    expect(defaultIssueDate(undefined, new Date('2026-07-01T12:00:00Z'))).toBe('2026-07-01')
+    expect(defaultIssueDate('2025-03-03', new Date('2026-07-01T22:30:00Z'))).toBe('2025-03-03')
+  })
+})
+
+describe('external_ref is checked at the door (ticket #757)', () => {
+  it(`ACCEPTS ${EXTERNAL_REF_MAX} characters, and turns an empty string into null`, () => {
+    expect(normaliseExternalRef('x'.repeat(EXTERNAL_REF_MAX))).toHaveLength(EXTERNAL_REF_MAX)
+    expect(normaliseExternalRef('')).toBeNull()
+    expect(normaliseExternalRef(null)).toBeNull()
+    expect(normaliseExternalRef(undefined)).toBeNull()
+  })
+
+  it(`refuses ${EXTERNAL_REF_MAX + 1} characters as a 400 with a code, not a 500 from the column`, () => {
+    const e = refusal(() => normaliseExternalRef('x'.repeat(EXTERNAL_REF_MAX + 1)))
+    expect(e.code).toBe('invalid_external_ref')
+    expect(e.status).toBe(400)
+    expect(e.message).toMatch(new RegExp(`${EXTERNAL_REF_MAX + 1} characters`))
   })
 })

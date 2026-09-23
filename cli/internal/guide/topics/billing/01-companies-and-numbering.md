@@ -64,6 +64,18 @@ member creating a company leaves them off and the owner adds them.
 A company with no IBAN can hold invoices and cannot produce a payment part.
 `company create` says so when that is the state it left you in.
 
+## What is refused at save, so it cannot fail on every bill later
+
+The fields that reach the payment part are checked when you save them, not
+when the first invoice is sent: an IBAN's check digits (Swiss or Liechtenstein
+accounts only), that `--qr-iban` really is a QR-IBAN and `--iban` really is not,
+a two-letter ISO country code (`CH`, never `Schweiz`), one well-formed
+`--email`, and the Swiss QR character set on the legal name and address — an
+em dash or a line break there is refused, naming the character and its
+position, and is never replaced for you, because the legal name must match the
+account holder. A company registered for VAT must carry `--vat-number`.
+Spaces in an IBAN are removed on save; everything else is stored as typed.
+
 ## There is no company delete
 
 A company is **retired**: it stops being offered for new invoices and still

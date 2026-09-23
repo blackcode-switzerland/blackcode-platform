@@ -45,7 +45,8 @@ import { appendAudit, appendFieldChanges } from './audit'
 import { getInvoice, getInvoiceRow, insertInvoice, InvoiceRefused, type Exec, type WriteCtx } from './invoices'
 import { advance, anchorDay, isCalendarDate, isDue, nextDate, PERIOD_EXAMPLE, PERIOD_SHAPE, periodKey } from '@/lib/derive/recurrence'
 import { todayInZurich } from '@/lib/derive/format'
-import { LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, METADATA_LIMITS, RECURRENCE_LIMITS, validateMetadata } from '@/lib/limits'
+import { EXTERNAL_REF_MAX, externalRefProblem, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, METADATA_LIMITS, RECURRENCE_LIMITS, validateMetadata } from '@/lib/limits'
+import { isUniqueViolation } from '../unique-violation'
 import { RECURRENCE_FREQUENCIES } from '@/lib/vocabularies'
 import type {
   CreateInvoiceBody,
@@ -261,18 +262,14 @@ function assertMeta(meta: unknown): void {
 
 function assertExternalRef(v: unknown): string | null | undefined {
   if (v === undefined || v === null) return v as null | undefined
-  if (typeof v !== 'string' || v.trim() === '' || v.length > 80) {
-    throw new InvoiceRefused('invalid_external_ref', 'external_ref is text of 1 to 80 characters', 'your own identifier for this series, such as a subscription id')
+  if (typeof v !== 'string' || v.trim() === '' || externalRefProblem(v)) {
+    throw new InvoiceRefused(
+      'invalid_external_ref',
+      (typeof v === 'string' && externalRefProblem(v)) || `external_ref is text of 1 to ${EXTERNAL_REF_MAX} characters`,
+      'your own identifier for this series, such as a subscription id'
+    )
   }
   return v
-}
-
-/** A unique violation on `constraint`, anywhere on the cause chain. */
-function isUniqueViolation(err: unknown, constraint: string): boolean {
-  for (let x = err as { code?: unknown; constraint?: unknown; cause?: unknown } | null | undefined; x; x = x.cause as typeof x) {
-    if (x.code === '23505' && x.constraint === constraint) return true
-  }
-  return false
 }
 
 /** The template, locked, checked against what a template may be. */

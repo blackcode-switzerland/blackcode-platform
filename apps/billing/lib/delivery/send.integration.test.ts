@@ -103,6 +103,8 @@ run('billing send (integration)', () => {
       email: 'billing@sender.example',
       iban: IBAN,
       vat_registered: true,
+      // Required since ticket #757: a registered company carries its number.
+      vat_number: 'CHE-000.000.000 TVA',
       number_format: 'OK-{SEQ4}',
     })
     // A company the write door accepts and the QR-bill standard does not: no address.
@@ -113,6 +115,7 @@ run('billing send (integration)', () => {
       email: 'billing@bare.example',
       iban: IBAN,
       vat_registered: true,
+      vat_number: 'CHE-000.000.000 TVA',
       number_format: 'BA-{SEQ4}',
     })
   })

@@ -117,6 +117,8 @@ run('billing recurrence (integration)', () => {
       email: 'billing@rec.example',
       iban: 'CH9300762011623852957',
       vat_registered: true,
+      // Required since ticket #757: a registered company carries its number.
+      vat_number: 'CHE-000.000.000 TVA',
       number_format: 'RC-{SEQ4}',
     })
   })
@@ -283,6 +285,7 @@ run('billing recurrence (integration)', () => {
       address: { street: 'Rue', building: '1', postal_code: '1200', city: 'Genève', country: 'CH' },
       iban: 'CH9300762011623852957',
       vat_registered: true,
+      vat_number: 'CHE-000.000.000 TVA',
       number_format: 'SR-{SEQ4}',
     })
     const t = await template('2025-01-15', 'soon-retired')
