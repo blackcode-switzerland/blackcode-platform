@@ -90,8 +90,10 @@ export type DocumentLanguage = 'fr' | 'de' | 'it' | 'en'
 /**
  * How a company rounds. Decision D-B7 — a per-company policy rather than one
  * constant, because two companies in one workspace may keep different books.
+ * `exact_0_05` (2026-09-23) is the first external customer's: lines kept
+ * exact, the total rounded once.
  */
-export type RoundingPolicy = 'line_0_05' | 'total_0_05' | 'none'
+export type RoundingPolicy = 'line_0_05' | 'total_0_05' | 'exact_0_05' | 'none'
 
 export type RecurrenceFrequency = 'monthly' | 'quarterly' | 'yearly'
 
@@ -257,7 +259,9 @@ export interface InvoiceTotals {
   /**
    * The rounding adjustment the company's policy produced, as a signed string.
    * `"0.00"` for `line_0_05` and `none`; printed as its own `Arrondi` line when
-   * it is not zero.
+   * it is not zero. Under `exact_0_05` it is what makes the printed lines,
+   * `subtotal` and `total` foot, since the total was rounded from the exact,
+   * unprinted sum.
    */
   rounding: string
   total: string

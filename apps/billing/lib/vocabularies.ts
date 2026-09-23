@@ -171,6 +171,13 @@ export const DOCUMENT_LANGUAGES: Term[] = [
  * are correct bookkeeping; two companies in one workspace may keep different
  * books, so the value is DATA.
  *
+ * `exact_0_05` was added on 2026-09-23 from a closer read of that customer's
+ * code: they never round a line at all — qty × price stays exact, the sum is
+ * exact, and the payable total is rounded ONCE. `total_0_05` rounds each line
+ * to the rappen first, and on a fractional quantity the two land on different
+ * totals. The lines are still PRINTED to the rappen and the `rounding` figure
+ * makes the paper foot (`lib/derive/totals.ts`).
+ *
  * **Changing a company's policy changes every total it has ever derived**,
  * because nothing is stored. That is the point of deriving them, and it is also
  * why this is a setting an owner changes deliberately rather than a default
@@ -186,6 +193,13 @@ export const ROUNDING_POLICIES: Term[] = [
     value: 'total_0_05',
     label: 'Total only, 5 rappen',
     note: 'Lines and VAT to the rappen, the payable total to five, and the difference printed as its own Arrondi line.',
+  },
+  {
+    value: 'exact_0_05',
+    label: 'Exact lines, total to 5 rappen',
+    note:
+      'Lines kept exact (never rounded), VAT taken on the exact base to the rappen, the payable total rounded ONCE to five rappen. ' +
+      'Lines print to the rappen and the Arrondi line carries whatever separates the printed subtotal from the total. The first external customer\u2019s policy.',
   },
   {
     value: 'none',
