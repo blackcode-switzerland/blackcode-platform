@@ -7,6 +7,21 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-09-24 — The advertised `bk` versions come from npm, live — a CLI release needs no deploy
+
+**Not breaking. Nothing to change in a client.** `X-BK-CLI-Latest`,
+`X-BK-CLI-Min`, `bk meta`'s `cli.latest_version` / `cli.min_version` and the
+changelog feed's `cli_latest_version` / `cli_min_version` keep their names and
+meaning. What changed is where the server gets them: from the npm dist-tags of
+`@blackcode_sa/bc-issues` — `latest` and `min` — read live and cached for five
+minutes, instead of constants compiled into each deployment.
+
+In practice: a new `bk` release is advertised by **every** app within about five
+minutes of `npm publish`, where before it waited for every app to be redeployed.
+A raised or rolled-back floor takes effect the same way. If npm is unreachable
+the server keeps its last good answer, and the floor is never advertised above
+`latest`.
+
 ## 2026-09-21 — Footprint: a workspace can be blocked by a retention hold, not only by members
 
 **Not breaking.** `AppFootprint.blocked_by[]` entries (`GET /api/me/footprint`,

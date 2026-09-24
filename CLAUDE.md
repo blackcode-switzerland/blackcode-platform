@@ -627,26 +627,30 @@ See `AGENTS.md` for the short version.
 exactly one app**, so name it). Both interactive. `./devops/release.sh apps`
 lists what is deployable; `app_registry()` in that script is the authority.
 
-**The order is: deploy web, then npm, then deploy web AGAIN — and "web" means
-EVERY app, both times.** The release script bumps `CLI_LATEST_VERSION` in a
-commit it creates itself, so that commit lands *after* the first web deploy —
-without the second deploy, production keeps advertising the old version and no
-installed client is told an update exists. And every deployment answers the
-"current version?" question from that one shared constant while `bk` asks
-whichever app the user is *homed* on, so deploying only one leaves everyone
-homed on the other uninformed. Both halves verified on 2026-08-10.
+**A CLI release is: deploy web ONLY if the new binary needs new routes, then
+publish to npm. That is all — no deploy follows it** (since 2026-09-24). Every
+app reads the versions it advertises (`X-BK-CLI-Latest`, `X-BK-CLI-Min`,
+`bk meta`) **live from the npm dist-tags** `latest` and `min`, cached five
+minutes per instance — `getCliVersions()` in
+`packages/platform-agent/src/cli-version.ts`. `npm publish` moves `latest` by
+itself, so publishing IS advertising, on every app at once. Until that date the
+versions were constants bumped in a commit the release script made itself, and
+every release was "deploy every app, publish, deploy every app AGAIN". If you
+find that sequence in a doc, it is stale.
 
 > **Vercel does not read `.gitignore`.** The repo-root **`.vercelignore`** is
 > what keeps a deploy at ~66 MB instead of 8.5 GB (`.turbo` is 16 GB on disk).
 > It is shared by every app — never add a per-app one. If an upload ever reports
 > gigabytes, stop and find out why before letting it finish.
 
-`CLI_MIN_VERSION` in `packages/platform-agent/src/cli-version.ts` hard-blocks
-every older binary with exit 8. **Publish to npm before raising it** — raise it
-first and every user is locked out with nothing to upgrade to. Both versions are
-overridable by env (`BK_CLI_LATEST` / `BK_CLI_MIN`), so the floor moves and rolls
-back without a redeploy. Answer `normal`, never `forced`, unless raising the
-floor is the deliberate point of that release.
+The floor — the npm `min` dist-tag — hard-blocks every older binary with exit
+8. A **forced** release moves it; so does, at any time and with no deploy,
+`npm dist-tag add @blackcode_sa/bc-issues@<version> min` (also how you roll it
+back). npm refuses to tag an unpublished version, so the floor cannot lead the
+release, and the server clamps it to `latest`. `BK_CLI_LATEST` / `BK_CLI_MIN`
+env still pin both, but on Vercel an env change applies only on the next
+deploy — an emergency lever, not the normal one. Answer `normal`, never
+`forced`, unless raising the floor is the deliberate point of that release.
 
 ## Changelog rule (MANDATORY)
 

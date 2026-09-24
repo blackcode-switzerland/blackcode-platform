@@ -16,12 +16,13 @@
 //   lib/limits.ts      — the length/count caps the routes check
 //   lib/upload.ts      — the upload size cap + block list
 //   lib/rich-text.ts   — how an uploaded url renders
-//   @blackcode/platform-agent — the advertised CLI floor/ceiling
+//
+// The CLI versions are not here: they are platform-wide and read live from npm,
+// so `platformMetaBlock` (packages/platform-api/src/meta.ts) serves them.
 
 import { LENGTH_LIMITS } from './limits'
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, BLOCKED_UPLOAD_MIME_TYPES } from './upload'
 import { INLINE_MEDIA_PREFIXES } from './rich-text'
-import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@blackcode/platform-agent'
 
 /** `meta.limits` — every cap an agent must respect before it sends a request. */
 export const META_LIMITS = {
@@ -46,14 +47,4 @@ export const META_MEDIA = {
   // External urls stay plain links and raw <iframe> is stripped on render — so
   // "embed this video" always means "upload it first".
   uploaded_assets_only: true,
-} as const
-
-/** `meta.cli` — the versions the API advertises on every response. */
-export const META_CLI = {
-  package: '@blackcode_sa/bc-issues',
-  latest_version: CLI_LATEST_VERSION,
-  /** Below this the CLI hard-blocks with exit 8. */
-  min_version: CLI_MIN_VERSION,
-  install: 'npm install -g @blackcode_sa/bc-issues',
-  update: 'npm install -g @blackcode_sa/bc-issues@latest',
 } as const

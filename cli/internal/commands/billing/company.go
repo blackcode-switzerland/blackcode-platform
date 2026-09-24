@@ -43,7 +43,8 @@ choice is a wrong number on a legal document, not just a wrong label.
 ONE setting here is read when a total is DERIVED rather than when an invoice is
 created:
 
-  rounding              how five-rappen rounding is applied
+  rounding              how five-rappen rounding is applied: per line, on the
+                        total, once on the exact unrounded sum, or not at all
 
 Changing it changes the total of every DRAFT this company has, at once. It does
 not reach an invoice that already left draft: that one carries its own copy of
@@ -195,10 +196,13 @@ func newCompanyCreateCmd() *cobra.Command {
 --legal-name defaults to --name. It is the one that goes on the payment part and
 MUST match the holder of the credit account.
 
---rounding decides how five-rappen rounding is applied and is read whenever a
-DRAFT's total is derived, so changing it later changes every draft this company
-has. Issued invoices keep the policy they were issued under.
-Run "bk meta --app-server billing" for the policies and what each one does.
+--rounding decides how five-rappen rounding is applied — to every line, to the
+total only, once to the exact unrounded sum of the lines, or not at all — and is
+read whenever a DRAFT's total is derived, so changing it later changes every
+draft this company has. Issued invoices keep the policy they were issued under.
+Run "bk meta --app-server billing" for the policies and what each one does; the
+policy that keeps lines exact and rounds once is the one to match a system that
+never rounds a line.
 
 The IBAN flags are OWNER-ONLY. If you are not the workspace owner, create the
 company without them and have the owner add them.`,
@@ -275,7 +279,7 @@ company without them and have the owner add them.`,
 	f.StringVar(&defaults.VatRate, "vat-rate", "", "Rate prefilled onto new lines; omit for none")
 	f.BoolVar(&pricesIncludeVat, "prices-include-vat", false, "New invoices' line prices already contain their VAT")
 	f.IntVar(&defaults.PaymentTermsDays, "payment-terms", 0, "Days until a new invoice is due")
-	f.StringVar(&req.Rounding, "rounding", "", "Rounding policy; read when a bill is rendered (bk meta for the values)")
+	f.StringVar(&req.Rounding, "rounding", "", "Rounding policy: per line, total only, exact lines rounded once, or none; read when a bill is rendered (bk meta for the values)")
 	f.StringVar(&req.NumberFormat, "number-format", "", `Invoice number format, e.g. "BC-{YYYY}-{SEQ4}"`)
 	f.StringVar(&req.FooterFr, "footer-fr", "", "Footer printed on French invoices")
 	f.StringVar(&req.FooterEn, "footer-en", "", "Footer printed on English invoices")
@@ -404,7 +408,7 @@ total. --prices-include-vat is a prefill for new invoices and changes none.`,
 	f.String("vat-rate", "", "Rate prefilled onto new lines")
 	f.Bool("prices-include-vat", false, "New invoices' prices already contain their VAT")
 	f.Int("payment-terms", 0, "Days until a new invoice is due")
-	f.String("rounding", "", "Rounding policy; re-totals every draft, and no issued invoice")
+	f.String("rounding", "", "Rounding policy (bk meta for the values); re-totals every draft, and no issued invoice")
 	f.String("number-format", "", "Invoice number format")
 	f.String("footer-fr", "", "Footer printed on French invoices")
 	f.String("footer-en", "", "Footer printed on English invoices")

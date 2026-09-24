@@ -59,12 +59,13 @@ const LIB = fileURLToPath(new URL('.', import.meta.url))
 const TYPES = readFileSync(join(LIB, '..', 'types', 'index.ts'), 'utf8')
 
 /**
- * Every migration in `lib/db/migrations/`, concatenated.
+ * Every migration in `lib/db/migrations/`, concatenated IN ORDER.
  *
  * Read as a directory rather than by naming 0005, because a constraint moved or
  * replaced by a later migration would otherwise make this guard read a file that
- * no longer describes the database. Reading them all means the check is against
- * everything that has been applied.
+ * no longer describes the database. Reading them all, and taking the LAST
+ * definition of a constraint, means the check is against what is applied.
+ * (The order matters: `readdirSync` is alphabetical and the files are numbered.)
  */
 const MIGRATIONS = (() => {
   const dir = join(LIB, 'db', 'migrations')
@@ -190,10 +191,16 @@ function unionValues(typeName: string): string[] {
  * CLAUDE.md finding #17 is the same mechanism through a rename.
  */
 function constraintValues(name: string): string[] {
-  const re = new RegExp(`CONSTRAINT\\s+${name}(?![\\w])[\\s\\S]{0,400}?IN\\s*\\(([^)]*)\\)`, 'i')
-  const m = re.exec(MIGRATIONS)
-  if (!m) return []
-  return [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1])
+  const re = new RegExp(`CONSTRAINT\\s+${name}(?![\\w])[\\s\\S]{0,400}?IN\\s*\\(([^)]*)\\)`, 'gi')
+  // THE LAST DEFINITION, NOT THE FIRST. Migrations are read in order, and a
+  // later one may `DROP CONSTRAINT … ; ADD CONSTRAINT …` with a wider list
+  // (0013 did, for `company_rounding_check`). Until 2026-09-23 this returned the
+  // first match, so it read 0005's three values and could not see the fourth —
+  // the header above promised exactly the opposite. Found by adding a value
+  // and watching the guard go red on the STALE list rather than pass.
+  const all = [...MIGRATIONS.matchAll(re)]
+  if (all.length === 0) return []
+  return [...all[all.length - 1][1].matchAll(/'([^']+)'/g)].map((x) => x[1])
 }
 
 describe('every closed vocabulary agrees in all three places', () => {

@@ -458,4 +458,61 @@ run('billing write paths (integration)', () => {
     const mine = companyRows.find((r) => r.subject_seq === Number(companyRow.rows[0].seq))
     expect(mine, 'the test company’s created row resolves to its #seq').toBeDefined()
   })
+
+  // -------------------------------------------------------------------------
+  // 2026-09-23 — `exact_0_05`, end to end: refused by name, accepted by the
+  // database, derived by the read
+  // -------------------------------------------------------------------------
+  // `totals.test.ts` proves the arithmetic on a fixture. This proves the path
+  // AROUND it: the refusal an agent sees names every policy (a value the
+  // message omits is a policy nobody can discover); migration 0013's CHECK
+  // accepts the row; and the read derives through the company's policy rather
+  // than a default — shown by switching the policy and reading again.
+
+  it('exact_0_05: the refusal names four policies, the CHECK accepts the row, the read derives through it', async () => {
+    const companies = await import('./companies')
+    const cctx = { workspaceId: ctx.workspaceId, actorUserId: ctx.actorUserId, via: 'token' as const, isOwner: true }
+
+    let refused: unknown
+    try {
+      await companies.createCompany(cctx, { slug: `${companySlug}-bad`, name: 'Bad', rounding: 'exact_0_5' } as never)
+    } catch (e) {
+      refused = e
+    }
+    expect(refused).toBeInstanceOf(companies.CompanyRefused)
+    const r = refused as InstanceType<typeof companies.CompanyRefused>
+    expect(r.code).toBe('invalid_rounding')
+    for (const policy of ['line_0_05', 'total_0_05', 'exact_0_05', 'none']) expect(r.suggestion).toContain(policy)
+
+    // THE POSITIVE HALF: the row lands, past 0013's CHECK, and reads back.
+    const slug = `${companySlug}-exact`
+    const co = await companies.createCompany(
+      cctx,
+      { slug, name: 'Exact SA', rounding: 'exact_0_05', number_format: 'EX-{SEQ4}' } as never
+    )
+    expect(co.rounding).toBe('exact_0_05')
+
+    // The fixture from totals.test.ts, through the real read path. Exempt
+    // lines (the company charges no VAT), prices including VAT.
+    //   0.5 × 12.35 = 6.175 → prints 6.18;  0.333 × 12.45 = 4.14585 → prints 4.15
+    //   exact sum 10.32085 → ONE rounding → 10.30;  printed 10.33, Arrondi −0.03
+    const inv = await invoices.createInvoice(ctx, {
+      company: slug,
+      ref_type: 'NON',
+      client: { name: 'Client SA' },
+      prices_include_vat: true,
+      items: [
+        { description: 'half', qty: '0.5', unit_price: '12.35' },
+        { description: 'third', qty: '0.333', unit_price: '12.45' },
+      ],
+    } as never)
+    expect(inv.items.map((i) => i.line_total)).toEqual(['6.18', '4.15'])
+    expect(inv.totals).toMatchObject({ subtotal: '10.33', rounding: '-0.03', total: '10.30' })
+
+    // The policy is READ, not defaulted: the same draft under `total_0_05`
+    // rounds the lines first and lands on 10.35.
+    await companies.editCompany(cctx, slug, { rounding: 'total_0_05' })
+    const again = await invoices.getInvoice(ctx.workspaceId, String(inv.seq))
+    expect(again!.totals).toMatchObject({ subtotal: '10.33', rounding: '0.02', total: '10.35' })
+  })
 })

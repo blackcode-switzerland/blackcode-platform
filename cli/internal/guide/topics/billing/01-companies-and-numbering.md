@@ -45,6 +45,15 @@ under the policy it was issued with. `bk guide billing/references-and-qr` has
 what else that copy protects.
 
 Run `bk meta --app-server billing` for the policies and what each one does.
+They differ in WHERE the five-rappen rounding happens: on every line, on the
+payable total only, once on the exact unrounded sum of the lines, or nowhere.
+If you are matching totals against another system, that is the first thing to
+ask it: a system that never rounds a line and rounds its sum once will
+disagree with one that rounds each line first, on any fractional quantity,
+and `--expect-total` will refuse the bill until the two policies agree. Under
+every policy the printed lines, subtotal, rounding line and total add up on
+the document; under the exact-sum policy the rounding line is what carries
+the difference between the printed subtotal and the total.
 
 ## The legal name is not the display name
 

@@ -64,6 +64,37 @@ each on an existing route; one response gained a field. Ticket #757.
   negative line), and a bill whose total is not positive is still refused at
   `send` / `mark-sent` with 409 `total_not_positive`. A test now holds both.
 
+## 2026-09-23 — A fourth rounding policy: `exact_0_05`
+
+**Not breaking.** One new value in an existing closed vocabulary; nothing else
+on the wire changes shape.
+
+- `company.rounding` accepts **`exact_0_05`** beside `line_0_05`, `total_0_05`
+  and `none` — on `bk billing company create --rounding`, `company edit
+  --rounding` (`POST` / `PATCH /api/workspaces/{ws}/companies…`), and in the
+  company form. `bk meta --app-server billing` serves it under
+  `rounding_policies` with its label and note; **400 `invalid_rounding`** now
+  lists four values.
+- **What it does.** Every line's `qty × unit_price` is kept EXACT (integer
+  milli-rappen, no rounding, no floating point), the VAT is taken per rate on
+  the exact base and rounded to the rappen, and the payable total is rounded
+  ONCE, half away from zero, to five rappen. It is the first external
+  customer's arithmetic; `total_0_05` rounds each line to the rappen before
+  summing, and on a fractional quantity the two land on different totals
+  (0.5 × 12.35 + 0.333 × 12.45 → **10.30** exact, 10.35 rounded first).
+- **The document still foots.** `items[].line_total` prints each exact line to
+  the rappen, `totals.subtotal` is the sum of those printed lines, and
+  `totals.rounding` carries whatever separates that (plus `vat_total` when
+  prices exclude VAT) from `totals.total`. A client that checks
+  `subtotal + vat_total + rounding = total` keeps passing; a client that
+  recomputes `total` from the printed lines will not — recompute from the
+  exact products, or send `expected_total` and let the server refuse.
+- Reads through the issuer copy unchanged: an invoice issued under one policy
+  keeps it; switching a company to `exact_0_05` re-totals its DRAFTS only.
+- Migration **0013** widens `company_rounding_check`. `lib/vocabularies.test.ts`
+  was reading the FIRST definition of a replaced constraint (0005's) and now
+  reads the last.
+
 ## 2026-09-21 — Workspace administration, invitation acceptance, and a default workspace
 
 **Not breaking** for existing calls. New routes and commands, one changed

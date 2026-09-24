@@ -120,6 +120,12 @@ two that wrote.
 
 ### The release
 
+> **Superseded 2026-09-24.** The second pass below no longer exists: every app
+> reads the advertised CLI versions live from npm dist-tags, so a release is
+> *deploy the changed apps if the binary needs their routes, then publish*.
+> Current procedure: `docs/devops.md` → *Release CLI to GitHub + npm*. What
+> follows is what phase 6 did at the time.
+
 **The order is: deploy web, then npm, then deploy web again — and "web" means
 every app, both times.**
 

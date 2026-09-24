@@ -159,6 +159,17 @@ That is not tidiness. Since decision **D-B7** the rounding policy is a COMPANY
 setting, so a stored total would have to be rewritten across history whenever
 that setting moved — a migration triggered by a settings change.
 
+Four policies since 2026-09-23 (`lib/vocabularies.ts`, `ROUNDING_POLICIES`).
+The fourth, **`exact_0_05`**, is the one that makes "derived, never stored"
+earn its keep: a line's `qty × unit_price` is kept EXACT in integer
+milli-rappen (`numeric(12,3) × numeric(14,2)` has no remainder at that scale),
+the VAT is taken on the exact base, and the payable total is rounded ONCE to
+five rappen. The printed line is that exact product to the rappen, the printed
+subtotal is the sum of the PRINTED lines, and `rounding` is whatever closes
+the gap to the total — so the document foots and no figure on it is a float.
+The section *"A fourth rounding policy"* below has the worked numbers and the
+mutations.
+
 ### The rules with no database object behind them
 
 Four, and they are the ones most likely to be quietly lost, because a write path
@@ -952,6 +963,94 @@ and after with `bk`. `{ref}` and `{seq}` were already refused when unknown.
 - **The per-page browser report** on all three tenants in FR and EN (#96).
 - The five open questions in the changelog: P1, P2, P3, P11, P8.
 
+## A fourth rounding policy: `exact_0_05` (2026-09-23)
+
+Branch `feat/billing-rounding-exact`. The first external customer, read more
+closely than on 2026-09-16, does not round a line at all: `qty × unit_price`
+stays exact, the sum is exact, and the payable total is rounded once to five
+rappen. `total_0_05` was the first reading of the same code and rounds each
+line to the rappen before summing — the same total whenever every quantity is
+whole, a different one whenever it is not. So b/billing carries the
+customer's arithmetic as a fourth per-company policy rather than a closer
+approximation of it.
+
+### What it is, in integers
+
+`numeric(12,3) × numeric(14,2)` is exact in **milli-rappen** (thousandths of a
+rappen), so `lib/derive/money.ts` gained a `MilliRappen` scale beside `Rappen`
+— `lineProductExact`, `milliToRappen`, `roundMilliToStep` — and
+`computeTotalsRappen` branches to `computeExactTotalsRappen`:
+
+| figure | how |
+|---|---|
+| each line, printed | the exact product to the rappen, half away from zero |
+| `subtotal` | the sum of the **printed** lines — not the exact sum, which is printed nowhere |
+| VAT `base` per rate | the exact sum of that rate's products, printed to the rappen |
+| VAT `amount` | on the exact base: `base × rate / (100 + rate)` inclusive, `/ 100` exclusive, one division, to the rappen |
+| `total` | the exact sum (plus VAT when prices exclude it) to five rappen — **the one rounding** |
+| `rounding` | `total − (subtotal [+ vat_total])`: whatever closes the gap on paper |
+
+The wire shape is unchanged, so the PDF's total block, the detail page and
+`bk billing invoice show` print the fourth policy without knowing it exists:
+lines → subtotal → Arrondi → total still adds up, which is the invariant the
+`rounding` figure was always for. A client that recomputes `total` from the
+printed lines will disagree by a rappen or two on a fractional quantity; the
+changelog says so and points at `expected_total`.
+
+Golden cases in `lib/derive/totals.test.ts`, every expectation worked by hand:
+0.5 × 12.35 prints 6.18 and totals 6.20; the worked 1.5 × 350 exempt + 1 × 180
+at 8.1 % less 10 % as two negative lines totals 634.50 with VAT 12.14; and
+0.5 × 12.35 + 0.333 × 12.45 is **10.30** exact against **10.35** under
+`total_0_05` — the fixture on which the footing assertion runs, because its
+exact sum (10.32085) and its printed sum (10.33) are different numbers.
+
+Note on what "one rounding" means: rounding the exact SUM to the rappen and
+then to five rappen lands exactly where rounding it to five directly does —
+every five-rappen midpoint is a rappen midpoint, and both halves round away
+from zero — so that mutation is an equivalent program, not an inert test. The
+rounding that changes the answer is the per-LINE one, and that is the
+mutation on record below.
+
+### Where the value had to land
+
+`ROUNDING_POLICIES` (served by `bk meta`), the `RoundingPolicy` union,
+migration **0013** (`company_rounding_check` dropped and re-added with four
+values, 0008's shape), `assertRounding`'s `invalid_rounding` suggestion (which
+reads the served list, so it named four the moment the list did), the company
+form's select (it maps the served list), the issuer copy (a plain string
+column held by the CHECK — an invoice issued under one policy keeps it, and
+the write-paths suite shows a company switched to `total_0_05` re-deriving
+its draft from 10.30 to 10.35), `bk billing company` help, the guide topic,
+the plan (D-B7, P8, phase 1's derivation) and the changelog.
+
+### What adding one value found
+
+**`lib/vocabularies.test.ts` was reading the first definition of a replaced
+constraint.** Its header says the migrations are read as a directory so that a
+constraint "moved or replaced by a later migration" is still seen correctly;
+its `constraintValues` returned the FIRST regex match over the concatenation,
+which is 0005's. Adding `exact_0_05` to the vocabulary and the CHECK in 0013
+turned the guard red on the stale three-value list rather than green — the
+right colour for the wrong reason, and a guard that could never have accepted
+a widened CHECK. It takes the last definition now.
+
+**The suites run as the local superuser, and three assertions know it.**
+`invariants.test.ts` I2, I7 and I13 expect `42501` (the app role denied by a
+REVOKE) and get `P0001` (the trigger's own RAISE), because the local
+`.env.local` connects as `blackcode`, which bypasses grants and hits the
+trigger instead. The suite's own header says to run it as `billing_app`; that
+role's local password is recorded nowhere a checkout can read. Not this
+change's failures, and stated rather than hidden.
+
+### Verified on 2026-09-23
+
+`tsc --noEmit` clean for billing; `eslint` 0 errors; `go build`, `go vet`,
+`go test ./...` green; `lib/derive/totals.test.ts` 35/35;
+`lib/vocabularies.test.ts` 12/12; the five database suites 41/44 with the
+three role cases above; `write-paths.integration.test.ts` 8/8 including the
+new end-to-end case; migration 0013 applied to the local database and
+`pg_constraint` read back with four values (the catalog, not the repo).
+
 ## The guards, watched failing
 
 A check nobody has watched fail is not a check (CLAUDE.md's standing rule).
@@ -1081,6 +1180,16 @@ Ticket #86 added these, on 2026-09-18:
 | `invoice_issuer_iff_issued` (catalog) | the constraint dropped from the local database | I12's "the database holds it": the forgetful `SET status = 'sent'` succeeded. Left a sent row with no copy, repaired before the constraint went back; `pg_constraint` re-read |
 | G2's `issuer` line (catalog) | the function replaced without it | the same case: expected `P0001`, got no error. Restored from `pg_get_functiondef`, `pg_proc` re-read |
 | `lib/delivery/send.integration.test.ts` | `issuer` dropped from send's UPDATE; the read path ignoring the stored copy; mark-sent's validation removed; the write door's character check off | 23514 from the database on every send; "still is after the company is edited" (and I12 with it); the mark-sent case; the write-door case |
+
+`exact_0_05` added these, on 2026-09-23:
+
+| Guard | The mutation | What it said |
+|---|---|---|
+| `totals.test.ts`, the `exact_0_05` block | each line rounded to the rappen BEFORE summing (`lineProduct(…) * MILLI` in place of `lineProductExact`) | three red: "differs from `total_0_05`" (10.35 where 10.30), "VAT on the exact base", and the footing case's precondition (exact sum equal to the printed sum) |
+| the same | `rounding` computed from the exact subtotal instead of the printed one | the same three red: `subtotal + rounding ≠ total` |
+| the same | the exact sum rounded to the rappen, then to five | **green, correctly** — an equivalent program (see the note above), recorded so nobody reads it as an inert test |
+| `lib/vocabularies.test.ts` | `'none'` dropped from 0013's CHECK | "migration CHECK company_rounding_check disagrees with lib/vocabularies.ts", naming the three-value list — and, before the fix, red on 0005's list with 0013 correct |
+| `write-paths.integration.test.ts`, the new case | (not injected) | the positive half asserts the derived VALUES (10.30, then 10.35 after the policy switch), not a flag on the way there — finding #21's rule |
 | `lib/invariants.test.ts` I12 | a void from draft taking no copy | three cases: every void-from-draft in the file is refused by the CHECK |
 | `lib/delivery/document.test.ts` | the seam's validation removed; then the renderer's too; the void checks; CRLF in the seam | the 422 case (the renderer still threw, as a bare error with no code); plus `pdf.test.ts`' blank-account case; each void case; "character for character" |
 | `lib/issuer.test.ts` | `rounding` out of `ISSUER_FIELDS`; `footer_en` out of the CHECK; `billingCompany` imported by the renderer; the same in a comment; the scan pointed at `lib/email` | three cases; one; one; **green, correctly**; "found files to scan" |

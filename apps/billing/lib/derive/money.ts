@@ -155,3 +155,41 @@ export function roundToStep(r: Rappen, step: number): Rappen {
  */
 export const lineProduct = (qtyMilli: number, priceRappen: Rappen): Rappen =>
   divRoundHalfAway(qtyMilli * priceRappen, QTY_SCALE)
+
+// ===========================================================================
+// MILLI-RAPPEN: THE EXACT LINE, FOR THE `exact_0_05` POLICY
+// ===========================================================================
+// `qty` is `numeric(12,3)` and `unit_price` is `numeric(14,2)`, so a line's
+// product is EXACT as an integer count of thousandths of a rappen — there is no
+// fractional remainder to lose, and no floating point anywhere in the path.
+// The first external customer keeps every line at that precision, sums, and
+// rounds ONCE at the end (`exact_0_05`, 2026-09-23). Everything below is the
+// same integer discipline as above, one scale down.
+
+/** Milli-rappen: 1/1000 of a rappen. A line's product before any rounding. */
+export type MilliRappen = number
+
+/** How many milli-rappen make one rappen — the quantity scale, by construction. */
+export const MILLI = QTY_SCALE
+
+/** The exact product, in milli-rappen. Nothing is rounded. */
+export const lineProductExact = (qtyMilli: number, priceRappen: Rappen): MilliRappen =>
+  qtyMilli * priceRappen
+
+/** Milli-rappen → rappen, half away from zero. What a line PRINTS as. */
+export const milliToRappen = (m: MilliRappen): Rappen => divRoundHalfAway(m, MILLI)
+
+/**
+ * Milli-rappen → the nearest multiple of `step` rappen, half away from zero.
+ * `roundMilliToStep(617_500, 5)` is 620: 6.175 → 6.20.
+ *
+ * What this must be applied to is the exact SUM, never each line: 6.175 +
+ * 4.14585 = 10.32085 → 10.30, while the lines rounded first give 6.18 + 4.15 =
+ * 10.33 → 10.35 (`totals.test.ts`, and the mutation that proves it). Rounding
+ * one sum to the rappen and then to five rappen would land where this does —
+ * every five-rappen midpoint is a rappen midpoint and both halves round away
+ * from zero — so this helper is one division rather than two, not a different
+ * answer.
+ */
+export const roundMilliToStep = (m: MilliRappen, step: number): Rappen =>
+  step <= 1 ? milliToRappen(m) : divRoundHalfAway(m, step * MILLI) * step

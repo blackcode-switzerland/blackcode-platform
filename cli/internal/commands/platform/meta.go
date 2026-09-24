@@ -234,8 +234,8 @@ An unknown key is an error naming the keys that exist.`,
 					//
 					// Do NOT name a version here. This line used to promise the
 					// top-level keys "go away in 1.12.0"; 1.12.0 shipped, the
-					// keys are still served — correctly, because CLI_MIN_VERSION
-					// is 1.9.1 and every binary from 1.9.1 up reads them. A
+					// keys are still served — correctly, because the floor was
+					// 1.9.1 and every binary from 1.9.1 up reads them. A
 					// removal date in a string that ships inside the binary
 					// cannot be corrected once it is wrong on the installed
 					// copies. The server decides when they go; this only says

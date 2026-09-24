@@ -18,9 +18,12 @@ import {
   formatRappen,
   formatRate,
   lineProduct,
+  lineProductExact,
+  milliToRappen,
   parseQty,
   parseRappen,
   parseRateBp,
+  roundMilliToStep,
   roundToStep,
 } from './money'
 import { computeTotals, computeTotalsRappen, hasVatBlock, type TotalsLine } from './totals'
@@ -193,7 +196,7 @@ describe('the mixed invoice the first external customer actually sends', () => {
   })
 })
 
-describe('the three rounding policies, on one fixture where they differ', () => {
+describe('the four rounding policies, on one fixture where three of them differ', () => {
   // Chosen so every policy lands somewhere different. Exclusive, 8.1%.
   //   3 × 33.33 = 99.99  (9999 rappen)
   //   VAT at 8.1% = 9999 × 810 / 10000 = 809.919 → 810 rappen = 8.10
@@ -230,12 +233,141 @@ describe('the three rounding policies, on one fixture where they differ', () => 
     expect(t.total).toBe('108.10')
   })
 
-  it('the three do not agree, or one of them is unreachable', () => {
-    const totals = (['none', 'total_0_05', 'line_0_05'] as const).map(
+  it('`exact_0_05` coincides with `total_0_05` here, because 3 × 33.33 has no fraction to lose', () => {
+    // The exact product is 99.99 to the milli-rappen, so rounding it to the
+    // rappen first changes nothing and the two policies agree. The fixture
+    // where they part is below.
+    const t = computeTotals(lines, false, 'exact_0_05')
+    expect(t.subtotal).toBe('99.99')
+    // VAT on the exact base: 9_999_000 × 810 / 10_000_000 = 809.919 → 810
+    expect(t.vat_total).toBe('8.10')
+    // 99.99 + 8.10 = 108.09 exact → rounded ONCE to five rappen → 108.10
+    expect(t.rounding).toBe('0.01')
+    expect(t.total).toBe('108.10')
+  })
+
+  it('the policies do not all agree, or one of them is unreachable', () => {
+    const totals = (['none', 'total_0_05', 'line_0_05', 'exact_0_05'] as const).map(
       (p) => computeTotals(lines, false, p).subtotal
     )
-    // `none` and `total_0_05` share a subtotal; `line_0_05` must differ.
+    // `none`, `total_0_05` and `exact_0_05` share a subtotal; `line_0_05` must differ.
     expect(new Set(totals).size).toBeGreaterThan(1)
+  })
+})
+
+describe('`exact_0_05`: lines kept exact, one rounding at the end (the first customer, 2026-09-23)', () => {
+  it('rounds milli-rappen to five rappen in ONE step', () => {
+    // 0.5 × 12.35 = 6.175 exactly, in milli-rappen
+    expect(lineProductExact(parseQty('0.5'), parseRappen('12.35'))).toBe(617_500)
+    // …which PRINTS as 6.18
+    expect(milliToRappen(617_500)).toBe(618)
+    // …and rounds to 6.20 as a total: 6.175 / 0.05 = 123.5 → half away → 124 × 5
+    expect(roundMilliToStep(617_500, 5)).toBe(620)
+    // Symmetric for a credit: -6.175 → -6.20, not -6.15
+    expect(roundMilliToStep(-617_500, 5)).toBe(-620)
+    // 10.32085 → 10.30, and NOT 10.33 → 10.35 (that would be two roundings)
+    expect(roundMilliToStep(1_032_085, 5)).toBe(1030)
+  })
+
+  it('golden: 0.5 × 12.35 prints 6.18 and totals 6.20', () => {
+    const t = computeTotals([line('0.5', '12.35', null)], true, 'exact_0_05')
+    // The printed line is the exact 6.175 to the rappen.
+    expect(computeTotalsRappen([line('0.5', '12.35', null)], true, 'exact_0_05').line_totals).toEqual([618])
+    expect(t.subtotal).toBe('6.18')
+    expect(t.vat).toEqual([])
+    // 6.175 → 6.20 in one rounding; the paper shows 6.18 + 0.02 = 6.20.
+    expect(t.rounding).toBe('0.02')
+    expect(t.total).toBe('6.20')
+  })
+
+  it('golden: the worked example — 1.5 × 350 exempt + 1 × 180 at 8.1%, less 10% as two negative lines', () => {
+    // Prices INCLUDE VAT. −10% is a taxable −18.00 and an exempt −52.50.
+    const lines = [
+      line('1.5', '350.00', null), // 525.00
+      line('1', '180.00', '8.1'), // 180.00, VAT inside
+      line('1', '-18.00', '8.1'), // −10% of the taxable line
+      line('1', '-52.50', null), // −10% of the exempt line
+    ]
+    const t = computeTotals(lines, true, 'exact_0_05')
+    // 525.00 + 180.00 − 18.00 − 52.50 = 634.50, already a multiple of 0.05
+    expect(t.subtotal).toBe('634.50')
+    expect(t.rounding).toBe('0.00')
+    expect(t.total).toBe('634.50')
+    // The taxable base is 180.00 − 18.00 = 162.00 and CONTAINS its VAT:
+    //   162.00 × 8.1 / 108.1 = 12.1387… → 12.14
+    //   in milli-rappen: 16_200_000 × 810 / (10810 × 1000) = 1213.87… → 1214
+    expect(t.vat).toEqual([{ rate: '8.1', base: '162.00', amount: '12.14' }])
+    expect(t.vat_total).toBe('12.14')
+  })
+
+  // The fixture the policy exists for: a fractional quantity whose exact
+  // product is not a whole number of rappen.
+  //   0.5   × 12.35 = 6.175    (617_500 milli-rappen) → prints 6.18
+  //   0.333 × 12.45 = 4.14585  (414_585 milli-rappen) → prints 4.15
+  //   exact sum   = 10.32085   → ONE rounding to five rappen → 10.30
+  //   printed sum = 10.33      → what the paper shows as the subtotal
+  const fractional = [line('0.5', '12.35', null), line('0.333', '12.45', null)]
+
+  it('golden: differs from `total_0_05`, which rounds the lines first', () => {
+    const exact = computeTotals(fractional, true, 'exact_0_05')
+    expect(exact.subtotal).toBe('10.33')
+    expect(exact.total).toBe('10.30')
+    // 10.33 − 0.03 = 10.30 — the Arrondi line carries the gap.
+    expect(exact.rounding).toBe('-0.03')
+
+    // `total_0_05`: 6.18 + 4.15 = 10.33 → nearest five rappen is 10.35
+    const rounded = computeTotals(fractional, true, 'total_0_05')
+    expect(rounded.subtotal).toBe('10.33')
+    expect(rounded.rounding).toBe('0.02')
+    expect(rounded.total).toBe('10.35')
+
+    // The two must not agree, or the exact path is unreachable.
+    expect(exact.total).not.toBe(rounded.total)
+  })
+
+  it('takes the VAT on the exact base, and prints that base to the rappen', () => {
+    // Same two lines, EXCLUDING VAT at 8.1% on both.
+    const taxed = fractional.map((l) => line(l.qty, l.unit_price, '8.1'))
+    const t = computeTotals(taxed, false, 'exact_0_05')
+    // base = 10.32085 exact; VAT = 1_032_085 × 810 / (10000 × 1000) = 83.598… → 0.84
+    expect(t.vat).toEqual([{ rate: '8.1', base: '10.32', amount: '0.84' }])
+    // exact 10.32085 + 0.84 = 11.16085 → ONE rounding → 11.15
+    expect(t.total).toBe('11.15')
+    // printed: 10.33 + 0.84 = 11.17, so the Arrondi line is −0.02
+    expect(t.subtotal).toBe('10.33')
+    expect(t.rounding).toBe('-0.02')
+  })
+
+  it('THE DOCUMENT FOOTS: printed lines → subtotal → (VAT) → rounding → total, where exact ≠ printed', () => {
+    for (const pricesIncludeVat of [true, false]) {
+      const lines = pricesIncludeVat ? fractional : fractional.map((l) => line(l.qty, l.unit_price, '8.1'))
+      const r = computeTotalsRappen(lines, pricesIncludeVat, 'exact_0_05')
+
+      // PRECONDITION, asserted so this test cannot pass vacuously: the exact sum
+      // and the sum of the printed lines are different numbers here.
+      const exactSum = lines.reduce((a, l) => a + lineProductExact(parseQty(l.qty), parseRappen(l.unit_price)), 0)
+      const printedSum = r.line_totals.reduce((a, b) => a + b, 0)
+      expect(milliToRappen(exactSum)).not.toBe(printedSum)
+
+      // 1. the printed subtotal is the sum of the PRINTED lines, not the exact sum
+      expect(r.subtotal).toBe(printedSum)
+      // 2. the total is the EXACT sum rounded once
+      expect(r.total).toBe(roundMilliToStep(exactSum + (pricesIncludeVat ? 0 : r.vat_total * 1000), 5))
+      // 3. and the rounding figure closes the gap on paper
+      expect(r.subtotal + (pricesIncludeVat ? 0 : r.vat_total) + r.rounding).toBe(r.total)
+      // 4. it is a real gap, not zero — or this fixture proves nothing
+      expect(r.rounding).not.toBe(0)
+    }
+  })
+
+  it('an empty invoice and a whole-number invoice behave like `total_0_05`', () => {
+    expect(computeTotals([], true, 'exact_0_05').total).toBe('0.00')
+    const whole = [line('12', '132.50', '8.1')]
+    // 1590.00 exact; VAT 128.79; 1718.79 → 1718.80, rounding +0.01
+    const t = computeTotals(whole, false, 'exact_0_05')
+    expect(t).toEqual(computeTotals(whole, false, 'total_0_05'))
+    expect(t.total).toBe('1718.80')
+    expect(t.rounding).toBe('0.01')
   })
 })
 

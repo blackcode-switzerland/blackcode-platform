@@ -730,7 +730,7 @@ able to accidentally send a sales stage to the issues app.
 
 > The top-level `vocabulary` / `limits` / `media` keys still exist and are
 > **deprecated**. They are served for binaries older than the namespacing, and go
-> away once `CLI_MIN_VERSION` passes the release that stopped needing them. Read
+> away once the CLI floor (the npm `min` dist-tag) passes the release that stopped needing them. Read
 > `apps.<slug>`.
 
 ### 7.5 Docs — platform at root, app docs in the app

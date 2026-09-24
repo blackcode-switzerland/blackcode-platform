@@ -30,7 +30,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { marked } from 'marked'
 import sanitizeHtml from 'sanitize-html'
-import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from './cli-version'
+import type { CliVersions } from './cli-version'
 
 // The changelog lives at the MONOREPO ROOT (`docs/changelog/`), not inside this
 // app — architecture §7.3 makes it a platform surface merging one file per app
@@ -237,19 +237,34 @@ function mergeEntries(sources: Array<{ app: string; markdown: string }>): Change
 
 // Read once and memoize. In production the files never change under the running
 // process; in dev, editing a doc triggers a module reload which clears this.
-let cached: ChangelogPayload | null = null
+//
+// Only the ENTRIES are memoized. The CLI versions are passed in by the caller
+// (from `getCliVersions()`) on every call, because they are read live from npm
+// and memoizing them here would freeze whatever this instance saw first.
+let cached: Omit<ChangelogPayload, 'cli_latest_version' | 'cli_min_version'> | null = null
 
-export function getChangelog(): ChangelogPayload {
+function getFeed() {
   if (cached) return cached
   const sources = readSources()
   cached = {
-    cli_latest_version: CLI_LATEST_VERSION,
-    cli_min_version: CLI_MIN_VERSION,
     apps: sources.map((s) => s.app),
     entries: mergeEntries(sources),
     reference_moved_to: 'Run `bk guide` — the complete usage guide, embedded in the CLI binary.',
   }
   return cached
+}
+
+/** Every section with a changelog file: `platform` first, then each app. */
+export function getChangelogApps(): string[] {
+  return getFeed().apps
+}
+
+export function getChangelog(versions: Pick<CliVersions, 'latest' | 'min'>): ChangelogPayload {
+  return {
+    cli_latest_version: versions.latest,
+    cli_min_version: versions.min,
+    ...getFeed(),
+  }
 }
 
 /**
@@ -258,8 +273,11 @@ export function getChangelog(): ChangelogPayload {
  * valid names rather than serving a silently empty list — "no entries" and "no
  * such app" must not look the same to an agent.
  */
-export function getChangelogFor(app?: string | null): ChangelogPayload | null {
-  const full = getChangelog()
+export function getChangelogFor(
+  app: string | null | undefined,
+  versions: Pick<CliVersions, 'latest' | 'min'>
+): ChangelogPayload | null {
+  const full = getChangelog(versions)
   const want = (app ?? '').trim().toLowerCase()
   if (!want) return full
   if (!full.apps.includes(want)) return null
@@ -276,8 +294,10 @@ export function getChangelogFor(app?: string | null): ChangelogPayload | null {
  * carries its app so the merged document stays attributable.
  */
 export function getChangelogMarkdown(app?: string | null): string | null {
-  const payload = getChangelogFor(app)
-  if (!payload) return null
+  const feed = getFeed()
+  const want = (app ?? '').trim().toLowerCase()
+  if (want && !feed.apps.includes(want)) return null
+  const entries = want ? feed.entries.filter((e) => e.app === want) : feed.entries
 
   const heading = app ? `# Changelog — ${app}` : '# Changelog'
   const parts = [
@@ -288,7 +308,7 @@ export function getChangelogMarkdown(app?: string | null): string | null {
     '`bk meta`.',
     '',
   ]
-  for (const e of payload.entries) {
+  for (const e of entries) {
     const date = e.date || 'undated'
     parts.push('---', '', `## ${date} — [${e.app}] ${e.title}`, '', e.markdown, '')
   }
