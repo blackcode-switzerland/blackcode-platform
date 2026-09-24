@@ -170,6 +170,11 @@ exercised by real writes while nothing yet depended on the index.
 
 ### 4. The three-step CLI release: deploy web → publish npm → deploy web AGAIN
 
+> **Retired 2026-09-24.** The advertised versions are read live from npm
+> dist-tags now (`packages/platform-agent/src/cli-version.ts`), so there is no
+> second deploy and the floor cannot be raised ahead of the publish. Current
+> procedure: `docs/devops.md`. Kept below as the reason it once existed.
+
 The release script bumps `CLI_LATEST_VERSION` **in a commit it creates itself**,
 so that commit necessarily lands *after* whatever deploy preceded it. Without the
 second deploy, production keeps advertising the old version and **no installed

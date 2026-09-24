@@ -1264,14 +1264,18 @@ response, success or error:
 - `X-BK-CLI-Latest` — newest published `bk` CLI. The CLI shows a throttled
   "update available" notice when the caller is behind it.
 - `X-BK-CLI-Min` — minimum CLI the API supports. The CLI hard-refuses (exit code
-  8) below this. **Raise `CLI_MIN_VERSION` whenever a server change breaks older
-  CLIs** (e.g. the milestone→task / key-removal rename) so stale clients get a
-  clear "please upgrade" instead of cryptic 404s.
+  8) below this. **Raise the floor whenever a server change breaks older CLIs**
+  (e.g. the milestone→task / key-removal rename) so stale clients get a clear
+  "please upgrade" instead of cryptic 404s — by moving the npm `min` dist-tag
+  (a forced `release.sh cli`, or `npm dist-tag add <pkg>@<version> min`).
 - `X-BK-Help` — the get-current guide (`/agent-updator`).
 - `X-BK-Changelog` — the changelog (`/api/changelog`). Points at the JSON route, not a page: the human `/changelog` page was removed on 2026-08-03 and these headers are read by agents.
 
-The version headers come from `@blackcode/platform-agent` (override via `BK_CLI_LATEST` /
-`BK_CLI_MIN` env, no redeploy); the two breadcrumb headers come from
+The version headers come from `getCliVersions()` in `@blackcode/platform-agent`,
+which reads the package's npm dist-tags (`latest`, `min`) live, cached five
+minutes per instance — so publishing a CLI updates every app with no deploy.
+`BK_CLI_LATEST` / `BK_CLI_MIN` env pin them in an emergency (applies on the next
+deploy). The two breadcrumb headers come from
 `lib/agent-manifest.ts` `discovery`, so they can't drift from `/llms.txt`. The
 breadcrumbs are out-of-band (never in the body), so a client that ignores them
 pays nothing — but an agent that hits a wall can follow them back to the

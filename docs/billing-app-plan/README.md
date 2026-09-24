@@ -366,9 +366,10 @@ Two facts about the world that these docs depend on, and that will expire:
 - **IG QR-bill v2.3 is the version in force**; v2.4 takes effect 14 November 2026
   and v2.3 stays valid until November 2027. This plan builds to v2.4's rules,
   which are valid under both. See [`qr-bill.md`](qr-bill.md).
-- **The `bk` floor is 4.2.0** (`packages/platform-agent/src/cli-version.ts`).
-  Adding this app raises neither `CLI_LATEST_VERSION` nor `CLI_MIN_VERSION` by
-  itself; the release does.
+- **The `bk` floor was 4.2.0** when this was written. Since 2026-09-24 it is
+  the npm `min` dist-tag, read live by every app
+  (`packages/platform-agent/src/cli-version.ts`). Adding this app moves neither
+  `latest` nor `min` by itself; the release does.
 
 When `apps/billing` exists, this folder moves to `apps/billing/docs/`, per the
 placement rule in `working-in-this-repo.md`. It sits in root docs for now because

@@ -21,7 +21,7 @@
 // @blackcode/platform-agent (packages/platform-agent/src/changelog.ts).
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getChangelog, getChangelogFor, getChangelogMarkdown } from '@blackcode/platform-agent'
+import { getChangelogApps, getChangelogFor, getChangelogMarkdown, getCliVersions } from '@blackcode/platform-agent'
 import type { AppContext } from '../app-context'
 
 export function changelogRoute(_app: AppContext) {
@@ -29,7 +29,7 @@ export function changelogRoute(_app: AppContext) {
   // of the wrapper's machinery would apply. It was that way before the
   // extraction and stays that way — an agent reading the changelog is often an
   // agent whose credentials are the thing that stopped working.
-  return function GET(request: NextRequest) {
+  return async function GET(request: NextRequest) {
     const format = request.nextUrl.searchParams.get('format')
     const appFilter = request.nextUrl.searchParams.get('app')
     const wantsMarkdown =
@@ -40,7 +40,7 @@ export function changelogRoute(_app: AppContext) {
     // Public, so it does not go through apiHandler/Errors — but an agent that
     // mistypes --app still gets the shape it knows how to read, suggestion
     // included.
-    const known = getChangelog().apps
+    const known = getChangelogApps()
     if (appFilter && !known.includes(appFilter.trim().toLowerCase())) {
       return NextResponse.json(
         {
@@ -61,7 +61,7 @@ export function changelogRoute(_app: AppContext) {
       })
     }
 
-    return NextResponse.json(getChangelogFor(appFilter), {
+    return NextResponse.json(getChangelogFor(appFilter, await getCliVersions()), {
       headers: { 'Cache-Control': 'public, max-age=300' },
     })
   }
