@@ -1,4 +1,4 @@
-// The totals: per line, per rate, in one of two price modes, under one of three
+// The totals: per line, per rate, in one of two price modes, under one of four
 // rounding policies. **Pure, and nothing here is ever stored.**
 //
 // ===========================================================================
@@ -31,6 +31,13 @@
 // None of that is unusual bookkeeping. All of it was impossible in the old
 // shape, and all of it was cheap to support before the first row existed.
 //
+// A fourth policy followed on 2026-09-23, from the same customer's code read
+// more closely: they keep each line's qty × price UNROUNDED, sum, and round the
+// payable total ONCE to five rappen. `total_0_05` rounds each line to the rappen
+// before summing, and on a fractional quantity that lands a different total
+// (`totals.test.ts` has 0.5 × 12.35 + 0.333 × 12.45: 10.30 exact, 10.35 rounded
+// first). That is `exact_0_05` — see `computeExactTotalsRappen` below.
+//
 // ── THE ONE RULE TO CARRY OUT OF THIS FILE ─────────────────────────────────
 // **`vat_rate === null` is not `vat_rate === '0'`.** Null means the line carries
 // no VAT at all — an exempt act, or a company that is not registered. Zero is a
@@ -38,14 +45,19 @@
 // document and differently on a VAT return. Never write the test as `> 0`.
 
 import {
+  MILLI,
   formatRappen,
   formatRate,
   lineProduct,
+  lineProductExact,
+  milliToRappen,
   parseQty,
   parseRappen,
   parseRateBp,
+  roundMilliToStep,
   roundToStep,
   divRoundHalfAway,
+  type MilliRappen,
   type Rappen,
 } from './money'
 import type { InvoiceTotals, RoundingPolicy, VatLine } from '@/types'
@@ -65,7 +77,12 @@ export interface TotalsInRappen {
   subtotal: Rappen
   vat: Array<{ rate_bp: number; base: Rappen; amount: Rappen }>
   vat_total: Rappen
-  /** The adjustment the policy produced. Signed; zero for every policy but `total_0_05`. */
+  /**
+   * The adjustment the policy produced. Signed; zero under `line_0_05` and
+   * `none`. Under `exact_0_05` it is what makes the PRINTED figures foot: the
+   * difference between the printed subtotal (plus VAT, when prices exclude it)
+   * and the total that was rounded from the exact sum.
+   */
   rounding: Rappen
   total: Rappen
   /** Each line's own total, in order, so a caller need not recompute them. */
@@ -73,12 +90,14 @@ export interface TotalsInRappen {
 }
 
 /**
- * One line's total.
+ * One line's total, AS PRINTED.
  *
  * Under `line_0_05` it is rounded to five rappen HERE, before anything is
  * summed, which is what makes the printed column add up to the printed subtotal
- * with no rounding line. Under the other two policies it is rounded to the
- * rappen and the adjustment (if any) happens once, at the end.
+ * with no rounding line. Under the other three policies it is rounded to the
+ * rappen and the adjustment (if any) happens once, at the end. Under
+ * `exact_0_05` this is the DISPLAY figure only: the sum is taken over the exact
+ * products, not over these (`computeExactTotalsRappen`).
  */
 export function lineTotal(line: TotalsLine, rounding: RoundingPolicy): Rappen {
   const raw = lineProduct(parseQty(line.qty), parseRappen(line.unit_price))
@@ -98,6 +117,8 @@ export function computeTotalsRappen(
   pricesIncludeVat: boolean,
   rounding: RoundingPolicy
 ): TotalsInRappen {
+  if (rounding === 'exact_0_05') return computeExactTotalsRappen(lines, pricesIncludeVat)
+
   const line_totals = lines.map((l) => lineTotal(l, rounding))
   const subtotal = line_totals.reduce((a, b) => a + b, 0)
 
@@ -157,6 +178,70 @@ export function computeTotalsRappen(
     vat_total,
     rounding: adjustment,
     total: beforeRounding + adjustment,
+    line_totals,
+  }
+}
+
+/**
+ * `exact_0_05`: the first external customer's arithmetic (2026-09-23).
+ *
+ * Every line is kept EXACT — qty × unit_price in integer milli-rappen, with no
+ * rounding at all — the VAT is taken per rate on the exact base, and the
+ * payable total is rounded ONCE, half away from zero, to five rappen. Nothing
+ * in the path is a float: `numeric(12,3) × numeric(14,2)` is exact in
+ * thousandths of a rappen by construction.
+ *
+ * ── THE DOCUMENT STILL HAS TO FOOT ─────────────────────────────────────────
+ * A line cannot print 6.175. So each line is printed to the rappen, the
+ * printed subtotal is the sum of those PRINTED lines (not the exact sum), and
+ * `rounding` carries whatever separates that printed subtotal (plus the VAT,
+ * when prices exclude it) from the total. Lines → subtotal → rounding → total
+ * adds up on paper; the exact sum is what the total was rounded FROM and is not
+ * printed anywhere. `totals.test.ts` asserts the footing on a fixture where the
+ * exact and printed sums differ.
+ *
+ * The VAT `base` reported per rate is the exact base, printed to the rappen.
+ */
+export function computeExactTotalsRappen(lines: TotalsLine[], pricesIncludeVat: boolean): TotalsInRappen {
+  const exact: MilliRappen[] = lines.map((l) => lineProductExact(parseQty(l.qty), parseRappen(l.unit_price)))
+  const line_totals = exact.map(milliToRappen)
+  const subtotal = line_totals.reduce((a, b) => a + b, 0)
+
+  // Same grouping rule as above — null is exempt and in no group; keyed by
+  // basis points so `"8.1"` and `"8.10"` are one rate — over the EXACT products.
+  const groups = new Map<number, MilliRappen>()
+  lines.forEach((l, i) => {
+    if (l.vat_rate === null) return
+    const bp = parseRateBp(l.vat_rate)
+    groups.set(bp, (groups.get(bp) ?? 0) + exact[i])
+  })
+  const rates = [...groups.keys()].sort((a, b) => a - b)
+
+  const vat = rates.map((bp) => {
+    const baseMilli = groups.get(bp)!
+    // The same two formulas as the rappen path, one scale down: the divisor
+    // carries the extra ×1000 so the result comes back as rappen in one
+    // half-away-from-zero division.
+    const amount = pricesIncludeVat
+      ? divRoundHalfAway(baseMilli * bp, (10000 + bp) * MILLI)
+      : divRoundHalfAway(baseMilli * bp, 10000 * MILLI)
+    return { rate_bp: bp, base: milliToRappen(baseMilli), amount }
+  })
+  const vat_total = vat.reduce((a, v) => a + v.amount, 0)
+
+  // The one rounding: the exact sum (plus the VAT, already in rappen, when it
+  // is added on top) to five rappen.
+  const exactBefore: MilliRappen = exact.reduce((a, b) => a + b, 0) + (pricesIncludeVat ? 0 : vat_total * MILLI)
+  const total = roundMilliToStep(exactBefore, 5)
+
+  // What the paper shows above the total, and the figure that closes the gap.
+  const printedBefore = pricesIncludeVat ? subtotal : subtotal + vat_total
+  return {
+    subtotal,
+    vat,
+    vat_total,
+    rounding: total - printedBefore,
+    total,
     line_totals,
   }
 }

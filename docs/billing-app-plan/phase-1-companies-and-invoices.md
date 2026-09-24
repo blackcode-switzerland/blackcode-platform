@@ -111,7 +111,7 @@ Multi-entity by design: a new company is a row, never a code change.
 | `uid`, `vat_number` | `varchar(32)` nullable | ⚠ placeholders until P2 |
 | `default_currency`, `default_language`, `default_ref_type`, `default_vat_rate` | `varchar` / `numeric(5,2)` nullable | prefill for new invoices and their lines only. Never read at render time. |
 | `default_prices_include_vat` | `boolean NOT NULL DEFAULT false` | prefill for `invoice.prices_include_vat`. The first external customer's prices include VAT ([D-B7](README.md)). |
-| `rounding` | `varchar(12) NOT NULL DEFAULT 'line_0_05'` | **the rounding policy, read at derivation time.** `line_0_05`: each line total and each VAT amount to five rappen, so printed sums are exact (the mockup's). `total_0_05`: lines and VAT to the rappen, the payable total to five, the difference printed as an `Arrondi` line. `none`: everything to the rappen. Position P8, per company since D-B7. |
+| `rounding` | `varchar(12) NOT NULL DEFAULT 'line_0_05'` | **the rounding policy, read at derivation time.** `line_0_05`: each line total and each VAT amount to five rappen, so printed sums are exact (the mockup's). `total_0_05`: lines and VAT to the rappen, the payable total to five, the difference printed as an `Arrondi` line. `exact_0_05` (2026-09-23): lines kept exact and never rounded, VAT on the exact base to the rappen, the payable total rounded once to five; lines print to the rappen and the `Arrondi` line carries the gap to the printed subtotal (the first customer's). `none`: everything to the rappen. Position P8, per company since D-B7. |
 | `number_format` | `varchar(40)` | `BC-{YYYY}-{SEQ4}`, `AL-{SEQ4}`. Two tokens, both optional. |
 | `next_seq` | `integer NOT NULL DEFAULT 1` | **the allocator.** See below. |
 | `payment_terms_days` | `integer` | `due_date` prefill |
@@ -297,8 +297,9 @@ Pure functions. Never store a result. Every amount is an **integer count of
 rappen** inside these functions and a **string** at both ends.
 
 **`totals.ts`** — per line, per rate, in one of two price modes, under one of
-three rounding policies. Changed 2026-09-16 for the first external customer
+four rounding policies. Changed 2026-09-16 for the first external customer
 ([D-B7](README.md)); the earlier shape had one rate per invoice and one constant.
+The fourth policy, `exact_0_05`, followed on 2026-09-23 (below).
 
 ```
 lineTotal(qty, unit_price)  → rappen
@@ -329,6 +330,15 @@ computeTotals(lines, prices_include_vat, rounding)
         line_0_05  : amount(r) = round_to_step(amount(r), 5); rounding = 0
         total_0_05 : rounding  = round_to_step(total, 5) − total; total += rounding
         none       : rounding  = 0
+
+    exact_0_05 (2026-09-23) — a separate path, one scale down:
+        exact(line) = qty_milli × price_rappen              → milli-rappen, NOT rounded
+        lineTotal   = round_half_away(exact / 1000)          → what the line PRINTS
+        subtotal    = Σ lineTotal                            → the PRINTED sum
+        base(r)     = Σ exact over the group                 → exact, printed to the rappen
+        amount(r)   = round_half_away(base × rate_bp / (10000 [+ rate_bp]) / 1000)
+        total       = round_half_away((Σ exact [+ Σ amount × 1000]) / 5000) × 5   ← ONE rounding
+        rounding    = total − (subtotal [+ Σ amount])       → closes the gap on paper
 ```
 
 `rate_bp` is the rate in basis points (`8.1%` → `810`), parsed from the
@@ -336,17 +346,21 @@ computeTotals(lines, prices_include_vat, rounding)
 when at least one line carries a non-null rate, and the block has one line per
 distinct rate, printed `TVA 8.1% sur CHF 1 200.00` in exclusive mode and
 `dont TVA 8.1%` in inclusive mode. A non-zero `rounding` prints as its own
-`Arrondi` line in the total block. The three policies are a closed vocabulary in
+`Arrondi` line in the total block. The four policies are a closed vocabulary in
 `lib/vocabularies.ts`, served by `/api/meta`. **There is no `VAT_ROUNDING_STEP`
 constant.**
 
-**Why three policies and not one constant.** The mockup rounds every line and
+**Why four policies and not one constant.** The mockup rounds every line and
 every VAT amount to five rappen so the printed sums are exact without a rounding
 line; that is `line_0_05`, the default, and the phase-6 parity test holds it to
 the mockup to the rappen. The first external customer rounds VAT to the rappen
-and only the payable total to five, with the difference shown; that is
-`total_0_05`, and their totals must match ours to the rappen or their
-`expected_total` check refuses every bill. A bank-transfer bill needs no
+and only the payable total to five, with the difference shown — and, read more
+closely on 2026-09-23, **never rounds a line at all**: qty × price stays exact,
+the sum is exact, and the one rounding is the total's. That is `exact_0_05`
+(`total_0_05`, which rounds each line to the rappen before summing, was the
+first reading of the same code and lands on a different total whenever a
+quantity is fractional), and their totals must match ours to the rappen or
+their `expected_total` check refuses every bill. A bank-transfer bill needs no
 five-rappen rounding at all; that is `none`. **A policy is a company setting,
 never a deployment setting**, because two companies in one workspace may keep
 different books.
@@ -528,6 +542,10 @@ workspace. Not a blank panel: say what the page is for and what would fill it.
       asserted
 - [ ] The three rounding policies each asserted on one fixture where they
       differ, and `total_0_05` prints its `Arrondi` line
+- [ ] `exact_0_05` (2026-09-23): the golden cases (0.5 × 12.35 → 6.18 printed,
+      6.20 total; the worked 634.50 / VAT 12.14 example), a fixture where it
+      and `total_0_05` disagree, and the footing assertion where the exact sum
+      and the printed sum differ
 - [ ] Every write path has left exactly the audit rows expected, including one
       row per changed line path
 - [ ] The combination matrix refuses QR-IBAN + SCOR, IBAN + QRR, and EUR + QRR
