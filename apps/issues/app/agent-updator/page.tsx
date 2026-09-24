@@ -13,7 +13,13 @@
 import type { Metadata } from 'next'
 import { MarketingLayout } from '@/components/marketing/layout'
 import { AGENT_MANIFEST as m } from '@/lib/agent-manifest'
-import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@blackcode/platform-agent'
+import { getCliVersions } from '@blackcode/platform-agent'
+
+// Rendered per request: the "Current:" line reads the CLI versions live from npm
+// (packages/platform-agent/src/cli-version.ts). A prerendered page would freeze
+// whatever was published at build time — the stale-version problem that lookup
+// exists to end.
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'The HTTP API is now CLI-only · b/issues',
@@ -42,7 +48,8 @@ const MOVED: Array<[string, string, string]> = [
   ['/changelog (web page)', 'bk changelog', 'The page was removed; the dated record itself is unchanged and also at GET /api/changelog.'],
 ]
 
-export default function AgentUpdatorPage() {
+export default async function AgentUpdatorPage() {
+  const cli = await getCliVersions()
   return (
     <MarketingLayout>
       <article className="mx-auto max-w-3xl px-6 py-16 sm:py-24">
@@ -172,7 +179,7 @@ export default function AgentUpdatorPage() {
             <code>bk skill install</code>.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            Current: CLI latest v{CLI_LATEST_VERSION} &middot; minimum supported v{CLI_MIN_VERSION}.
+            Current: CLI latest v{cli.latest} &middot; minimum supported v{cli.min}.
           </p>
           <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
             Update at any time:

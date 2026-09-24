@@ -43,11 +43,9 @@ die()     { error "$*"; exit 1; }
 # .vercel/project.json happens to be linked. Without it, deploying a second app
 # would silently ship to whichever project the working copy was last linked to —
 # the kind of mistake that is only visible after it is live.
-# WHEN YOU ADD A LINE, RE-READ "RELEASING THE CLI" IN usage() BELOW. The version
-# gate is served by EVERY app (packages/platform-api's apiHandler sets
-# X-BK-CLI-Latest / X-BK-CLI-Min on every response, from the one shared
-# constant), so step 3 of a CLI release is one `web <app>` per line here — not
-# one. This script prints that list for you rather than naming `issues`.
+# The CLI version gate is NOT deployed with an app (since 2026-09-24): every app
+# reads it live from npm dist-tags (packages/platform-agent/src/cli-version.ts),
+# so adding a line here adds nothing to a CLI release.
 app_registry() {
   cat <<'APPS'
 issues|bc-issues|prj_bueHX5y2f7uaemskB5Q1Plwbry2p|https://issues.blackcode.ch
@@ -204,7 +202,7 @@ ${BOLD}USAGE${RESET}
   $(basename "$0") web <app>          Deploy ONE app to Vercel production
   $(basename "$0") cli [bump]         Release the shared \`bk\` CLI to GitHub + npm.
                                       Omit [bump] to be prompted. Also asks
-                                      force-vs-normal, and updates cli-version.ts.
+                                      force-vs-normal (moves the npm \`min\` tag).
   $(basename "$0") apps               List deployable apps
   $(basename "$0") --help             Show this help
 
@@ -219,23 +217,18 @@ ${BOLD}EXAMPLES${RESET}
   $(basename "$0") web issues
   $(basename "$0") cli minor
 
-${BOLD}RELEASING THE CLI — THREE STEPS, IN THIS ORDER${RESET}
-  1. $(basename "$0") web <app>   deploy EVERY app first; each must be
-                                  backwards compatible with installed clients
-  2. $(basename "$0") cli minor   publish to npm
-  3. $(basename "$0") web <app>   AGAIN, for EVERY app — this is what makes the
-                                  version gate live. The one people skip.
+${BOLD}RELEASING THE CLI${RESET}
+  1. $(basename "$0") web <app>   ONLY for apps whose server changed and whose new
+                                  routes the new CLI calls. Nothing else needs it.
+  2. $(basename "$0") cli minor   publish to npm. That is the whole release.
 
-  The gate (cli-version.ts) is bumped in a commit this script creates itself, so
-  it always lands AFTER step 1. Without step 3, production keeps advertising the
-  old version and no installed client is told an update exists.
+  Every app reads the advertised versions LIVE from npm dist-tags, cached for
+  five minutes: \`latest\` (moved by npm publish) and \`min\` (moved by this
+  script on a FORCED release). So publishing IS advertising, on every app at
+  once — there is no second deploy. See packages/platform-agent/src/cli-version.ts.
 
-  ${BOLD}Steps 1 and 3 are once PER APP, not once.${RESET} Every deployment answers the
-  version question — apiHandler stamps X-BK-CLI-Latest and X-BK-CLI-Min on every
-  response from the same shared constant — and \`bk\` asks whichever host it is
-  pointed at. Deploy only one and a user whose home app is the other is told
-  nothing; on a FORCED release, one host blocks them and the other does not.
-  \`$(basename "$0") apps\` lists which apps that currently means.
+  Move or roll back the floor any time, no deploy:
+    npm dist-tag add @blackcode_sa/bc-issues@<version> min
 
 ${BOLD}ADDING AN APP${RESET}
   Add one line to app_registry() near the top of this file. Everything else here
@@ -244,7 +237,8 @@ ${BOLD}ADDING AN APP${RESET}
 ${BOLD}PREREQUISITES${RESET}
   web   vercel CLI logged in (vercel login)
   cli   gh CLI logged in (gh auth login), npm logged in (npm login),
-        OTP authenticator app ready for npm publish
+        OTP authenticator app ready for npm publish (and, when forced,
+        a second OTP for the \`min\` dist-tag)
 "
 }
 
@@ -367,13 +361,13 @@ release_cli() {
   version=$(resolve_version "$bump")
   local version_number="${version#v}"   # strip leading 'v' for package.json
 
-  # Upgrade policy — drives the server version gate (cli-version.ts):
-  #   normal → CLI_LATEST advertises the new version (soft "update available").
-  #   forced → also raise CLI_MIN so older CLIs are hard-blocked (exit code 8).
+  # Upgrade policy — drives the npm dist-tags every app reads live:
+  #   normal → `npm publish` moves `latest`; older CLIs get a soft update notice.
+  #   forced → also move `min`, so older CLIs are hard-blocked (exit code 8).
   echo
   header "Upgrade policy"
   echo "  normal — advertise ${version} as latest; older CLIs get a soft update notice."
-  echo "  forced — also raise CLI_MIN to ${version}; older CLIs are blocked until they upgrade."
+  echo "  forced — also move the npm 'min' tag to ${version}; older CLIs are blocked until they upgrade."
   local force_ans forced=false
   read -r -p "Force upgrade? [y/N] " force_ans
   if [[ "$force_ans" =~ ^[Yy]$ ]]; then forced=true; fi
@@ -383,13 +377,13 @@ release_cli() {
   header "Release plan"
   echo -e "  CLI version:  ${BOLD}${version}${RESET}"
   if [[ "$forced" == true ]]; then
-    echo -e "  Policy:       ${BOLD}FORCED${RESET} — sets CLI_LATEST and CLI_MIN to ${version}"
+    echo -e "  Policy:       ${BOLD}FORCED${RESET} — npm tags latest AND min → ${version}"
     echo
-    warn "FORCED blocks every older binary with exit 8 the moment the gate goes live."
-    warn "Publish first (this script does), then deploy web. Anyone who has not"
-    warn "upgraded is locked out until they run: npm install -g ${npm_package:-@blackcode_sa/bc-issues}@latest"
+    warn "FORCED blocks every older binary with exit 8 within ~5 minutes of publishing,"
+    warn "on every app at once — no deploy stands in between. Anyone who has not"
+    warn "upgraded is locked out until they run: npm install -g @blackcode_sa/bc-issues@latest"
   else
-    echo -e "  Policy:       normal — sets CLI_LATEST to ${version} (CLI_MIN unchanged)"
+    echo -e "  Policy:       normal — npm tag latest → ${version} (min unchanged)"
   fi
   echo -e "  Deploy web:   ${BOLD}no${RESET} — a CLI release never deploys an app"
   local go
@@ -437,43 +431,11 @@ release_cli() {
   success "Updated ${pkg_json}"
   success "Updated ${install_js}"
 
-  # Update the server-side version gate now so it lands in the SAME commit as the
-  # bump (one commit, then the tag/build/publish come from it). CLI_LATEST always;
-  # CLI_MIN only when forced.
-  #
-  # The gate has now moved twice, so it is SEARCHED FOR rather than hardcoded.
-  #
-  # History, because it is the reason for the search: it was <root>/lib/cli-version.ts
-  # until Phase 1 put the app under apps/issues/, and this path was not updated
-  # with it — so every release since would have died here on `sed: no such file`,
-  # after bumping package.json and install.js and before the release commit.
-  # Caught in Phase 5, the first release attempt after the move. Phase 6 then
-  # moved it again, into packages/platform-agent/, because one binary has one
-  # advertised version and a second app must not answer that question differently.
-  #
-  # A hardcoded path that breaks halfway through a release is a bad trade for the
-  # two lines this costs. The candidate list is ordered newest-first and the
-  # failure names every place it looked.
-  local cli_version_ts=""
-  local candidate
-  for candidate in \
-    "${root_dir}/packages/platform-agent/src/cli-version.ts" \
-    "${root_dir}/apps/issues/lib/cli-version.ts" \
-    "${root_dir}/lib/cli-version.ts"; do
-    if [[ -f "$candidate" ]]; then cli_version_ts="$candidate"; break; fi
-  done
-  [[ -n "$cli_version_ts" ]] || die "Version gate (cli-version.ts) not found in packages/platform-agent/src, apps/issues/lib or <root>/lib — has it moved again?"
-  info "Version gate: ${cli_version_ts#$root_dir/}"
-  sed -i '' -E "s/(CLI_LATEST_VERSION = process\.env\.BK_CLI_LATEST \?\? ')[^']*'/\1${version_number}'/" "$cli_version_ts"
-  success "CLI_LATEST_VERSION → ${version_number}"
-  if [[ "$forced" == true ]]; then
-    sed -i '' -E "s/(CLI_MIN_VERSION = process\.env\.BK_CLI_MIN \?\? ')[^']*'/\1${version_number}'/" "$cli_version_ts"
-    success "CLI_MIN_VERSION → ${version_number} (forced)"
-  fi
-
-  # Single release commit: package bump + install.js + version gate.
+  # Single release commit: package bump + install.js. The version gate is NOT in
+  # it any more — every app reads it live from npm (cli-version.ts), which is
+  # what removed the "deploy every app again" step that followed this commit.
   info "Committing release ${version}..."
-  git add "$pkg_json" "$install_js" "$cli_version_ts"
+  git add "$pkg_json" "$install_js"
   git commit -m "chore: release CLI ${version}$([[ "$forced" == true ]] && echo ' (forced min)')"
   git push origin main
   success "Pushed release commit."
@@ -535,7 +497,17 @@ bk guide
   cd "$root_dir"
 
   echo
-  success "npm package published: ${npm_package}@${version_number}"
+  success "npm package published: ${npm_package}@${version_number} (dist-tag latest)"
+
+  # The floor. npm refuses to tag a version that was never published, so this
+  # can only ever run AFTER the publish above — the lockout the old ordering
+  # rule warned about cannot happen here.
+  if [[ "$forced" == true ]]; then
+    header "Raising the floor (npm dist-tag min → ${version_number})..."
+    warn "npm will ask for your OTP again."
+    npm dist-tag add "${npm_package}@${version_number}" min
+    success "dist-tag min → ${version_number}"
+  fi
 
   # summary
   echo
@@ -546,36 +518,13 @@ bk guide
   echo -e "  npm:     https://www.npmjs.com/package/${npm_package}"
   echo -e "  Install: npm install -g ${npm_package}"
   echo
+  echo "  Every app advertises the new version within ~5 minutes — no deploy needed."
+  echo "  Check any of them:"
+  echo "      curl -sI https://issues.blackcode.ch/api/meta | grep -i x-bk-cli"
   if [[ "$forced" == true ]]; then
-    echo -e "  Version gate: CLI_LATEST=${version_number} · CLI_MIN=${version_number} (committed, NOT live)"
-  else
-    echo -e "  Version gate: CLI_LATEST=${version_number} (committed, NOT live)"
-  fi
-
-  # The version gate is server-side, and this script bumped it in a commit it
-  # made itself — so it only goes live on the NEXT web deploy. Skipping that is
-  # how production keeps advertising the previous version and no installed
-  # client is ever told an update exists.
-  echo
-  header "⚠  NOT DONE YET — the version gate is not live"
-  echo "  The gate lives in the web apps, and the commit that bumped it was made"
-  echo "  by this script. It takes effect only after a web deploy — and EVERY app"
-  echo "  answers the version question, so this is one deploy per app:"
-  echo
-  app_registry | while IFS='|' read -r slug _project _id _url; do
-    echo -e "      ${BOLD}$(basename "$0") web ${slug}${RESET}"
-  done
-  echo
-  echo "  Any app you skip keeps advertising the previous version to everyone"
-  echo "  whose home app it is."
-  echo
-  if [[ "$forced" == true ]]; then
-    warn "Until you run that, older binaries are NOT yet blocked."
-    warn "The moment you do, everyone below ${version_number} gets exit 8."
-    echo "  Tell the team before deploying."
-  else
-    echo "  Until you run that, production still advertises the previous version"
-    echo "  and nobody is nudged to upgrade."
+    echo
+    warn "Everyone below ${version_number} gets exit 8 once the cache turns over."
+    echo "  Roll back with: npm dist-tag add ${npm_package}@<previous> min"
   fi
   echo
 }

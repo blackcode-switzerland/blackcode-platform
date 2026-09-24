@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { getChangelog, getChangelogFor, getChangelogMarkdown, PLATFORM_APP } from '@blackcode/platform-agent'
+import {
+  getChangelog,
+  getChangelogFor as getChangelogForVersions,
+  getChangelogMarkdown,
+  PLATFORM_APP,
+} from '@blackcode/platform-agent'
+
+const getChangelogFor = (app?: string) => getChangelogForVersions(app, { latest: '9.8.7', min: '9.1.0' })
 
 describe('changelog', () => {
-  const cl = getChangelog()
+  const cl = getChangelog({ latest: '9.8.7', min: '9.1.0' })
 
   it('parses dated entries newest-first with a date and title', () => {
     expect(cl.entries.length).toBeGreaterThan(3)
@@ -18,9 +25,15 @@ describe('changelog', () => {
     expect(withBody!.html).not.toContain('<script')
   })
 
-  it('advertises the CLI versions', () => {
-    expect(cl.cli_min_version).toMatch(/^\d+\.\d+\.\d+/)
-    expect(cl.cli_latest_version).toMatch(/^\d+\.\d+\.\d+/)
+  // The versions are passed in (read live from npm by the caller), never
+  // memoized with the entries — asserting the exact values is what catches a
+  // payload that froze whatever it saw first.
+  it('advertises the CLI versions it is given', () => {
+    expect(cl.cli_latest_version).toBe('9.8.7')
+    expect(cl.cli_min_version).toBe('9.1.0')
+    const again = getChangelog({ latest: '9.9.0', min: '9.2.0' })
+    expect(again.cli_latest_version).toBe('9.9.0')
+    expect(again.cli_min_version).toBe('9.2.0')
   })
 
   // The retired Platform Reference must not come back as a hand-maintained copy

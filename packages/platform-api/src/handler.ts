@@ -36,7 +36,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { CLI_LATEST_VERSION, CLI_MIN_VERSION } from '@blackcode/platform-agent'
+import { getCliVersions } from '@blackcode/platform-agent'
 import { errorEvents, type User } from '@blackcode/platform-db'
 import type { AppContext } from './app-context'
 import type { WorkspaceMembershipRef } from './workspace-source'
@@ -72,20 +72,23 @@ function isCliCaller(req: NextRequest): boolean {
 // Standard headers on EVERY API response (success and error alike):
 //  - X-BK-CLI-Latest / X-BK-CLI-Min: the supported bk CLI versions. The CLI reads
 //    these to show a soft "update available" notice and to hard-block when it is
-//    below the minimum supported version.
+//    below the minimum supported version. Read live from npm dist-tags (cached;
+//    see packages/platform-agent/src/cli-version.ts), so publishing a CLI updates
+//    every app's headers with no deploy.
 //  - X-BK-Help / X-BK-Changelog: passive breadcrumbs so an agent that hits a wall
 //    can find its own way back. They sit out-of-band in headers (never in the
 //    body), so they cost nothing to a client that ignores them. Sourced from the
 //    app's manifest so they can't drift from /llms.txt and the per-page manifest.
 //    Omitted entirely when the app has no manifest — a breadcrumb pointing at a
 //    404 is worse than none.
-function withStandardHeaders<T extends NextResponse | Response>(
+async function withStandardHeaders<T extends NextResponse | Response>(
   app: AppContext,
   res: T,
   req?: NextRequest
-): T {
-  res.headers.set('X-BK-CLI-Latest', CLI_LATEST_VERSION)
-  res.headers.set('X-BK-CLI-Min', CLI_MIN_VERSION)
+): Promise<T> {
+  const cli = await getCliVersions()
+  res.headers.set('X-BK-CLI-Latest', cli.latest)
+  res.headers.set('X-BK-CLI-Min', cli.min)
   if (app.manifest) {
     res.headers.set('X-BK-Help', app.manifest.help)
     res.headers.set('X-BK-Changelog', app.manifest.changelog)
@@ -127,9 +130,9 @@ export function createApiHandler(app: AppContext) {
   ): (req: NextRequest, ctx: TCtx) => Promise<NextResponse | Response> {
     return async (req, ctx) => {
       try {
-        return withStandardHeaders(app, await handler(req, ctx), req)
+        return await withStandardHeaders(app, await handler(req, ctx), req)
       } catch (err) {
-        return withStandardHeaders(app, await handleError(app, err, req), req)
+        return await withStandardHeaders(app, await handleError(app, err, req), req)
       }
     }
   }

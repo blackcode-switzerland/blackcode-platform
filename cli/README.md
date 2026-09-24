@@ -117,7 +117,7 @@ Stable across releases so scripts/agents can branch on outcome:
 | 5 | not found (404) |
 | 6 | validation error (400/422) |
 | 7 | user aborted at a confirm prompt |
-| 8 | this binary is below `CLI_MIN_VERSION` — upgrade, nothing else will work |
+| 8 | this binary is below the server's minimum (`X-BK-CLI-Min`) — upgrade, nothing else will work |
 
 **409 exits 2, not 6.** A conflict is the server refusing a well-formed request
 on content grounds, which is a usage problem for the caller — `classify()` in
@@ -220,5 +220,6 @@ that `bk meta` should serve.
 - `BK_NO_PROMPT=1` — skip every interactive confirmation prompt. Note that this
   makes `Confirm()` auto-approve, which is why irreversible commands require the
   target repeated back (`--confirm <slug>`) rather than a yes/no.
-- `BK_CLI_LATEST` / `BK_CLI_MIN` — override the advertised and minimum versions
-  without a redeploy.
+- `BK_CLI_LATEST` / `BK_CLI_MIN` — **server** env (not the CLI's): pin the
+  advertised and minimum versions over the npm dist-tags the server normally
+  reads. On Vercel this applies only after a redeploy — an emergency lever.

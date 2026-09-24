@@ -113,36 +113,54 @@ Everything else in the script is app-agnostic. This is a step in
 
 The version is auto-resolved from the latest git tag — you never need to type a version number manually.
 
-> **Three steps, not one: deploy web → release CLI → deploy web AGAIN.**
-> Step 4 below bumps `CLI_LATEST_VERSION` **in a commit the script creates
-> itself**, so it necessarily lands *after* whatever deploy preceded it —
-> production keeps advertising the previous version, and no installed client is
-> ever told an update exists. Since that nudge is the adoption signal a
-> `CLI_MIN_VERSION` raise depends on, skipping the second deploy quietly stalls
-> the next release. Full reasoning in
-> [`../docs/2026-08-platform-migration.md`](2026-08-platform-migration.md) →
-> *The operational rules it bought*. Confirm the last step:
+> **A CLI release is one step: publish. No web deploy follows it.** (Since
+> 2026-09-24.) Every app reads the versions it advertises — `X-BK-CLI-Latest`,
+> `X-BK-CLI-Min`, `bk meta`'s `cli` block — **live from npm dist-tags**, cached
+> five minutes per server instance (`packages/platform-agent/src/cli-version.ts`):
+>
+> | Advertised | npm dist-tag | Moved by |
+> |---|---|---|
+> | latest | `latest` | `npm publish` itself |
+> | minimum (exit 8 below it) | `min` | `release.sh cli` on a **forced** release |
+>
+> Until then the versions were constants bumped in a commit the release script
+> made itself, so a release was *deploy every app → publish → deploy every app
+> AGAIN*, and the second round existed only to ship that string. It is gone.
+>
+> Deploy web **before** a CLI release only when the new binary calls routes the
+> production servers do not have yet — and then only the apps that changed.
+>
+> Confirm what production advertises (any app; they all read the same tags):
 >
 > ```bash
-> curl -sI https://issues.blackcode.ch/api/meta | grep x-bk-cli
+> curl -sI https://issues.blackcode.ch/api/meta | grep -i x-bk-cli
 > ```
+>
+> **Move or roll back the floor with no deploy:**
+>
+> ```bash
+> npm dist-tag add @blackcode_sa/bc-issues@<version> min
+> ```
+>
+> npm refuses to tag a version that was never published, so the floor can no
+> longer be raised ahead of the release. `min` is also clamped to `latest` on
+> the server. `BK_CLI_LATEST` / `BK_CLI_MIN` env vars still exist as an
+> emergency pin for when npm itself is the problem — but on Vercel an env change
+> only applies on the next deploy, so they are not the day-to-day lever.
 
 Full CLI release pipeline:
 1. Preflight — checks gh auth, npm auth, git branch, clean tree, no duplicate tag/version
 2. Resolves the next version from the latest git tag + bump type
 3. Bumps version in `cli/npm/package.json` and `cli/npm/install.js`
-4. Bumps `CLI_LATEST_VERSION` in `packages/platform-agent/src/cli-version.ts` — located by
-   SEARCH, not a hardcoded path (the gate has moved twice: root → `apps/issues/lib`
-   in Phase 1, → `packages/platform-agent/src` in Phase 6, and the first move broke
-   the release halfway through) — and
-   `CLI_MIN_VERSION` too, **only** if you answer `forced` at the upgrade-policy
-   prompt. Answer `normal` unless you have deliberately decided to hard-block
-   every older client; publishing must always precede a floor raise.
-5. Commits + pushes the version bump to `main`
-6. Creates and pushes the git tag
-7. Builds binaries for all 6 platforms via `make dist`
-8. Creates a GitHub Release and uploads the binaries + `SHA256SUMS`
-9. Publishes `@blackcode_sa/bc-issues` to npm (prompts for OTP)
+4. Commits + pushes the version bump to `main`
+5. Creates and pushes the git tag
+6. Builds binaries for all 6 platforms via `make dist`
+7. Creates a GitHub Release and uploads the binaries + `SHA256SUMS`
+8. Publishes `@blackcode_sa/bc-issues` to npm (prompts for OTP) — this moves
+   the `latest` dist-tag, and every app advertises it within ~5 minutes
+9. **Only if you answered `forced`**: `npm dist-tag add …@<version> min`
+   (prompts for a second OTP). Answer `normal` unless you have deliberately
+   decided to hard-block every older client
 
 **Have your authenticator app ready** — npm requires a 2FA code during publish.
 
@@ -167,33 +185,16 @@ git add .
 git commit -m "fix: ..."
 git push origin main
 
-# 2. Deploy the web fix immediately — name the app
+# 2. Deploy the web fix — name the app(s) whose code changed
 ./devops/release.sh web issues
 
-# 3. If the CLI was also changed, cut a new CLI release
+# 3. If the CLI was also changed, cut a new CLI release. Done — no redeploy.
 ./devops/release.sh cli patch
-
-# 4. Deploy web AGAIN to make the new version gate live —
-#    EVERY app, not just the one you fixed. See below.
-./devops/release.sh web issues
-./devops/release.sh web sales
-./devops/release.sh web books
 ```
 
-> **Step 4 is every app in `app_registry()`.** Each deployment answers "what CLI
-> version is current?" from the same shared constant, and `bk` asks whichever app
-> the user is *homed* on. Deploy only one and everyone homed on the other is
-> never told an update exists — and on a forced release, one host locks them out
-> while the other does not. `release.sh` prints the per-app list at the end of a
-> CLI release; run all of it. Verified 2026-08-10: both apps returned
-> `x-bk-cli-latest: 2.1.0` only after the second pair of deploys. **It is three
-> apps since 2026-08-20**, and books is the one most likely to be forgotten and
-> least able to afford it: its web surface is read-only, so a user homed on books
-> whose binary is stale has no other way in.
->
-> Step 4 is also not optional busywork. The CLI release bumps the version in a
-> commit **it creates itself**, which lands after step 2's deploy — so without
-> step 4 production keeps advertising the old version.
+> Until 2026-09-24 there was a step 4 here — "deploy EVERY app again to make the
+> version gate live". It existed because the advertised version was a constant
+> in the web code. It is read from npm now, so step 3 is the end.
 
 ---
 
