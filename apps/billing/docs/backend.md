@@ -159,6 +159,17 @@ That is not tidiness. Since decision **D-B7** the rounding policy is a COMPANY
 setting, so a stored total would have to be rewritten across history whenever
 that setting moved — a migration triggered by a settings change.
 
+Four policies since 2026-09-23 (`lib/vocabularies.ts`, `ROUNDING_POLICIES`).
+The fourth, **`exact_0_05`**, is the one that makes "derived, never stored"
+earn its keep: a line's `qty × unit_price` is kept EXACT in integer
+milli-rappen (`numeric(12,3) × numeric(14,2)` has no remainder at that scale),
+the VAT is taken on the exact base, and the payable total is rounded ONCE to
+five rappen. The printed line is that exact product to the rappen, the printed
+subtotal is the sum of the PRINTED lines, and `rounding` is whatever closes
+the gap to the total — so the document foots and no figure on it is a float.
+The section *"A fourth rounding policy"* below has the worked numbers and the
+mutations.
+
 ### The rules with no database object behind them
 
 Four, and they are the ones most likely to be quietly lost, because a write path
@@ -952,6 +963,94 @@ and after with `bk`. `{ref}` and `{seq}` were already refused when unknown.
 - **The per-page browser report** on all three tenants in FR and EN (#96).
 - The five open questions in the changelog: P1, P2, P3, P11, P8.
 
+## A fourth rounding policy: `exact_0_05` (2026-09-23)
+
+Branch `feat/billing-rounding-exact`. The first external customer, read more
+closely than on 2026-09-16, does not round a line at all: `qty × unit_price`
+stays exact, the sum is exact, and the payable total is rounded once to five
+rappen. `total_0_05` was the first reading of the same code and rounds each
+line to the rappen before summing — the same total whenever every quantity is
+whole, a different one whenever it is not. So b/billing carries the
+customer's arithmetic as a fourth per-company policy rather than a closer
+approximation of it.
+
+### What it is, in integers
+
+`numeric(12,3) × numeric(14,2)` is exact in **milli-rappen** (thousandths of a
+rappen), so `lib/derive/money.ts` gained a `MilliRappen` scale beside `Rappen`
+— `lineProductExact`, `milliToRappen`, `roundMilliToStep` — and
+`computeTotalsRappen` branches to `computeExactTotalsRappen`:
+
+| figure | how |
+|---|---|
+| each line, printed | the exact product to the rappen, half away from zero |
+| `subtotal` | the sum of the **printed** lines — not the exact sum, which is printed nowhere |
+| VAT `base` per rate | the exact sum of that rate's products, printed to the rappen |
+| VAT `amount` | on the exact base: `base × rate / (100 + rate)` inclusive, `/ 100` exclusive, one division, to the rappen |
+| `total` | the exact sum (plus VAT when prices exclude it) to five rappen — **the one rounding** |
+| `rounding` | `total − (subtotal [+ vat_total])`: whatever closes the gap on paper |
+
+The wire shape is unchanged, so the PDF's total block, the detail page and
+`bk billing invoice show` print the fourth policy without knowing it exists:
+lines → subtotal → Arrondi → total still adds up, which is the invariant the
+`rounding` figure was always for. A client that recomputes `total` from the
+printed lines will disagree by a rappen or two on a fractional quantity; the
+changelog says so and points at `expected_total`.
+
+Golden cases in `lib/derive/totals.test.ts`, every expectation worked by hand:
+0.5 × 12.35 prints 6.18 and totals 6.20; the worked 1.5 × 350 exempt + 1 × 180
+at 8.1 % less 10 % as two negative lines totals 634.50 with VAT 12.14; and
+0.5 × 12.35 + 0.333 × 12.45 is **10.30** exact against **10.35** under
+`total_0_05` — the fixture on which the footing assertion runs, because its
+exact sum (10.32085) and its printed sum (10.33) are different numbers.
+
+Note on what "one rounding" means: rounding the exact SUM to the rappen and
+then to five rappen lands exactly where rounding it to five directly does —
+every five-rappen midpoint is a rappen midpoint, and both halves round away
+from zero — so that mutation is an equivalent program, not an inert test. The
+rounding that changes the answer is the per-LINE one, and that is the
+mutation on record below.
+
+### Where the value had to land
+
+`ROUNDING_POLICIES` (served by `bk meta`), the `RoundingPolicy` union,
+migration **0013** (`company_rounding_check` dropped and re-added with four
+values, 0008's shape), `assertRounding`'s `invalid_rounding` suggestion (which
+reads the served list, so it named four the moment the list did), the company
+form's select (it maps the served list), the issuer copy (a plain string
+column held by the CHECK — an invoice issued under one policy keeps it, and
+the write-paths suite shows a company switched to `total_0_05` re-deriving
+its draft from 10.30 to 10.35), `bk billing company` help, the guide topic,
+the plan (D-B7, P8, phase 1's derivation) and the changelog.
+
+### What adding one value found
+
+**`lib/vocabularies.test.ts` was reading the first definition of a replaced
+constraint.** Its header says the migrations are read as a directory so that a
+constraint "moved or replaced by a later migration" is still seen correctly;
+its `constraintValues` returned the FIRST regex match over the concatenation,
+which is 0005's. Adding `exact_0_05` to the vocabulary and the CHECK in 0013
+turned the guard red on the stale three-value list rather than green — the
+right colour for the wrong reason, and a guard that could never have accepted
+a widened CHECK. It takes the last definition now.
+
+**The suites run as the local superuser, and three assertions know it.**
+`invariants.test.ts` I2, I7 and I13 expect `42501` (the app role denied by a
+REVOKE) and get `P0001` (the trigger's own RAISE), because the local
+`.env.local` connects as `blackcode`, which bypasses grants and hits the
+trigger instead. The suite's own header says to run it as `billing_app`; that
+role's local password is recorded nowhere a checkout can read. Not this
+change's failures, and stated rather than hidden.
+
+### Verified on 2026-09-23
+
+`tsc --noEmit` clean for billing; `eslint` 0 errors; `go build`, `go vet`,
+`go test ./...` green; `lib/derive/totals.test.ts` 35/35;
+`lib/vocabularies.test.ts` 12/12; the five database suites 41/44 with the
+three role cases above; `write-paths.integration.test.ts` 8/8 including the
+new end-to-end case; migration 0013 applied to the local database and
+`pg_constraint` read back with four values (the catalog, not the repo).
+
 ## The guards, watched failing
 
 A check nobody has watched fail is not a check (CLAUDE.md's standing rule).
@@ -1084,6 +1183,16 @@ Ticket #86 added these, on 2026-09-18:
 | `invoice_issuer_iff_issued` (catalog) | the constraint dropped from the local database | I12's "the database holds it": the forgetful `SET status = 'sent'` succeeded. Left a sent row with no copy, repaired before the constraint went back; `pg_constraint` re-read |
 | G2's `issuer` line (catalog) | the function replaced without it | the same case: expected `P0001`, got no error. Restored from `pg_get_functiondef`, `pg_proc` re-read |
 | `lib/delivery/send.integration.test.ts` | `issuer` dropped from send's UPDATE; the read path ignoring the stored copy; mark-sent's validation removed; the write door's character check off | 23514 from the database on every send; "still is after the company is edited" (and I12 with it); the mark-sent case; the write-door case |
+
+`exact_0_05` added these, on 2026-09-23:
+
+| Guard | The mutation | What it said |
+|---|---|---|
+| `totals.test.ts`, the `exact_0_05` block | each line rounded to the rappen BEFORE summing (`lineProduct(…) * MILLI` in place of `lineProductExact`) | three red: "differs from `total_0_05`" (10.35 where 10.30), "VAT on the exact base", and the footing case's precondition (exact sum equal to the printed sum) |
+| the same | `rounding` computed from the exact subtotal instead of the printed one | the same three red: `subtotal + rounding ≠ total` |
+| the same | the exact sum rounded to the rappen, then to five | **green, correctly** — an equivalent program (see the note above), recorded so nobody reads it as an inert test |
+| `lib/vocabularies.test.ts` | `'none'` dropped from 0013's CHECK | "migration CHECK company_rounding_check disagrees with lib/vocabularies.ts", naming the three-value list — and, before the fix, red on 0005's list with 0013 correct |
+| `write-paths.integration.test.ts`, the new case | (not injected) | the positive half asserts the derived VALUES (10.30, then 10.35 after the policy switch), not a flag on the way there — finding #21's rule |
 | `lib/invariants.test.ts` I12 | a void from draft taking no copy | three cases: every void-from-draft in the file is refused by the CHECK |
 | `lib/delivery/document.test.ts` | the seam's validation removed; then the renderer's too; the void checks; CRLF in the seam | the 422 case (the renderer still threw, as a bare error with no code); plus `pdf.test.ts`' blank-account case; each void case; "character for character" |
 | `lib/issuer.test.ts` | `rounding` out of `ISSUER_FIELDS`; `footer_en` out of the CHECK; `billingCompany` imported by the renderer; the same in a comment; the scan pointed at `lib/email` | three cases; one; one; **green, correctly**; "found files to scan" |
@@ -1207,6 +1316,61 @@ DELETE with the pre-check skipped refused by the database; transfer and remove;
 accept / decline / stranger; the footprint reporting the held workspace as
 `retention`-blocked and the purge refusing. Watched failing: the header lists
 the two mutations.
+
+## Hardening before production (ticket #757, 2026-09-23)
+
+The app had been driven by people and agents by hand. Read as an unattended
+server-to-server client would use it — thousands of calls, across timeouts,
+never looking at a screen — six things broke. Each fix has a test that was
+watched failing first; the mutations are in the table below.
+
+| # | Defect | Fix | Where |
+|---|---|---|---|
+| 1 | A request killed after claiming its idempotency key (the platform's function limit, a deploy) left the row `pending`, and every retry with the same key — the caller's CORRECT behaviour — answered 409 for the whole 24 h TTL. The failure-path `DELETE` only runs when the handler *throws* | A `pending` row older than `PENDING_ABANDONED_MS` (the `app/api/**` `maxDuration` from `vercel.json` plus a margin) is taken over with ONE conditional `UPDATE … WHERE status = 'pending' AND created_at < …`, so two retries arriving together still get one handler run. A fresh `pending` row still answers 409 | `lib/api/idempotency.ts` |
+| 2 | `createCompany` / `editCompany` stored whatever they were given; a bad IBAN, `Schweiz`, an em dash in the legal name each failed later on every bill | `normaliseCompanyFields`, pure and exported, called by both paths: ISO 13616 checksum (CH/LI), the QR-IID range on `qr_iban` and its absence on `iban`, ISO-2 country, one email, the QR character set and Table 8 widths (`ADDRESS_LIMITS`, now exported from `lib/qr/validate.ts`) on the payment-part fields; plus `vat_number_required` on the merged state. IBANs are stored compact | `lib/db/queries/companies.ts` |
+| 3 | `insertInvoice` defaulted `issue_date` to the UTC date; 00:30 in Zurich was yesterday, and on 1 January last fiscal year | `defaultIssueDate` → `todayInZurich()`, the rule `lib/derive/format.ts` states and `paid_date` and recurrence already followed | `lib/db/queries/invoices.ts` |
+| 4 | An `external_ref` over 80 characters reached Postgres as sqlstate `22001`, which `apiHandler` does not translate: a 500 with no code. A duplicate was the generic 409 `already_exists (uq_invoice_ws_external_ref)` | `EXTERNAL_REF_MAX` declared once in `lib/limits.ts`, served by `/api/meta`, checked at the door by invoices, companies and series (`invalid_external_ref`); the unique violation is mapped AFTER the rollback to 409 `external_ref_taken` naming the holder's `#seq` (and number or slug), via `lib/db/unique-violation.ts` — the chain walk that lived privately in `recurrences.ts` | `invoices.ts`, `companies.ts`, `limits.ts` |
+| 5 | Negative lines (a discount) were neither forbidden nor promised | Pinned by a test: accepted, totalled, and a non-positive total still refused by `assertReadyToIssue` | `write-paths.integration.test.ts` |
+| 6 | `listAudit` served the subject's ROW ID as `subject_seq`. The overview's links and a poller's `invoice:<ref>` were wrong from the second workspace on | Three `LEFT JOIN`s keyed on `subject_type`, one query; `subject_seq` is the `#seq`, and the entry also carries `subject_external_ref` | `lib/db/queries/audit.ts`, `types/index.ts` |
+
+**Verified by reading, not only by test, for #6:** `audit.ts:200` was
+`subject_seq: r.subject_id` with a comment saying phase 1 serves the row id;
+the type above it said `#number`. In the integration test the two differ by
+three orders of magnitude (`expected 1817 to be 1` under the mutation), which
+is what a real second tenant looks like.
+
+**What was decided where the ticket left room.** The window is
+`maxDuration + 60 s`, and `idempotency.test.ts` holds the copied `30` against
+`vercel.json` so the two cannot drift (finding #23's shape). The takeover
+resets `created_at` rather than deleting and re-inserting, so the unique index
+stays the mechanism. IBAN spaces are removed at save because §4.2.2's
+electronic form has none and `compactIban` already existed for exactly that;
+nothing else is rewritten (charset.ts: reject, never transliterate). Country
+codes are checked by SHAPE (two letters), the same test `validate.ts` applies
+at render time — a full ISO list would be a second copy of a standard. An
+empty string in a nullable text field means "none" on both write paths, because
+that is what both front doors already send.
+
+### The guards, watched failing (2026-09-23)
+
+| Guard | The mutation | What it said |
+|---|---|---|
+| `write-paths` #757 stale key | the takeover's age predicate made never-true | `ApiError: a request with that key is still running` |
+| `write-paths` #757 fresh key, and `idempotency.test.ts` | `PENDING_ABANDONED_MS = 0` | the fresh key ran the handler (`{ status: 201 }` where 409 was due); `expected 0 to be greater than 30000` |
+| `idempotency.test.ts` | `ROUTE_MAX_DURATION_S = 25` | `expected 25 to be 30` — the drift from `vercel.json` |
+| `write-paths` #757 invoice duplicate | `externalRefRefusal` returning the raw error | `Failed query: insert into "billing… to be an instance of InvoiceRefused` |
+| `write-paths` #757 company duplicate | the create's `.catch` predicate made false | the same, for `CompanyRefused` |
+| `companies.test.ts` + `invoices.test.ts` | the length check in `externalRefProblem` disabled | both 81-character cases: "expected a refusal and the call succeeded" |
+| `invoices.test.ts` Zurich | `defaultIssueDate` back to `toISOString().slice(0, 10)` | `expected '2026-07-01' to be '2026-07-02'` and the fiscal-year case |
+| `write-paths` #757 wired | `normaliseCompanyFields` replaced by the identity in BOTH paths | `expected undefined to be 'invalid_iban'` |
+| `companies.test.ts` country | the alpha-2 regex disabled | `Schweiz`, `CHE` and `41` all accepted |
+| `write-paths` #757 audit | `subject_seq: r.subject_id` restored | `expected 1817 to be 1` |
+| `write-paths` #757 negative lines, refusal half | `assertReadyToIssue` softened to `< 0` | the zero-total draft got past it: `expected 'company_has_no_iban' to be 'total_not_positive'` |
+| the same, acceptance half | `ALTER TABLE billing.invoice_line ADD CONSTRAINT … CHECK (unit_price >= 0) NOT VALID` as the owner | `new row … violates check constraint "mut_757_no_negative"` on the `-50.00` line. Dropped; `pg_constraint` read back `0` |
+
+Run as the owner credential (`blackcode`) against Docker: the local
+`billing_app` password is not on record in this repo. None of the six touches a
+revoke, and the suite states the role it ran as.
 
 ## Frontend
 

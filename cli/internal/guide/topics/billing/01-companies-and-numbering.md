@@ -45,6 +45,15 @@ under the policy it was issued with. `bk guide billing/references-and-qr` has
 what else that copy protects.
 
 Run `bk meta --app-server billing` for the policies and what each one does.
+They differ in WHERE the five-rappen rounding happens: on every line, on the
+payable total only, once on the exact unrounded sum of the lines, or nowhere.
+If you are matching totals against another system, that is the first thing to
+ask it: a system that never rounds a line and rounds its sum once will
+disagree with one that rounds each line first, on any fractional quantity,
+and `--expect-total` will refuse the bill until the two policies agree. Under
+every policy the printed lines, subtotal, rounding line and total add up on
+the document; under the exact-sum policy the rounding line is what carries
+the difference between the printed subtotal and the total.
 
 ## The legal name is not the display name
 
@@ -63,6 +72,18 @@ member creating a company leaves them off and the owner adds them.
 
 A company with no IBAN can hold invoices and cannot produce a payment part.
 `company create` says so when that is the state it left you in.
+
+## What is refused at save, so it cannot fail on every bill later
+
+The fields that reach the payment part are checked when you save them, not
+when the first invoice is sent: an IBAN's check digits (Swiss or Liechtenstein
+accounts only), that `--qr-iban` really is a QR-IBAN and `--iban` really is not,
+a two-letter ISO country code (`CH`, never `Schweiz`), one well-formed
+`--email`, and the Swiss QR character set on the legal name and address — an
+em dash or a line break there is refused, naming the character and its
+position, and is never replaced for you, because the legal name must match the
+account holder. A company registered for VAT must carry `--vat-number`.
+Spaces in an IBAN are removed on save; everything else is stored as typed.
 
 ## There is no company delete
 

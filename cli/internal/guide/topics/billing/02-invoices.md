@@ -36,7 +36,16 @@ bk billing invoice create --company acme-sa \
 
 It arrives as a draft, numbered. **The number is consumed by this command and
 cannot be reclaimed** — so a retry must not create a second bill, which is why
-`create` sends an idempotency key automatically.
+`create` sends an idempotency key automatically. Without `--issue-date` the
+bill is dated today in Zurich, whatever timezone the machine running `bk` is
+in.
+
+`--external-ref` is your own identifier, unique within the workspace. Sending
+one another invoice already carries is refused with `external_ref_taken`, and
+the message names that invoice's `#number` — so on that refusal, read it back
+rather than creating again: it is the bill you created and did not hear about.
+A reference longer than the limit `bk meta --app-server billing` serves as
+`limits.external_ref_max` is refused as `invalid_external_ref`.
 
 If you are driving this from a script, `--expect-total` is worth the one extra
 field. When it disagrees with what this app derives, the invoice is **refused

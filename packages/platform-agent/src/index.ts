@@ -4,7 +4,8 @@
 // a second app needs them UNCHANGED.
 //
 //   changelog    the dated record, merged across every app into one feed
-//   cli-version  the CLI versions the API advertises, and the hard floor
+//   cli-version  the CLI versions the API advertises, and the hard floor —
+//                read live from npm dist-tags, so a release needs no deploy
 //
 // `changelog` is the clearer case of the two. Architecture §7.3 makes the feed
 // explicitly cross-app: one authored file per app in `docs/changelog/`, merged by
@@ -45,9 +46,11 @@
 export {
   PLATFORM_APP,
   getChangelog,
+  getChangelogApps,
   getChangelogFor,
   getChangelogMarkdown,
 } from './changelog'
 export type { ChangelogEntry, ChangelogPayload } from './changelog'
 
-export { CLI_LATEST_VERSION, CLI_MIN_VERSION, CLI_NPM_PACKAGE } from './cli-version'
+export { CLI_NPM_PACKAGE, getCliVersions, createCliVersionSource } from './cli-version'
+export type { CliVersions, CliVersionSourceOptions } from './cli-version'

@@ -127,4 +127,6 @@ flag, every run is a new request.
 `bk billing audit list --since <seq>` returns entries in order from a cursor, so a
 poller learns what somebody did in the browser; `bk meta --app-server billing`
 lists the actions an entry can carry. A send entry with no message id was
-recorded, not delivered.
+recorded, not delivered. Each entry names its subject by `#number`
+(`subject_seq`) and carries the subject's own `external_ref`
+(`subject_external_ref`), so an event maps straight to your record.

@@ -180,6 +180,7 @@ CREATE TABLE billing.idempotency_keys (
 | Same key, same hash, `done` | Replay the stored status and body, with header `Idempotent-Replayed: true`. **Nothing runs.** |
 | Same key, different hash | `422 idempotency_key_reused`, suggestion: *"use a new key for a different request"*. |
 | Same key, still `pending` | `409 idempotency_in_progress`, suggestion: *"retry in a few seconds with the same key"*. This is the concurrent double-submit, and the unique index is what makes the second insert fail rather than the second handler run. |
+| Same key, `pending` for longer than any route may run | **Abandoned** (since 2026-09-23, ticket #757): the request that claimed it was killed — the failure-path delete only runs when the handler throws, not when the process dies. Taken over with one conditional `UPDATE`, and the handler runs. Before this, a timeout locked the key for the whole TTL and the caller's correct retry was the thing that never worked. |
 | Key older than 24 hours | Treated as new. A daily `bk billing maintenance purge-keys` deletes older rows; the app schedules nothing. |
 
 **Where it lives:** `apps/billing/lib/api/idempotency.ts`, a wrapper applied in

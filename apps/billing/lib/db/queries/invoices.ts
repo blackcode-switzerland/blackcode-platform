@@ -49,8 +49,16 @@ import { qrBillFieldsFor } from '@/lib/qr/payload'
 import { findDisallowed } from '@/lib/qr/charset'
 import { hasPaymentPart, validateQrBill } from '@/lib/qr/validate'
 import { ISSUER_FIELDS, issuerOf, type IssuerSource } from '@/lib/issuer'
-import { yearOf } from '@/lib/derive/format'
-import { LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, PAYMENT_MESSAGE_MAX, METADATA_LIMITS, validateMetadata } from '@/lib/limits'
+import { todayInZurich, yearOf } from '@/lib/derive/format'
+import { isUniqueViolation } from '../unique-violation'
+import {
+  LIST_LIMIT_DEFAULT,
+  LIST_LIMIT_MAX,
+  PAYMENT_MESSAGE_MAX,
+  METADATA_LIMITS,
+  externalRefProblem,
+  validateMetadata,
+} from '@/lib/limits'
 import { DOCUMENT_LANGUAGES, REFERENCE_TYPES } from '@/lib/vocabularies'
 import type {
   ActorVia,
@@ -412,7 +420,17 @@ export async function getInvoiceRow(
 // ---------------------------------------------------------------------------
 
 export async function createInvoice(ctx: WriteCtx, body: CreateInvoiceBody): Promise<Invoice> {
-  const { seq } = await getDb().transaction((tx) => insertInvoice(tx, ctx, body))
+  let seq: number
+  try {
+    ;({ seq } = await getDb().transaction((tx) => insertInvoice(tx, ctx, body)))
+  } catch (e) {
+    // After the rollback, so the number the transaction took is already
+    // released. Mapped here rather than left to `apiHandler`'s generic 409
+    // `already_exists`, so the refusal names the invoice that HOLDS the
+    // reference — which is how an integration adopts a bill it created and
+    // never heard back about.
+    throw await externalRefRefusal(e, ctx.workspaceId, body.external_ref)
+  }
   const fresh = await getInvoice(ctx.workspaceId, String(seq))
   if (!fresh) {
     // Genuinely unreachable once the transaction has committed, and asserted
@@ -500,8 +518,9 @@ export async function insertInvoice(
   // number the transaction allocates — and a refusal there rolls the number back.
   const bodyProblem = referenceBodyProblem(refType, body.ref_body)
   if (bodyProblem) throw new InvoiceRefused(bodyProblem.code, bodyProblem.message, bodyProblem.suggestion)
+  const externalRef = normaliseExternalRef(body.external_ref)
 
-  const issueDate = body.issue_date ?? new Date().toISOString().slice(0, 10)
+  const issueDate = defaultIssueDate(body.issue_date)
   const dueDate = body.due_date ?? addDays(issueDate, company.payment_terms_days)
 
   // ── THE EXPECTED-TOTAL CHECK HAPPENS BEFORE ANYTHING IS ALLOCATED ────────
@@ -561,7 +580,7 @@ export async function insertInvoice(
       vat_rate: body.vat_rate ?? company.default_vat_rate,
       prices_include_vat: pricesIncludeVat,
       message: body.message ?? null,
-      external_ref: body.external_ref ?? null,
+      external_ref: externalRef,
       metadata: body.metadata ?? {},
       recurrence_id: series?.recurrenceId ?? null,
       occurrence_period: series?.period ?? null,
@@ -705,6 +724,9 @@ export async function editInvoice(
     const p = validateMetadata(patch.metadata as Record<string, string>)
     if (p) throw new InvoiceRefused('invalid_metadata', p, `at most ${METADATA_LIMITS.max_keys} flat string keys`)
   }
+  if (patch.external_ref !== undefined) {
+    patch = { ...patch, external_ref: normaliseExternalRef(patch.external_ref as string | null) }
+  }
 
   return await getDb().transaction(async (tx) => {
     const changes: Array<{ field: string; from: unknown; to: unknown }> = []
@@ -736,6 +758,9 @@ export async function editInvoice(
 
     return Number(row.seq)
   })
+    .catch(async (e: unknown) => {
+      throw await externalRefRefusal(e, ctx.workspaceId, patch.external_ref as string | null | undefined)
+    })
     .then(async (seq) => {
       const fresh = await getInvoice(ctx.workspaceId, String(seq))
       if (!fresh) throw new Error(`invoice #${seq} not readable after commit`)
@@ -1083,6 +1108,56 @@ export function assertExpectedTotal(
       409
     )
   }
+}
+
+/**
+ * The issue date a create takes when the caller sends none: today, **in
+ * Zurich**.
+ *
+ * Until 2026-09-23 this was `new Date().toISOString().slice(0, 10)` — a UTC
+ * date — so a bill issued between midnight and 01:00 (02:00 in summer) local
+ * time was dated the previous day, and once a year the previous FISCAL year.
+ * `lib/derive/format.ts` states the rule; `lifecycle.ts` already followed it
+ * for `paid_date` and `recurrences.ts` for a generated occurrence. This was the
+ * one create path still on the UTC calendar (ticket #757).
+ */
+export function defaultIssueDate(supplied: string | null | undefined, now: Date = new Date()): string {
+  return supplied ?? todayInZurich(now)
+}
+
+/**
+ * `''` means "none" (both front doors send an empty field for it); anything
+ * else is checked against the column's width here, at the door, because a
+ * value longer than `varchar(80)` reaches Postgres as sqlstate `22001`, which
+ * `apiHandler` does not translate — so an 81-character reference was a 500
+ * with no code until 2026-09-23.
+ */
+export function normaliseExternalRef(v: string | null | undefined): string | null {
+  if (v === undefined || v === null || v === '') return null
+  const p = externalRefProblem(v)
+  if (p) throw new InvoiceRefused('invalid_external_ref', p, 'your own identifier for this invoice, such as an order or appointment id')
+  return v
+}
+
+/**
+ * A unique violation on `uq_invoice_ws_external_ref` → 409 `external_ref_taken`
+ * naming the invoice that holds it. Any other error is returned unchanged for
+ * the caller to rethrow. Runs AFTER the failed transaction, on the pool.
+ */
+async function externalRefRefusal(e: unknown, workspaceId: number, externalRef: string | null | undefined): Promise<unknown> {
+  if (!externalRef || !isUniqueViolation(e, 'uq_invoice_ws_external_ref')) return e
+  const { data } = await listInvoices(workspaceId, { externalRef, limit: 1 })
+  const holder = data[0]
+  return new InvoiceRefused(
+    'external_ref_taken',
+    holder
+      ? `invoice #${holder.seq} (${holder.number}) already carries external_ref ${JSON.stringify(externalRef)}`
+      : `another invoice in this workspace already carries external_ref ${JSON.stringify(externalRef)}`,
+    holder
+      ? `bk billing invoice show ${holder.seq} — if that is the bill you meant, use it rather than creating another`
+      : 'bk billing invoice list --external-ref <ref>',
+    409
+  )
 }
 
 function addDays(iso: string, days: number): string {

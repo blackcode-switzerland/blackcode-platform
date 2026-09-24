@@ -1,41 +1,56 @@
-// Source of truth for the bk CLI versions the API advertises. Every API
-// response carries these as headers (set in lib/api/handler.ts):
+// The bk CLI versions the API advertises. Every API response carries them as
+// headers (set in packages/platform-api/src/handler.ts), and `bk meta` and the
+// changelog feed repeat them:
 //
 //   X-BK-CLI-Latest  — newest published CLI; the CLI prints a soft "update
 //                      available" notice when the user is behind it.
 //   X-BK-CLI-Min     — minimum CLI the API still supports; the CLI refuses to
-//                      run (hard upgrade) when the user is below it.
+//                      run (hard upgrade, exit 8) when the user is below it.
 //
-// Bump these on each CLI release. Raise CLI_MIN_VERSION whenever a server change
-// is incompatible with older CLIs (e.g. the milestone→task / key-removal rename),
-// so stale clients get a clear "please upgrade" instead of cryptic 404s.
-// Both are overridable via env without a redeploy.
+// ---------------------------------------------------------------------------
+// NPM IS THE SOURCE OF TRUTH — NOT THIS FILE (since 2026-09-24)
+// ---------------------------------------------------------------------------
+// Both values are read, at runtime, from the npm dist-tags of the one CLI
+// package:
 //
-// ORDER MATTERS. Publish the new CLI to npm and verify a clean install BEFORE
-// raising CLI_MIN_VERSION. Raising the floor first locks out every user with no
-// working version to move to. Because both values read from env, the floor can
-// also be rolled back instantly without a redeploy.
+//   latest  → the `latest` dist-tag, which `npm publish` moves by itself
+//   min     → the `min` dist-tag, which `./devops/release.sh cli` moves on a
+//             FORCED release (`npm dist-tag add <pkg>@<version> min`)
 //
-// Current state (2026-08-04): 1.10.0 namespaces app commands behind their app
-// name — `bk issues issue create`, not `bk issue create`. Every pre-1.10.0
-// spelling still runs as a deprecated alias that prints one stderr line, and
-// those aliases are pruned in 1.12.0.
+// Until then the versions were constants in this file, bumped by the release
+// script in a commit it made itself — AFTER the first web deploy. So a CLI
+// release was "deploy every app, publish, deploy every app AGAIN", and the
+// second round of deploys existed only to ship one version string. Reading npm
+// ends that: publishing IS advertising, on every app at once, with no deploy.
 //
-// The floor stays at 1.9.1 deliberately, and that is the whole point of the
-// deprecation window: a 1.9.x client still works against this server, it just
-// uses the old spellings. Raising the floor now would break the callers the
-// aliases exist to protect. **The floor moves in Phase 8** of
-// docs/2026-08-platform-migration.md, once 1.10.0 adoption is visible — by setting
-// BK_CLI_MIN, no redeploy needed.
+// It also enforces the rule that used to be a warning here — "publish to npm
+// BEFORE raising the floor, or every user is locked out with nothing to upgrade
+// to". npm refuses to point a dist-tag at a version that was never published,
+// so the floor physically cannot lead the release.
 //
-// NOTE (2026-08-04): production is currently serving X-BK-CLI-Latest 1.9.3, not
-// 1.10.0. The release commit that bumped this constant landed AFTER the web
-// deploy — an unavoidable consequence of deploying the server before publishing
-// the CLI, which was the right order (the new server is backwards compatible
-// with 1.9.x clients; a 1.10.0 client against the old server would have got an
-// unfiltered feed from `bk changelog --app`). Effect: 1.9.x users get no soft
-// "update available" nudge yet. Fix with either a redeploy or BK_CLI_LATEST=1.10.0
-// in Vercel — the env override exists for exactly this.
+// Moving or rolling back the floor, with no deploy, from any machine logged in
+// to npm:
+//
+//   npm dist-tag add @blackcode_sa/bc-issues@<version> min
+//
+// The resolution order, highest first:
+//
+//   1. BK_CLI_LATEST / BK_CLI_MIN env — an emergency PIN. On Vercel an env
+//      change only takes effect on the next deploy, so this is not the way to
+//      move a version day to day; it is for when npm itself is the problem.
+//   2. npm dist-tags, cached per server instance for CACHE_TTL_MS, then
+//      refreshed in the background (stale-while-revalidate). A failed lookup
+//      keeps the last good answer and retries after RETRY_AFTER_MS.
+//   3. FALLBACK_* below — only when this instance has never reached npm (a cold
+//      start during an npm outage) or the `min` tag does not exist.
+//
+// The FALLBACK_* values are a safety net, NOT the advertised version. Nothing
+// bumps them on release and nothing needs to: a stale fallback during an npm
+// outage means a missed "update available" nudge for a few minutes, never a
+// lockout, because a fallback floor is always an OLD floor.
+//
+// And `min` is clamped to `latest`: a floor above the newest published version
+// would block everyone with no upgrade that satisfies it.
 
 /**
  * The npm package that IS the binary. One name for the whole platform, because
@@ -46,8 +61,112 @@
  * and a deployment that showed a different name here would be advertising an
  * install that does not exist. A fork that publishes its own binary changes
  * this line, and every surface that prints it moves together. (Ticket #756.)
+ *
+ * It is also the package whose npm dist-tags ARE the advertised versions.
  */
 export const CLI_NPM_PACKAGE = '@blackcode_sa/bc-issues'
 
-export const CLI_LATEST_VERSION = process.env.BK_CLI_LATEST ?? '5.0.0'
-export const CLI_MIN_VERSION = process.env.BK_CLI_MIN ?? '5.0.0'
+const FALLBACK_LATEST = '5.0.0'
+const FALLBACK_MIN = '5.0.0'
+
+const CACHE_TTL_MS = 5 * 60_000
+const RETRY_AFTER_MS = 60_000
+const FETCH_TIMEOUT_MS = 1_500
+
+const DIST_TAGS_URL = `https://registry.npmjs.org/-/package/${CLI_NPM_PACKAGE}/dist-tags`
+
+export interface CliVersions {
+  latest: string
+  min: string
+  /** Where `latest`/`min` came from — for debugging, never for behaviour. */
+  source: 'env' | 'npm' | 'fallback'
+}
+
+const SEMVER = /^\d+\.\d+\.\d+$/
+
+function compare(a: string, b: string): number {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return pa[i] - pb[i]
+  return 0
+}
+
+/** min never above latest: a floor nobody can reach is a lockout. */
+function clamp(latest: string, min: string): string {
+  return compare(min, latest) > 0 ? latest : min
+}
+
+type Fetch = (url: string, init: { signal: AbortSignal; cache: 'no-store' }) => Promise<Response>
+
+export interface CliVersionSourceOptions {
+  fetch?: Fetch
+  now?: () => number
+  env?: Record<string, string | undefined>
+  /** false → never touch the network (tests, offline dev). */
+  network?: boolean
+}
+
+/**
+ * A cached reader of the advertised versions. Exported as a factory so tests
+ * can drive the cache with a fake fetch and clock; the app uses the default
+ * instance behind `getCliVersions()`.
+ */
+export function createCliVersionSource(opts: CliVersionSourceOptions = {}) {
+  const doFetch: Fetch = opts.fetch ?? ((url, init) => fetch(url, init))
+  const now = opts.now ?? Date.now
+  const env = opts.env ?? process.env
+  const network = opts.network ?? true
+
+  let last: { latest: string; min: string } | null = null
+  let nextRefresh = 0
+  let inflight: Promise<void> | null = null
+
+  async function refresh(): Promise<void> {
+    try {
+      const res = await doFetch(DIST_TAGS_URL, {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        cache: 'no-store',
+      })
+      if (!res.ok) throw new Error(`npm dist-tags: HTTP ${res.status}`)
+      const tags = (await res.json()) as Record<string, unknown>
+      const latest = typeof tags.latest === 'string' ? tags.latest : ''
+      if (!SEMVER.test(latest)) throw new Error(`npm dist-tags: bad latest ${String(tags.latest)}`)
+      // No `min` tag yet is a legitimate state, not an error: keep the fallback.
+      const min = typeof tags.min === 'string' && SEMVER.test(tags.min) ? tags.min : FALLBACK_MIN
+      last = { latest, min }
+      nextRefresh = now() + CACHE_TTL_MS
+    } catch {
+      // Keep whatever we had. A lookup failure must never change what is
+      // advertised — least of all the floor.
+      nextRefresh = now() + RETRY_AFTER_MS
+    }
+  }
+
+  return async function getCliVersions(): Promise<CliVersions> {
+    const pinLatest = env.BK_CLI_LATEST
+    const pinMin = env.BK_CLI_MIN
+
+    if (network && !(pinLatest && pinMin) && now() >= nextRefresh) {
+      inflight ??= refresh().finally(() => {
+        inflight = null
+      })
+      // Only an instance that has never had an answer waits for npm (~400 ms,
+      // bounded by FETCH_TIMEOUT_MS). After that an expired answer is served as
+      // is while the refresh runs behind it — a request never pays for npm twice.
+      if (!last) await inflight
+    }
+
+    const latest = pinLatest || last?.latest || FALLBACK_LATEST
+    const min = clamp(latest, pinMin || last?.min || FALLBACK_MIN)
+    const source = pinLatest || pinMin ? 'env' : last ? 'npm' : 'fallback'
+    return { latest, min, source }
+  }
+}
+
+/**
+ * The versions every app advertises. Never reaches the network under test —
+ * a unit test that depends on npm being up is a flaky test.
+ */
+export const getCliVersions = createCliVersionSource({
+  network: process.env.NODE_ENV !== 'test',
+})

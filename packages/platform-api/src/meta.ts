@@ -35,7 +35,7 @@
 import type { NextRequest } from 'next/server'
 import { listAppRegistry, type User } from '@blackcode/platform-db'
 import { isSuperAdmin } from '@blackcode/platform-auth'
-import { CLI_LATEST_VERSION, CLI_MIN_VERSION, CLI_NPM_PACKAGE } from '@blackcode/platform-agent'
+import { CLI_NPM_PACKAGE, getCliVersions } from '@blackcode/platform-agent'
 import type { AppContext } from './app-context'
 import type { WorkspaceMembershipRef } from './workspace-source'
 
@@ -93,9 +93,10 @@ export async function platformMetaBlock(
   // an agent needs to target the right tenant by (human-readable) name/slug.
   // There is no narrower and wider list any more: a workspace this app's own
   // source reports IS one the caller can write to here.
-  const [myWorkspaces, registry] = await Promise.all([
+  const [myWorkspaces, registry, cliVersions] = await Promise.all([
     app.workspaces.listForUser(user.id),
     listAppRegistry(app.db),
+    getCliVersions(),
   ])
 
   const members = workspace ? await app.workspaces.listMembers(workspace.id) : []
@@ -188,15 +189,16 @@ export async function platformMetaBlock(
       urn_format: 'bc:<app>:<workspace-slug>/<entity-type>/<number>',
       urn_example: `bc:${app.appSlug}:${workspace?.slug ?? '<workspace>'}/issue/1`,
     },
-    // The bk versions this server advertises (also sent as X-BK-CLI-* headers).
+    // The bk versions this server advertises (also sent as X-BK-CLI-* headers),
+    // read live from npm dist-tags — see packages/platform-agent/src/cli-version.ts.
     // Platform, not per-app: there is ONE binary and one npm package for the
     // whole platform, so an app that published its own package name here would
     // be advertising an install that does not exist.
     cli: {
       package: CLI_NPM_PACKAGE,
-      latest_version: CLI_LATEST_VERSION,
+      latest_version: cliVersions.latest,
       /** Below this the CLI hard-blocks with exit 8. */
-      min_version: CLI_MIN_VERSION,
+      min_version: cliVersions.min,
       install: `npm install -g ${CLI_NPM_PACKAGE}`,
       update: `npm install -g ${CLI_NPM_PACKAGE}@latest`,
     },

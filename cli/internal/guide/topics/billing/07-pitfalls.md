@@ -17,6 +17,13 @@ That makes a retried create expensive: if a create timed out and you run it
 again, you may now have two real invoices. From another system, send an
 `Idempotency-Key` with every create, so a retry replays instead of minting.
 
+Keep the SAME key when you retry after a timeout — never mint a new one, because
+the first request may have succeeded. If the retry answers
+`idempotency_in_progress`, the first request is still running or was just
+killed: wait and retry again with the same key. A claim whose request died is
+released after a bounded wait, longer than any request may run, and the retry
+then runs once.
+
 ## `vat_rate: null` is not `0`
 
 Null means the line carries no VAT at all — an exempt act, or a company that is

@@ -100,6 +100,8 @@ run('billing at runtime (integration)', () => {
           iban: IBAN,
           qr_iban: s.qr_iban,
           vat_registered: true,
+          // Required since ticket #757: a registered company carries its number.
+          vat_number: 'CHE-000.000.000 TVA',
           number_format: s.format,
         })
       }

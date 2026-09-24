@@ -7,6 +7,21 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-09-24 — The advertised `bk` versions come from npm, live — a CLI release needs no deploy
+
+**Not breaking. Nothing to change in a client.** `X-BK-CLI-Latest`,
+`X-BK-CLI-Min`, `bk meta`'s `cli.latest_version` / `cli.min_version` and the
+changelog feed's `cli_latest_version` / `cli_min_version` keep their names and
+meaning. What changed is where the server gets them: from the npm dist-tags of
+`@blackcode_sa/bc-issues` — `latest` and `min` — read live and cached for five
+minutes, instead of constants compiled into each deployment.
+
+In practice: a new `bk` release is advertised by **every** app within about five
+minutes of `npm publish`, where before it waited for every app to be redeployed.
+A raised or rolled-back floor takes effect the same way. If npm is unreachable
+the server keeps its last good answer, and the floor is never advertised above
+`latest`.
+
 ## 2026-09-23 — The CLI's npm package name has one source (ticket #756)
 
 Not breaking; no value changed. `CLI_NPM_PACKAGE` in
@@ -2388,7 +2403,6 @@ app permanently (see the upload entry below).
 /api/workspaces` (no app but issues offers a create-workspace flow) and
 `/api/auth/*` (an app's own sign-in pages and providers).
 
-
 ## 2026-08-06 — **SECURITY:** `bk login` no longer completes from an invalidated session
 
 **The same gap as the `/api/tokens` entry below, in the other route that mints a
@@ -2412,7 +2426,6 @@ one, not what an existing one can do. Revoke any you no longer recognise with
 Both token-minting routes now use the same session check. Nothing else about the
 `bk login` handshake changed: same callback validation (loopback only), same
 response fields, same token naming.
-
 
 ## 2026-08-06 — A file belongs to the app you uploaded it THROUGH
 
@@ -2449,7 +2462,6 @@ code and status are unchanged, and the set of refused types is identical. It had
 been a second, hand-typed copy of that list; adding a type to the blocklist would
 previously have taken effect on one of the two upload paths and not the other.
 
-
 ## 2026-08-06 — **SECURITY:** a password reset now invalidates token creation too
 
 **What changed.** `GET/POST /api/tokens` and `DELETE /api/tokens/{id}` now reject
@@ -2473,7 +2485,6 @@ this changes who may create and revoke them, not what existing ones can do.
 
 **`bk` users are unaffected.** The CLI authenticates with a token and has never
 been able to reach these routes.
-
 
 ## 2026-08-06 — The shared request layer and the first platform route factories
 
@@ -2530,7 +2541,6 @@ of a workspace but have not been granted an app in it — is now exported from
 `@blackcode/platform-api` rather than `@blackcode/platform-auth`. The check, the
 status, the code and the suggestion text are identical. This is an internal
 import path; no HTTP client is affected.
-
 
 ## 2026-08-06 — **FIX:** `bk issues --help` said the removed 1.12.0 spellings still worked
 

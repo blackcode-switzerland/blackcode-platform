@@ -27,6 +27,7 @@
 // | same key, same body, `done` | **replay the stored response.** Nothing runs |
 // | same key, different body | `422 idempotency_key_reused` — never replayed |
 // | same key, still `pending` | `409 idempotency_in_progress` |
+// | same key, `pending` for longer than any route may run | **abandoned**: taken over, and the handler runs |
 // | key older than 24h | treated as new |
 //
 // **The `pending` case is the one that matters**, because it is the concurrent
@@ -35,6 +36,20 @@
 // `(workspace_id, key)` is what settles it: the second INSERT violates it, and
 // **this module never checks first.** A check-then-insert is a race, and the race
 // is the case.
+//
+// ── A `pending` ROW OUTLIVING ITS REQUEST IS ABANDONED, NOT RUNNING ────────
+// The failure path below deletes the row when the handler THROWS. It cannot run
+// when the process is killed — Vercel's function limit (`vercel.json`), a
+// deploy, an OOM — and until 2026-09-23 that left the row `pending` for the
+// whole TTL: every retry with the same key, which is the caller's CORRECT
+// behaviour, answered `409 idempotency_in_progress` for twenty-four hours
+// (ticket #757, found by reading the integration's retry loop against this
+// file). So a `pending` row older than `PENDING_ABANDONED_MS` is taken over —
+// with ONE conditional UPDATE, so two retries arriving together still get one
+// handler run — and the request proceeds as if the key were new.
+//
+// The window is longer than the longest route may run, which is what makes
+// "older than the window" mean "its process is gone" rather than "still busy".
 //
 // ── WHY NOT IN `packages/platform-api` ─────────────────────────────────────
 // Because a second app has not asked. This repo promotes a thing to the platform
@@ -52,6 +67,17 @@ import { billingIdempotencyKeys } from '@/lib/db/schema'
 
 /** How long a stored response is replayable. */
 const TTL_MS = 24 * 60 * 60 * 1000
+
+/**
+ * A `pending` row this old belongs to a request whose process is gone.
+ *
+ * `ROUTE_MAX_DURATION_S` is `vercel.json`'s `maxDuration` for `app/api/**`:
+ * the platform kills a function at that mark, so nothing can still be running
+ * this long after it claimed a key. The margin on top covers a clock that is
+ * not the database's and a claim written just before the deadline.
+ */
+export const ROUTE_MAX_DURATION_S = 30
+export const PENDING_ABANDONED_MS = (ROUTE_MAX_DURATION_S + 60) * 1000
 
 export const IDEMPOTENCY_HEADER = 'idempotency-key'
 /** Set on a replay, so a caller can tell one from a fresh write. */
@@ -194,17 +220,37 @@ export async function withIdempotency(
     }
 
     if (existing.status !== 'done' || existing.response_status === null) {
-      throw Errors.conflict(
-        'idempotency_in_progress',
-        'a request with that key is still running',
-        'retry in a few seconds with the same key'
-      )
-    }
+      // TAKE OVER AN ABANDONED CLAIM, ATOMICALLY. The predicate repeats the
+      // age check inside the UPDATE, so of two retries that both read a stale
+      // row, exactly one gets a row back; the other sees a fresh `created_at`
+      // and is told to wait, which is right — the first is now running it.
+      const takenOver = await db
+        .update(billingIdempotencyKeys)
+        .set({ created_at: new Date() })
+        .where(
+          and(
+            eq(billingIdempotencyKeys.workspace_id, workspaceId),
+            eq(billingIdempotencyKeys.key, key),
+            eq(billingIdempotencyKeys.status, 'pending'),
+            lt(billingIdempotencyKeys.created_at, new Date(Date.now() - PENDING_ABANDONED_MS))
+          )
+        )
+        .returning({ id: billingIdempotencyKeys.id })
 
-    return NextResponse.json(existing.response_body, {
-      status: existing.response_status,
-      headers: { [REPLAYED_HEADER]: 'true' },
-    })
+      if (takenOver.length === 0) {
+        throw Errors.conflict(
+          'idempotency_in_progress',
+          'a request with that key is still running',
+          'retry in a few seconds with the same key'
+        )
+      }
+      // Fall through: we hold the key now, exactly as if the INSERT had won.
+    } else {
+      return NextResponse.json(existing.response_body, {
+        status: existing.response_status,
+        headers: { [REPLAYED_HEADER]: 'true' },
+      })
+    }
   }
 
   // We hold the key. Run the handler.
