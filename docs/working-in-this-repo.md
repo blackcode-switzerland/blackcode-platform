@@ -289,18 +289,19 @@ its own entity type — the counters decision (`docs/platform-architecture.md`
 release targets exactly **one** app, so name it. `./devops/release.sh apps` lists
 what is deployable.
 
-**The order is: deploy web, then npm, then deploy web AGAIN — and "web" means
-EVERY app, both times.** The release script bumps `CLI_LATEST_VERSION` in a
-commit it creates itself, so that commit lands *after* the first web deploy;
-without the second deploy, production keeps advertising the old version and no
-installed client is ever told an update exists. And because every deployment
-answers the "current version?" question from that one shared constant while `bk`
-asks whichever app the user is *homed* on, deploying only one app leaves everyone
-homed on the other uninformed. Both halves were verified on 2026-08-10.
+**A CLI release is one step: `./devops/release.sh cli <bump>`.** Deploy web
+first only for the apps whose new routes the new binary calls. Nothing is
+deployed after it (since 2026-09-24): every app reads the versions it
+advertises live from the npm dist-tags `latest` and `min`
+(`packages/platform-agent/src/cli-version.ts`), so `npm publish` updates every
+app within ~5 minutes. Before that date the versions were constants, and a
+release was *deploy every app → publish → deploy every app again*; older docs
+and plans still describe that sequence — it is gone.
 
-`CLI_MIN_VERSION` hard-blocks every older binary with exit 8. **Publish to npm
-before raising it** — raise it first and every user is locked out with nothing to
-upgrade to.
+The floor (`min`) hard-blocks every older binary with exit 8. A forced release
+moves it; `npm dist-tag add @blackcode_sa/bc-issues@<version> min` moves or rolls
+it back any time, no deploy. npm will not tag an unpublished version, so the
+floor cannot be raised ahead of the release.
 
 ### Where documentation goes
 

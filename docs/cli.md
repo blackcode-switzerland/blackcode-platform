@@ -215,43 +215,55 @@ A release is cut with the repo's release script (from the repo root):
 ./devops/release.sh cli minor      # or pass the bump to skip the first prompt
 ```
 
-It is **interactive** and asks three things up front, then shows a plan and a
+It is **interactive** and asks two things up front, then shows a plan and a
 final "Proceed?" confirm before doing anything irreversible:
 
 1. **Bump** — patch / minor / major / explicit `vX.Y.Z` (skipped if passed as an arg).
 2. **Upgrade policy** — *normal* or *forced* (see below).
-3. **Deploy web?** — whether to push the web app to production at the end.
 
-On confirm it: preflights (gh/npm/git auth, clean tree, version unused — plus
-Vercel auth if deploying web); edits `cli/npm/package.json` + `install.js`
-(install.js derives its version from package.json, so they can't drift) **and**
-`packages/platform-agent/src/cli-version.ts`, then makes **one** commit + push for all three; creates and
+On confirm it: preflights (gh/npm/git auth, clean tree, version unused); edits
+`cli/npm/package.json` + `install.js` (install.js derives its version from
+package.json, so they can't drift), then makes **one** commit + push; creates and
 pushes the `vX.Y.Z` tag; `make dist` cross-compiles (version stamped via
-`-ldflags`); publishes the GitHub Release + npm package; and finally deploys web
-if you said yes. (One commit, near the start — the tag and the published binary
-are built from it, so it can't be deferred to after publish.)
+`-ldflags`); publishes the GitHub Release + npm package; and, on a forced
+release, moves the npm `min` dist-tag. It never deploys web — and since
+2026-09-24 **nothing needs to be deployed after it**.
 
 ### Upgrade policy: normal vs forced
 
 The "update available" notice and the hard min-version block (see
-[Updates](#updates)) are driven by **server** constants in `packages/platform-agent/src/cli-version.ts`,
-which the script now edits for you:
+[Updates](#updates)) are driven by **npm dist-tags**, which every app reads live
+(`getCliVersions()` in `packages/platform-agent/src/cli-version.ts`, cached five
+minutes per server instance):
 
-- **normal** → sets `CLI_LATEST_VERSION` to the new version (soft "a new bk version
-  is available" notice).
-- **forced** → also raises `CLI_MIN_VERSION`, so clients below it are hard-blocked
-  with "please upgrade" and exit code `8`. Choose this when a server change is
-  incompatible with older CLIs (e.g. a breaking route/field rename).
+- **normal** → `npm publish` moves the `latest` tag by itself; every app
+  advertises it within ~5 minutes (soft "a new bk version is available" notice).
+- **forced** → the script also runs `npm dist-tag add <pkg>@<version> min`, so
+  clients below it are hard-blocked with "please upgrade" and exit code `8`.
+  Choose this when a server change is incompatible with older CLIs (e.g. a
+  breaking route/field rename).
 
-Because the gate lives in the web app, it only takes effect once the web is
-deployed — so if you answer **no** to "Deploy web?", the script reminds you to run
-`./devops/release.sh web` later. (`BK_CLI_LATEST` / `BK_CLI_MIN` env vars still
-override at runtime without a redeploy.) This keeps the CLI and the server in
-step per the agent surface contract in `CLAUDE.md` / `AGENTS.md`.
+The floor can be moved or rolled back at any time with no deploy:
+`npm dist-tag add @blackcode_sa/bc-issues@<version> min`. npm refuses to tag an
+unpublished version, so the old rule — *publish before raising the floor, or
+everyone is locked out with nothing to upgrade to* — is now enforced by npm
+rather than by memory. The server also clamps `min` to `latest`.
 
-**Order matters when raising the floor:** publish the new CLI to npm and verify a
-clean install *before* raising `CLI_MIN_VERSION`. Raising it first locks out every
-user with no working version to move to.
+**Why this changed (2026-09-24).** The versions used to be constants in
+`cli-version.ts`, bumped by the release script in a commit it created itself.
+That commit always landed after the web deploy, so every CLI release was
+*deploy every app → publish → deploy every app again*, and forgetting the second
+round left production advertising the old version. Reading npm removed the
+second round entirely.
+
+Fallbacks, highest priority first: `BK_CLI_LATEST` / `BK_CLI_MIN` env (an
+emergency pin — on Vercel it only applies after a redeploy), then npm, then the
+`FALLBACK_*` constants in `cli-version.ts` (cold start during an npm outage, or
+no `min` tag). A failed npm lookup keeps the last good answer; the fallbacks are
+never bumped on release and do not need to be.
+
+The one ordering rule left: if the new binary calls routes production does not
+serve yet, deploy the apps that changed **before** publishing.
 
 ---
 
