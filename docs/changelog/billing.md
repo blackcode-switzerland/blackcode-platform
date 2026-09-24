@@ -5,6 +5,42 @@ This file is an **agent** surface. It is merged into `bk changelog` and
 entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
+## 2026-09-23 — Nothing a person sees is hard-coded to Blackcode any more (ticket #756)
+
+Not breaking. No route changed shape. What changed is where the words come from.
+
+- **The family name is environment-driven.** `BILLING_PLATFORM_NAME` (default
+  `blackcode`) is the word in "your blackcode account is the same one across
+  every blackcode app", "this mints one blackcode-wide token", "Tokens are how
+  agents reach blackcode" and the account/profile settings copy. The product name
+  (`BILLING_DISPLAY_NAME`), the contact address (`BILLING_CONTACT_EMAIL`) and the
+  accent (`BILLING_EMAIL_ACCENT`) were already environment. The landing footer's
+  `mailto:` and the two `you@…` placeholders now derive from the contact address.
+- **The brand variables are read at BUILD time.** They were read at request
+  time on the server and never reached the browser at all — the login form, the
+  settings pages and the shell are client components, and a client bundle
+  cannot see a non-`NEXT_PUBLIC_` variable. Measured: built with
+  `BILLING_DISPLAY_NAME=Zedbrand`, zero client chunks carried the value. They are
+  inlined now (`next.config.js` `env`), so a rebranded deployment shows its own
+  name in the browser too; **changing one needs a redeploy, not a restart.** With
+  none set, every surface renders exactly what it rendered before.
+- **The install line on the landing page reads the platform's one package
+  constant** (`CLI_NPM_PACKAGE`), the same value `bk meta` advertises under
+  `cli.package`. It is not environment: a deployment that named a different
+  package here would be advertising an install that does not exist.
+- **Two audit sentences and one refusal hint stopped naming a sibling product.**
+  `paid`'s audit detail read "b/billing does not reconcile, b/books does" and
+  `void`'s refusal said "b/books records it"; a deployment without b/books would
+  have printed another company's product to its staff. They say "the
+  bookkeeping" now, and the product half reads `BILLING_DISPLAY_NAME`. Rows
+  written before today keep their old text — the audit log is append-only.
+- **Error events no longer keep a request's structured context** (`redactBody`):
+  an invoice carries a customer's name and address, and `error_events` is not
+  the place for them. The `message` column is unchanged. No client sees this.
+- **A guard refuses the next literal**: `lib/no-brand-literal.test.ts` scans the
+  pages, the components, the mail, the PDF and the query prose for the product
+  name, the family name, the domain, the npm scope and the sibling products.
+
 ## 2026-09-23 — Hardening for unattended callers: stuck keys, company checks, Zurich dates, `external_ref` refusals, the feed's subject
 
 **Not breaking** for a client that sends valid data. Six behaviours changed,

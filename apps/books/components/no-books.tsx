@@ -72,8 +72,8 @@ export function NoBooks({ email }: { email?: string | null }) {
             this, and its header says so. */}
         <pre className="mt-3 overflow-x-auto rounded-md bg-secondary px-3 py-2 font-mono text-[12px] leading-relaxed text-foreground">
 {`bk books entity create \\
-  --slug blackcode \\
-  --name "blackcode SA" \\
+  --slug acme \\
+  --name "Acme SA" \\
   --legal-form SA`}
         </pre>
         <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">

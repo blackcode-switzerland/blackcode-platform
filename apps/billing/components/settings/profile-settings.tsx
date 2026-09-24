@@ -14,6 +14,7 @@
 // this app can offer is name + tagline, exactly what `PATCH /api/me` accepts.
 
 import { useEffect, useState } from 'react'
+import { PLATFORM_NAME } from '@/lib/app'
 import { toast } from 'sonner'
 import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
 import { Button } from '@blackcode/platform-ui/ui/button'
@@ -56,8 +57,8 @@ export function ProfileSettings() {
   return (
     <div className="space-y-6">
       <Section
-        title="Your blackcode profile"
-        description="This is your account, not a billing one. The name here is the name every blackcode app shows."
+        title={`Your ${PLATFORM_NAME} profile`}
+        description={`This is your account, not a billing one. The name here is the name every ${PLATFORM_NAME} app shows.`}
       >
         <div className="space-y-4">
           <FormField label="Photo">

@@ -52,5 +52,5 @@ export {
 } from './changelog'
 export type { ChangelogEntry, ChangelogPayload } from './changelog'
 
-export { CLI_PACKAGE, getCliVersions, createCliVersionSource } from './cli-version'
+export { CLI_NPM_PACKAGE, getCliVersions, createCliVersionSource } from './cli-version'
 export type { CliVersions, CliVersionSourceOptions } from './cli-version'

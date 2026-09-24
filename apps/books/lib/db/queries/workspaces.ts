@@ -31,6 +31,7 @@ import type {
   WorkspaceRef,
 } from '@blackcode/platform-api'
 import { getDb } from '../client'
+import { APP_NAME } from '@/lib/app'
 import { booksWorkspaceMembers, booksWorkspaces, users } from '../schema'
 
 /**
@@ -312,7 +313,7 @@ export async function createWorkspaceForUser(
     const first = owned[0]
     throw new WorkspaceRefused(
       'one_workspace_per_person',
-      `you already have a workspace ("${first.name}", slug ${first.slug}) and b/books gives one per person for now`,
+      `you already have a workspace ("${first.name}", slug ${first.slug}) and ${APP_NAME} gives one per person for now`,
       `work in it: \`bk books workspace use ${first.slug}\`. A workspace holds ANY number of books, so a second company is \`bk books entity create\` — not a second workspace. Sharing a workspace with somebody else needs the invitation flow, which is not open yet`
     )
   }

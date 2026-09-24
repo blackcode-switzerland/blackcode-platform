@@ -11,6 +11,29 @@ complete usage guide, embedded in the binary, so it always describes the version
 you are running. For live values (vocabularies, limits, your books), run
 **`bk meta --app-server books`** and `bk books entity list`.
 
+## 2026-09-23 — The product name, the contact address and the family name are environment-driven (ticket #756)
+
+Not breaking. No route changed shape; with nothing set, every screen, mail and
+refusal reads exactly as before.
+
+- `BOOKS_DISPLAY_NAME` (default `b/books`), `BOOKS_CONTACT_EMAIL` (default
+  `contact@blackcode.ch`) and `BOOKS_PLATFORM_NAME` (default `blackcode`) replace
+  the literals in `<title>`, the login card, the sidebar wordmark, the footer,
+  the mail identity, and the sixty-odd dictionary strings that said "your
+  blackcode account" or "b/books — a blackcode product". The dictionaries write
+  `{app}`, `{platform}` and `{contactDomain}`; `lib/dictionary/index.ts`
+  substitutes them once. They are inlined at BUILD time, because the dictionary
+  is bundled for the browser: a change needs a redeploy.
+- Two refusal sentences (`one_workspace_per_person`, the footprint purge guard)
+  read the display name instead of `b/books`.
+- Three example values in suggestions changed spelling: `pass --slug blackcode`,
+  `pass --name "blackcode SA"` and `pass --entity blackcode` say `acme` /
+  `"Acme SA"` now, and so does the `bk books entity create` example on the
+  no-books screen. An agent that copied the example verbatim was creating an
+  entity named after us; the hint's meaning is unchanged.
+- `lib/no-brand-literal.test.ts` refuses the next literal in the pages, the
+  components, the dictionaries, the mail and the query prose.
+
 Surfaced at: `GET /api/changelog` (JSON or `?format=markdown`) and `bk changelog`,
 which merge every app's file into one feed by date, each entry tagged with its
 app. `bk changelog --app books` filters to this file.

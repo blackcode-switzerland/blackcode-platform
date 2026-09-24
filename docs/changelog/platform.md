@@ -22,6 +22,23 @@ A raised or rolled-back floor takes effect the same way. If npm is unreachable
 the server keeps its last good answer, and the floor is never advertised above
 `latest`.
 
+## 2026-09-23 — The CLI's npm package name has one source (ticket #756)
+
+Not breaking; no value changed. `CLI_NPM_PACKAGE` in
+`packages/platform-agent/src/cli-version.ts` is now the one place the binary's
+package name (`@blackcode_sa/bc-issues`) is spelled: `bk meta`'s `cli.package`,
+`cli.install` and `cli.update`, the HTTP deprecation warning header, and an
+app's landing-page install line all read it. It is a constant, not environment —
+there is one binary, and a deployment advertising a different package would be
+advertising an install that does not exist. A fork that publishes its own binary
+changes that line and every surface moves with it.
+
+`packages/platform-email` also gained `test/no-brand-literal.test.ts`: it renders
+the three templates with a non-Blackcode identity and asserts the output names
+that identity and no brand of its own. It found, and recorded rather than
+changed, that `documentEmail`'s plain-text part identifies the sender only by
+the From header and the reply-to line, never by name.
+
 ## 2026-09-21 — Footprint: a workspace can be blocked by a retention hold, not only by members
 
 **Not breaking.** `AppFootprint.blocked_by[]` entries (`GET /api/me/footprint`,
@@ -2386,7 +2403,6 @@ app permanently (see the upload entry below).
 /api/workspaces` (no app but issues offers a create-workspace flow) and
 `/api/auth/*` (an app's own sign-in pages and providers).
 
-
 ## 2026-08-06 — **SECURITY:** `bk login` no longer completes from an invalidated session
 
 **The same gap as the `/api/tokens` entry below, in the other route that mints a
@@ -2410,7 +2426,6 @@ one, not what an existing one can do. Revoke any you no longer recognise with
 Both token-minting routes now use the same session check. Nothing else about the
 `bk login` handshake changed: same callback validation (loopback only), same
 response fields, same token naming.
-
 
 ## 2026-08-06 — A file belongs to the app you uploaded it THROUGH
 
@@ -2447,7 +2462,6 @@ code and status are unchanged, and the set of refused types is identical. It had
 been a second, hand-typed copy of that list; adding a type to the blocklist would
 previously have taken effect on one of the two upload paths and not the other.
 
-
 ## 2026-08-06 — **SECURITY:** a password reset now invalidates token creation too
 
 **What changed.** `GET/POST /api/tokens` and `DELETE /api/tokens/{id}` now reject
@@ -2471,7 +2485,6 @@ this changes who may create and revoke them, not what existing ones can do.
 
 **`bk` users are unaffected.** The CLI authenticates with a token and has never
 been able to reach these routes.
-
 
 ## 2026-08-06 — The shared request layer and the first platform route factories
 
@@ -2528,7 +2541,6 @@ of a workspace but have not been granted an app in it — is now exported from
 `@blackcode/platform-api` rather than `@blackcode/platform-auth`. The check, the
 status, the code and the suggestion text are identical. This is an internal
 import path; no HTTP client is affected.
-
 
 ## 2026-08-06 — **FIX:** `bk issues --help` said the removed 1.12.0 spellings still worked
 

@@ -19,6 +19,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useT } from '@/lib/i18n'
+import { APP_NAME, CONTACT_EMAIL, wordmark } from '@/lib/app'
 
 export function SiteHeader({ children }: { children?: React.ReactNode }) {
   const t = useT()
@@ -26,8 +27,8 @@ export function SiteHeader({ children }: { children?: React.ReactNode }) {
     <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-11 max-w-5xl items-center gap-2.5 px-5 sm:px-6">
         <Link href="/" aria-label={t('site.home')} className="flex items-center gap-2.5">
-          <Image src="/logo.png" alt="b/" width={20} height={20} className="rounded-[14%]" />
-          <span className="text-[15px] font-semibold tracking-tight">books</span>
+          <Image src="/logo.png" alt="" width={20} height={20} className="rounded-[14%]" />
+          <span className="text-[15px] font-semibold tracking-tight">{wordmark(APP_NAME)}</span>
         </Link>
         {children ? <nav className="ml-auto flex items-center gap-2">{children}</nav> : null}
       </div>
@@ -41,8 +42,8 @@ export function SiteFooter() {
     <footer className="border-t border-border">
       <div className="mx-auto flex max-w-5xl flex-col gap-2 px-5 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:px-6">
         <span>{t('site.footer')}</span>
-        <a href="mailto:contact@blackcode.ch" className="hover:text-foreground sm:ml-auto">
-          contact@blackcode.ch
+        <a href={`mailto:${CONTACT_EMAIL}`} className="hover:text-foreground sm:ml-auto">
+          {CONTACT_EMAIL}
         </a>
       </div>
     </footer>

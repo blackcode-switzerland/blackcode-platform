@@ -18,7 +18,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { GoogleMark } from '@blackcode/platform-ui/ui/google-mark'
 import { WebError, call } from '@/lib/client'
-import { APP_NAME } from '@/lib/app'
+import { APP_NAME, EMAIL_PLACEHOLDER, PLATFORM_NAME } from '@/lib/app'
 import { PasswordResetFlow } from '@/components/password-reset-flow'
 import { SiteFrame, BrandMark } from '@/components/landing/site-chrome'
 
@@ -203,7 +203,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className={inputClass}
-                  placeholder="you@blackcode.ch"
+                  placeholder={EMAIL_PLACEHOLDER}
                   data-testid="input-email"
                 />
               </div>
@@ -260,8 +260,8 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
         )}
 
         <p className="mt-8 text-center text-xs leading-relaxed text-muted-foreground">
-          Your blackcode account is the same one across every blackcode app. New addresses have to
-          be approved by a super admin before they can sign up.
+          Your {PLATFORM_NAME} account is the same one across every {PLATFORM_NAME} app. New
+          addresses have to be approved by a super admin before they can sign up.
         </p>
       </div>
     </SiteFrame>

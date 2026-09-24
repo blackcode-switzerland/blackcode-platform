@@ -4,7 +4,7 @@ export const en = {
   'docs.uiName': 'Supporting documents',
   'docs.legalName': 'Pièces justificatives',
   'docs.lead':
-    'Every entry needs its document (art. 957a al. 3 CO), kept ten years (art. 958f). Google Drive is the inbox and the human view; the legal archive is a separate immutable copy. b/books keeps references, hashes and capture dates — never the file itself.',
+    'Every entry needs its document (art. 957a al. 3 CO), kept ten years (art. 958f). Google Drive is the inbox and the human view; the legal archive is a separate immutable copy. {app} keeps references, hashes and capture dates — never the file itself.',
   'docs.noBalanceLead': 'Nothing here changes a balance.',
   'docs.noBalanceBody':
     'A document is not an écriture: it lands staged, it never posts, and no statement reads this table. This list is the whole inbox and is not filtered by book — a scanned receipt does not always say whose it is, and saying so is one of the judgments this screen is for.',
@@ -115,7 +115,7 @@ export const fr: Record<keyof typeof en, string> = {
   'docs.uiName': 'Pièces justificatives',
   'docs.legalName': 'Pièces justificatives',
   'docs.lead':
-    'Chaque écriture a besoin de sa pièce (art. 957a al. 3 CO), conservée dix ans (art. 958f). Google Drive est la boîte de réception et la vue humaine ; l’archive légale est une copie immuable distincte. b/books conserve des références, des empreintes et des dates de capture — jamais le fichier lui-même.',
+    'Chaque écriture a besoin de sa pièce (art. 957a al. 3 CO), conservée dix ans (art. 958f). Google Drive est la boîte de réception et la vue humaine ; l’archive légale est une copie immuable distincte. {app} conserve des références, des empreintes et des dates de capture — jamais le fichier lui-même.',
   'docs.noBalanceLead': 'Rien ici ne modifie un solde.',
   'docs.noBalanceBody':
     'Une pièce n’est pas une écriture : elle arrive en attente, elle n’est jamais comptabilisée, et aucun état ne lit cette table. Cette liste est la boîte de réception entière et n’est pas filtrée par livre — un reçu scanné ne dit pas toujours à qui il appartient, et le dire est l’un des jugements auxquels cet écran sert.',

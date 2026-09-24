@@ -40,3 +40,4 @@ export {
   type DescribeLike,
   type IntegrationSuiteOptions,
 } from './integration-suite'
+export { readableText, stripComments, stripSpecifiers, type StrippedSource } from './source-text'

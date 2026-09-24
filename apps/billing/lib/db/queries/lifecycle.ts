@@ -61,7 +61,7 @@ import { emailEnabled, sendDocumentEmail } from '@/lib/email/send'
 import { date as formatDate, money, todayInZurich } from '@/lib/derive/format'
 import { parseRappen } from '@/lib/derive/money'
 import { DELIVERY_LIMITS } from '@/lib/limits'
-import { APP_SLUG } from '@/lib/app'
+import { APP_NAME, APP_SLUG } from '@/lib/app'
 import type {
   DocumentLanguage,
   Invoice,
@@ -667,7 +667,7 @@ export async function markInvoicePaid(ctx: LifecycleCtx, ref: string, raw: unkno
       throw new InvoiceRefused('already_paid', `invoice ${n} is already marked paid`, `bk billing invoice show ${locked.seq}`, 409)
     }
     if (locked.status === 'void') {
-      throw new InvoiceRefused('invoice_void', `invoice ${n} was voided; a cancelled bill is not paid`, 'if money arrived for it anyway, that is a refund conversation, and b/books records it', 409)
+      throw new InvoiceRefused('invoice_void', `invoice ${n} was voided; a cancelled bill is not paid`, 'if money arrived for it anyway, that is a refund conversation, and the bookkeeping records it', 409)
     }
 
     await tx
@@ -685,8 +685,8 @@ export async function markInvoicePaid(ctx: LifecycleCtx, ref: string, raw: unkno
       field: 'status',
       from: 'sent',
       to: 'paid',
-      detailEn: `Marked paid on ${formatDate(paid_date)} — an assertion that the money arrived; b/billing does not reconcile, b/books does`,
-      detailFr: `Marquée payée le ${formatDate(paid_date)} — une affirmation que le paiement est arrivé ; b/billing ne rapproche pas, b/books le fait`,
+      detailEn: `Marked paid on ${formatDate(paid_date)} — an assertion that the money arrived; ${APP_NAME} does not reconcile, the bookkeeping does`,
+      detailFr: `Marquée payée le ${formatDate(paid_date)} — une affirmation que le paiement est arrivé ; ${APP_NAME} ne rapproche pas, la comptabilité le fait`,
     })
     return locked.seq
   })

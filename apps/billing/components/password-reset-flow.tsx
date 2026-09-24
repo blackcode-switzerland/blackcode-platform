@@ -31,6 +31,7 @@
 // somebody to watch an inbox forever.
 
 import { useEffect, useRef, useState } from 'react'
+import { EMAIL_PLACEHOLDER } from '@/lib/app'
 import { toast } from 'sonner'
 import { Eye, EyeOff, Loader2, Mail, ShieldCheck } from 'lucide-react'
 import { WebError, call } from '@/lib/client'
@@ -181,7 +182,7 @@ export function PasswordResetFlow({ authenticated, presetEmail, onDone, onCancel
                 autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@blackcode.ch"
+                placeholder={EMAIL_PLACEHOLDER}
                 className={inputClass}
                 data-testid="input-reset-email"
               />

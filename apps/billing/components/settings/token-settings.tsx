@@ -15,7 +15,7 @@ import { Input } from '@blackcode/platform-ui/ui/input'
 import { useTokens } from '@/lib/queries'
 import { useCreateToken, useDeleteToken, toastError, type MintedToken } from '@/lib/mutations'
 import { Section, EmptyState, ErrorState, LoadingState } from '@/components/ui-kit'
-import { APP_NAME } from '@/lib/app'
+import { APP_NAME, PLATFORM_NAME } from '@/lib/app'
 
 export function TokenSettings() {
   const [name, setName] = useState('')
@@ -86,7 +86,7 @@ export function TokenSettings() {
         </Section>
       )}
 
-      <Section title="New token" description={`Tokens are how agents reach blackcode. This one will work against every app you have access to, not only ${APP_NAME}.`}>
+      <Section title="New token" description={`Tokens are how agents reach ${PLATFORM_NAME}. This one will work against every app you have access to, not only ${APP_NAME}.`}>
         <div className="flex gap-2">
           <Input
             data-testid="input-token-name"

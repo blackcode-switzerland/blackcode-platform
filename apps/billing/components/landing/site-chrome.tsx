@@ -12,7 +12,7 @@
 //
 import Link from 'next/link'
 import { BrandMark, wordmark } from '@/components/brand'
-import { APP_NAME } from '@/lib/app'
+import { APP_NAME, CONTACT_EMAIL } from '@/lib/app'
 
 export { BrandMark }
 
@@ -35,8 +35,8 @@ export function SiteFooter() {
     <footer className="border-t border-border">
       <div className="mx-auto flex max-w-5xl flex-col gap-2 px-5 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:px-6">
         <span>{APP_NAME} — Swiss QR-bill invoicing.</span>
-        <a href="mailto:contact@blackcode.ch" className="hover:text-foreground sm:ml-auto">
-          contact@blackcode.ch
+        <a href={`mailto:${CONTACT_EMAIL}`} className="hover:text-foreground sm:ml-auto">
+          {CONTACT_EMAIL}
         </a>
       </div>
     </footer>

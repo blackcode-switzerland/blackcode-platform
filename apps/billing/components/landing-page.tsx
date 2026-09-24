@@ -34,7 +34,8 @@ import {
   ScrollText,
   Terminal,
 } from 'lucide-react'
-import { APP_NAME } from '@/lib/app'
+import { CLI_NPM_PACKAGE } from '@blackcode/platform-agent'
+import { APP_NAME, PLATFORM_NAME } from '@/lib/app'
 import { SiteFrame } from '@/components/landing/site-chrome'
 
 export function LandingPage() {
@@ -199,7 +200,7 @@ function ForAgents() {
             {/* Every command here is one this app actually carries — do not
                 extend this list. `bk guide billing` is the reference. */}
             <pre className="overflow-x-auto p-5 font-mono text-[12.5px] leading-relaxed">
-              {`$ npm install -g @blackcode_sa/bc-issues
+              {`$ npm install -g ${CLI_NPM_PACKAGE}
 $ bk login
 $ bk billing workspace use <your-workspace>
 $ bk billing invoice list`}
@@ -219,7 +220,7 @@ function FinalCTA() {
           Start invoicing.
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-          Sign in with your blackcode account — the same one every blackcode app uses.
+          Sign in with your {PLATFORM_NAME} account — the same one every {PLATFORM_NAME} app uses.
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link

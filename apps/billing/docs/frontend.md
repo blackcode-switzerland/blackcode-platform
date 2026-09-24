@@ -65,9 +65,14 @@ companies.
 - **`data-testid`s from the test scaffold are kept** on the equivalent
   elements (`input-<field>`, `invoice-row-<number>`, `field-<name>`, `error`,
   `done`, …); the few that changed are listed in the 2026-09-21 changelog entry.
-- **No rendered string contains the literal product name** — `APP_NAME`,
-  passed from the server where a client component needs it
-  (`lib/no-brand-literal.test.ts`).
+- **No rendered string contains the brand** — the product name, the family
+  name, the domain, the npm scope or a sibling product. Every one comes from
+  `lib/app.ts` (`APP_NAME`, `PLATFORM_NAME`, `CONTACT_EMAIL`,
+  `EMAIL_PLACEHOLDER`) or from `CLI_NPM_PACKAGE`, and a client component imports
+  them directly: the values are inlined at build time by `next.config.js`
+  `env`, which is what lets a client component read them at all
+  (`docs/backend.md` → Branding). `lib/no-brand-literal.test.ts` refuses the
+  next literal.
 
 
 ## A page is not a route, and this app already has the risky shape

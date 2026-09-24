@@ -36,6 +36,8 @@
 
 import type { Dictionary } from '@blackcode/platform-i18n'
 
+import { APP_NAME, CONTACT_EMAIL, PLATFORM_NAME } from '@/lib/app'
+
 import * as analyses from './analyses'
 import * as chrome from './chrome'
 import * as compliance from './compliance'
@@ -92,9 +94,33 @@ const EN = {
  */
 export type BooksKey = keyof typeof EN
 
+// ── THE BRAND IS SUBSTITUTED HERE, ONCE, NOT AT EVERY CALL SITE ─────────────
+// Ticket #756 (2026-09-23): a copy of this app runs under another company's
+// name, so no area file may spell `b/books`, `blackcode` or `blackcode.ch`.
+// They write `{app}`, `{platform}` and `{contactDomain}` instead, and this is
+// where those three become `lib/app.ts`'s values — which are environment-driven
+// and inlined at build time (`next.config.js` `env`, because this module is
+// imported by a CLIENT module). Substituting here rather than in `t()` keeps
+// every call site and the key type unchanged, and keeps `t()`'s own `{name}`
+// placeholders (`{year}`, `{bk}`, …) for the caller, which is what they are for.
+// `lib/no-brand-literal.test.ts` is what refuses a literal in an area file.
+const BRAND: Record<string, string> = {
+  app: APP_NAME,
+  platform: PLATFORM_NAME,
+  contactDomain: CONTACT_EMAIL.slice(CONTACT_EMAIL.indexOf('@') + 1),
+}
+
+function branded<K extends string>(table: Record<K, string>): Record<K, string> {
+  const out = {} as Record<K, string>
+  for (const key of Object.keys(table) as K[]) {
+    out[key] = table[key].replace(/\{(app|platform|contactDomain)\}/g, (_, name: string) => BRAND[name])
+  }
+  return out
+}
+
 export const DICTIONARY: Dictionary<BooksKey> = {
-  en: EN,
-  fr: {
+  en: branded(EN),
+  fr: branded({
     ...analyses.fr,
     ...chrome.fr,
     ...compliance.fr,
@@ -108,7 +134,7 @@ export const DICTIONARY: Dictionary<BooksKey> = {
     ...sources.fr,
     ...statements.fr,
     ...taxes.fr,
-  },
+  }),
 }
 
 /**

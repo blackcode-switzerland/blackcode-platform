@@ -20,14 +20,34 @@ trusting it; it is a snapshot, not a mechanism.
 
 **`bc-billing` was created 2026-09-21** (`prj_nHqNQjjlHbUDdQ1aZgDSbCrxcrRz`,
 root `apps/billing`, the same settings as `bc-books`). It carries the same
-variables as `bc-books` except the blob ones, all Production only, and three
+variables as `bc-books` except the blob ones, all Production only, and four
 optional ones of its own:
 
 | Variable | Note |
 |---|---|
 | `BILLING_DISPLAY_NAME` | the product name a person reads. Optional; defaults to `b/billing`. A rebranded copy of the app sets it |
-| `BILLING_CONTACT_EMAIL` | the reply-to in this app's mail. Optional; defaults to `contact@blackcode.ch` — and a copy of the app that left it at the default would send another company's clients to us |
+| `BILLING_CONTACT_EMAIL` | the reply-to in this app's mail, the landing footer's address, and the domain of the `you@…` login placeholder. Optional; defaults to `contact@blackcode.ch` — and a copy of the app that left it at the default would send another company's clients to us |
 | `BILLING_EMAIL_ACCENT` | the email button fill. Optional; the default is measured at 6.55:1 against white, and an override must be measured too |
+| `BILLING_PLATFORM_NAME` | the FAMILY name — the word in "your blackcode account is the same one across every blackcode app" and "blackcode-wide token". Optional; defaults to `blackcode`. Added 2026-09-23 (ticket #756) |
+
+> **The four `BILLING_*` values are inlined at BUILD time** (`next.config.js`
+> `env`), because the login form, the settings pages and the shell are client
+> components and a browser bundle cannot see a non-`NEXT_PUBLIC_` variable —
+> measured 2026-09-23: built with `BILLING_DISPLAY_NAME=Zedbrand`, zero client
+> chunks carried the value while fourteen server chunks read it. **Changing one
+> of them on Vercel needs a redeploy, not a restart.** The logo is not a
+> variable: it is `apps/billing/public/logo.png`, served by the deployment
+> (the mail links `<NEXTAUTH_URL>/logo.png`), and a rebranded copy swaps the file.
+
+**`bc-books` carries three optional brand variables of the same shape since
+2026-09-23** (ticket #756), inlined at build time for the same reason — the
+dictionary is bundled for the browser:
+
+| Variable | Note |
+|---|---|
+| `BOOKS_DISPLAY_NAME` | the product name. Optional; defaults to `b/books` |
+| `BOOKS_CONTACT_EMAIL` | the reply-to, the footer address and the login placeholder's domain. Optional; defaults to `contact@blackcode.ch` |
+| `BOOKS_PLATFORM_NAME` | the family name in "your blackcode account". Optional; defaults to `blackcode` |
 
 `BLOB_READ_WRITE_TOKEN` is deliberately NOT set on it: this app stores no
 files.

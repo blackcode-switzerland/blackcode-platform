@@ -323,3 +323,52 @@ component call `apiSend` directly deletes the guard outright.
 
 The test for where a new write belongs is one question: **does it touch
 `books.*`?**
+
+## 9. Branding: the name, the address and the family name are environment (ticket #756, 2026-09-23)
+
+b/billing ships as a rebranded product for an outside company, and this app got
+the same treatment on the same day so that a copy of it could too. Three
+values, all in `lib/app.ts`, all with today's literal as the default:
+
+| Export | Environment | Default | Where it lands |
+|---|---|---|---|
+| `APP_NAME` | `BOOKS_DISPLAY_NAME` | `b/books` | `<title>`, the login card, the sidebar wordmark (`wordmark()` strips `b/`), the mail From line, two refusal sentences |
+| `CONTACT_EMAIL` | `BOOKS_CONTACT_EMAIL` | `contact@blackcode.ch` | the footer, the mail identity, the login placeholder's domain |
+| `PLATFORM_NAME` | `BOOKS_PLATFORM_NAME` | `blackcode` | "your blackcode account", "every blackcode app", "a blackcode product" |
+
+`EMAIL_ACCENT` stays a constant: the contrast argument in `lib/app.ts` is about
+THIS palette, and an override would need its own measurement.
+
+**The dictionaries never spell the brand.** `lib/dictionary/*.ts` write
+`{app}`, `{platform}` and `{contactDomain}`; `lib/dictionary/index.ts`
+substitutes the three once, at assembly, so every `t()` call site and the key
+type are unchanged and `t()`'s own `{year}`-style placeholders stay the
+caller's. Sixty-six lines across `marketing.ts`, `settings.ts`, `chrome.ts`
+and `documents.ts` were rewritten this way; the substitution is what
+`no-brand-literal.test.ts` (below) lets through.
+
+**The values are inlined at build time.** `lib/i18n.tsx` imports the dictionary
+in a CLIENT module — deliberately, so the strings are bundled rather than
+serialised into every RSC payload — which means the substitution runs in the
+browser too, where `process.env.X` is `undefined` unless `next.config.js` lists
+it under `env`. It does, for the three `BOOKS_*` variables that are set. A
+change needs a redeploy. b/billing measured the same defect the same day
+(`apps/billing/docs/backend.md` → Branding).
+
+**Three example values changed spelling**, and this is the one place today's
+rendering differs with nothing set: `pass --slug blackcode`,
+`pass --name "blackcode SA"` and `pass --entity blackcode` in the API
+suggestions, and the `bk books entity create` block on the no-books screen, say
+`acme` / `"Acme SA"`. An agent that copied the example verbatim was creating an
+entity named after us.
+
+**`lib/no-brand-literal.test.ts`** scans `app/`, `components/`, `lib/dictionary/`,
+`lib/email/` and `lib/db/queries/` — comments and module specifiers stripped —
+for `b/books`, `blackcode` (any case), `bc-issues` and `b/billing`, and asserts
+its own inputs (every directory exists, the dictionaries are among the files,
+the specifier stripping removed something). Watched failing on 2026-09-23:
+`'b/books — a {platform} product.'` back in `marketing.ts` → `marketing.ts:13
+renders the product name`; `contact@blackcode.ch` back in `site-chrome.tsx` →
+`site-chrome.tsx:46 renders the family name, the domain or the npm scope`. On
+its first green run it found `components/no-books.tsx:71`, which the grep that
+built the inventory had excluded as a code block.

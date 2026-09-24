@@ -52,7 +52,19 @@
 // And `min` is clamped to `latest`: a floor above the newest published version
 // would block everyone with no upgrade that satisfies it.
 
-export const CLI_PACKAGE = '@blackcode_sa/bc-issues'
+/**
+ * The npm package that IS the binary. One name for the whole platform, because
+ * there is one binary (`§6`), so it lives beside the version pair rather than in
+ * any app: `bk meta` advertises it, the deprecation header names it, and an
+ * app's landing page prints the install line from it. It is not brand copy and
+ * it is not environment — it is the package a person has to type to get `bk`,
+ * and a deployment that showed a different name here would be advertising an
+ * install that does not exist. A fork that publishes its own binary changes
+ * this line, and every surface that prints it moves together. (Ticket #756.)
+ *
+ * It is also the package whose npm dist-tags ARE the advertised versions.
+ */
+export const CLI_NPM_PACKAGE = '@blackcode_sa/bc-issues'
 
 const FALLBACK_LATEST = '5.0.0'
 const FALLBACK_MIN = '5.0.0'
@@ -61,7 +73,7 @@ const CACHE_TTL_MS = 5 * 60_000
 const RETRY_AFTER_MS = 60_000
 const FETCH_TIMEOUT_MS = 1_500
 
-const DIST_TAGS_URL = `https://registry.npmjs.org/-/package/${CLI_PACKAGE}/dist-tags`
+const DIST_TAGS_URL = `https://registry.npmjs.org/-/package/${CLI_NPM_PACKAGE}/dist-tags`
 
 export interface CliVersions {
   latest: string

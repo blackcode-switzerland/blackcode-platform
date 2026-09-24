@@ -56,6 +56,36 @@ export const APP_NAME = process.env.BILLING_DISPLAY_NAME ?? 'b/billing'
 export const CONTACT_EMAIL = process.env.BILLING_CONTACT_EMAIL ?? 'contact@blackcode.ch'
 
 /**
+ * The FAMILY name — the word in "your blackcode account is the same one across
+ * every blackcode app", "this mints one blackcode-wide token". It is not the
+ * product name: those sentences are about the account every app of the family
+ * shares, and `APP_NAME` in them would say "your b/billing account", which is
+ * the misunderstanding they exist to prevent. A rebranded deployment sets it to
+ * its own company. Ticket #756.
+ */
+export const PLATFORM_NAME = process.env.BILLING_PLATFORM_NAME ?? 'blackcode'
+
+/**
+ * `you@<the contact address's domain>` — the two email placeholders (login,
+ * password reset). Derived rather than a fifth variable: a placeholder on
+ * another company's domain is exactly the leak nobody remembers to set a
+ * variable for, and the contact address already says whose domain this is.
+ */
+export const EMAIL_PLACEHOLDER = `you@${CONTACT_EMAIL.slice(CONTACT_EMAIL.indexOf('@') + 1)}`
+
+// ── EVERY VALUE ABOVE IS INLINED AT BUILD TIME, AND THAT IS DELIBERATE ──────
+// `components/login-form.tsx`, the settings pages and the shell are CLIENT
+// components importing these constants. In a browser bundle `process.env.X` is
+// `undefined` unless it is `NEXT_PUBLIC_` or listed under `env` in
+// `next.config.js` — measured 2026-09-23 (ticket #756): built with
+// `BILLING_DISPLAY_NAME=Zedbrand`, fourteen server chunks read the variable and
+// ZERO client chunks carried the value, so every client surface of a rebranded
+// deployment rendered `b/billing`. `next.config.js` now lists the four
+// `BILLING_*` variables under `env`. The price: changing one needs a rebuild,
+// not a restart; the gain: the routes, `bk meta`, the mail and the browser all
+// read one inlined value and cannot disagree.
+
+/**
  * The button fill in this app's email templates — **not `--primary`.**
  *
  * `EmailIdentity.accent` always carries WHITE text: the templates say so, and an

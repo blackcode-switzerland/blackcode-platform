@@ -35,7 +35,7 @@
 import type { NextRequest } from 'next/server'
 import { listAppRegistry, type User } from '@blackcode/platform-db'
 import { isSuperAdmin } from '@blackcode/platform-auth'
-import { CLI_PACKAGE, getCliVersions } from '@blackcode/platform-agent'
+import { CLI_NPM_PACKAGE, getCliVersions } from '@blackcode/platform-agent'
 import type { AppContext } from './app-context'
 import type { WorkspaceMembershipRef } from './workspace-source'
 
@@ -195,12 +195,12 @@ export async function platformMetaBlock(
     // whole platform, so an app that published its own package name here would
     // be advertising an install that does not exist.
     cli: {
-      package: CLI_PACKAGE,
+      package: CLI_NPM_PACKAGE,
       latest_version: cliVersions.latest,
       /** Below this the CLI hard-blocks with exit 8. */
       min_version: cliVersions.min,
-      install: `npm install -g ${CLI_PACKAGE}`,
-      update: `npm install -g ${CLI_PACKAGE}@latest`,
+      install: `npm install -g ${CLI_NPM_PACKAGE}`,
+      update: `npm install -g ${CLI_NPM_PACKAGE}@latest`,
     },
     // Pointers only — the behaviour itself lives in `bk guide`, which ships
     // inside the binary and therefore always describes the binary in your hand.

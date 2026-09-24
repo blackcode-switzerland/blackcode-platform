@@ -36,7 +36,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { getCliVersions } from '@blackcode/platform-agent'
+import { CLI_NPM_PACKAGE, getCliVersions } from '@blackcode/platform-agent'
 import { errorEvents, type User } from '@blackcode/platform-db'
 import type { AppContext } from './app-context'
 import type { WorkspaceMembershipRef } from './workspace-source'
@@ -59,7 +59,7 @@ import { sanitize, truncate } from './sanitize'
 // break anyone's response parsing.
 const DEPRECATION_WARNING =
   '299 - "The HTTP API is no longer a supported interface. Use the bk CLI: ' +
-  'npm install -g @blackcode_sa/bc-issues && bk skill install"'
+  `npm install -g ${CLI_NPM_PACKAGE} && bk skill install"`
 
 // The CLI identifies itself as `bk-cli/<version>` (see cli/internal/client). It
 // IS the supported interface, so warning it would be noise that its users can do

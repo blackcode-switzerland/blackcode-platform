@@ -79,6 +79,7 @@ import { useSetLocale } from '@/lib/account'
 import { ALL_NAV, NAV, isActive, scopedHref, type NavIconName, type NavItem } from '@/lib/nav'
 import { useScope, WorkspaceSlugProvider } from '@/lib/scope'
 import { useMe } from '@/lib/hooks'
+import { APP_NAME, wordmark } from '@/lib/app'
 
 /**
  * A heading a CLIENT page sets for itself.
@@ -263,8 +264,8 @@ function ShellBody({
         {/* The blackcode mark every app carries — `public/logo.png`, the same
             file, not a text badge drawn in this app's amber. The palette is
             where b/books differs; the logo is the family. */}
-        <Image src="/logo.png" alt="b/" width={20} height={20} className="rounded-[14%]" />
-        <span className="text-[15px] font-semibold tracking-tight">books</span>
+        <Image src="/logo.png" alt="" width={20} height={20} className="rounded-[14%]" />
+        <span className="text-[15px] font-semibold tracking-tight">{wordmark(APP_NAME)}</span>
       </Link>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3">

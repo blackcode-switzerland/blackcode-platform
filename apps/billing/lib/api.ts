@@ -181,9 +181,17 @@ export const appContext: AppContext = {
   resolveSessionUser: getValidatedSessionUser,
   // No `manifest`: this app has no agent landing page yet, and a X-BK-Help
   // header pointing at a 404 is worse than no header. A real app adds one.
-  //
-  // No `redactBody` either — see `AppContext` for when an app wants it. An app
-  // holding personal data about people outside the company does.
+
+  // Withhold `ApiError.details` from `platform.error_events.context` (ticket
+  // #756, 2026-09-23). An invoice is a customer's name, address and the
+  // treatments they paid for — for the first outside deployment, a patient's —
+  // and `sanitize()` is a denylist of credential-shaped KEY NAMES that cannot
+  // know `customer_name` matters. Today every billing `details` is a string
+  // suggestion, so nothing structured reaches the column yet; the flag is
+  // per-app precisely so a route added later cannot forget it. It does NOT
+  // redact `message` or `stack` — read `errorLogContext` in platform-api's
+  // handler.ts before relying on it for more than the context column.
+  redactBody: true,
 }
 
 export const apiHandler = createApiHandler(appContext)

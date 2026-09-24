@@ -215,7 +215,7 @@ npm run lint       # eslint, all apps and packages
 > guardrail, test, assertion or probe works, break the thing it guards and watch
 > it go red. Then restore.
 
-This is not a style preference. **Twenty-six guardrails in this repo have been
+This is not a style preference. **Twenty-seven guardrails in this repo have been
 found green-but-inert** — eight during the migration, and the count is still growing.
 Every one looked like working protection:
 
@@ -250,12 +250,20 @@ Every one looked like working protection:
 | 24 | `cited-tests-exist.test.ts` — the guard written FOR finding #18 | Resolved a bare or app-relative citation to a same-named test ANYWHERE in the repo. Apps are copied from one scaffold, so they share test names: b/billing's `schema.ts` cited `lib/db/schema-parity.test.ts` from phase 1 on, billing never had one, and the guard found `apps/books`' file of that name and reported it resolved. `totals.ts`' `parity.test.ts` resolved the same way. Tightened 2026-09-18 to the citing app and `packages/`, it then found five dead citations: three in billing, a sales header still describing the `projectEntity` it lost on 2026-08-10, and a books comment placing a sales test in `apps/issues` |
 | 25 | `help_prose_table_test.go`'s row regex | `bk (?:word )+?` put a space AFTER each word, spending one of the two spaces between a command and its verbs — so a tour row padded with exactly two was never read. `bk books --help`'s `workspace  list, show, use` was one: books gained `workspace create` and its tour never said so, with the guard green. And a row with no description swallowed the next row's indent, so only every other row of billing's tour parsed. Both found 2026-09-18 by generalising the check to every app group (finding #22's lesson), which also found the books drift |
 | 26 | b/billing's `holds-covers-entities.test.ts`, a second time | After finding #11's fix it stripped comments and still searched for a table's identifier anywhere in `footprint.ts` — and the file's own `import { … } from '../schema'` names every table it uses. Removing phase 5's history count and keeping the import stayed green. It requires `.from(<ident>)` now. **The granularity of a text scan is part of what it checks** — the same file, the same lesson, one layer down |
+| 27 | The brand-leak guards' `stripComments` (`apps/*/lib/no-brand-literal.test.ts`) | Two chained regexes: block comments, then line comments. A **line** comment whose prose quotes `/*` — `apps/books/components/login-form.tsx` has one, about route patterns — opened a block comment for the first pass, which then closed at the next `*/` **3,161 characters later**, so every line of real code in that gap stopped being scanned while the guard stayed green. Measured 2026-09-23 by putting `you@blackcode.ch` in the gap and watching 7/7 pass. **No ordering of the two regexes is right** (a `//` inside a block comment ends it early the other way round): the question needs the state a scanner carries and a regex does not. Replaced by `packages/platform-testing/src/source-text.ts`, which knows strings, template holes and regex literals from comments, and keeps newlines so the reported line number is still true |
 
 **#24 to #26 landed 2026-09-18**, in b/billing's phases 5 and 6, and #24 is the
 one to sit with: it is the guard written to enforce finding #18, and it was
 satisfied by ANOTHER APP's file. A resolver that looks "anywhere in the repo"
 cannot tell the app that makes a claim from the app that happens to share a
 filename — and every app here is born from one scaffold, so they all do.
+
+**#27 landed 2026-09-23**, in the branding work, and it is #11's lesson once
+more: *the granularity of a text scan is part of what it checks*. The scan was
+not wrong about what it looked FOR — it was wrong about which characters it was
+allowed to look at, which no amount of widening the pattern would have found.
+When a guard strips something before searching, **put a literal in the stripped
+region and watch it fail**; that is the only way the removal itself gets tested.
 
 **#22 and #23 landed 2026-08-20**, the day b/books went to production, in a phase
 whose job was to make one app's CLI answer for itself. Both are the same shape as
@@ -518,7 +526,7 @@ command whose guide topic still describes last week's behaviour.
 > compares routes against `bk`, never *pages* against `bk`. A feature added to a
 > server component, or one that reuses an existing route in a new way, ships a
 > capability gap with **every suite green**. That is the exact shape of the
-> twenty-six findings in the table above, so treat "the tests pass" as saying
+> twenty-seven findings in the table above, so treat "the tests pass" as saying
 > nothing at all here, and check both front doors by hand.
 
 **The one legitimate exception is a deliberate capability decision, and it gets

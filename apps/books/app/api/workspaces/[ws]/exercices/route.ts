@@ -52,7 +52,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     throw Errors.badRequest(
       "missing_entity",
       "entity is required",
-      "pass --entity blackcode",
+      "pass --entity acme",
     );
   if (!Number.isInteger(year) || year < 1900 || year > 2200) {
     throw Errors.badRequest(

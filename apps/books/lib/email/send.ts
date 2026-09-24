@@ -38,7 +38,7 @@
 
 import { createEmailSender } from '@blackcode/platform-email'
 import { getDb } from '@/lib/db/client'
-import { APP_NAME, APP_SLUG, EMAIL_ACCENT } from '@/lib/app'
+import { APP_NAME, APP_SLUG, CONTACT_EMAIL, EMAIL_ACCENT } from '@/lib/app'
 
 export type { SendResult } from '@blackcode/platform-email'
 
@@ -57,6 +57,6 @@ export const {
     // NOT `--primary`. See `EMAIL_ACCENT`'s own note in lib/app.ts: the accent
     // always carries white text, and this app's fill is 1.84:1 against white.
     accent: EMAIL_ACCENT,
-    contactEmail: 'contact@blackcode.ch',
+    contactEmail: CONTACT_EMAIL,
   },
 })
