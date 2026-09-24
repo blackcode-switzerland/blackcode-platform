@@ -7,6 +7,17 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-09-24 — Fix: every app now picks up a new `bk` release, not just the busy ones
+
+**Not breaking.** The same-day change below refreshed the npm lookup in the
+background after answering. On Vercel an instance is frozen once its response
+is sent, so on quiet apps the refresh never completed: after `bk` 5.0.1 was
+published, issues advertised it within two minutes while sales, books and
+billing kept sending `X-BK-CLI-Latest: 5.0.0`. The request that finds the
+cached answer expired now waits for npm itself (at most 1.5 s, once per
+instance per five minutes), and a failed lookup is logged. Nothing to change in
+a client.
+
 ## 2026-09-24 — The advertised `bk` versions come from npm, live — a CLI release needs no deploy
 
 **Not breaking. Nothing to change in a client.** `X-BK-CLI-Latest`,

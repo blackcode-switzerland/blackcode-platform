@@ -18,9 +18,6 @@ function fakeNpm(initial: Record<string, unknown> | Error) {
   return { state, fetch }
 }
 
-/** Let a background refresh finish. */
-const settle = () => new Promise((r) => setTimeout(r, 0))
-
 function clock(start = 1_000_000) {
   const c = { t: start, now: () => c.t }
   return c
@@ -44,13 +41,9 @@ describe('getCliVersions', () => {
     expect((await get()).latest).toBe('6.2.0') // still cached
     expect(npm.state.calls).toBe(1)
 
-    // Expired: this request is served the old answer while npm is asked...
     c.t += 5 * 60_000
-    expect((await get()).latest).toBe('6.2.0')
-    expect(npm.state.calls).toBe(2)
-    // ...and the next one sees the new one.
-    await settle()
     expect((await get()).latest).toBe('6.3.0')
+    expect(npm.state.calls).toBe(2)
   })
 
   it('keeps the last good answer when npm fails, and retries later', async () => {
@@ -61,15 +54,11 @@ describe('getCliVersions', () => {
 
     npm.state.answer = new Error('registry down')
     c.t += 10 * 60_000
-    await get()
-    await settle()
     expect(await get()).toEqual({ latest: '6.2.0', min: '6.1.0', source: 'npm' })
     expect(npm.state.calls).toBe(2)
 
     npm.state.answer = { latest: '6.4.0', min: '6.1.0' }
     c.t += 61_000
-    await get()
-    await settle()
     expect((await get()).latest).toBe('6.4.0')
   })
 
@@ -80,8 +69,6 @@ describe('getCliVersions', () => {
     await get()
     npm.state.answer = { latest: 'banana', min: '0.0.1' }
     c.t += 10 * 60_000
-    await get()
-    await settle()
     expect(await get()).toEqual({ latest: '6.2.0', min: '6.1.0', source: 'npm' })
   })
 
@@ -98,7 +85,7 @@ describe('getCliVersions', () => {
   })
 
   it('falls back when npm has never answered, and when there is no min tag', async () => {
-    const down = createCliVersionSource({ fetch: fakeNpm(new Error('down')).fetch, env: {} })
+    const down = createCliVersionSource({ fetch: fakeNpm(new Error('down')).fetch, env: {}, warn: () => {} })
     const r = await down()
     expect(r.source).toBe('fallback')
     expect(r.latest).toMatch(/^\d+\.\d+\.\d+$/)
@@ -119,23 +106,29 @@ describe('getCliVersions', () => {
     expect(npm.state.calls).toBe(0)
   })
 
-  it('only the first request waits for npm; an expired answer does not block', async () => {
-    let release!: () => void
-    const gate = new Promise<void>((r) => (release = r))
-    let calls = 0
-    const fetch = async () => {
-      calls++
-      if (calls > 1) await gate // the refresh hangs
-      return new Response(JSON.stringify({ latest: '6.2.0', min: '6.0.0' }), { status: 200 })
-    }
+  // The production bug of 2026-09-24: a refresh left running after the
+  // response is frozen with the instance on Vercel and never lands. So the
+  // request that finds the cache expired must itself see the new answer.
+  it('the request that finds the cache expired waits for, and gets, the new answer', async () => {
+    const npm = fakeNpm({ latest: '6.2.0', min: '6.0.0' })
     const c = clock()
-    const get = createCliVersionSource({ fetch, now: c.now, env: {} })
+    const get = createCliVersionSource({ fetch: npm.fetch, now: c.now, env: {} })
     await get()
+    npm.state.answer = { latest: '6.3.0', min: '6.0.0' }
     c.t += 10 * 60_000
-    // Resolves even though the refresh has not.
-    expect((await get()).latest).toBe('6.2.0')
-    expect(calls).toBe(2)
-    release()
+    expect((await get()).latest).toBe('6.3.0')
+  })
+
+  it('a failed lookup is reported, not swallowed', async () => {
+    const warnings: string[] = []
+    const get = createCliVersionSource({
+      fetch: fakeNpm(new Error('registry down')).fetch,
+      env: {},
+      warn: (m) => warnings.push(m),
+    })
+    await get()
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('registry down')
   })
 
   it('concurrent requests share one lookup', async () => {

@@ -259,8 +259,17 @@ second round entirely.
 Fallbacks, highest priority first: `BK_CLI_LATEST` / `BK_CLI_MIN` env (an
 emergency pin — on Vercel it only applies after a redeploy), then npm, then the
 `FALLBACK_*` constants in `cli-version.ts` (cold start during an npm outage, or
-no `min` tag). A failed npm lookup keeps the last good answer; the fallbacks are
-never bumped on release and do not need to be.
+no `min` tag). A failed npm lookup keeps the last good answer and logs one
+`[cli-version]` warning; the fallbacks are never bumped on release and do not
+need to be.
+
+**The request that finds the cache expired waits for npm** (~400 ms, capped at
+1.5 s) — once per instance per five minutes. Do not "optimise" that into a
+refresh that runs after the response: that shipped on 2026-09-24 and failed in
+production within the hour. Vercel freezes an instance once its response is
+sent, so the background fetch froze, timed out on thaw, and three of four apps
+kept advertising the old version. Anything that must finish has to finish
+before the response (or go through `waitUntil`).
 
 The one ordering rule left: if the new binary calls routes production does not
 serve yet, deploy the apps that changed **before** publishing.

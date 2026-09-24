@@ -38,9 +38,10 @@
 //   1. BK_CLI_LATEST / BK_CLI_MIN env — an emergency PIN. On Vercel an env
 //      change only takes effect on the next deploy, so this is not the way to
 //      move a version day to day; it is for when npm itself is the problem.
-//   2. npm dist-tags, cached per server instance for CACHE_TTL_MS, then
-//      refreshed in the background (stale-while-revalidate). A failed lookup
-//      keeps the last good answer and retries after RETRY_AFTER_MS.
+//   2. npm dist-tags, cached per server instance for CACHE_TTL_MS. The request
+//      that finds the cache expired waits for the refresh (never in the
+//      background — see getCliVersions). A failed lookup keeps the last good
+//      answer, logs one line, and retries after RETRY_AFTER_MS.
 //   3. FALLBACK_* below — only when this instance has never reached npm (a cold
 //      start during an npm outage) or the `min` tag does not exist.
 //
@@ -104,6 +105,8 @@ export interface CliVersionSourceOptions {
   env?: Record<string, string | undefined>
   /** false → never touch the network (tests, offline dev). */
   network?: boolean
+  /** Where a failed lookup is reported. */
+  warn?: (message: string) => void
 }
 
 /**
@@ -116,6 +119,7 @@ export function createCliVersionSource(opts: CliVersionSourceOptions = {}) {
   const now = opts.now ?? Date.now
   const env = opts.env ?? process.env
   const network = opts.network ?? true
+  const warn = opts.warn ?? ((m: string) => console.warn(m))
 
   let last: { latest: string; min: string } | null = null
   let nextRefresh = 0
@@ -135,9 +139,11 @@ export function createCliVersionSource(opts: CliVersionSourceOptions = {}) {
       const min = typeof tags.min === 'string' && SEMVER.test(tags.min) ? tags.min : FALLBACK_MIN
       last = { latest, min }
       nextRefresh = now() + CACHE_TTL_MS
-    } catch {
+    } catch (err) {
       // Keep whatever we had. A lookup failure must never change what is
-      // advertised — least of all the floor.
+      // advertised — least of all the floor. But say so: a silent failure here
+      // is how a stale version went unnoticed on 2026-09-24.
+      warn(`[cli-version] npm dist-tags lookup failed, keeping ${last ? 'last good answer' : 'fallback'}: ${String(err)}`)
       nextRefresh = now() + RETRY_AFTER_MS
     }
   }
@@ -150,10 +156,14 @@ export function createCliVersionSource(opts: CliVersionSourceOptions = {}) {
       inflight ??= refresh().finally(() => {
         inflight = null
       })
-      // Only an instance that has never had an answer waits for npm (~400 ms,
-      // bounded by FETCH_TIMEOUT_MS). After that an expired answer is served as
-      // is while the refresh runs behind it — a request never pays for npm twice.
-      if (!last) await inflight
+      // AWAITED, every time the cache has expired — never left running behind
+      // the response. That was tried (stale-while-revalidate) and it broke in
+      // production on 2026-09-24: Vercel freezes an instance once its response
+      // is sent, so the background fetch froze mid-flight, the timeout fired on
+      // thaw, the refresh failed, and three of four apps kept advertising 5.0.0
+      // for as long as anyone watched. The cost of awaiting is one ~400 ms
+      // request per instance per CACHE_TTL_MS, bounded by FETCH_TIMEOUT_MS.
+      await inflight
     }
 
     const latest = pinLatest || last?.latest || FALLBACK_LATEST
