@@ -41,7 +41,14 @@ export function hasPaymentPart(currency: string): boolean {
   return (PAYMENT_PART_CURRENCIES as readonly string[]).includes(currency)
 }
 
-const ADDRESS_LIMITS = { name: 70, street: 70, building: 16, postalCode: 16, town: 35 } as const
+/**
+ * Table 8's address widths, in characters. Exported since 2026-09-23 so the
+ * company write door (`lib/db/queries/companies.ts`) refuses a legal name or a
+ * town the payment part cannot carry at SAVE time, from the same numbers this
+ * check applies at render time — two copies of a width is one bill that saved
+ * cleanly and can never be sent.
+ */
+export const ADDRESS_LIMITS = { name: 70, street: 70, building: 16, postalCode: 16, town: 35 } as const
 
 /** No leading zeros, exactly two decimals, `.`, at most 9 integer digits (§4.2.2 line 19). */
 const AMOUNT_RE = /^(0|[1-9]\d{0,8})\.\d{2}$/

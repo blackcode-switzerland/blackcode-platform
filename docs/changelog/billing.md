@@ -5,6 +5,65 @@ This file is an **agent** surface. It is merged into `bk changelog` and
 entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
+## 2026-09-23 — Hardening for unattended callers: stuck keys, company checks, Zurich dates, `external_ref` refusals, the feed's subject
+
+**Not breaking** for a client that sends valid data. Six behaviours changed,
+each on an existing route; one response gained a field. Ticket #757.
+
+### Changed
+
+- **A killed request no longer locks its `Idempotency-Key` for a day.** A key
+  left `pending` by a request whose process died (a platform timeout, a deploy)
+  used to answer **409 `idempotency_in_progress`** on every retry until the key
+  expired. It is now treated as abandoned once it has been `pending` longer
+  than any route may run, and the next retry with the same key takes it over
+  and runs once. A key still inside that window keeps answering 409, so a
+  genuinely concurrent double-submit is unchanged. **Adapt:** keep retrying
+  with the same key on 409, with a back-off of at least a couple of minutes;
+  you no longer need to mint a new key after a timeout — and you must not,
+  because the original may have succeeded.
+- **`POST …/companies` and `PATCH …/companies/{slug}` refuse bad payment-part
+  data at save**, instead of storing it and refusing every invoice later. New
+  400 codes: `invalid_iban` (ISO 13616 checksum), `iban_country_not_allowed`
+  (CH and LI only), `qr_iban_not_qr_iban` (institution id outside 30000–31999),
+  `iban_is_qr_iban` (a QR-IBAN sent as the ordinary `iban`), `invalid_country`
+  (not ISO 3166-1 alpha-2 — send `CH`, not `Schweiz`), `invalid_email` (one
+  syntactically valid address), `character_not_allowed` and `field_too_long`
+  (the Swiss QR character set and widths, on `legal_name`, `street`,
+  `building`, `postal_code`, `city`), `invalid_legal_name` (empty), and
+  `vat_number_required` (`vat_registered: true` without a `vat_number`, also
+  when an edit would produce that state). IBANs are **stored compact**
+  (spaces removed, uppercased) and a country code is uppercased; an empty
+  string in any of these fields means "none". POST still takes a nested
+  `address`; PATCH still takes flat fields.
+- **`POST …/invoices` dates a bill without an `issue_date` today in
+  Europe/Zurich**, not in UTC. A bill created between midnight and 02:00 local
+  time used to carry the previous day's date, and once a year the previous
+  fiscal year's. A supplied `issue_date` is never changed.
+- **`external_ref` longer than the limit is 400 `invalid_external_ref`** on
+  invoices and companies (it was a 500 with no code — the column refused it).
+  The limit is served by `bk meta --app-server billing` as
+  `limits.external_ref_max`; an empty string means "none".
+- **A duplicate `external_ref` in a workspace is 409 `external_ref_taken`,
+  naming the record that holds it** — `invoice #12 (BC-2026-0012) already
+  carries external_ref "appt-4711"`, with the `bk … show` command in the
+  suggestion — instead of the generic 409 `already_exists` with a constraint
+  name. On invoices and companies, on create and on edit. **Adapt:** on this
+  code, read the named record back; it is the one you created and did not hear
+  about.
+- **`GET …/audit` serves the subject's `#seq` in `subject_seq`.** It served
+  the subject's database row id under that name — the two only agree in a
+  database with one workspace, so from the second tenant on, a poller
+  following `subject_seq` to `invoice:<ref>` read the wrong bill. Each entry
+  also carries **`subject_external_ref`** (new field, null when the subject has
+  none), so a poller maps an event straight to its own record.
+
+### Pinned, not changed
+
+- Negative line prices are accepted and total correctly (a discount is a
+  negative line), and a bill whose total is not positive is still refused at
+  `send` / `mark-sent` with 409 `total_not_positive`. A test now holds both.
+
 ## 2026-09-23 — A fourth rounding policy: `exact_0_05`
 
 **Not breaking.** One new value in an existing closed vocabulary; nothing else

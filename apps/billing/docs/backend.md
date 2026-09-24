@@ -1314,6 +1314,61 @@ accept / decline / stranger; the footprint reporting the held workspace as
 `retention`-blocked and the purge refusing. Watched failing: the header lists
 the two mutations.
 
+## Hardening before production (ticket #757, 2026-09-23)
+
+The app had been driven by people and agents by hand. Read as an unattended
+server-to-server client would use it — thousands of calls, across timeouts,
+never looking at a screen — six things broke. Each fix has a test that was
+watched failing first; the mutations are in the table below.
+
+| # | Defect | Fix | Where |
+|---|---|---|---|
+| 1 | A request killed after claiming its idempotency key (the platform's function limit, a deploy) left the row `pending`, and every retry with the same key — the caller's CORRECT behaviour — answered 409 for the whole 24 h TTL. The failure-path `DELETE` only runs when the handler *throws* | A `pending` row older than `PENDING_ABANDONED_MS` (the `app/api/**` `maxDuration` from `vercel.json` plus a margin) is taken over with ONE conditional `UPDATE … WHERE status = 'pending' AND created_at < …`, so two retries arriving together still get one handler run. A fresh `pending` row still answers 409 | `lib/api/idempotency.ts` |
+| 2 | `createCompany` / `editCompany` stored whatever they were given; a bad IBAN, `Schweiz`, an em dash in the legal name each failed later on every bill | `normaliseCompanyFields`, pure and exported, called by both paths: ISO 13616 checksum (CH/LI), the QR-IID range on `qr_iban` and its absence on `iban`, ISO-2 country, one email, the QR character set and Table 8 widths (`ADDRESS_LIMITS`, now exported from `lib/qr/validate.ts`) on the payment-part fields; plus `vat_number_required` on the merged state. IBANs are stored compact | `lib/db/queries/companies.ts` |
+| 3 | `insertInvoice` defaulted `issue_date` to the UTC date; 00:30 in Zurich was yesterday, and on 1 January last fiscal year | `defaultIssueDate` → `todayInZurich()`, the rule `lib/derive/format.ts` states and `paid_date` and recurrence already followed | `lib/db/queries/invoices.ts` |
+| 4 | An `external_ref` over 80 characters reached Postgres as sqlstate `22001`, which `apiHandler` does not translate: a 500 with no code. A duplicate was the generic 409 `already_exists (uq_invoice_ws_external_ref)` | `EXTERNAL_REF_MAX` declared once in `lib/limits.ts`, served by `/api/meta`, checked at the door by invoices, companies and series (`invalid_external_ref`); the unique violation is mapped AFTER the rollback to 409 `external_ref_taken` naming the holder's `#seq` (and number or slug), via `lib/db/unique-violation.ts` — the chain walk that lived privately in `recurrences.ts` | `invoices.ts`, `companies.ts`, `limits.ts` |
+| 5 | Negative lines (a discount) were neither forbidden nor promised | Pinned by a test: accepted, totalled, and a non-positive total still refused by `assertReadyToIssue` | `write-paths.integration.test.ts` |
+| 6 | `listAudit` served the subject's ROW ID as `subject_seq`. The overview's links and a poller's `invoice:<ref>` were wrong from the second workspace on | Three `LEFT JOIN`s keyed on `subject_type`, one query; `subject_seq` is the `#seq`, and the entry also carries `subject_external_ref` | `lib/db/queries/audit.ts`, `types/index.ts` |
+
+**Verified by reading, not only by test, for #6:** `audit.ts:200` was
+`subject_seq: r.subject_id` with a comment saying phase 1 serves the row id;
+the type above it said `#number`. In the integration test the two differ by
+three orders of magnitude (`expected 1817 to be 1` under the mutation), which
+is what a real second tenant looks like.
+
+**What was decided where the ticket left room.** The window is
+`maxDuration + 60 s`, and `idempotency.test.ts` holds the copied `30` against
+`vercel.json` so the two cannot drift (finding #23's shape). The takeover
+resets `created_at` rather than deleting and re-inserting, so the unique index
+stays the mechanism. IBAN spaces are removed at save because §4.2.2's
+electronic form has none and `compactIban` already existed for exactly that;
+nothing else is rewritten (charset.ts: reject, never transliterate). Country
+codes are checked by SHAPE (two letters), the same test `validate.ts` applies
+at render time — a full ISO list would be a second copy of a standard. An
+empty string in a nullable text field means "none" on both write paths, because
+that is what both front doors already send.
+
+### The guards, watched failing (2026-09-23)
+
+| Guard | The mutation | What it said |
+|---|---|---|
+| `write-paths` #757 stale key | the takeover's age predicate made never-true | `ApiError: a request with that key is still running` |
+| `write-paths` #757 fresh key, and `idempotency.test.ts` | `PENDING_ABANDONED_MS = 0` | the fresh key ran the handler (`{ status: 201 }` where 409 was due); `expected 0 to be greater than 30000` |
+| `idempotency.test.ts` | `ROUTE_MAX_DURATION_S = 25` | `expected 25 to be 30` — the drift from `vercel.json` |
+| `write-paths` #757 invoice duplicate | `externalRefRefusal` returning the raw error | `Failed query: insert into "billing… to be an instance of InvoiceRefused` |
+| `write-paths` #757 company duplicate | the create's `.catch` predicate made false | the same, for `CompanyRefused` |
+| `companies.test.ts` + `invoices.test.ts` | the length check in `externalRefProblem` disabled | both 81-character cases: "expected a refusal and the call succeeded" |
+| `invoices.test.ts` Zurich | `defaultIssueDate` back to `toISOString().slice(0, 10)` | `expected '2026-07-01' to be '2026-07-02'` and the fiscal-year case |
+| `write-paths` #757 wired | `normaliseCompanyFields` replaced by the identity in BOTH paths | `expected undefined to be 'invalid_iban'` |
+| `companies.test.ts` country | the alpha-2 regex disabled | `Schweiz`, `CHE` and `41` all accepted |
+| `write-paths` #757 audit | `subject_seq: r.subject_id` restored | `expected 1817 to be 1` |
+| `write-paths` #757 negative lines, refusal half | `assertReadyToIssue` softened to `< 0` | the zero-total draft got past it: `expected 'company_has_no_iban' to be 'total_not_positive'` |
+| the same, acceptance half | `ALTER TABLE billing.invoice_line ADD CONSTRAINT … CHECK (unit_price >= 0) NOT VALID` as the owner | `new row … violates check constraint "mut_757_no_negative"` on the `-50.00` line. Dropped; `pg_constraint` read back `0` |
+
+Run as the owner credential (`blackcode`) against Docker: the local
+`billing_app` password is not on record in this repo. None of the six touches a
+revoke, and the suite states the role it ran as.
+
 ## Frontend
 
 `apps/billing/docs/frontend.md`.

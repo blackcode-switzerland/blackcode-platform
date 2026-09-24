@@ -436,6 +436,11 @@ export interface AuditEntry {
   subject_type: 'invoice' | 'company' | 'recurrence'
   /** The subject's `#number`, not its row id. */
   subject_seq: number
+  /**
+   * The subject's own `external_ref`, so a poller maps an entry straight to
+   * the record it created without a second read. Null when it has none.
+   */
+  subject_external_ref: string | null
   ts: string
   actor: {
     user_id: number | null

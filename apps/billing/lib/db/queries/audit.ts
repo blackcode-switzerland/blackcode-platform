@@ -36,7 +36,7 @@
 // pollers, with nothing to say so.
 
 import { and, asc, desc, eq, gt, sql } from 'drizzle-orm'
-import { billingAudit, users } from '../schema'
+import { billingAudit, billingCompany, billingInvoice, billingRecurrence, users } from '../schema'
 import { getDb } from '../client'
 import { allocateSeq, type Tx } from './seq'
 import type { ActorVia, AuditAction, AuditEntry } from '@/types'
@@ -166,6 +166,16 @@ export async function listAudit(
       seq: billingAudit.seq,
       subject_type: billingAudit.subject_type,
       subject_id: billingAudit.subject_id,
+      // ── THE SUBJECT'S #NUMBER, RESOLVED IN THE SAME QUERY ──────────────
+      // `subject_id` is a row id, global across workspaces; `#seq` is the
+      // workspace address every surface prints. Until 2026-09-23 this
+      // function served the row id under the name `subject_seq`, and the two
+      // only agree in a database with one workspace — so the overview's links
+      // and a poller's `invoice:<ref>` both pointed at the wrong bill from the
+      // second tenant on (ticket #757). Three LEFT JOINs, one per subject
+      // table, keyed on the type, so the page stays one round trip.
+      subject_seq: sql<number>`COALESCE(${billingInvoice.seq}, ${billingCompany.seq}, ${billingRecurrence.seq})`,
+      subject_external_ref: sql<string | null>`COALESCE(${billingInvoice.external_ref}, ${billingCompany.external_ref}, ${billingRecurrence.external_ref})`,
       ts: billingAudit.ts,
       actor_user_id: billingAudit.actor_user_id,
       actor_email: users.email,
@@ -183,6 +193,9 @@ export async function listAudit(
     // make those rows VANISH from the log, which is the one thing an append-only
     // log must never do.
     .leftJoin(users, eq(users.id, billingAudit.actor_user_id))
+    .leftJoin(billingInvoice, and(eq(billingAudit.subject_type, 'invoice'), eq(billingInvoice.id, billingAudit.subject_id)))
+    .leftJoin(billingCompany, and(eq(billingAudit.subject_type, 'company'), eq(billingCompany.id, billingAudit.subject_id)))
+    .leftJoin(billingRecurrence, and(eq(billingAudit.subject_type, 'recurrence'), eq(billingRecurrence.id, billingAudit.subject_id)))
     .where(and(...where))
     .orderBy(ascending ? asc(billingAudit.seq) : desc(billingAudit.seq))
     .limit(limit + 1)
@@ -193,11 +206,11 @@ export async function listAudit(
     data: page.map((r) => ({
       seq: r.seq,
       subject_type: r.subject_type as AuditEntry['subject_type'],
-      // The subject's #number. `subject_id` IS the row id, and resolving it to a
-      // #number per row would be one query per row; the shaping layer passes the
-      // mapping in where it has one. Phase 1 serves the row id here and the
-      // frontend addresses by it only within a subject it already has.
-      subject_seq: r.subject_id,
+      // Null only for a subject row that no longer exists, which the retention
+      // guards make impossible for all three tables; typed as a number on the
+      // wire because that is what it is.
+      subject_seq: Number(r.subject_seq),
+      subject_external_ref: r.subject_external_ref ?? null,
       ts: r.ts.toISOString(),
       actor: {
         user_id: r.actor_user_id,
