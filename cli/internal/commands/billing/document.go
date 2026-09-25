@@ -49,7 +49,7 @@ func pdfVerdict(status, got, sent string) string {
 	case sent == got:
 		return "byte for byte the PDF that was emailed"
 	default:
-		return "NOT the bytes that were emailed (" + sent[:12] + "…): the payment message or the due date was edited since — everything else on a sent invoice is frozen"
+		return "NOT the bytes that were emailed (" + sent[:12] + "…): the payment message or the due date was edited since, or the document layout changed after it was sent (2026-09-25: the payment slip stopped printing the reference) — the figures on a sent invoice are frozen"
 	}
 }
 

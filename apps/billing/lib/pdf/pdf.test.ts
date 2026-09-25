@@ -35,7 +35,9 @@ import { renderInvoiceDocument, PaymentPartRefused, type PdfCompany } from './in
 import { sampleCompany, sampleInvoice } from './fixtures'
 import { A4, PT_PER_MM, Sheet } from './sheet'
 import { drawPaymentPart, BLANK, QR, STRIP_TOP, PAYMENT_STRIP } from './payment-part'
-import { qrBillFieldsFor } from '@/lib/qr/payload'
+import { qrBillFieldsFor, serializeQrPayload } from '@/lib/qr/payload'
+import { formatQRR, formatSCOR } from '@/lib/qr/reference'
+import { qrLabels } from '@/lib/qr/labels'
 import type { Invoice } from '@/types'
 
 // ---------------------------------------------------------------------------
@@ -234,6 +236,34 @@ describe('the words on the page', () => {
     expect(headings).toHaveLength(1)
     // x = 118 is the payment part's information column; the receipt is x < 62.
     expect(headings[0].x).toBeGreaterThan(62)
+  })
+
+  // A product decision that departs from v2.4 §3.5.4 — see payment-part.ts'
+  // header. The positive half comes first: the reference is still in the QR
+  // code and still in the invoice body, so an empty strip is not passing
+  // because the bill simply had no reference.
+  it('never prints the reference on the receipt or the payment part, and keeps it in the QR code and the body', async () => {
+    const cases = [
+      { invoice: sampleInvoice(), company: sampleCompany },
+      { invoice: sampleInvoice({ ref_type: 'SCOR', ref_body: 'BC20260007' }), company: { ...sampleCompany, qr_iban: null } },
+    ]
+    for (const c of cases) {
+      const fields = qrBillFieldsFor(c.invoice, c.company)
+      expect(fields.reference, 'the bill carries a reference').toBeTruthy()
+      expect(serializeQrPayload(fields)).toContain(fields.reference!)
+      const printed = fields.referenceType === 'QRR' ? formatQRR(fields.reference!) : formatSCOR(fields.reference!)
+      for (const language of ['fr', 'de', 'it', 'en'] as const) {
+        const out = await renderInvoiceDocument({ invoice: { ...c.invoice, language }, company: c.company })
+        expect(out.hasPaymentPart).toBe(true)
+        const entries = out.log.at(-1)!.filter((e) => e.kind === 'text')
+        const strip = entries.filter((e) => e.y >= STRIP_TOP).map((e) => e.text)
+        const body = entries.filter((e) => e.y < STRIP_TOP).map((e) => e.text ?? '').join(' ')
+        expect(strip, `${language}: the strip was drawn`).toContain(qrLabels(language).account_payable_to)
+        expect(strip, `${language}: no reference heading on the strip`).not.toContain(qrLabels(language).reference)
+        expect(strip.join(' '), `${language}: no reference value on the strip`).not.toContain(printed)
+        expect(body, `${language}: the body still states it`).toContain(printed)
+      }
+    }
   })
 
   it('does not print a heading whose value is absent (§3.5.4)', async () => {

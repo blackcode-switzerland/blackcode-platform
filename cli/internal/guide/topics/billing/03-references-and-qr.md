@@ -66,7 +66,7 @@ and tells you how it relates to what was sent:
 | It says | It means |
 |---|---|
 | byte for byte the PDF that was emailed | this file IS what the client received |
-| NOT the bytes that were emailed | the payment message or the due date was edited since. Nothing else on a sent invoice can change |
+| NOT the bytes that were emailed | the payment message or the due date was edited since, or the layout changed after sending. The figures on a sent invoice cannot change |
 | issued outside this app | it was recorded with `mark-sent`, so no emailed copy was fingerprinted |
 | a DRAFT | it can still change until it is sent |
 

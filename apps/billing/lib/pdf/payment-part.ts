@@ -22,15 +22,27 @@
 // grid sheet is a manual step (qr-bill.md §8), not something a test can do.
 //
 // ── WHAT IS NEVER PRINTED ──────────────────────────────────────────────────
-// A heading whose value is absent (§3.5.4) — no "Reference" on a NON bill. The
-// additional information on the receipt (§3.6). The header elements of the
-// payload (§7.2).
+// A heading whose value is absent (§3.5.4). The additional information on the
+// receipt (§3.6). The header elements of the payload (§7.2).
+//
+// ── AND THE REFERENCE, DELIBERATELY, SINCE 2026-09-25 ─────────────────────
+// Neither the receipt nor the payment part prints the reference, on any bill.
+// A product decision, and a departure from the standard that should be read as
+// one: v2.4 §3.5.4 prints the "Reference" heading and value whenever the bill
+// carries a reference, so a SCOR or QRR slip without it is not a conforming
+// layout, and the SIX validation portal may say so.
+//
+// What still carries it: the QR CODE (the payload is unchanged — a banking app
+// reads the code, not the print, so payments still arrive referenced and
+// matchable) and the invoice body's own meta block above the strip. A bill
+// that must pass layout validation should be issued with `ref_type NON`, which
+// has no reference to print and is fully conforming.
 
 import type { PDFFont } from 'pdf-lib'
 import { Sheet, lineHeightMm, wrap, A4 } from './sheet'
 import { printAddress, printAmount } from './format'
 import { qrMatrix } from './qr-matrix'
-import { formatIban, formatQRR, formatSCOR } from '@/lib/qr/reference'
+import { formatIban } from '@/lib/qr/reference'
 import { serializeQrPayload, type QrBillFields } from '@/lib/qr/payload'
 import { qrLabels, type QrLanguage } from '@/lib/qr/labels'
 
@@ -51,11 +63,6 @@ const LINE_PT = 0.75
 interface Fonts {
   regular: PDFFont
   bold: PDFFont
-}
-
-function reference(fields: QrBillFields): string | null {
-  if (!fields.reference) return null
-  return fields.referenceType === 'QRR' ? formatQRR(fields.reference) : formatSCOR(fields.reference)
 }
 
 /** A blank field drawn as its four corner marks (§3.5.3, §3.5.4). */
@@ -79,7 +86,6 @@ function blankField(sheet: Sheet, tag: string, x: number, y: number, w: number, 
 export function drawPaymentPart(sheet: Sheet, fields: QrBillFields, language: QrLanguage, fonts: Fonts): void {
   const L = qrLabels(language)
   const T = STRIP_TOP
-  const ref = reference(fields)
 
   // ── separation (§3.7): a dashed line and the hint, ABOVE the line, outside
   // the payment part ─────────────────────────────────────────────────────────
@@ -111,11 +117,6 @@ export function drawPaymentPart(sheet: Sheet, fields: QrBillFields, language: Qr
   receiptValue(formatIban(fields.account))
   for (const l of printAddress(fields.creditor)) receiptValue(l)
   gapReceipt()
-  if (ref) {
-    receiptHeading(L.reference)
-    receiptValue(ref)
-    gapReceipt()
-  }
   if (fields.debtor) {
     receiptHeading(L.payable_by)
     for (const l of printAddress(fields.debtor)) receiptValue(l)
@@ -203,11 +204,6 @@ export function drawPaymentPart(sheet: Sheet, fields: QrBillFields, language: Qr
   value(formatIban(fields.account))
   for (const l of printAddress(fields.creditor)) value(l)
   gap()
-  if (ref) {
-    heading(L.reference)
-    value(ref)
-    gap()
-  }
   if (fields.unstructuredMessage) {
     // Printed on the payment part and never on the receipt (§3.6). Truncation is
     // marked with "..." (§3.5.4); v1 carries no billing information, so no
