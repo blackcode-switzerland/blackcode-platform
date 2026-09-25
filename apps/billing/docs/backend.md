@@ -340,6 +340,13 @@ box at the top listing what the PDF says differently.
 
 ## Phase 2, ticket #85: `lib/pdf/` — the A4 invoice and the payment part
 
+> **2026-09-25: the slip prints no reference.** The receipt and payment part
+> dropped the "Reference" heading and value on every bill — a product decision
+> that departs from v2.4 §3.5.4, recorded in `lib/pdf/payment-part.ts`' header.
+> The QR payload is unchanged; `pdf.test.ts` asserts both halves, in four
+> languages. Sent invoices rendered again no longer match their `pdf_sha256`.
+
+
 Built 2026-09-18, on `feat/billing-phase-2-be`. `renderInvoiceDocument({invoice,
 company})` returns the bytes, whether a payment part was drawn, the page count
 and a draw log. **Still not wired into a route**: #86 serves it, lists the fonts

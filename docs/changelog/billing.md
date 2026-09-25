@@ -5,6 +5,24 @@ This file is an **agent** surface. It is merged into `bk changelog` and
 entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
+
+## 2026-09-25 — The payment slip no longer prints the reference
+
+Not breaking for any client: no route, field or command changed shape.
+
+- **The receipt and the payment part print no "Reference" heading or value,**
+  on every bill and in every language. The QR code still carries the reference
+  (the payload is unchanged), so banking apps still pay it referenced and a
+  payment stays matchable. The invoice body's meta block above the slip still
+  states the reference.
+- **This departs from the Swiss QR-bill standard** (v2.4 §3.5.4 prints the
+  reference whenever the bill has one), so the SIX validation portal may flag
+  the layout. A bill that must pass layout validation should use `ref_type NON`.
+- **A sent invoice downloaded again is no longer byte-identical to the emailed
+  copy,** because the slip changed after it was sent. `bk billing invoice pdf`
+  says "NOT the bytes that were emailed"; its message names the layout change
+  as a cause from the next CLI release. The figures are unchanged.
+
 ## 2026-09-23 — Nothing a person sees is hard-coded to Blackcode any more (ticket #756)
 
 Not breaking. No route changed shape. What changed is where the words come from.
