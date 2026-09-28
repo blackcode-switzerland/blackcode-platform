@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Toaster } from 'sonner'
+import { AgentManifest } from '@/components/agent-manifest'
 import { Providers } from './providers'
 import './globals.css'
 
@@ -43,6 +44,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="font-sans antialiased">
+        {/* Machine-readable access note for agents fetching any page. Renders nothing visible. */}
+        <AgentManifest />
         <Providers>
           {children}
           {/* Toasts are token-driven through the `--toast-*` bridge in

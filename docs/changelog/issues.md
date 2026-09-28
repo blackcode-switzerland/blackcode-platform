@@ -35,6 +35,26 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-09-28 — The signed-out pages match the other apps; `/privacy` and `/terms` are gone
+
+Not breaking for agents: no route or command changed, and `/agent-updator`,
+`/agent-updater` (a redirect), `/llms.txt` and the `X-BK-Help` header are all
+where they were.
+
+- **`/privacy` and `/terms` now 404.** They were linked only from the footer and
+  the sign-up form; neither link exists any more, and no other app had them.
+- **`/`, `/login` and `/agent-updator` use the design sales, books and billing
+  share** — header, footer, landing structure and login card — with a light/dark
+  switch on every signed-out page (web only).
+- **The Google button renders only when Google is configured** on the
+  deployment, as in the other apps. The old login page drew it unconditionally.
+- **`/llms.txt`'s last link** now reads "Getting an agent current" (was
+  "Migrating from the HTTP API"); same URL. Its vocabulary bullet no longer names
+  the vocabularies, which `bk meta` serves. The text is now rendered by
+  `@blackcode/platform-agent`, shared with every app.
+- `/agent-updator` names the skill directory `.claude/skills/blackcode/`; it
+  still said `blackcode-issues/`, the name before CLI 2.0.0.
+
 ## 2026-08-13 — projects take a logo, and four project fields stopped being silently dropped
 
 ### The bug first, because it is the breaking-ish part

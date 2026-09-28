@@ -12,6 +12,7 @@
 export const en = {
   'site.footer': '{app} — a {platform} product.',
   'site.home': '{app} home',
+  'site.forAgents': 'For agents',
   'site.signIn': 'Sign in',
   'site.createAccount': 'Create an account',
 
@@ -165,11 +166,37 @@ export const en = {
   'noExercice.body':
     'There is nothing to derive, so there is no {statement} to show. A book gets its chart of accounts when it is created; opening an exercice is a second step, and every book starts here.',
   'noExercice.fromTerminal': 'From the terminal: {suggestion}',
+
+  // ── /agent-updator — where a stuck agent is sent (X-BK-Help) ───────────────
+  'agents.eyebrow': 'For agents',
+  'agents.title': 'Operate {app} from an agent.',
+  'agents.metaTitle': 'For agents · {app}',
+  'agents.metaDescription':
+    'How an AI agent operates {app} through the bk CLI: what to install, where the answers live, and what to do when something stops working.',
+  'agents.intro':
+    'People use this web app; agents use {bk}, one Go binary on npm. There is no HTTP API to learn: the routes behind the web app are private plumbing with no public contract, and everything an agent needs is in the binary or one command away.',
+  'agents.startTitle': '1 · Start here',
+  'agents.startBody':
+    '{skill} writes a short skill file that points your agent at the two sources below and holds no facts that can go stale.',
+  'agents.answersTitle': '2 · Where the answers live',
+  'agents.guideBody':
+    'how the tool behaves: every workflow, flag and failure mode. It ships inside the binary, so it describes exactly the version you are running, and it works offline.',
+  'agents.metaBody':
+    'what the data is now: your workspaces, the current vocabularies and every limit the server enforces. Fetched live; never hardcode any of it.',
+  'agents.helpBody': '{help} on any command, before calling it.',
+  'agents.stuckTitle': '3 · When something stops working',
+  'agents.stuckBody':
+    'Run {sync}, then retry. It refreshes the skill, and when the binary itself is behind it prints the exact upgrade command. What changed, and when, is in {changelog} (also {route}).',
+  'agents.floorBody':
+    'Every API response carries {latestHeader} and {minHeader}. Below the minimum, {bk} refuses to run and prints the upgrade commands instead of failing with a cryptic error.',
+  'agents.current': 'Current: CLI latest v{latest} · minimum supported v{min}.',
+  'agents.updateTitle': '4 · Update at any time',
 } as const
 
 export const fr: Record<keyof typeof en, string> = {
   'site.footer': '{app} — un produit {platform}.',
   'site.home': 'Accueil {app}',
+  'site.forAgents': 'Pour les agents',
   'site.signIn': 'Se connecter',
   'site.createAccount': 'Créer un compte',
 
@@ -322,4 +349,28 @@ export const fr: Record<keyof typeof en, string> = {
   'noExercice.body':
     'Il n’y a rien à dériver, donc aucun {statement} à afficher. Un livre reçoit son plan comptable à sa création ; ouvrir un exercice est une seconde étape, et tout livre commence ici.',
   'noExercice.fromTerminal': 'Depuis le terminal : {suggestion}',
+
+  'agents.eyebrow': 'Pour les agents',
+  'agents.title': 'Piloter {app} depuis un agent.',
+  'agents.metaTitle': 'Pour les agents · {app}',
+  'agents.metaDescription':
+    'Comment un agent IA pilote {app} avec la CLI bk : quoi installer, où trouver les réponses, et que faire quand quelque chose cesse de fonctionner.',
+  'agents.intro':
+    'Les personnes utilisent cette application web ; les agents utilisent {bk}, un binaire Go publié sur npm. Il n’y a pas d’API HTTP à apprendre : les routes derrière l’application web sont une plomberie privée sans contrat public, et tout ce dont un agent a besoin est dans le binaire ou à une commande de distance.',
+  'agents.startTitle': '1 · Pour commencer',
+  'agents.startBody':
+    '{skill} écrit un court fichier de compétence qui oriente votre agent vers les deux sources ci-dessous et ne contient aucun fait susceptible de vieillir.',
+  'agents.answersTitle': '2 · Où se trouvent les réponses',
+  'agents.guideBody':
+    'le comportement de l’outil : chaque procédure, option et mode d’échec. Il est livré dans le binaire, décrit donc exactement la version que vous utilisez, et fonctionne hors ligne.',
+  'agents.metaBody':
+    'l’état actuel des données : vos espaces de travail, les vocabulaires en vigueur et chaque limite imposée par le serveur. Lu en direct ; n’en codez jamais rien en dur.',
+  'agents.helpBody': '{help} sur n’importe quelle commande, avant de l’appeler.',
+  'agents.stuckTitle': '3 · Quand quelque chose cesse de fonctionner',
+  'agents.stuckBody':
+    'Lancez {sync}, puis réessayez. La commande rafraîchit la compétence et, si le binaire lui-même est en retard, affiche la commande de mise à jour exacte. Ce qui a changé, et quand, se trouve dans {changelog} (aussi {route}).',
+  'agents.floorBody':
+    'Chaque réponse de l’API porte {latestHeader} et {minHeader}. Sous le minimum, {bk} refuse de s’exécuter et affiche les commandes de mise à jour au lieu d’échouer avec une erreur obscure.',
+  'agents.current': 'Actuel : CLI la plus récente v{latest} · minimum pris en charge v{min}.',
+  'agents.updateTitle': '4 · Mettre à jour à tout moment',
 }

@@ -39,6 +39,7 @@ import {
   listWorkspacesForUser,
 } from './db/queries/workspaces'
 import { billingFootprintSource } from './db/queries/footprint'
+import { AGENT_MANIFEST } from './agent-manifest'
 
 /**
  * The caller, from a `bk_live_…` bearer token **or** a browser session.
@@ -179,8 +180,14 @@ export const appContext: AppContext = {
   // created. Passed by reference rather than wrapped so the wiring stays
   // observable to a test.
   resolveSessionUser: getValidatedSessionUser,
-  // No `manifest`: this app has no agent landing page yet, and a X-BK-Help
-  // header pointing at a 404 is worse than no header. A real app adds one.
+  // Where a stuck agent goes, advertised on every response as X-BK-Help /
+  // X-BK-Changelog. Added 2026-09-28 with `app/agent-updator/page.tsx` — the
+  // page this header had been waiting for, since a header pointing at a 404 is
+  // worse than no header.
+  manifest: {
+    help: AGENT_MANIFEST.help,
+    changelog: AGENT_MANIFEST.changelog,
+  },
 
   // Withhold `ApiError.details` from `platform.error_events.context` (ticket
   // #756, 2026-09-23). An invoice is a customer's name, address and the

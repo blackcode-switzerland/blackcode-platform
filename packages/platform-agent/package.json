@@ -1,14 +1,15 @@
 {
   "name": "@blackcode/platform-agent",
   "version": "0.0.0",
-  "description": "The agent surface every app shares: the merged changelog feed and the advertised CLI versions (read live from npm).",
+  "description": "The agent surface every app shares: the merged changelog feed, the advertised CLI versions (read live from npm), and the agent manifest / llms.txt renderer.",
   "private": true,
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
     "./changelog": "./src/changelog.ts",
-    "./cli-version": "./src/cli-version.ts"
+    "./cli-version": "./src/cli-version.ts",
+    "./agent-manifest": "./src/agent-manifest.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

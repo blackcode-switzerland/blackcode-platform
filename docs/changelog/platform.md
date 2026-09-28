@@ -7,6 +7,20 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-09-28 — Every app now has an agent front door, rendered from one place
+
+Not breaking. `X-BK-Help` and `X-BK-Changelog` used to come from b/issues only;
+since today every deployed app sets them, and each serves its own
+`/agent-updator` and `/llms.txt` (see each app's entry). `bk guide
+platform/staying-current` already described these headers as being on "every
+API response" — that is now true.
+
+The renderer behind `/llms.txt` and the per-page agent manifest moved from
+b/issues into `@blackcode/platform-agent` (`renderLlmsTxt`,
+`renderAgentManifestNote`, `llmsTxtResponse`); each app supplies only its own
+values. The signed-out light/dark switch is shared too
+(`@blackcode/platform-ui/ui/theme-toggle`).
+
 ## 2026-09-24 — Fix: every app now picks up a new `bk` release, not just the busy ones
 
 **Not breaking.** The same-day change below refreshed the npm lookup in the

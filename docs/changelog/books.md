@@ -11,6 +11,27 @@ complete usage guide, embedded in the binary, so it always describes the version
 you are running. For live values (vocabularies, limits, your books), run
 **`bk meta --app-server books`** and `bk books entity list`.
 
+## 2026-09-28 — An agent front door: `/agent-updator`, `/llms.txt`, and `X-BK-Help` on every response
+
+Not breaking. Additive for agents; no route or command changed.
+
+- **`X-BK-Help: /agent-updator`** and **`X-BK-Changelog: /api/changelog`** are now
+  set on every API response from this app. Until today only b/issues sent them;
+  this app omitted them on purpose, because there was no page for `X-BK-Help` to
+  point at.
+- **`/agent-updator`** is that page: what to install, where the answers live
+  (`bk guide`, `bk meta`), and what to do when something stops working, with the
+  current CLI versions read live. `/agent-updater` redirects to it.
+- **`/llms.txt`** is served, and every HTML page embeds the same pointer as a
+  comment plus a `<script type="application/json" id="agent-manifest">`. Both
+  name ``bk books …`` as the way in. The page is in English and French, like the rest of the signed-out surface.
+
+**How to adapt:** nothing is required. An agent that hits a wall can now follow
+`X-BK-Help` from this app the same way it could from b/issues.
+
+The signed-out pages also gained a light/dark switch and a "For agents" footer
+link (web only).
+
 ## 2026-09-23 — The product name, the contact address and the family name are environment-driven (ticket #756)
 
 Not breaking. No route changed shape; with nothing set, every screen, mail and

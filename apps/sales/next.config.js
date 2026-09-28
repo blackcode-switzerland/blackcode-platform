@@ -37,6 +37,14 @@ const nextConfig = {
     // catches.
     '/api/changelog': ['../../docs/changelog/*.md'],
   },
+  // `/agent-updater` is how anyone writing the link from memory spells it; the
+  // page is `/agent-updator` in every app because apps/issues shipped it that
+  // way and the X-BK-Help header must agree across apps. 307, not 308, so the
+  // spelling stays reversible. Same rule as apps/issues/next.config.js.
+  async redirects() {
+    return [{ source: '/agent-updater', destination: '/agent-updator', permanent: false }]
+  },
+
   images: {
     remotePatterns: [
       {

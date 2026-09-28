@@ -18,6 +18,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
+import { ThemeToggle } from '@blackcode/platform-ui/ui/theme-toggle'
 import { useT } from '@/lib/i18n'
 import { APP_NAME, CONTACT_EMAIL, wordmark } from '@/lib/app'
 
@@ -30,7 +31,12 @@ export function SiteHeader({ children }: { children?: React.ReactNode }) {
           <Image src="/logo.png" alt="" width={20} height={20} className="rounded-[14%]" />
           <span className="text-[15px] font-semibold tracking-tight">{wordmark(APP_NAME)}</span>
         </Link>
-        {children ? <nav className="ml-auto flex items-center gap-2">{children}</nav> : null}
+        {/* The theme switch is on every signed-out page, so it is not the
+            caller's: the login page passes no nav and still gets it. */}
+        <nav className="ml-auto flex items-center gap-2">
+          {children}
+          <ThemeToggle />
+        </nav>
       </div>
     </header>
   )
@@ -42,9 +48,14 @@ export function SiteFooter() {
     <footer className="border-t border-border">
       <div className="mx-auto flex max-w-5xl flex-col gap-2 px-5 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:px-6">
         <span>{t('site.footer')}</span>
-        <a href={`mailto:${CONTACT_EMAIL}`} className="hover:text-foreground sm:ml-auto">
-          {CONTACT_EMAIL}
-        </a>
+        <span className="flex gap-4 sm:ml-auto">
+          <Link href="/agent-updator" className="hover:text-foreground">
+            {t('site.forAgents')}
+          </Link>
+          <a href={`mailto:${CONTACT_EMAIL}`} className="hover:text-foreground">
+            {CONTACT_EMAIL}
+          </a>
+        </span>
       </div>
     </footer>
   )
