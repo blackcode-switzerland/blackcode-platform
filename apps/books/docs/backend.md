@@ -23,7 +23,7 @@ today can be read and never recorded.
 
 What each phase added is in [`docs/books-app-plan/`](../../../docs/books-app-plan/README.md).
 
-**Migrations applied: 21 of 21**, `__drizzle_migrations_books`. `0015`–`0020`
+**Migrations applied: 22 of 22**, `__drizzle_migrations_books`. `0015`–`0022`
 landed after the sentence above was first written, and each changed something a
 caller can see:
 
@@ -36,6 +36,7 @@ caller can see:
 | `0019_source_import_mapping` | `source.import_mapping` (the delimited reader's column map, per issuer) and an index on `draws_from`. There is no "CSV format": every issuer names its columns differently, so the mapping is DATA established once from a real export, not code |
 | `0020_books_remembers_a_workspace` | `books.user_settings(user_id, active_workspace_id)` — the workspace a person last chose. Until then `setDefaultForUser` was a no-op and `POST /api/me/active-workspace` stored nothing; `platform.users.active_workspace_id` is read by every deployment, so a books id cannot go there. Pointer `ON DELETE SET NULL`; the reader re-checks membership. See §10 |
 | `0021_books_workspace_logo` | `books.workspaces.logo_url`, and its `trg_blob_refs_logo` trigger (`blob_refs_sync('books','workspace_logo','id','exact','logo_url')`) in the same file — the first file ever held in a books column, set only through the logo-only `POST/DELETE /api/workspaces/{ws}/logo`. Also re-asserts `platform.apps.maintains_blob_index = true`: 0002's UPDATE matches nothing if the app is registered after it runs, and a local database was found with it false |
+| `0022_openings_can_be_replaced` | `GRANT DELETE ON books.opening_balance TO books_app`, and `trg_opening_frozen` returns `COALESCE(NEW, OLD)` instead of `NEW` — which on DELETE was NULL and silently skipped the row. Together they made `bk books opening set` work at all (blackcode-issues #100). See §4 |
 
 ---
 
@@ -241,10 +242,18 @@ that weakens a guard.
 can stage, line, post and resolve an entry, and it cannot delete an entry, add a
 statement position, or create a table.
 
-`DELETE` is revoked on `entry`, `entry_line`, `ri_entry`, `patrimoine`, `account`,
-`opening_balance` and `exercice`, by privilege **and** by trigger. The trigger
-stops anything running as owner; the revoke shows up in `\dp` where a reviewer
-sees it.
+`DELETE` is revoked on `entry`, `entry_line`, `ri_entry`, `patrimoine`, `account`
+and `exercice`. The revoke shows up in `\dp` where a reviewer sees it; `entry`
+and `ri_entry` also refuse DELETE by trigger, for anything running as owner.
+
+**`opening_balance` is the exception, since `0022` (2026-09-29).** 0005 revoked
+DELETE there too, and `setOpenings` replaces a first year's set with
+DELETE-then-INSERT — so `bk books opening set` returned 500 for every payload
+from the day it shipped, while every test passed as a role that still held
+DELETE (blackcode-issues #100). What the revoke meant to protect, a filed year's
+openings, is enforced by `trg_opening_frozen` (0016) for every role, and the
+door refuses any year but a book's first. `year.test.ts` asserts the grant
+against the catalog, so it holds whichever role the suite runs as.
 
 `books.statement_position` is `SELECT` only. The law is not runtime-editable.
 

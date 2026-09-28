@@ -232,7 +232,7 @@ See `docs/2026-08-multi-app-refactor.md`.
 
 `apps/books` went to production on 2026-08-20 as the **third** app, and it never
 had a `platform.*` tenancy to move: `books.*` carried its own `workspaces`,
-`workspace_members` and counters from migration `0001`, and twenty-one
+`workspace_members` and counters from migration `0001`, and twenty-two
 migrations later it still reads nothing outside `platform.{users,apps,api_tokens,
 password_reset_otps,email_whitelist,blob_references}`. It is the first app to
 follow `docs/adding-an-app.md` end to end, which is the only evidence that

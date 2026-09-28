@@ -187,6 +187,9 @@ export async function setOpenings(
   const written = await db.transaction(async (tx) => {
     // Whole-set replace, inside the transaction, so a failed write cannot
     // leave the year holding half of one balance sheet and half of another.
+    // Needs DELETE on books.opening_balance, which 0005 revoked and 0022 gave
+    // back (blackcode-issues #100); trg_opening_frozen keeps a closed year's
+    // rows out of reach of this statement.
     await tx
       .delete(booksOpeningBalance)
       .where(
