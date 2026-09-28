@@ -57,7 +57,6 @@ import {
   Sun,
   Sparkles,
   Trash2,
-  Users,
   type LucideIcon,
 } from 'lucide-react'
 import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
@@ -100,9 +99,10 @@ const NAV_CATALOG: NavEntry[] = [
 // linked, because a page reachable only by typing its URL is a page nobody uses
 // — the mirror of the nav-item-with-no-route problem above.
 //
-// Members arrived here on 2026-08-11 from `/dashboard/settings/members`, where
-// it was filed beside four ACCOUNT pages while being the only workspace-scoped
-// one of the five. Above Trash: it is the one of the two people actually open.
+// Members was an entry here from 2026-08-11 to 2026-09-28, when the team and
+// its invitations became sections of Settings — the page every blackcode app
+// now shares (`@blackcode/platform-ui/workspace/*`). `/dashboard/{ws}/members`
+// redirects there.
 //
 // Settings arrived 2026-09-11 with the D-3 reversal (create/rename/transfer/
 // delete a workspace) — `Landmark` reads as "the institution itself" without
@@ -112,7 +112,6 @@ const NAV_CATALOG: NavEntry[] = [
 // often than Members or Trash, and the workspace switcher's own "Manage
 // workspace" row is the door most people actually use.
 const NAV_UTILITY: NavEntry[] = [
-  { seg: '/members', label: 'Members', icon: Users },
   { seg: '/trash', label: 'Trash', icon: Trash2 },
   { seg: '/settings', label: 'Settings', icon: Landmark },
 ]

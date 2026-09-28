@@ -25,12 +25,13 @@
 //                          for a bootstrap that threw, and shows the error.
 //   1 workspace          → redirect straight there, unless `?new=1`
 //   several workspaces   → redirect to the REMEMBERED one
-//                          (`platform.users.active_workspace_id`, resolved
-//                          against THIS app's membership so it can only ever
-//                          point at a workspace of ours) when there is one;
-//                          otherwise a chooser, listing every workspace with
-//                          the `workspace-<slug>` testids a Playwright walk
-//                          depends on
+//                          (`billing.user_settings`, migration 0014 — until
+//                          2026-09-28 this read `platform.users
+//                          .active_workspace_id`, which this app never writes,
+//                          so it never matched), when it is still one of ours;
+//                          otherwise the shared chooser, whose rows keep the
+//                          `workspace-<slug>` testids a Playwright walk
+//                          depends on, and which remembers the choice
 //   `?new=1`              → always shows the create-workspace screen instead
 //                          of redirecting, regardless of count — the
 //                          workspace switcher's "Create workspace" link uses it
@@ -69,13 +70,12 @@
 // A pending invitation wins over a mint: somebody invited into an existing
 // workspace should land on the invitation, not in an empty tenant of their own.
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
-import { Building2, Plus } from 'lucide-react'
 import { getValidatedSessionUser } from '@/lib/auth/session'
-import { ensureWorkspaceForUser, listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { ensureWorkspaceForUser, getStoredActiveWorkspaceId, listWorkspacesForUser } from '@/lib/db/queries/workspaces'
 import { listPendingInvitationsForEmail } from '@/lib/db/queries/invitations'
 import { NoWorkspace } from '@/components/no-workspace'
 import { CreateWorkspaceForm } from '@/components/create-workspace-form'
+import { BillingWorkspaceChooser } from '@/components/workspace-chooser'
 
 export const dynamic = 'force-dynamic'
 
@@ -119,61 +119,31 @@ export default async function DashboardPage({
     // More than one: go where they last were, if that is still a workspace
     // they belong to. `getWorkspaceForUser`-style membership is already
     // implied by `mine`, so this is a plain lookup, not a second query.
-    const remembered =
-      user.active_workspace_id != null
-        ? mine.find((w) => w.id === user.active_workspace_id)
-        : undefined
+    const storedId = await getStoredActiveWorkspaceId(user.id)
+    const remembered = storedId != null ? mine.find((w) => w.id === storedId) : undefined
     if (remembered) redirect(`/dashboard/${remembered.slug}`)
+  }
+
+  if (!wantsCreate) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <BillingWorkspaceChooser workspaces={mine} />
+      </div>
+    )
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm space-y-6">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">
-            {wantsCreate ? 'Create a workspace' : 'Choose a workspace'}
-          </h1>
+          <h1 className="text-lg font-semibold text-foreground">Create a workspace</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {wantsCreate
-              ? 'A workspace is a tenant — one is enough even if you bill under several companies, which live inside it.'
-              : `You can reach ${mine.length} workspaces here. This choice is remembered — switch any time from the sidebar.`}
+            A workspace is a tenant — one is enough even if you bill under several companies, which live inside it.
           </p>
         </div>
-
-        {wantsCreate ? (
-          <div className="rounded-xl border border-border bg-card p-4">
-            <CreateWorkspaceForm />
-          </div>
-        ) : (
-          <>
-            <div className="space-y-1.5" data-testid="workspaces">
-              {mine.map((w) => (
-                <Link
-                  key={w.id}
-                  href={`/dashboard/${w.slug}`}
-                  data-testid={`workspace-${w.slug}`}
-                  className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-sm transition-colors hover:bg-accent"
-                >
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Building2 size={15} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium text-foreground">{w.name}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{w.slug}</span>
-                  </span>
-                </Link>
-              ))}
-            </div>
-            <Link
-              href="/dashboard?new=1"
-              data-testid="new-workspace"
-              className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-            >
-              <Plus size={14} />
-              Create workspace
-            </Link>
-          </>
-        )}
+        <div className="rounded-xl border border-border bg-card p-4">
+          <CreateWorkspaceForm />
+        </div>
       </div>
     </div>
   )

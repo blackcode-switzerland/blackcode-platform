@@ -19,6 +19,7 @@ export function useWorkspaceLabels(): WorkspaceLabels {
       chooseWorkspace: t('ws.chooseWorkspace'),
       owner: t('ws.owner'),
       member: t('ws.member'),
+      ownedBy: (who) => t('ws.ownedBy', { who }),
       createWorkspace: t('ws.createWorkspace'),
       manage: (name) => t('ws.manage', { name }),
       createTitle: t('ws.createTitle'),

@@ -13,7 +13,7 @@ import { useState } from 'react'
 import { ChevronRight, Loader2, Plus } from 'lucide-react'
 import { WorkspaceMark } from './workspace-mark'
 import { withDefaults, type WorkspaceLabels } from './labels'
-import type { SwitcherWorkspace } from './workspace-switcher'
+import { roleLine, type SwitcherWorkspace } from './workspace-switcher'
 
 export function WorkspaceChooser({
   workspaces,
@@ -49,14 +49,14 @@ export function WorkspaceChooser({
               type="button"
               onClick={() => void choose(ws)}
               disabled={pending !== null}
-              data-testid={`choose-workspace-${ws.slug}`}
+              data-testid={`workspace-${ws.slug}`}
               className="flex w-full items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40 disabled:opacity-60"
             >
               <WorkspaceMark name={ws.name} logoUrl={ws.logo_url} size={32} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{ws.name}</span>
                 <span className="block truncate text-xs text-muted-foreground">
-                  {ws.member_role === 'owner' ? L.owner : L.member} · <span className="font-mono">{ws.slug}</span>
+                  {roleLine(ws, L)} · <span className="font-mono">{ws.slug}</span>
                 </span>
               </span>
               {pending === ws.slug ? (
@@ -72,7 +72,7 @@ export function WorkspaceChooser({
         <button
           type="button"
           onClick={onCreate}
-          data-testid="chooser-create-workspace"
+          data-testid="new-workspace"
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
         >
           <Plus size={15} />

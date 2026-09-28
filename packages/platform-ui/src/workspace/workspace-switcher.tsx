@@ -28,6 +28,19 @@ export interface SwitcherWorkspace {
   slug: string
   member_role: 'owner' | 'member'
   logo_url?: string | null
+  /**
+   * Who owns it, for a workspace that is not yours — a name, or an email.
+   * From apps/sales (2026-08-12): "Member" does not tell two workspaces apart
+   * when one is somebody else's called "My Workspace"; "Owned by Priya" does.
+   */
+  owner_label?: string | null
+}
+
+/** The second line under a workspace's name: whose it is, then its slug. */
+export function roleLine(ws: SwitcherWorkspace, L: Pick<WorkspaceLabels, 'owner' | 'member' | 'ownedBy'>): string {
+  if (ws.member_role === 'owner') return L.owner
+  const owner = ws.owner_label?.trim()
+  return owner ? L.ownedBy(owner) : L.member
 }
 
 export function WorkspaceSwitcher({
@@ -143,7 +156,7 @@ export function WorkspaceSwitcher({
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13px]">{ws.name}</span>
                         <span className="block truncate text-[11px] text-muted-foreground">
-                          {ws.member_role === 'owner' ? L.owner : L.member} · <span className="font-mono">{ws.slug}</span>
+                          {roleLine(ws, L)} · <span className="font-mono">{ws.slug}</span>
                         </span>
                       </span>
                       {pending === ws.slug ? (

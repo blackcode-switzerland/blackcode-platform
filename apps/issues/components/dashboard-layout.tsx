@@ -17,7 +17,7 @@ import {
   BarChart3,
   Clock,
   Inbox,
-  Users,
+  Settings2,
   Tag,
   Trash2,
   Menu,
@@ -44,16 +44,19 @@ const NAV_PRIMARY = [
 // Workspace-scoped nav. `seg` is the path under /dashboard/{ws}; the href and
 // active-match are built per-render from the current workspace slug. `countKey`
 // maps to the sidebar count badges.
-type CountKey = 'projects' | 'tasks' | 'issues' | 'labels' | 'members'
+type CountKey = 'projects' | 'tasks' | 'issues' | 'labels'
 const NAV_WORKSPACE: { seg: string; label: string; icon: LucideIcon; countKey?: CountKey }[] = [
   { seg: '', label: 'Projects', icon: LayoutGrid, countKey: 'projects' },
   { seg: '/tasks', label: 'Tasks', icon: Target, countKey: 'tasks' },
   { seg: '/issues', label: 'Issues', icon: List, countKey: 'issues' },
   { seg: '/labels', label: 'Labels', icon: Tag, countKey: 'labels' },
-  { seg: '/members', label: 'Members', icon: Users, countKey: 'members' },
   { seg: '/activity', label: 'Activity', icon: Clock },
   { seg: '/analytics', label: 'Analytics', icon: BarChart3 },
   { seg: '/trash', label: 'Trash', icon: Trash2 },
+  // Name, logo, members, invitations, storage and deletion — the settings page
+  // every blackcode app shares (2026-09-28). It replaced a Members entry here;
+  // `/members` redirects to it.
+  { seg: '/settings', label: 'Settings', icon: Settings2 },
 ]
 
 
@@ -93,14 +96,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     enabled: !!ws,
     queryFn: async () => {
       const slug = ws!.slug
-      const [p, m, i, l, mem] = await Promise.all([
+      const [p, m, i, l] = await Promise.all([
         fetch(`/api/workspaces/${slug}/projects`).then((r) => r.json()).then((j) => (j.data ?? j).length as number),
         fetch(`/api/workspaces/${slug}/tasks`).then((r) => r.json()).then((j) => (j.total ?? j.data?.length ?? 0) as number),
         fetch(`/api/workspaces/${slug}/issues`).then((r) => r.json()).then((j) => (j.total ?? j.data?.length ?? 0) as number),
         fetch(`/api/workspaces/${slug}/labels`).then((r) => r.json()).then((j) => (j.data ?? j).length as number),
-        fetch(`/api/workspaces/${slug}/members`).then((r) => r.json()).then((j) => (j.data ?? j).length as number),
       ])
-      return { projects: p, tasks: m, issues: i, labels: l, members: mem }
+      return { projects: p, tasks: m, issues: i, labels: l }
     },
   })
 

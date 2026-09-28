@@ -54,7 +54,9 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const SOURCE = join(__dirname, 'member-settings.tsx')
+// Retargeted 2026-09-28: the members and invitations lists moved from
+// `member-settings.tsx` (deleted) into `workspace-settings.tsx`, with the page.
+const SOURCE = join(__dirname, 'workspace-settings.tsx')
 const raw = readFileSync(SOURCE, 'utf8')
 
 // STRIP COMMENTS BEFORE SCANNING. The first version of this file did not, and
@@ -64,12 +66,25 @@ const raw = readFileSync(SOURCE, 'utf8')
 // which did not stop it happening here.
 const src = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-/** Every `apiGet<…>(…)` call in the file, with its type argument. */
+/**
+ * Every `apiGet<…>(wsPath(ws, '/<list>'))` call in the file, with its type
+ * argument — the LIST reads this file exists to check.
+ *
+ * Tightened 2026-09-28, when the file started also reading the workspace
+ * itself (`apiGet<WorkspaceDetail>(wsPath(ws, ''))`), a single resource that is
+ * correctly NOT an envelope. The old pattern, `apiGet<([^>]*(?:>[^>]*)?)>\(`,
+ * let a bare `apiGet<X>(` run on to the NEXT call's `>(`, so the "type
+ * argument" it reported was forty characters of code — the granularity of a
+ * text scan is part of what it checks (CLAUDE.md finding #11). Now: one
+ * generic level at most, the argument is captured, and the workspace's own
+ * path (empty sub-path) is not a list.
+ */
 function apiGetCalls(): string[] {
-  return [...src.matchAll(/apiGet<([^>]*(?:>[^>]*)?)>\(/g)].map((m) => m[1].trim())
+  const re = /apiGet<([^<>]*(?:<[^<>]*>[^<>]*)*)>\(\s*wsPath\(\s*ws\s*,\s*'([^']*)'\s*\)/g
+  return [...src.matchAll(re)].filter((m) => m[2] !== '').map((m) => m[1].trim())
 }
 
-describe('member-settings.tsx list queries', () => {
+describe('workspace-settings.tsx list queries', () => {
   it('PREMISE: the file makes at least two apiGet calls', () => {
     // Without this, every assertion below passes on a file that was renamed,
     // emptied, or had its calls refactored out of textual reach.

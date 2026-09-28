@@ -10,9 +10,17 @@
 //
 // So this is this app's own — and since Phase 3 it records its event too, in
 // `sales.events`, beside everything else that happens in this workspace.
+//
+// ---------------------------------------------------------------------------
+// THE OWNER FOR ANYONE, A MEMBER FOR THEMSELVES (2026-09-28)
+// ---------------------------------------------------------------------------
+// Removing yourself is LEAVING, and this is the one route for both — the
+// shape apps/billing and apps/books have. Until 2026-09-28 it was owner-only,
+// which left a sales member no way out short of asking; the web's "Leave
+// workspace" button and `bk sales member remove <your id>` both call this now.
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors } from '@blackcode/platform-api'
-import { apiHandler, resolveWorkspace, requireOwner } from '@/lib/api'
+import { apiHandler, resolveWorkspace } from '@/lib/api'
 import { getDb } from '@/lib/db/client'
 import { resolveActor } from '@/lib/actor'
 import { removeMember } from '@/lib/db/queries/workspaces'
@@ -29,7 +37,13 @@ export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) =>
   }
 
   const ctx = await resolveWorkspace(req, ws)
-  requireOwner(ctx)
+  const self = targetId === ctx.user.id
+  if (!self && ctx.role !== 'owner') {
+    throw Errors.forbidden(
+      'Only the workspace owner can remove other members',
+      'you can remove yourself (leave): bk sales member remove <your user id>'
+    )
+  }
 
   // The owner cannot be removed, for the reason the platform route gives: they
   // are the only person who can grant anything back, and this route is behind a
@@ -54,5 +68,5 @@ export const DELETE = apiHandler(async (req: NextRequest, { params }: Params) =>
   const actor = await resolveActor(getDb(), req, ctx.user)
   const removed = await removeMember(ctx.workspace.id, targetId, actor)
   if (!removed) throw Errors.notFound('member')
-  return NextResponse.json({ removed: true })
+  return NextResponse.json({ removed: true, left: self })
 })

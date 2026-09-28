@@ -6,6 +6,15 @@ entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
 
+## 2026-09-28 — The workspace screens are the shared ones; `/dashboard` remembers
+
+Web only. The switcher, create modal, `/dashboard` chooser, invitation page and
+workspace settings sections are the ones every blackcode app now renders — this
+app's were the model for them. Visible differences: the chooser now remembers
+your choice (it read a column this app never wrote, so it asked every time), the
+workspace mark is coloured per workspace, and members show an owner badge.
+Routes, `bk billing` commands and test ids are unchanged.
+
 ## 2026-09-28 — Fix: the chosen workspace is actually remembered
 
 Not breaking. `POST /api/me/active-workspace` (the web switcher, and `bk billing

@@ -47,7 +47,7 @@
 
 import { redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
-import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { getStoredActiveWorkspaceId, listWorkspacesWithOwnerForUser } from '@/lib/db/queries/workspaces'
 import { PageTitle, SalesShell } from '@/components/sales-shell'
 import { SettingsNav } from '@/components/settings/settings-nav'
 
@@ -55,8 +55,14 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   const user = await getValidatedSessionUser()
   if (!user) redirect('/login')
 
-  const memberships = await listWorkspacesForUser(user.id)
-  const ws = memberships[0]?.slug ?? null
+  const [memberships, storedId] = await Promise.all([
+    listWorkspacesWithOwnerForUser(user.id),
+    getStoredActiveWorkspaceId(user.id),
+  ])
+  // The workspace you were last in (not merely the oldest), and the whole list
+  // for the sidebar switcher. Until 2026-09-28 no list was passed, so on these
+  // pages the switcher read "No workspace" with nothing to choose from.
+  const ws = (memberships.find((w) => w.id === storedId) ?? memberships[0])?.slug ?? null
 
   const body = (
     <div className="mx-auto max-w-3xl">
@@ -74,7 +80,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   if (ws === null) return <div className="px-6 py-8">{body}</div>
 
   return (
-    <SalesShell ws={ws}>
+    <SalesShell ws={ws} workspaces={memberships}>
       <PageTitle title="Settings" />
       {body}
     </SalesShell>

@@ -30,5 +30,5 @@ export default async function Page({ params }: { params: Promise<{ ws: string }>
   const here = mine.find((w) => w.slug === ws)
   if (!here) notFound()
 
-  return <WorkspaceSettings ws={here.slug} isOwner={here.member_role === 'owner'} />
+  return <WorkspaceSettings ws={here.slug} isOwner={here.member_role === 'owner'} meId={user.id} />
 }

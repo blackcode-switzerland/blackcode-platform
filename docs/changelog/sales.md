@@ -22,6 +22,25 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-09-28 — A member can leave a workspace; members and invitations move into Settings
+
+**Behaviour change, not breaking:** `DELETE /api/workspaces/{ws}/members/{userId}`
+(`bk sales member remove <user_id>`) now accepts a MEMBER removing
+**themselves** — that is how you leave, and it answers `{ removed: true, left:
+true }`. Removing anyone else is still owner-only (403), and the owner still
+cannot be removed or leave (`cannot_remove_owner`; transfer first). Until today
+a sales member had no way out short of asking the owner.
+
+Web: the workspace switcher, create modal, chooser, invitation page and
+Settings sections are the ones every blackcode app now shares. Members and
+invitations are sections of `/dashboard/{ws}/settings`; `/dashboard/{ws}/members`
+redirects there. Removing a member and revoking an invitation now ask first,
+and deleting a workspace asks you to type its **slug** (it asked for the name).
+The `/dashboard` chooser now remembers what you pick. In read-only mode the
+invitations section is hidden, as before.
+
+**How to adapt:** nothing is required.
+
 ## 2026-09-11 — You can now create, rename, transfer, and delete b/sales workspaces
 
 **Not breaking**; every existing route, command and stored workspace keeps

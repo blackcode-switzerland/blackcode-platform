@@ -35,6 +35,28 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-09-28 — Workspaces: a dropdown switcher, and settings inside the workspace
+
+Web only; no route or `bk issues` command changed.
+
+- **The sidebar switcher is a dropdown** — your workspaces with your role, plus
+  "Create workspace" and "Manage" — the one every blackcode app now shares. It
+  used to link to a list page.
+- **Settings live at `/dashboard/{ws}/settings`**: name, logo, members,
+  invitations, storage, and delete (or leave). It replaces
+  `/dashboard/workspaces/{slug}`, `/dashboard/{ws}/members` and
+  `/dashboard/{ws}/members/invite`, which all redirect there. The sidebar's
+  "Members" entry became "Settings".
+- A member can **leave** from the web (the route and `bk issues member leave`
+  existed; no button called them). Revoking an invitation now asks first, and
+  deleting a workspace asks you to type its **slug** (it asked for the name).
+- `/dashboard/workspaces` is the shared workspace chooser; `/dashboard/workspaces/new`
+  opens the create modal on it. Creating asks for a name only — set the logo in
+  Settings.
+- **Fix:** `/invitations/{token}`, opened by somebody signed in as a different
+  address, printed the address the invitation was sent to. It now names only
+  yours, as the other apps do.
+
 ## 2026-08-13 — projects take a logo, and four project fields stopped being silently dropped
 
 ### The bug first, because it is the breaking-ish part

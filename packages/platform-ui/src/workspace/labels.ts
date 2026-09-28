@@ -18,6 +18,7 @@ export interface WorkspaceLabels {
   chooseWorkspace: string
   owner: string
   member: string
+  ownedBy: (who: string) => string
   createWorkspace: string
   manage: (name: string) => string
 
@@ -106,6 +107,7 @@ export const DEFAULT_WORKSPACE_LABELS: WorkspaceLabels = {
   chooseWorkspace: 'Choose a workspace',
   owner: 'Owner',
   member: 'Member',
+  ownedBy: (who) => `Owned by ${who}`,
   createWorkspace: 'Create workspace',
   manage: (name) => `Manage ${name}`,
 
