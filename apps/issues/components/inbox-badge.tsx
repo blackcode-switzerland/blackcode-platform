@@ -13,7 +13,9 @@ export function InboxBadge() {
   const { data } = useQuery({
     queryKey: ['inbox-unread'],
     queryFn: fetchUnreadCount,
-    refetchInterval: 120_000,
+    // No polling: a timer here kept the database awake for as long as any tab
+    // was open. The count refreshes on window focus, on navigation and after an
+    // inbox mutation, and the inbox page has a manual refresh button.
     refetchOnWindowFocus: true,
   })
   if (!data || data <= 0) return null

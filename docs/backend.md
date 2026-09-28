@@ -334,8 +334,10 @@ are a separate credential and are unaffected.
 
 - Plaintext format: `bk_live_` + 32 random bytes (base64url). **Shown once.**
 - Stored as `token_hash` (SHA-256) plus a `token_prefix` for display; verified
-  with a timing-safe comparison; `last_used_at` is updated on use; optional
-  `expires_at` is honored.
+  with a timing-safe comparison; `last_used_at` is stamped on use but **at most
+  once per UTC day** (it is read as a date, and a write per request kept the
+  database awake — `verifyToken` skips the `UPDATE` entirely when the stored
+  value already has today's date); optional `expires_at` is honored.
 - Sent as `Authorization: Bearer <token>`.
 
 **CLI authorize flow** (`POST /api/cli/authorize`,

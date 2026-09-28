@@ -58,6 +58,10 @@ function toDate(v: unknown): Date | null {
   return v instanceof Date ? v : new Date(String(v))
 }
 
+function isSameUtcDay(a: Date, b: Date): boolean {
+  return a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10)
+}
+
 export async function mintToken(
   db: Executor,
   opts: {
@@ -111,7 +115,7 @@ export async function verifyToken(db: Executor, plaintext: string): Promise<User
   const expected_buf = Buffer.from(expected_hash, 'hex')
 
   const res = await db.execute(sql`
-    SELECT id, user_id, token_hash, expires_at
+    SELECT id, user_id, token_hash, expires_at, last_used_at
     FROM ${apiTokens}
     WHERE token_hash = ${expected_hash}
     LIMIT 1
@@ -131,9 +135,17 @@ export async function verifyToken(db: Executor, plaintext: string): Promise<User
   const expiresAt = toDate(candidate.expires_at)
   if (expiresAt && expiresAt.getTime() < Date.now()) return null
 
-  await db.execute(sql`
-    UPDATE ${apiTokens} SET last_used_at = now() WHERE id = ${candidate.id}
-  `)
+  // `last_used_at` is a DAY, not a timestamp: the only reader shows a date
+  // (account-settings' token list, `bk token list`), and this runs on every
+  // authenticated request — an agent loop would otherwise write a row per call.
+  // The stamp is skipped, with no statement issued at all, when it already
+  // carries today's date. Same-day races just stamp twice, which is harmless.
+  const lastUsed = toDate(candidate.last_used_at)
+  if (!lastUsed || !isSameUtcDay(lastUsed, new Date())) {
+    await db.execute(sql`
+      UPDATE ${apiTokens} SET last_used_at = now() WHERE id = ${candidate.id}
+    `)
+  }
 
   const userRes = await db.execute(sql`
     SELECT * FROM ${users} WHERE id = ${candidate.user_id} LIMIT 1
