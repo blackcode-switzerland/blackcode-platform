@@ -50,7 +50,15 @@ export function AccountSettingsFrame({
 }) {
   return (
     <div className={cn('mx-auto w-full max-w-3xl', !bare && 'px-4 py-6 sm:px-6')}>
-      <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-border" aria-label="Settings" data-testid="settings-tabs">
+      {/* The rule under the tabs is an inset shadow, not a border, and the tabs
+          have no `-mb-px`: `overflow-x-auto` makes the strip scroll vertically
+          too, so a tab poking 1px below it drew a vertical scrollbar wherever
+          scrollbars are always shown (apps/issues styles them so). */}
+      <nav
+        className="mb-6 flex gap-1 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--color-border)] [scrollbar-width:none]"
+        aria-label="Settings"
+        data-testid="settings-tabs"
+      >
         {tabs.map((t) => (
           <Link
             key={t.href}
@@ -58,7 +66,7 @@ export function AccountSettingsFrame({
             data-testid={t.testId}
             aria-current={t.active ? 'page' : undefined}
             className={cn(
-              '-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+              'shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
               t.active
                 ? 'border-primary text-foreground'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
