@@ -447,7 +447,8 @@ export const blobReferences = platformSchema.table(
     // pasted between workspaces) and a reference must still count.
     url: text('url').notNull(),
     // Who holds the reference. `'platform'` for content in platform-owned
-    // tables (comments), which belongs to no single app. No FK to apps.slug,
+    // tables (comments; `platform.users.avatar_url` since apps/issues migration
+    // 0050), which belongs to no single app. No FK to apps.slug,
     // for that reason and because deregistering an app must not silently drop
     // its references and unblock a delete.
     app: varchar('app', { length: 40 }).notNull(),

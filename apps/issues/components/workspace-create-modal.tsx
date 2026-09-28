@@ -1,133 +1,75 @@
 'use client'
 
-import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+// "Create workspace" — the shared `CreateWorkspaceModal` since 2026-09-28, one
+// for every app; this file is issues' wiring. Opened from the sidebar switcher,
+// the `/dashboard/workspaces` chooser, and (not dismissible) the zero-workspace
+// onboarding screen.
+//
+// A name only. The logo field it used to carry moved to the workspace's
+// settings (General → Logo), where every app with a logo sets it — so creating
+// a workspace is one field everywhere. The API still accepts `logo_url` on
+// create, for `bk issues workspace create`.
+
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
-import { Modal } from '@blackcode/platform-ui/ui/modal'
-import { ImageUploadField } from './image-upload-field'
+import { CreateWorkspaceModal as SharedModal } from '@blackcode/platform-ui/workspace/create-workspace-modal'
+
+interface CreatedWorkspace {
+  id: number
+  name: string
+  slug: string
+}
 
 interface Props {
   open: boolean
   onClose: () => void
-  /** Prefill the name (e.g. "Bala's Workspace"). */
   defaultName?: string
-  /** Called with the created workspace after it's set active. */
-  onCreated?: (ws: { id: number; slug: string; key: string; name: string }) => void
-  /** When false, hides Cancel/close (e.g. onboarding where a workspace is required). */
+  onCreated?: (ws: CreatedWorkspace) => void
+  /** False for the first workspace, which must exist before anything else can. */
   dismissible?: boolean
 }
 
-// Reusable "create workspace" modal — name + square logo. Used by the sidebar
-// switcher and the onboarding screen for consistency.
-export function WorkspaceCreateModal({
-  open,
-  onClose,
-  defaultName = '',
-  onCreated,
-  dismissible = true,
-}: Props) {
+export function CreateWorkspaceModal({ open, onClose, defaultName = '', onCreated, dismissible = true }: Props) {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const [name, setName] = useState(defaultName)
-  const [logoUrl, setLogoUrl] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  // Keep the field seeded if defaultName changes while closed.
-  if (!open && name !== defaultName && name === '') {
-    setName(defaultName)
-  }
-
-  async function create(e: React.FormEvent) {
-    e.preventDefault()
-    const trimmed = name.trim()
-    if (!trimmed) {
-      toast.error('Enter a workspace name')
-      return
-    }
-    setLoading(true)
-    try {
-      const res = await fetch('/api/workspaces', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: trimmed, logo_url: logoUrl }),
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error ?? 'Could not create workspace')
-      }
-      const ws = await res.json()
-      await fetch('/api/me/active-workspace', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspace_id: ws.id }),
-      })
-      toast.success(`Created ${ws.name}`)
-      await queryClient.invalidateQueries()
-      setName('')
-      setLogoUrl(null)
-      onCreated?.(ws)
-      onClose()
-      router.refresh()
-    } catch (err) {
-      toast.error((err as Error).message)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   return (
-    <Modal
+    <SharedModal
       open={open}
       onClose={onClose}
+      defaultName={defaultName}
       dismissible={dismissible}
-      title="Create workspace"
-      description="A workspace holds your projects, tasks, issues, and team."
-    >
-      <form onSubmit={create} className="space-y-4">
-        <div>
-          <label className="mb-1.5 block text-xs font-medium">Logo</label>
-          <ImageUploadField
-            value={logoUrl}
-            onChange={setLogoUrl}
-            fallbackText={name || 'W'}
-          />
-          <p className="mt-1.5 text-[11px] text-muted-foreground">
-            Square image works best. Optional — we&apos;ll use the first letter otherwise.
-          </p>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium">Name</label>
-          <input
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={80}
-            placeholder="Acme Inc."
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-        <div className="flex justify-end gap-2 pt-1">
-          {dismissible ? (
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
-            >
-              Cancel
-            </button>
-          ) : null}
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {loading ? <Loader2 size={14} className="animate-spin" /> : null}
-            Create workspace
-          </button>
-        </div>
-      </form>
-    </Modal>
+      labels={{
+        createDescription: 'A workspace holds your projects, tasks, issues, and team.',
+        namePlaceholder: 'Acme Inc.',
+      }}
+      onCreate={async (name) => {
+        const res = await fetch('/api/workspaces', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        })
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          toast.error(j.error ?? 'Could not create workspace')
+          throw new Error(j.error ?? 'create failed')
+        }
+        const ws: CreatedWorkspace = await res.json()
+        await fetch('/api/me/active-workspace', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspace_id: ws.id }),
+        })
+        toast.success(`Created ${ws.name}`)
+        await queryClient.invalidateQueries()
+        onCreated?.(ws)
+        router.push(`/dashboard/${encodeURIComponent(ws.slug)}`)
+        router.refresh()
+      }}
+    />
   )
 }
+
+/** The old name, kept for the onboarding screen's import. */
+export const WorkspaceCreateModal = CreateWorkspaceModal

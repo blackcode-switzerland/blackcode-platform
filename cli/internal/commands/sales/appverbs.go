@@ -108,6 +108,7 @@ func appOwnedVerbs() []*cobra.Command {
 		Labels:           true,
 		Workspace:        true,
 		WorkspaceAdmin:   true,
+		WorkspaceLogo:    true,
 		Members:          true,
 		MemberRemove:     true,
 		Invites:          true,

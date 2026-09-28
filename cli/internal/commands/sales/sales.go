@@ -73,8 +73,7 @@ text does not list them.
 
 THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
-  bk sales workspace  list, show, use. There is no create/edit/delete here: a
-                      workspace is the COMPANY (D-3), and you are granted one
+  bk sales workspace  list, show, use, create, edit, transfer, delete, logo
   bk sales member     list, remove
   bk sales invite     send, list, revoke, candidates; show, accept, decline,
                       pending (redeeming one addressed to you)

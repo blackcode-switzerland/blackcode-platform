@@ -106,5 +106,4 @@ JSON
 ## What is still not reachable
 
 A book's patrimoine (the net-worth statement for a sole proprietorship) has no
-write door, and an invitation cannot yet be accepted, so a workspace stays
-single-member. Neither blocks statutory bookkeeping.
+write door. It does not block statutory bookkeeping.

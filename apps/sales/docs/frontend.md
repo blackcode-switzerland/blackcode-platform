@@ -150,19 +150,26 @@ comes back the day somebody writes one.
 right.
 
 - Nav: Today · Metrics · Prospects · Meetings · Communications · Activity, then
-  **Catalog**: Products · Templates · Documents, then **Members · Trash**.
-  Members arrived here on 2026-08-11 from `/dashboard/settings/members` — see §9.
+  **Catalog**: Products · Templates · Documents, then **Trash · Settings**.
+  A **Members** entry sat here from 2026-08-11 to 2026-09-28; the team and its
+  invitations are sections of Settings now — see §9.1.
 - **Workspace switcher, create-workspace flow, and workspace settings — all
   three since 2026-09-11 (D-3 reversed).** This bullet used to read "No
   workspace switcher and no create-workspace flow (D-3)." `WorkspaceSwitcher`
   now always renders (it used to return `null` below two memberships — see its
   own header for the full reasoning) and carries "Create workspace" and
   "Manage workspace" rows; the latter opens `/dashboard/{ws}/settings`
-  (`components/settings/workspace-settings.tsx`) for rename, transfer and
-  delete. `/dashboard` itself is UNCHANGED: it still resolves the remembered
-  workspace and redirects to `/dashboard/{ws}`; more than one with nothing
-  remembered still renders a picker rather than guessing, because landing
-  somebody in the wrong workspace is a silent failure.
+  (`components/settings/workspace-settings.tsx`). **Since 2026-09-28 all of
+  it is the shared kit** (`@blackcode/platform-ui/workspace/*`, root
+  `docs/frontend.md` → *Workspace management*): the switcher, the name-only
+  create modal, the settings sections and the invitation card are the ones
+  every app renders, and these files are their wiring. `/dashboard` still
+  resolves the remembered workspace and redirects to `/dashboard/{ws}`; more
+  than one with nothing remembered still asks rather than guessing, because
+  landing somebody in the wrong workspace is a silent failure — but it asks
+  with the shared chooser (`components/workspace-chooser.tsx`), whose choice
+  **is** remembered. The old picker said "this choice is remembered" over plain
+  links that wrote nothing.
 - Header title defaults to the nav label for the page and is overridable with
   `usePageTitle()` — a prospect detail page's title is a company name and no
   static table can hold it.
@@ -276,11 +283,11 @@ not repeated here. Two things are this app's own:
 | `/dashboard/{ws}/strategies` | why a SEGMENT was chosen — §7.4, and reusable across prospects (2026-08-17) |
 | `/dashboard/{ws}/activity` | what changed and who changed it — §7.7 |
 | `/dashboard/{ws}/search` | grouped, faceted full search — §7.8 |
-| `/dashboard/{ws}/members` | your team, and who has been invited — §9.1 (was `/dashboard/settings/members` until 2026-08-11) |
+| `/dashboard/{ws}/members` | a redirect to `/dashboard/{ws}/settings` since 2026-09-28 (it was the team page — §9.1) |
 | `/dashboard/{ws}/trash` | the bin, read-only in both modes |
-| `/dashboard/{ws}/settings` | rename, transfer ownership, delete this workspace — owner only, new 2026-09-11 with the D-3 reversal. Reached from the switcher's "Manage workspace" row, not from `/dashboard/settings/*` — see §9.2 |
+| `/dashboard/{ws}/settings` | the workspace: General (name, slug read-only, role), Members, Invitations (owner), Leave (member) or Danger zone (owner) — §9.1–9.2. New 2026-09-11 with the D-3 reversal; the team joined it 2026-09-28. Reached from the switcher's "Manage workspace" row and the sidebar's Settings |
 | `/dashboard/settings/{profile,account,tokens,preferences}` | §9 — inside the shell since 2026-08-11 |
-| `/dashboard/settings/members` | a redirect to `/dashboard/{ws}/members`, kept for bookmarks |
+| `/dashboard/settings/members` | a redirect to `/dashboard/{ws}/settings` (the first membership), kept for bookmarks |
 | `/invitations/{token}` | where an invitation link lands — accept or decline |
 | `/login` | sign in, create an account, reset a password. `?tab=signup` opens the create-account panel — the landing page's CTA depends on it. Wears the landing page's header and footer since 2026-08-11 — see below |
 | `/` | **the landing page** (2026-08-11). Signed-in visitors are redirected to `/dashboard`; it was a bare redirect for everybody until self-signup gave it an audience. See `components/landing-page.tsx`, whose header sets out what may not be written on it |
@@ -703,6 +710,12 @@ segment because they are about the **blackcode account** rather than about this
 workspace — and the pages say so, because a Settings screen inside one app reads
 as that app's settings and this one is not.
 
+**Since 2026-09-28 the four tabs are the shared account kit** (`/docs/frontend.md`,
+*Account settings*) — the same frame, cards and words as every other app. The
+**Account** tab's own blocks keep this app's `Section`, which now delegates to
+the shared `SettingsSection`; the photo is an upload through
+`POST/DELETE /api/me/avatar`.
+
 **It renders inside `SalesShell` as of 2026-08-11, and it did not before.** The
 shell is mounted by `app/dashboard/[ws]/layout.tsx`, and settings is a *sibling*
 of `[ws]`, not a child — so every settings page lost the sidebar, the header and
@@ -712,7 +725,10 @@ parent of both.
 
 Moving the URL under `{ws}` would have been the wrong fix: it would say the
 account belongs to a workspace. `app/dashboard/settings/layout.tsx` mounts the
-shell itself instead, resolving the first membership for the nav's hrefs.
+shell itself instead, resolving the remembered workspace (else the first
+membership) for the nav's hrefs, and — since 2026-09-28 — passing the whole
+list to the switcher, which on these pages had read "No workspace" with nothing
+to choose from.
 **Guessing is acceptable for CHROME and not for a DESTINATION** — every link
 points at a workspace this person is in, and the plural case costs one click
 through `/dashboard`'s picker rather than landing somebody silently in the wrong
@@ -729,18 +745,20 @@ goes through `apiSend` — **not** a bare `fetch`, which `lib/read-only.test.ts`
 refuses; the transport grew a `FormData` branch instead, and that guard caught
 the first version of it.
 
-### 9.1 Members is NOT here any more (2026-08-11)
+### 9.1 Members and invitations are sections of workspace settings (2026-09-28)
 
-It is `/dashboard/{ws}/members`, a sidebar entry above Trash. **Everything below
-about the page is unchanged — only where it lives moved.**
-
-It was the one workspace-scoped page filed beside four account pages, which made
-the workspace look like a property of the person. In the workspace segment the
-slug is in the URL instead of being resolved by the page, which is also how it
-sheds the "pick the one you have" branch it used to carry.
-
-`/dashboard/settings/members` **redirects** rather than 404ing — somebody has it
-bookmarked, and that file says to delete it once the redirect stops being taken.
+> **Moved twice.** From 2026-08-11 to 2026-09-28 the team was its own page,
+> `/dashboard/{ws}/members`, with a sidebar entry above Trash; before that it
+> was `/dashboard/settings/members`. Since 2026-09-28 it is the **Members** and
+> **Invitations** sections of `/dashboard/{ws}/settings` — the page every
+> blackcode app shares — and both old paths **redirect** there rather than
+> 404ing (bookmarks, and an invitation email's "manage your team" wording).
+> `components/settings/member-settings.tsx` was deleted; its envelope test is
+> now `components/settings/workspace-settings-envelope.test.ts`. The paragraph
+> this section used to carry — *"The word workspace does not appear on it. It
+> says 'your team', because a sales user has exactly one and never picks it"* —
+> stopped being true with the switcher (2026-08-11) and is gone: the page is a
+> workspace's settings, and says so.
 
 **It is the screen the multi-app refactor exists for.** It is about THIS app's
 workspace: `sales.workspace_members` and `sales.invitations`. Before it, nobody
@@ -748,43 +766,39 @@ could be put into b/sales from b/sales — membership was
 `platform.workspace_members` plus a per-app grant, so a sales user was somebody
 who had first been invited into an issues workspace.
 
-It is **visible by default**, not behind a role check. An owner needs it to
-invite; a member needs it to see who else is here. The page hides the invite form
-from non-owners, which is where that decision belongs — a tab that appears for
-some people and not others is how "why can Ana see this and I can't" becomes
-unanswerable.
+It is **visible to every member**, not behind a role check. An owner needs it to
+invite; a member needs it to see who else is here. The Invitations section is
+the owner's; a member sees **Leave** where the owner sees the Danger zone. Roles
+are shown and not editable: no app on this platform has a change-role route.
 
-The word *workspace* does not appear on it. It says "your team", because a sales
-user has exactly one and never picks it (PLAN.md §1). Roles are shown and not
-editable: no app on this platform has a change-role route, and inventing one here
-would have been a new platform capability landed inside a tenancy migration.
+What changed with the shared sections, beyond the address:
 
-**One third section is super-admin-only (2026-08-11): "Everyone with a blackcode
-account".** A searchable list of every live `platform.users` row, with one-click
-invite. It is the only super-admin capability in b/sales and it lives inside the
-page whose subject it already is — **there is no super-admin section in this
-app's settings and there will not be one**, which `app/dashboard/settings/
-account/page.tsx` states to the reader.
+- **Removing a member and revoking an invitation now ask first.** They did not
+  — this app was the one that removed and revoked on a single click.
+- **A member can leave.** `DELETE /api/workspaces/{ws}/members/{userId}` now
+  accepts a member removing themselves (`backend.md`); there was no way out
+  short of asking the owner.
+- **Delete asks for the slug**, typed, as in every app (it asked for the name).
+- **Invite candidates** feed the address field's suggestions and a row of
+  "people you already work with" chips. A super admin's platform-wide
+  candidates (`from_platform`) go into the address suggestions only, never into
+  that row — "somebody you work with" and "somebody with a login" stay
+  different claims. The separate searchable **"Everyone with a blackcode
+  account"** section this page carried from 2026-08-11 did not survive the move:
+  the shared section has no such list. The gate is still the server's
+  `is_super_admin`, from `GET …/invite-candidates`, never a client guess.
+- **No `bk sales …` hints** under the sections, unlike apps/billing and
+  apps/books: ordinary UI copy in this app names no command
+  (`lib/ui-commands.test.ts`), so the kit's `footer` props go unused here.
 
-Three things about it are load-bearing:
-
-- **The gate is the server's `is_super_admin`**, from
-  `GET /api/workspaces/{ws}/invite-candidates`, not a client guess: this
-  component cannot read `SUPER_ADMINS` and the whitelist is a table. While the
-  query is in flight, and after it fails, the flag is false and the section is
-  **absent rather than skeletal** — a placeholder would announce the feature to
-  exactly the people it is hidden from.
-- **It does not replace the email field.** Somebody with no blackcode account
-  cannot appear in the list at all, and that is the case the field exists for.
-- **The two sources stay apart.** Candidates carry `from_platform`; the ones you
-  already share a pipeline with say so on their row. "Somebody you work with"
-  and "somebody who has a login" are different claims.
-
-Inviting and removing go through `lib/mutations.ts` behind `useCanWrite()` —
-they are sales RECORDS now.
+Inviting, removing somebody else and revoking are sales RECORDS and go through
+`lib/mutations.ts` behind `useCanWrite()`: in `read_only` — the DEFAULT — those
+affordances are hidden and `READ_ONLY_NOTE` says why, the Invitations section
+included. Rename, transfer, delete and **leave** are tenancy and are not gated
+(§9.2).
 
 > **And until 2026-08-11 the PAGE did not ask.** That sentence was true of the
-> mutation layer and false of the affordances: `member-settings.tsx` was the one
+> mutation layer and false of the affordances: `member-settings.tsx` (deleted 2026-09-28) was the one
 > component in this app that rendered record-write controls without calling
 > `useCanWrite()`, so in `read_only` — the DEFAULT — it showed a live-looking
 > Invite field and enabled Remove / Revoke buttons, while the prospect page one
@@ -803,7 +817,7 @@ they are sales RECORDS now.
 saying why: read-only is a browser display preference, and one that could stop
 somebody joining the app at all would be a permission over their account (D-7).
 
-### 9.2 Workspace settings — rename, transfer, delete (2026-09-11)
+### 9.2 Workspace settings — the page, and its tenancy writes (2026-09-11)
 
 `/dashboard/{ws}/settings` — **inside** the workspace segment, unlike the four
 pages above it in this section. The distinction §9's opening paragraph draws
@@ -814,28 +828,29 @@ the same reasoning that moved Members out of `/dashboard/settings/members` in
 §9.1. Reached from the sidebar switcher's "Manage workspace" row — there is no
 other global workspaces-list page in this app the way `apps/issues` has one.
 
-Owner-only for the write affordances; a non-owner sees a read-only line naming
-the workspace and its owner. Three sections, mirroring
-`apps/issues/components/workspace-settings-view.tsx`'s shape minus two it does
-not need:
+Its sections are the shared ones (since 2026-09-28; until then it had three
+of its own, mirroring the issues app's old settings view):
 
-- **No logo section.** `sales.workspaces` has no `logo_url` column.
+- **General** — the name, editable by the owner; the **slug, shown read-only
+  with why it is fixed**. It is immutable server-side (`PATCH` 400s
+  `slug_immutable`) because `sales.events.subject_urn` has no rename cascade;
+  see `lib/db/queries/workspaces.ts`'s `updateWorkspace`. Until 2026-09-28 the
+  slug was not shown at all.
+- **Logo** — `sales.workspaces.logo_url` since migration 0013 (2026-09-28),
+  uploaded through the logo-only route `POST/DELETE /api/workspaces/{ws}/logo`
+  (the shared `workspaceLogoRoute`) and kept alive by the column's
+  `trg_blob_refs_logo` trigger; `lib/storage/scanner.ts` lists it as the
+  `workspace_logo` surface. Recorded in `sales.uploads` like any upload.
 - **No storage-management link.** This app mounts no `/storage` route.
-- **Name** is the only editable field. The **slug is not shown as an editable
-  field at all** — it is immutable server-side (`PATCH` 400s `slug_immutable`)
-  because `sales.events.subject_urn` has no rename cascade the way
-  `apps/issues`' `platform.entities` projection does; see
-  `lib/db/queries/workspaces.ts`'s `updateWorkspace` for the full reasoning.
-  Rendering a disabled slug field would invite a bug report about a field that
-  was never going to work.
-- **Transfer ownership** and **Danger zone → Delete** are the same UX pattern
-  `apps/issues` uses: a `<select>` of other members for transfer, `useConfirm()`'s
-  `prompt()` requiring the workspace name typed back for delete.
+- **Members** (make owner / remove) and **Invitations** — §9.1.
+- **Leave** for a member; **Danger zone → Delete** for the owner, confirmed by
+  typing the **slug** (it was the name).
 
-This is TENANCY administration, not a sales record — `components/settings/
-workspace-settings.tsx` calls `apiSend` directly, the same way `workspace-
-switcher.tsx` calls `POST /api/me/active-workspace` directly, and it is NOT
-routed through `lib/mutations.ts` / `useCanWrite()`. `lib/read-only.test.ts`
+Rename, transfer, delete and leave are TENANCY administration, not a sales
+record — `components/settings/workspace-settings.tsx` calls `apiSend` directly
+for them, the same way `workspace-switcher.tsx` calls
+`POST /api/me/active-workspace` directly, and they are NOT routed through
+`lib/mutations.ts` / `useCanWrite()` (the membership records of §9.1 are). `lib/read-only.test.ts`
 declares it in `ACCOUNT_WRITERS` with `workspaceScoped` set — its writes target
 `/api/workspaces/{ws}...`, which looks like a shared sales-record path, and the
 declaration is what tells the guard it administers the workspace itself rather

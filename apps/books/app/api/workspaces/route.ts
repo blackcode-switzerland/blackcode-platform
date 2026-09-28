@@ -4,15 +4,15 @@
 // which gated an app inside a shared workspace; both that table and the idea
 // went on 2026-08-10, because a workspace now belongs to exactly one app.
 //
-// POST /api/workspaces — `bk books workspace create`.
+// POST /api/workspaces — `bk books workspace create`, and the web's "Create
+// workspace" (since 2026-09-28).
 //
-// Web login mints a person's FIRST workspace (`ensureWorkspaceForUser`);
-// this is how they get a second: one set of books per venture, so a person
-// running a company and their own affairs keeps them in separate workspaces,
-// not one workspace with awkward books. Create is the ONLY admin verb this
-// app serves — no edit, no transfer, and deliberately no DELETE, ever:
-// workspaces hold statutory records under a ten-year retention duty
-// (art. 958f CO), the same doctrine that keeps `Trash` off in the CLI.
+// Web login mints a person's FIRST workspace (`ensureWorkspaceForUser`); this is
+// how they get another. Until 2026-09-28 it refused anyone who already owned
+// one (`one_workspace_per_person`) — lifted with the invitation-accept flow and
+// the web switcher; `createWorkspaceForUser` records why. Rename, transfer and
+// delete live on `[ws]/route.ts` and `[ws]/transfer`; delete is refused for any
+// workspace that has ever held a record (art. 958f CO).
 import { NextRequest, NextResponse } from 'next/server'
 import { workspacesRoute } from '@blackcode/platform-api/routes'
 import { Errors } from '@blackcode/platform-api'

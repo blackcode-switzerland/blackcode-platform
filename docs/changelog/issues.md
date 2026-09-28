@@ -35,6 +35,40 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-09-28 — Workspace logos go through `…/logo`, and are finally protected from clean-up
+
+Not breaking. `POST` / `DELETE /api/workspaces/{ws}/logo` (`bk issues workspace
+logo <file>` / `--remove`) sets and clears the logo; the web's settings page
+uses it. `PATCH /api/workspaces/{ws}` still accepts `logo_url`.
+
+**Fix:** a workspace logo was referenced by nothing the storage clean-up
+consults across deployments — no blob-reference trigger on
+`platform.workspaces.logo_url`, and this app's own reference check skipped the
+column too — so an in-use logo could read as an orphan. Migration 0049 adds the
+trigger and indexes every existing logo; the scanner now includes it.
+
+## 2026-09-28 — Workspaces: a dropdown switcher, and settings inside the workspace
+
+Web only; no route or `bk issues` command changed.
+
+- **The sidebar switcher is a dropdown** — your workspaces with your role, plus
+  "Create workspace" and "Manage" — the one every blackcode app now shares. It
+  used to link to a list page.
+- **Settings live at `/dashboard/{ws}/settings`**: name, logo, members,
+  invitations, storage, and delete (or leave). It replaces
+  `/dashboard/workspaces/{slug}`, `/dashboard/{ws}/members` and
+  `/dashboard/{ws}/members/invite`, which all redirect there. The sidebar's
+  "Members" entry became "Settings".
+- A member can **leave** from the web (the route and `bk issues member leave`
+  existed; no button called them). Revoking an invitation now asks first, and
+  deleting a workspace asks you to type its **slug** (it asked for the name).
+- `/dashboard/workspaces` is the shared workspace chooser; `/dashboard/workspaces/new`
+  opens the create modal on it. Creating asks for a name only — set the logo in
+  Settings.
+- **Fix:** `/invitations/{token}`, opened by somebody signed in as a different
+  address, printed the address the invitation was sent to. It now names only
+  yours, as the other apps do.
+
 ## 2026-09-28 — The signed-out pages match the other apps; `/privacy` and `/terms` are gone
 
 Not breaking for agents: no route or command changed, and `/agent-updator`,

@@ -20,7 +20,7 @@ body text, and is a known open point.
 | `/` | landing page (signed-out); signed-in goes to `/dashboard` |
 | `/login` | sign in / sign up tabs, forgot-password flow, Google if configured |
 | `/cli/authorize` | the browser half of `bk login` |
-| `/dashboard` | lands you in a workspace: the only one, the remembered one, or a chooser. **With none, it creates one and redirects** (see below); `?new=1` shows the create form instead |
+| `/dashboard` | lands you in a workspace: the only one, the remembered one (`billing.user_settings`), or the shared chooser, which remembers. **With none, it creates one and redirects** (see below); `?new=1` shows the create form instead |
 | `/invitations/[token]` | an invitation link lands here: who invited you, to which workspace, Accept / Decline. Signed-out → `/login?callbackUrl=…` |
 | `/dashboard/[ws]` | overview: outstanding / overdue / drafts / paid (one line per currency, never summed), to handle, recent invoices, recent changes |
 | `/dashboard/[ws]/invoices` · `/[ref]` | list with filters and create; detail with every lifecycle action, lines, payment part, document preview, recurrence, issuer copy, history |
@@ -28,7 +28,7 @@ body text, and is a known open point.
 | `/dashboard/[ws]/companies` · `/[slug]` | issuing companies: list, create, edit, retire |
 | `/dashboard/[ws]/history` · `/[seq]` | the imported archive, read-only, with the JSON import |
 | `/dashboard/[ws]/settings` | the workspace: rename, members (make owner / remove, or leave), invitations (send, candidates, copy link, revoke), danger zone (delete — refused with the reason when it holds records) |
-| `/dashboard/settings/*` | the account: profile, password, API tokens |
+| `/dashboard/settings/*` | the account — Profile (with a photo upload), Account, API tokens, Preferences (theme). The shared account kit since 2026-09-28 (`/docs/frontend.md`, *Account settings*) |
 
 **The company switcher** in the header writes `?company=<slug>`; overview,
 invoices, recurrences and history pass it to their route. No param = all
@@ -176,12 +176,35 @@ Every control is a route `bk` also calls — the table is in
   "people you already work with" chips; a super admin's platform-wide
   candidates go only into the datalist, never into that row.
 - **The switcher's "Create workspace" opens `WorkspaceCreateModal`**, which
-  wraps the same `CreateWorkspaceForm` as `/dashboard?new=1`, then writes the
-  active workspace and navigates. Two forms for one route would be two places
-  for validation to drift.
+  writes the active workspace and navigates. Since 2026-09-28 it is the shared
+  modal (below); `CreateWorkspaceForm` still serves `/dashboard?new=1` and the
+  failure screen, which have no modal to open.
 - **Account settings → delete my data** lists retention-held workspaces
   separately (`blocked_by[].reason === 'retention'`), and says invoices are
   kept for ten years; it no longer promises to delete them.
+
+### The screens are the shared workspace kit since 2026-09-28
+
+This app's switcher, chooser, settings page and invitation card were the model
+for `@blackcode/platform-ui/workspace/*`, which all four apps now render (root
+`docs/frontend.md` → *Workspace management*). What stays here is **wiring** —
+this app's writes, its router, its toasts and the nouns in its `detail`
+strings:
+
+| File | Renders |
+|---|---|
+| `components/shell/workspace-switcher.tsx` | `WorkspaceSwitcher`; also exports `useOpenWorkspace`, which the chooser shares |
+| `components/workspace-create-modal.tsx` | `CreateWorkspaceModal` |
+| `components/workspace-chooser.tsx` | `WorkspaceChooser` on `/dashboard` |
+| `components/settings/workspace-settings.tsx` | the General / Members / Invitations / Leave / Danger sections; the route table is in its header |
+| `components/accept-invitation.tsx` | `InvitationCard` on `/invitations/[token]` |
+
+**Remembering is real now.** Until 2026-09-28 `setDefaultForUser` was a no-op,
+so `POST /api/me/active-workspace` — the switcher's call and
+`bk billing workspace use`'s — stored nothing; and `/dashboard` read
+`platform.users.active_workspace_id`, which this app never writes, so it never
+matched and the old chooser's "this choice is remembered" was untrue on both
+ends. Both now use `billing.user_settings` (migration 0014, `backend.md`).
 
 ## What phase 3 put on the wire (backend landed 2026-09-17)
 

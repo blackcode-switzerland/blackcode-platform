@@ -238,8 +238,13 @@ describe('CLI ↔ routes parity', () => {
       if (!allPaths.has(path)) stale.push(`${path} — "${reason}"`)
     }
     for (const [op, reason] of UNSERVED_OPERATIONS) {
+      const method = op.slice(0, op.indexOf(' '))
       const path = op.slice(op.indexOf(' ') + 1)
       if (!allPaths.has(path)) stale.push(`${op} — "${reason}"`)
+      // An "unserved" operation this app now SERVES keeps skipping a drift
+      // check on a route that exists. Added 2026-09-28, when apps/books had
+      // carried three such entries with the suite green.
+      else if (real.get(path)?.has(method)) stale.push(`${op} — now served, but listed as unserved: "${reason}"`)
     }
     expect(
       stale,

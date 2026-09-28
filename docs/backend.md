@@ -499,7 +499,7 @@ maintenance.**
 
 | Table | Purpose / notable columns |
 |-------|---------------------------|
-| `blob_references` | who points at which stored file, across apps. PK `(app, source_type, source_id, url)`; `workspace_id` (nullable, no FK). `app` is `'platform'` for platform-owned content (comments), which belongs to no single app |
+| `blob_references` | who points at which stored file, across apps. PK `(app, source_type, source_id, url)`; `workspace_id` (nullable, no FK). `app` is `'platform'` for platform-owned content — comments, and profile photos (`platform.users.avatar_url`, source type `user_avatar`, issues migration 0050, 2026-09-28) — which belongs to no single app |
 
 **Why it exists.** Phase 7 made blob deletion require a proven negative from
 *every* enabled app. Per-app Postgres roles make that proof unobtainable across

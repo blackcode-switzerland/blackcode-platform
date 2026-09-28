@@ -4,7 +4,12 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { signOut } from 'next-auth/react'
 import { toast } from 'sonner'
-import { AlertTriangle, HelpCircle, KeyRound, Trash2 } from 'lucide-react'
+import { HelpCircle, Trash2 } from 'lucide-react'
+import {
+  PasswordSection,
+  SettingsSection,
+  SignedInSection,
+} from '@blackcode/platform-ui/account/account-settings'
 import { PasswordResetFlow } from './password-reset-flow'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -50,7 +55,6 @@ type Scope = 'this_app' | 'all_apps'
 export function AccountSettingsView() {
   const [confirming, setConfirming] = useState(false)
   const [phrase, setPhrase] = useState('')
-  const [changingPw, setChangingPw] = useState(false)
   const [scope, setScope] = useState<Scope | null>(null)
 
   const me = useQuery({
@@ -132,50 +136,37 @@ export function AccountSettingsView() {
   )
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-lg border border-border bg-card/30 p-5">
-        <h2 className="mb-2 flex items-center gap-2 text-base font-semibold">
-          <KeyRound size={15} />
-          Password
-        </h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          Change your password using a one-time code sent to your email. You can use this to set a
-          password for the first time too (for example if you signed up with Google).
-        </p>
-        {changingPw ? (
+    // The shared account cards (2026-09-28), so this tab looks like the same
+    // tab in every other app. What is inside the danger card is this app's own
+    // — the census and the two-route choice below — and did not change.
+    <>
+      {me.data ? (
+        <SignedInSection email={me.data.email} onSignOut={() => signOut({ callbackUrl: '/login' })} />
+      ) : null}
+
+      <PasswordSection>
+        {(close) => (
           <PasswordResetFlow
             authenticated
             presetEmail={me.data?.email}
-            onCancel={() => setChangingPw(false)}
+            onCancel={close}
             onDone={() => {
-              setChangingPw(false)
+              close()
               // The password change invalidated this session — sign out and
               // send the user back to log in with their new password.
               toast.success('Password changed — please sign in again')
               signOut({ callbackUrl: '/login' })
             }}
           />
-        ) : (
-          <button
-            onClick={() => setChangingPw(true)}
-            className="cursor-pointer rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary"
-          >
-            Change password
-          </button>
         )}
-      </section>
+      </PasswordSection>
 
-      <section className="rounded-lg border border-destructive/40 bg-destructive/5 p-5">
-      <h2 className="mb-2 flex items-center gap-2 text-base font-semibold text-destructive">
-        <AlertTriangle size={15} />
-        Delete account
-      </h2>
-      <p className="mb-4 text-sm text-muted-foreground">
-        Your blackcode account is one login for every app, and each app keeps its own workspaces and
-        records. You can delete your data in one app and keep your account, or close the account
-        everywhere.
-      </p>
-
+      <SettingsSection
+        tone="danger"
+        title="Delete account"
+        description="Your blackcode account is one login for every app, and each app keeps its own workspaces and records. You can delete your data in one app and keep your account, or close the account everywhere."
+        testId="settings-delete-account"
+      >
       {!confirming ? (
         <div className="flex justify-end">
           <button
@@ -325,8 +316,8 @@ export function AccountSettingsView() {
           ) : null}
         </div>
       )}
-      </section>
-    </div>
+      </SettingsSection>
+    </>
   )
 }
 

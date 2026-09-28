@@ -43,6 +43,7 @@ func appOwnedVerbs() []*cobra.Command {
 		// lib/cli-parity.test.ts checks that claim against the filesystem.
 		Workspace:        true,
 		WorkspaceAdmin:   true,
+		WorkspaceLogo:    true,
 		Members:          true,
 		MemberRemove:     true,
 		MemberLeave:      true,

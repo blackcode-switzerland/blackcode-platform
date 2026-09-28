@@ -59,7 +59,7 @@ recurring series and the imported archive of bills issued elsewhere. Start with
 
 THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
-  bk billing workspace  list, show, use, create, edit, transfer, delete
+  bk billing workspace  list, show, use, create, edit, transfer, delete, logo
   bk billing member     list, remove
   bk billing invite     send, list, revoke, candidates, show, accept, decline, pending
 
@@ -167,6 +167,7 @@ func appOwnedVerbs() []*cobra.Command {
 		App:              Slug,
 		Workspace:        true,
 		WorkspaceAdmin:   true,
+		WorkspaceLogo:    true,
 		Members:          true,
 		MemberRemove:     true,
 		Invites:          true,

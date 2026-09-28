@@ -34,6 +34,7 @@
 // This route is UNAUTHENTICATED, so it cannot resolve a workspace and therefore
 // cannot list one user's books. It reports the vocabularies and the law, and says
 // where the books actually come from. `bk books entity list` is the scoped read.
+import { WORKSPACE_LOGO_MAX_BYTES } from '@blackcode/platform-api'
 import { NextRequest, NextResponse } from 'next/server'
 import { platformMetaBlock } from '@blackcode/platform-api'
 import { apiHandler, appContext } from '@/lib/api'
@@ -158,6 +159,10 @@ export const GET = apiHandler(async (req: NextRequest) => {
     },
 
     tva_rates: TVA_RATES,
+    // The platform limits this app enforces — today only the workspace logo
+    // (`workspaceLogoRoute`, 2026-09-28). Served so `bk books workspace logo`'s
+    // "run bk meta for the limit" is true here too.
+    limits: { workspace_logo_max_bytes: WORKSPACE_LOGO_MAX_BYTES },
 
     // ── THE LAW ──────────────────────────────────────────────────────────
     // Served so the frontend renders the legal line list without duplicating it,

@@ -28,18 +28,15 @@ import {
   FileText,
   History,
   LayoutDashboard,
-  LogOut,
   Menu,
   Moon,
   Repeat,
   Settings,
   Sun,
-  UserRound,
   type LucideIcon,
 } from 'lucide-react'
-import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
+import { SidebarAccount, SidebarBrand, SidebarNavItem } from '@blackcode/platform-ui/ui/sidebar'
 import { useMe } from '@/lib/queries'
-import { cn } from '@/lib/utils'
 import { BrandMark, wordmark } from '@/components/brand'
 import { WorkspaceSwitcher, type SwitcherWorkspace } from './workspace-switcher'
 
@@ -60,7 +57,7 @@ const NAV_MAIN: NavEntry[] = [
   { seg: '/recurrences', label: 'Recurring', icon: Repeat, testId: 'nav-recurrences', companyScoped: true },
   { seg: '/companies', label: 'Companies', icon: Building2, testId: 'nav-companies', companyScoped: false },
   { seg: '/history', label: 'Imported history', icon: History, testId: 'nav-history', companyScoped: true },
-  { seg: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings', companyScoped: false },
+  { seg: '/settings', label: 'Workspace settings', icon: Settings, testId: 'nav-settings', companyScoped: false },
 ]
 
 // ---------------------------------------------------------------------------
@@ -177,17 +174,19 @@ function Sidebar({
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-      <Link
-        href={base ?? '/dashboard'}
-        className="flex h-12 shrink-0 items-center gap-2.5 border-b border-sidebar-border px-4"
-      >
+      {/* The platform's shared sidebar pieces since 2026-09-28
+          (`@blackcode/platform-ui/ui/sidebar`) — apps/issues' sizes, footer
+          and width, so the four apps' left menus are one design. */}
+      <SidebarBrand href={base ?? '/dashboard'} link={Link}>
         <BrandMark />
         <span className="truncate text-[15px] font-semibold tracking-tight">{wordmark(appName)}</span>
-      </Link>
+      </SidebarBrand>
 
-      <WorkspaceSwitcher workspaces={workspaces} current={ws} />
+      <div className="px-3 py-3">
+        <WorkspaceSwitcher workspaces={workspaces} current={ws} />
+      </div>
 
-      <nav data-testid="nav" className="flex-1 overflow-y-auto px-2.5 py-3">
+      <nav data-testid="nav" className="flex-1 overflow-y-auto px-2 pb-4">
         {base && (
           <div className="space-y-0.5">
             {NAV_MAIN.map((e) => (
@@ -204,9 +203,7 @@ function Sidebar({
         )}
       </nav>
 
-      <div className="shrink-0 space-y-0.5 border-t border-sidebar-border p-2.5">
-        <AccountMenu pathname={pathname} />
-      </div>
+      <AccountMenu />
     </div>
   )
 }
@@ -223,7 +220,7 @@ function isActive(pathname: string, href: string, exact: boolean): boolean {
 function NavLink({
   href,
   active,
-  icon: Icon,
+  icon,
   label,
   testId,
 }: {
@@ -233,22 +230,7 @@ function NavLink({
   label: string
   testId?: string
 }) {
-  return (
-    <Link
-      href={href}
-      data-testid={testId}
-      aria-current={active ? 'page' : undefined}
-      className={cn(
-        'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors',
-        active
-          ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
-          : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
-      )}
-    >
-      <Icon size={16} className={active ? 'text-sidebar-primary' : ''} />
-      {label}
-    </Link>
-  )
+  return <SidebarNavItem href={href} active={active} icon={icon} label={label} testId={testId} link={Link} />
 }
 
 /**
@@ -256,53 +238,19 @@ function NavLink({
  * `/api/me` row wins over the session's copy, which is minted at sign-in and
  * never refreshed.
  */
-function AccountMenu({ pathname }: { pathname: string }) {
+function AccountMenu() {
   const { data: session } = useSession()
   const me = useMe()
-  const user = {
-    name: me.data?.name ?? session?.user?.name ?? null,
-    email: me.data?.email ?? session?.user?.email ?? null,
-    image: me.data?.avatar_url ?? session?.user?.image ?? null,
-  }
-  const accountActive = isActive(pathname, '/dashboard/settings', false)
-
   return (
     <div data-testid="account-menu">
-      <div className="flex items-center gap-2.5 rounded-lg px-2.5 py-2">
-        <MemberAvatar name={user.name} email={user.email} avatarUrl={user.image} size={28} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium" data-testid="account-name">
-            {user.name ?? 'Signed in'}
-          </span>
-          <span className="block truncate text-[11px] text-muted-foreground" data-testid="account-email">
-            {user.email}
-          </span>
-        </span>
-        <ThemeToggle />
-      </div>
-      <Link
-        href="/dashboard/settings"
-        data-testid="nav-account"
-        aria-current={accountActive ? 'page' : undefined}
-        className={cn(
-          'flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors',
-          accountActive
-            ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
-            : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
-        )}
-      >
-        <UserRound size={15} />
-        Account settings
-      </Link>
-      <button
-        type="button"
-        onClick={() => signOut({ callbackUrl: '/login' })}
-        data-testid="sign-out"
-        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-      >
-        <LogOut size={15} />
-        Sign out
-      </button>
+      <SidebarAccount
+        name={me.data?.name ?? session?.user?.name ?? null}
+        email={me.data?.email ?? session?.user?.email ?? null}
+        avatarUrl={me.data?.avatar_url ?? session?.user?.image ?? null}
+        settingsHref="/dashboard/settings"
+        onSignOut={() => signOut({ callbackUrl: '/login' })}
+        link={Link}
+      />
     </div>
   )
 }

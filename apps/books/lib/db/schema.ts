@@ -127,6 +127,8 @@ export const booksWorkspaces = booksSchema.table('workspaces', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 80 }).notNull(),
   slug: varchar('slug', { length: 40 }).notNull(),
+  /** Migration 0021 (2026-09-28). An uploaded image; indexed by `trg_blob_refs_logo`. */
+  logo_url: text('logo_url'),
   owner_id: integer('owner_id')
     .notNull()
     .references(() => users.id, { onDelete: 'restrict' }),
@@ -170,6 +172,21 @@ export const booksInvitations = booksSchema.table('invitations', {
   accepted_at: timestamp('accepted_at', { withTimezone: true }),
   accepted_by: integer('accepted_by').references(() => users.id, { onDelete: 'set null' }),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+/**
+ * `books.user_settings` — this app's memory of which workspace you were in
+ * (migration 0020). Not `platform.users.active_workspace_id`: that
+ * column is read by every deployment as one of ITS ids. Ported from apps/sales.
+ */
+export const booksUserSettings = booksSchema.table('user_settings', {
+  user_id: integer('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  active_workspace_id: integer('active_workspace_id').references(() => booksWorkspaces.id, {
+    onDelete: 'set null',
+  }),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
 export type BooksWorkspace = typeof booksWorkspaces.$inferSelect

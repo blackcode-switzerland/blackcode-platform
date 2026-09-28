@@ -107,6 +107,7 @@ import type {
   TaxSnapshotResult,
   WorklistResult,
   WorklistRow,
+  Invitation,
 } from './types'
 
 /**
@@ -259,6 +260,8 @@ const META_KEYS = [
   'links',
   'cli',
   'entities',
+  // 2026-09-28, with workspace logos.
+  'limits',
   'vocabularies',
   'tva_rates',
   'statements',
@@ -1644,7 +1647,10 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     expect(listed.length + created.length + revoked.length, 'found no envelope keys at all').toBeGreaterThan(0)
 
     expect(listed.sort()).toEqual(['data', 'next_cursor'].sort())
-    expect(created.sort()).toEqual(['accept_url', 'email_sent', 'invitation'].sort())
+    // `invitee_has_account` since 2026-09-28, when the route started sending
+    // email (apps/billing's shape): the web says "they can sign in" or "they
+    // will create an account" from it.
+    expect(created.sort()).toEqual(['accept_url', 'email_sent', 'invitation', 'invitee_has_account'].sort())
     expect(revoked).toEqual(['deleted'])
 
     // ── WHAT THIS CASE CANNOT ASK ──────────────────────────────────────────
@@ -1655,15 +1661,12 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     // NOT checked anywhere is `InvitationRow`'s field list, which is why the
     // compile-time `_InvitationKeys` below exists.
     //
-    // And it asserts the absence D-C decided: no screen reads these, so
-    // `lib/types.ts` declares nothing for them.
-    const types = readFileSync(join(APP_ROOT, 'lib/types.ts'), 'utf8')
-    expect(
-      /export interface Invitation\b/.test(types),
-      'lib/types.ts now declares an Invitation — a screen is reading these routes, ' +
-        'and D-C (no members page, no invite flow, the word "workspace" never on screen) ' +
-        'says that is a decision to make deliberately, not a type to add quietly'
-    ).toBe(false)
+    // Until 2026-09-28 this also asserted that `lib/types.ts` declared NO
+    // `Invitation`, because D-C kept invitations off every screen. D-C was
+    // reversed that day — deliberately, as the assertion asked
+    // (apps/books/docs/frontend.md §4) — so the settings page reads these
+    // routes, and `_InvitationKeys` below is now a real `Mutual` against the
+    // declared type rather than a presence check.
   })
 
   // =========================================================================
@@ -2321,22 +2324,16 @@ type _WorklistEnvelopeKeys = Mutual<'entity' | 'exercice' | 'count' | 'rows', ke
 type _SourceDetailKeys = Mutual<keyof SourceWire | 'pulls' | 'runbook', keyof SourceDetail>
 
 /**
- * `InvitationRow` — pinned with NO `lib/types.ts` counterpart, on purpose.
+ * `InvitationRow` against `lib/types.ts`' `Invitation` — both directions.
  *
- * D-C bars an invite flow from this UI, so there is nothing to be assignable
- * to. What this asserts is that the interface still carries the four fields the
- * route's answer is useless without — and `token` above all, which is why the
- * listing is owner-only: it is redeemable access, in the clear, by design
+ * Until 2026-09-28 this was a presence check with no screen-side counterpart,
+ * because decision D-C kept invitations off screen; its own note said to
+ * replace it with a real `Mutual` the day a screen read these routes. The
+ * workspace settings page does now. `token` stays the field to care about: the
+ * listing is owner-only because it is redeemable access, in the clear, by design
  * (`lib/db/queries/invitations.ts` explains why it is not hashed).
- *
- * If a screen ever reads these routes, replace this with a real `Mutual`
- * against a declared type. Leaving it as a presence check would then be the
- * vacuous half of a real difference.
  */
-type _InvitationKeys = Mutual<
-  'id' | 'email' | 'role' | 'token' | 'status' | 'expires_at' | 'created_at' | 'invited_by_name' | 'invited_by_email',
-  keyof InvitationWire
->
+type _InvitationKeys = Mutual<keyof InvitationWire, keyof Invitation>
 
 /**
  * The SCALAR TYPES, field by field, for every field where the wire type is not

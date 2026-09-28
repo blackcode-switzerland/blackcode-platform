@@ -35,17 +35,22 @@
 
 import { redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
-import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { getStoredActiveWorkspaceId, listWorkspacesForUser, resolveActiveWorkspace } from '@/lib/db/queries/workspaces'
 import { BooksShell } from '@/components/books-shell'
-import { SettingsNav } from '@/components/settings/settings-nav'
+import { SettingsFrame } from '@/components/settings/settings-nav'
 import { serverT } from '@/lib/i18n-server'
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
   const user = await getValidatedSessionUser()
   if (!user) redirect('/login')
 
-  const memberships = await listWorkspacesForUser(user.id)
-  const ws = memberships[0]?.slug ?? null
+  const [memberships, storedId] = await Promise.all([
+    listWorkspacesForUser(user.id),
+    getStoredActiveWorkspaceId(user.id),
+  ])
+  // The workspace you were last in, not merely the oldest: the sidebar's
+  // switcher names it, and it should be the one you would go back to.
+  const ws = resolveActiveWorkspace(memberships, storedId)?.slug ?? null
   // A SERVER translator, not `useT()`. This is the one heading in the app a
   // layout has to name for itself — `/dashboard/settings/*` is a sibling of
   // `[ws]`, so no nav entry matches its pathname — and a layout cannot call a
@@ -53,30 +58,24 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   const t = await serverT()
 
   const body = (
-    // ── THE PADDING IS THIS COMPONENT'S NOW ────────────────────────────────
-    // `<BooksShell>`'s `<main>` carried `px-4 py-5` until 2026-08-21, when it
-    // moved into `<PageShell>` so a screen owns its own width. Settings kept
-    // its `max-w-3xl` and lost the padding with it, so the tab bar sat flush
-    // against the sticky header. Horizontal was fine — `mx-auto` was doing
-    // that — which is why it read as "slightly off" rather than as broken.
-    <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6 lg:px-8">
+    // The shared `AccountSettingsFrame` (via `SettingsFrame`) owns the column,
+    // its padding and the tab strip since 2026-09-28 — the same frame, width
+    // and tabs in every app.
+    <SettingsFrame>
       {/* The heading only when there is no frame. With the shell mounted, its
-          sticky header already says "Settings" and a second one is noise. */}
-      {ws === null && (
-        <h1 className="mb-5 text-xl font-semibold text-foreground">{t('settings.title')}</h1>
-      )}
-      <SettingsNav />
-      <div className="mt-6">{children}</div>
-    </div>
+          sticky header already names the page and a second one is noise. */}
+      {ws === null && <h1 className="text-xl font-semibold text-foreground">{t('settings.title')}</h1>}
+      {children}
+    </SettingsFrame>
   )
 
-  // The frameless case already padded itself and still does — it is the one
-  // that renders with no shell at all, for somebody whose workspace bootstrap
-  // failed and who is exactly the person who needs their profile and tokens.
-  if (ws === null) return <div className="py-3">{body}</div>
+  // The frameless case renders with no shell at all, for somebody whose
+  // workspace bootstrap failed and who is exactly the person who needs their
+  // profile and tokens.
+  if (ws === null) return body
 
   return (
-    <BooksShell ws={ws} title={t('settings.title')}>
+    <BooksShell ws={ws} title={t('settings.title')} workspaces={memberships}>
       {body}
     </BooksShell>
   )

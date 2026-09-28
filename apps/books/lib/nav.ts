@@ -54,6 +54,7 @@ export type NavIconName =
   | 'trending-up'
   | 'calculator'
   | 'messages-square'
+  | 'settings'
 
 export interface NavItem {
   /** The path under `/dashboard/{ws}`. `''` is the overview. */
@@ -69,6 +70,12 @@ export interface NavItem {
   icon: NavIconName
   /** Does switching book change what this page shows? */
   scoped: boolean
+  /**
+   * Not about any book at all — the workspace's own settings. Hides BOTH the
+   * book and the year switcher, for this file's rule: a control that appears
+   * to do nothing teaches the reader they used it wrong.
+   */
+  workspaceLevel?: boolean
 }
 
 export const NAV: readonly NavItem[] = [
@@ -95,6 +102,10 @@ export const NAV: readonly NavItem[] = [
   { seg: '/income-statement', labelKey: 'nav.incomeStatement', icon: 'trending-up', scoped: true },
   { seg: '/management', labelKey: 'nav.management', icon: 'calculator', scoped: true },
   { seg: '/analyses', labelKey: 'nav.analyses', icon: 'messages-square', scoped: true },
+  // The workspace's own settings — name, members, invitations. In the nav since
+  // 2026-09-28, when decision D-C was reversed; last, and below the books,
+  // because it is about the people and not about any book.
+  { seg: '/settings', labelKey: 'nav.workspaceSettings', icon: 'settings', scoped: false, workspaceLevel: true },
 ]
 
 /**

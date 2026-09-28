@@ -23,7 +23,7 @@ today can be read and never recorded.
 
 What each phase added is in [`docs/books-app-plan/`](../../../docs/books-app-plan/README.md).
 
-**Migrations applied: 19 of 19**, `__drizzle_migrations_books`. `0015`–`0019`
+**Migrations applied: 21 of 21**, `__drizzle_migrations_books`. `0015`–`0020`
 landed after the sentence above was first written, and each changed something a
 caller can see:
 
@@ -34,6 +34,8 @@ caller can see:
 | `0017_compliance_rules_reference` | The researched rule set, seeded as data with its citations, severities and `source_confidence`. Rules are the APP's, not a book's: no `entity_id`, and `applies_to` says which legal form each bites on |
 | `0018_pull_closing_balance` | `source_pull.closing_balance` / `closing_on` — what the bank SAID this statement closed at. It is what makes `bk books source show`'s reconciliation able to distinguish a drift from an unknown; without it a source that has never stated a balance agreed with everything |
 | `0019_source_import_mapping` | `source.import_mapping` (the delimited reader's column map, per issuer) and an index on `draws_from`. There is no "CSV format": every issuer names its columns differently, so the mapping is DATA established once from a real export, not code |
+| `0020_books_remembers_a_workspace` | `books.user_settings(user_id, active_workspace_id)` — the workspace a person last chose. Until then `setDefaultForUser` was a no-op and `POST /api/me/active-workspace` stored nothing; `platform.users.active_workspace_id` is read by every deployment, so a books id cannot go there. Pointer `ON DELETE SET NULL`; the reader re-checks membership. See §10 |
+| `0021_books_workspace_logo` | `books.workspaces.logo_url`, and its `trg_blob_refs_logo` trigger (`blob_refs_sync('books','workspace_logo','id','exact','logo_url')`) in the same file — the first file ever held in a books column, set only through the logo-only `POST/DELETE /api/workspaces/{ws}/logo`. Also re-asserts `platform.apps.maintains_blob_index = true`: 0002's UPDATE matches nothing if the app is registered after it runs, and a local database was found with it false |
 
 ---
 
@@ -322,7 +324,10 @@ first would make it "one of the five writes", which it is not; letting a
 component call `apiSend` directly deletes the guard outright.
 
 The test for where a new write belongs is one question: **does it touch
-`books.*`?**
+`books.*`?** The tenancy writes of §10 do — `books.workspaces`,
+`workspace_members`, `invitations` — so they live in `lib/mutations.ts`, in a
+section of their own, and are **not** counted among the five: those change the
+books, these change who may see them.
 
 ## 9. Branding: the name, the address and the family name are environment (ticket #756, 2026-09-23)
 
@@ -372,3 +377,53 @@ renders the product name`; `contact@blackcode.ch` back in `site-chrome.tsx` →
 `site-chrome.tsx:46 renders the family name, the domain or the npm scope`. On
 its first green run it found `components/no-books.tsx:71`, which the grep that
 built the inventory had excluded as a code block.
+
+## 10. Workspaces are managed here too (2026-09-28)
+
+Until this date b/books kept tenancy off screen (decision D-C, reversed — see
+[`frontend.md`](./frontend.md) §4) and served only what `bk` needed to find a
+workspace. It now serves the same administration as the other apps, ported from
+apps/billing, all on this app's own `books.*` tenancy tables — never the shared
+factories that write `platform.workspace_*` (read `invitations/route.ts`'s header
+for why that is a bug and not a shortcut).
+
+| Route | `bk books` | Notes |
+|---|---|---|
+| `POST /api/workspaces` | `workspace create` | The `one_workspace_per_person` refusal is **lifted**: a person may own several |
+| `PATCH /api/workspaces/{ws}` | `workspace edit --name` | Owner. Name only; a `slug` field is **rejected** with `400 slug_immutable`, not ignored — the slug is in every URN this app has printed |
+| `DELETE /api/workspaces/{ws}` | `workspace delete <slug> --confirm <slug>` | Owner. Refused `409 workspace_retained` if the workspace has **ever** held anything (below) |
+| `POST /api/workspaces/{ws}/transfer` | `workspace transfer --to <id>` | Owner |
+| `DELETE /api/workspaces/{ws}/members/{userId}` | `member remove <id>` | The owner removes anyone; a member removes **themselves**, which is leaving — there is no `…/leave` route, so `member leave` is not built. The owner cannot be removed by anyone, including themselves: transfer first |
+| `GET /api/workspaces/{ws}/invite-candidates` | `invite candidates` | Owner. People you share a **books** workspace with; a super admin also sees every live account, flagged `from_platform` |
+| `POST /api/workspaces/{ws}/invitations` | `invite send` | Now **emails** through `platform-email` (`email_sent` is real) and answers `invitee_has_account` |
+| `POST` / `DELETE /api/me/avatar` | `bk profile avatar <file>` / `--remove` | The shared `meAvatarRoute` (2026-09-28): the profile tab's photo upload. No upload ledger here, so `recordUpload: false` |
+| `GET /api/invitations/{token}`, `POST /api/invitations/{accept,decline}`, `GET /api/me/pending-invitations` | `invite show` / `accept` / `decline` / `pending` | The invitee's half — not workspace-scoped, because the person redeeming a link is not yet a member of anything |
+
+The CLI side is `appverbs.Config` in `cli/internal/commands/books/books.go`:
+`WorkspaceAdmin`, `MemberRemove`, `InviteCandidates` and `InviteAccept` are on;
+`MemberLeave` stays off.
+
+**The active workspace is remembered** in `books.user_settings` (migration
+`0020`), written by `setDefaultForUser` — which the switcher, the chooser and
+`bk books workspace use` all reach through `POST /api/me/active-workspace`.
+
+### Why delete is decided in code, not by triggers
+
+A books workspace holds statutory records under a ten-year retention duty
+(art. 958f CO), so it may be deleted only while it has **never held anything**.
+apps/billing gets that from its database — every retained billing table has a
+`BEFORE DELETE` trigger, and a row trigger fires on a cascade too. **Books does
+not**: measured against the catalog on 2026-09-28, only `books.entry` and
+`books.ri_entry` refuse a delete. A cascade from `books.workspaces` would take
+the books, accounts, fiscal years, opening balances, sources and pièces
+silently, provided nothing had been posted — and `REVOKE DELETE` does not stop
+it, because referential actions run as the table owner.
+
+So `deleteWorkspace` counts the rows in `HELD_TABLES`
+(`lib/db/queries/workspaces.ts`) and refuses, naming what is held ("2 books, 140
+entries"). The list is only as good as its coverage, so
+`lib/db/workspace-holdings.test.ts` reads `schema.ts` and fails when a table with
+a `workspace_id` is in neither `HELD_TABLES` nor `TENANCY_TABLES` — a table added
+later must be classified, or it is one a delete could empty without asking. It
+cannot see a table created by raw SQL alone.
+

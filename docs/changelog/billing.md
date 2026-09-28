@@ -6,6 +6,32 @@ entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
 
+## 2026-09-28 — Workspaces can carry a logo
+
+Not breaking; additive. `billing.workspaces.logo_url` (migration 0015), set with
+`bk billing workspace logo <file>` / `--remove` (`POST` / `DELETE
+/api/workspaces/{ws}/logo`, owner only) or from Settings. This is a logo-only
+route: billing still serves no general upload. `limits.workspace_logo_max_bytes`
+is in `bk meta`.
+
+## 2026-09-28 — The workspace screens are the shared ones; `/dashboard` remembers
+
+Web only. The switcher, create modal, `/dashboard` chooser, invitation page and
+workspace settings sections are the ones every blackcode app now renders — this
+app's were the model for them. Visible differences: the chooser now remembers
+your choice (it read a column this app never wrote, so it asked every time), the
+workspace mark is coloured per workspace, and members show an owner badge.
+Routes, `bk billing` commands and test ids are unchanged.
+
+## 2026-09-28 — Fix: the chosen workspace is actually remembered
+
+Not breaking. `POST /api/me/active-workspace` (the web switcher, and `bk billing
+workspace use`) answered 200 and stored nothing: the write was a deliberate
+no-op, because the shared `platform.users.active_workspace_id` column belongs to
+b/issues. The choice is now stored in this app's own `billing.user_settings`
+(migration 0014), so `/dashboard` reopens the workspace you last chose instead
+of guessing. The CLI's own per-app choice is unchanged.
+
 ## 2026-09-28 — An agent front door: `/agent-updator`, `/llms.txt`, and `X-BK-Help` on every response
 
 Not breaking. Additive for agents; no route or command changed.

@@ -11,7 +11,7 @@ and where the proof is. Unexplained money is a worklist, never a buried column.
 
 Related commands: `bk books overview`, `bk books entity list`, `bk books
 workspace list`, `bk books workspace use`, `bk books member list`, `bk books
-invite send`.
+invite send`, `bk books invite accept`.
 
 ## This app holds no intelligence, and that is the design
 
@@ -54,18 +54,25 @@ bk books workspace list
 bk books workspace use <slug>     # sets THIS app's active workspace only
 bk books member list
 bk books invite send <email>
+bk books invite pending           # invitations waiting for YOU
+bk books invite accept <token>
 ```
 
 Membership is the whole access gate, and the active workspace is stored per app:
 choosing one here disturbs no other app's choice.
 
-**One workspace per person, for now.** Signing in mints it; `bk books workspace
-create` refuses a second and names the one you have. This is a deliberate
-restriction rather than a limit of the model — sharing a workspace needs the
-invitation flow, which is not open yet. So if you are running several
-companies, they are several BOOKS in the one workspace, not several
-workspaces: `bk books entity create` is the command, and every read takes
-`--entity <slug>` to pick between them.
+A workspace is a set of PEOPLE; a book is a set of accounts. Signing in mints
+your first workspace, and it holds any number of books — if you are running
+several companies, they are usually several books in one workspace
+(`bk books entity create`), not several workspaces. Create another workspace
+(`bk books workspace create`) when a different group of people should see it.
+
+The owner renames (`workspace edit --name`; the slug never changes), hands the
+workspace on (`workspace transfer`), invites and removes. A member leaves with
+`bk books member remove <your user id>`; the owner cannot leave without
+transferring first. **`bk books workspace delete` succeeds only for a workspace
+that has never held anything** — one book, account or source and it is refused
+with `workspace_retained`, because accounting records are kept for ten years.
 
 Most read commands take `--entity <slug>` and `--exercice <year>` and fall back
 to the first book and its latest year. **Pass them explicitly in a script.** A

@@ -530,10 +530,12 @@ records is what is specific to this app.
 | `GET \| POST /api/upload`, `POST /api/upload/blob` | `bk sales upload` |
 | `GET \| PATCH …/preferences` | `bk sales preferences show \| set` |
 
-**Six of those are platform route factories**, mounted from
+**Several are platform route factories**, mounted from
 `@blackcode/platform-api/routes`: `/api/upload`, `/api/upload/blob`, and — since
 Phase 7 — `GET|PATCH /api/me`, `GET|POST /api/tokens`, `DELETE /api/tokens/{id}`,
-`GET …/activity` and `POST /api/cli/authorize`. Why each, and the two that are
+`GET …/activity` and `POST /api/cli/authorize` — and, since 2026-09-28,
+`POST|DELETE /api/me/avatar` (`bk profile avatar`) and
+`POST|DELETE /api/workspaces/{ws}/logo`. Why each, and the two that are
 deliberately NOT mounted (`DELETE /api/me`, `/api/me/password/*`), is a table in
 [`frontend.md` §10](./frontend.md) rather than repeated here — the decisions are
 about what the WEB surface offers. `/api/meta` is
@@ -749,14 +751,15 @@ asserts the absence:**
 - `setDefaultForUser` — `platform.users.active_workspace_id` is one column shared
   by every deployment, so a sales workspace id written into it is read back by
   `apps/issues` as one of ITS ids. The default comes from this app's own tenancy
-  instead.
+  instead. *(No longer a no-op since 2026-08-11: it writes
+  `sales.user_settings` — see the switcher paragraph below.)*
 
 **What this app now serves itself**, and why each could not stay a shared factory:
 
 | Route | Why |
 |---|---|
 | `POST /api/auth/register` | self sign-up. **Carries the whitelist gate** — the account is the shared platform one, so an ungated route here is an ungated route everywhere. `lib/auth/register-gate.test.ts` |
-| `DELETE …/members/{userId}` | the row is `sales.workspace_members`, and the factory's event write would carry this workspace's id into `platform.events` |
+| `DELETE …/members/{userId}` | the row is `sales.workspace_members`, and the factory's event write would carry this workspace's id into `platform.events`. **Since 2026-09-28 a member may remove THEMSELVES** — that is leaving, the web's "Leave workspace" and `bk sales member remove <your id>` — and the answer is `{ removed, left }`; removing anybody else is still owner-only, and the owner still cannot be removed. It was owner-only outright, which left a member no way out short of asking |
 | `GET\|POST …/invitations`, `DELETE …/invitations/{id}` | `sales.invitations` has no `app` column — an invitation to a sales workspace IS an invitation to sales |
 | `GET …/invite-candidates` | the shared version suggested people you share an ISSUES workspace with |
 | `GET /api/me/pending-invitations` | the shared version reads `platform.workspace_invitations` |
@@ -792,17 +795,21 @@ this app's own content tables (migration `0002`), and Phase 3 did not touch it.
 `write-paths.integration.test.ts` re-checks those triggers precisely because the
 ledger moved out from under them.
 
-**Mostly still hidden (PLAN.md §1):** no create-workspace flow, no workspace
-settings page. The tables are fully multi-workspace, so any of that is a UI
-change rather than a migration.
+**No longer hidden.** This paragraph read "no create-workspace flow, no
+workspace settings page (PLAN.md §1)". Both arrived 2026-09-11 with the D-3
+reversal, and since 2026-09-28 the switcher, the create modal, the chooser, the
+settings page (members and invitations included) and the invitation card are
+the shared workspace kit every blackcode app renders — `frontend.md` §4 and §9.
+The tables were always fully multi-workspace, so none of it needed a migration.
 
 **The switcher arrived on 2026-08-11**, and the premise it was withheld under —
 one workspace per person — turned out to be false. Being invited into somebody
 else's workspace leaves you in TWO: signing in mints your own (the bootstrap is
 keyed on membership, and you have none until you accept), then accepting adds
-theirs. `components/workspace-switcher.tsx` renders **nothing** below two
-memberships, so the single-tenant feel D-3 wanted is intact for everyone who has
-one.
+theirs. The switcher first rendered **nothing** below two memberships, to keep
+the single-tenant feel D-3 wanted; since 2026-09-11 it always renders, because a
+person with one workspace needs the door to create a second (its header has the
+argument), and since 2026-09-28 it is the shared dropdown.
 
 The choice lives in `sales.user_settings.active_workspace_id` — this app's own
 schema, migration `0006`. **Never `platform.users.active_workspace_id`**, which

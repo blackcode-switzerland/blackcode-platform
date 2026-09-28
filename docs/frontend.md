@@ -30,6 +30,7 @@ data flows. **Source of truth is the code** — this describes it as it is today
 - [Interface language](#interface-language--blackcodeplatform-i18n)
 - [Components](#components)
 - [Shared design primitives](#shared-design-primitives)
+- [Workspace management](#workspace-management--one-experience-in-every-app)
 - [State & data fetching](#state--data-fetching)
 - [Conventions](#conventions)
 
@@ -275,19 +276,12 @@ An unregistered port shows the button and fails at Google with
         {children}
 ```
 
-`app/dashboard/layout.tsx` distinguishes **two different empties**, which is the
-whole reason it fetches the workspace list twice (app-scoped and unfiltered):
-
-| State | What renders |
-|---|---|
-| no memberships at all | `OnboardingCreateWorkspace` — "create your first workspace" |
-| a member somewhere, but no app access anywhere | a "No access to Blackcode Issues" screen naming the workspaces and pointing at Workspace settings → Apps |
-
-Collapsing those two into one check would show a member-without-access the
-onboarding screen — which quietly "works" (they would become owner of a brand-new
-workspace) while hiding the real problem and leaving them a second workspace
-nobody asked for. Phase 4's failure mode is a screen that looks fine, so this is
-the one place the UI has to be explicit about which empty it is.
+`app/dashboard/layout.tsx` renders `OnboardingCreateWorkspace` ("create your
+first workspace") when the user belongs to no workspace, and the shell
+otherwise. It used to tell **two** empties apart — no memberships, and
+memberships with no app access — until `app_access` was dropped on 2026-08-10:
+an app's workspaces are its own now, so membership is the whole gate and there
+is only one empty.
 
 ## Interface language — `@blackcode/platform-i18n`
 
@@ -475,6 +469,126 @@ kanban, detail pages, modals) rendering work-item state identically.
     server sanitizes on write in `lib/rich-text.ts` — and it also covers rows
     written before server-side sanitization applied to the HTML path.
 
+## The left menu — one sidebar in every app
+
+Since 2026-09-28 every app's signed-in sidebar is built from
+`@blackcode/platform-ui/ui/sidebar`, at apps/issues' sizes: `SidebarBrand` (the
+mark and the app word, linking home), the workspace switcher in a `px-3 py-3`
+slot below it, `SidebarNavItem` rows (`text-sm`, `py-1.5`, 17px icons, optional
+count or trailing badge), `SidebarSectionLabel` for a group heading, and
+`SidebarAccount` as the footer — avatar, name and email, then an icon row: an
+optional app extra (books' EN/FR), theme, account settings, sign out
+(confirmed). Width is `w-60` everywhere (`lg:pl-60` / `lg:ml-60` on the
+content). The workspace's own settings entry is labelled **Workspace
+settings**. The package has no router: each app passes `next/link` as `link`.
+
+## Workspace management — one experience in every app
+
+**Since 2026-09-28 every app manages workspaces with the same screens**, from
+`packages/platform-ui/src/workspace/`, imported as
+`@blackcode/platform-ui/workspace/<file>` (the package's `./workspace/*`
+export). Until then each app had drawn its own, and they had drifted exactly
+where it mattered: one removed members and revoked invitations with no
+confirmation, two confirmed a delete by the workspace's *name*, one had a link
+to a list page instead of a switcher, one kept workspaces off screen entirely,
+and the workspace's picture was drawn four different ways. The kit is lifted from `apps/billing`'s screens, which were the
+most complete; the logo came from `apps/issues`.
+
+| Export (file) | What it is |
+|---|---|
+| `WorkspaceSwitcher` (`workspace-switcher`) | The sidebar dropdown: the current workspace's mark, name and slug; every workspace with your role in it — or *"Owned by X"* for somebody else's, since *"Member"* cannot tell two "My Workspace"s apart; **Create workspace**; **Manage** the current one |
+| `CreateWorkspaceModal` (`create-workspace-modal`) | A **name and nothing else**. The server derives the slug (which never changes), and a logo is set in settings once the workspace exists. `WORKSPACE_NAME_MAX` is 80 — every app's `workspaces.name` is `varchar(80)` |
+| `WorkspaceChooser` (`workspace-chooser`) | `/dashboard` for somebody in several workspaces with nothing remembered. Choosing goes through the same `onSelect` as the switcher, so **the choice is remembered** — the sentence on screen says so, and routing the click through the callback is what makes it true |
+| `InvitationCard` · `InvitationProblem` (`invitation-card`) | `/invitations/{token}`: accept/decline, or the reason the link cannot be used |
+| `WorkspaceMark` (`workspace-mark`) | The logo, else the initial on a colour derived from the name — the same derivation `MemberAvatar` uses, so a workspace keeps its colour everywhere |
+| `SettingsSection` + the sections below (`workspace-settings`) | The frame every settings card uses |
+| `WorkspaceGeneralSection` | Name (editable by the owner), slug **read-only**, your role, and a logo row **only if the app passes `logo`** — an app with no logo column omits it |
+| `WorkspaceMembersSection` | The member list; **make owner** and **remove**, both confirmed |
+| `WorkspaceInvitationsSection` | Invite by address, colleague suggestions (`candidates`), the pending list with **copy link**, and **revoke**, confirmed |
+| `WorkspaceLeaveSection` | A member's way out, confirmed |
+| `WorkspaceDangerSection` | Delete, confirmed by **typing the slug** — or, when the app knows the workspace can never be deleted, a `refusal` rendered **instead of the button**, so an owner looking for "delete" learns why there is none rather than concluding it is missing |
+
+**The contract — what makes one kit fit four apps:**
+
+- **Presentational only.** The package has no router, no fetch and no toast
+  library on purpose. Every action is a callback returning a promise: **resolve
+  when it worked, throw when it did not**, and the app shows its own error in
+  its own style. Data props are `undefined` while loading.
+- **Every word is a `labels` prop.** `labels.ts` holds the English defaults and
+  an app passes a `Partial<WorkspaceLabels>` merged over them. Anything with a
+  name in it is a *function*, because French reorders the sentence around the
+  name. A bilingual app builds the object from its own dictionary (`apps/books`
+  passes EN/FR); product nouns ("invoices", "prospects") appear only in the
+  `detail` strings an app supplies, never in the defaults. This is also why the
+  kit does not trip a hardcoded-strings guard: it holds no copy an app cannot
+  replace.
+- **The `footer` props** are for each app's "same as `bk <app> …`" hint, which
+  is app-specific by definition — and optional, since not every app puts
+  commands in its copy.
+- **Pages stay the app's.** The invitation page resolves the token on the
+  server and decides, in one security order — accepted → not pending → expired
+  → not yours — whether to render the card or the problem. The not-yours
+  message names **only the signed-in address**, never the invitee's: a link is
+  a bearer of nothing, and printing the address it was sent to turns it into an
+  oracle.
+
+**The shape every app follows:**
+
+| Where | What |
+|---|---|
+| Sidebar | `WorkspaceSwitcher`. Selecting calls `POST /api/me/active-workspace` — the route `bk <app> workspace use` calls — then navigates |
+| `/dashboard/{ws}/settings` | General · Members · Invitations (owner) · Leave (member) **or** Danger zone (owner) |
+| `/dashboard` | One workspace → open it. Several → the remembered one, **if you are still a member of it**. Otherwise the shared chooser, which remembers |
+| `/invitations/{token}` | `InvitationCard` / `InvitationProblem` |
+
+Remembering is **per app**: each app stores the active workspace in its own
+schema (`<app>.user_settings`) through its `setDefaultForUser`, because two
+apps' workspace ids overlap. An app whose `setDefaultForUser` is a no-op makes
+`POST /api/me/active-workspace` answer 200 and store nothing — which is how the
+chooser and the switcher both came to promise a memory that did not exist in
+two apps until 2026-09-28. Each app's doc says where its own is.
+
+Adding an app: wire these, modelled on `apps/billing` (its
+`components/shell/workspace-switcher.tsx`, `workspace-create-modal.tsx`,
+`workspace-chooser.tsx`, `components/settings/workspace-settings.tsx` and
+`accept-invitation.tsx` are the thinnest wiring of the four). See
+[`adding-an-app.md`](./adding-an-app.md).
+
+## Account settings — one set of tabs in every app
+
+Since 2026-09-28 every app's `/dashboard/settings/*` is drawn from
+`packages/platform-ui/src/account/` (`@blackcode/platform-ui/account/account-settings`
+and `…/account/labels`). The account is one `platform.users` row everywhere,
+so it is one page everywhere: **Profile · Account · API tokens · Preferences**,
+same order, same cards, same `max-w-3xl` column.
+
+| Export | What it draws |
+|---|---|
+| `AccountSettingsFrame` | The tab strip and column. `bare` when the shell already pads |
+| `ProfileSection` | Photo (upload / remove), email as text, name, tagline |
+| `SignedInSection` · `PasswordSection` | Sign-out; the app's own password flow behind a button (`children(close)`) |
+| `TokensSection` | Mint, copy once, list, revoke (confirmed, naming the token). Revoking the token still on screen takes its secret off |
+| `AppearanceSection` | Light / Dark / System via `next-themes` — the browser, never the account |
+
+Same contract as the workspace kit: presentational, callbacks resolve on success
+and **throw** on failure (the app shows its own toast), `link` is the app's
+`next/link`. Each app keeps its own **Account** tab body (deletion rules differ
+per app) inside `SettingsSection` cards.
+
+**Words.** `labels` is a partial over English defaults, and the defaults carry
+**no brand** — b/billing ships rebranded, and its brand-leak guard scans the
+app, not this package. An app that wants its name in a sentence passes the
+label. b/books builds the WHOLE `AccountLabels` from its EN/FR dictionary
+(`components/settings/labels.ts`), typed total rather than partial, so a key
+added to the kit and not translated is a `tsc` error instead of English on a
+French page.
+
+**The photo** goes through `POST/DELETE /api/me/avatar` (`meAvatarRoute` in
+`platform-api`, mounted by every app; `bk profile avatar`), so an app with no
+general upload route can still offer one. `platform.users.avatar_url` is in the
+blob index since `apps/issues` migration 0050 — before it, nothing protected
+an uploaded avatar from storage clean-up.
+
 ## Workspace-scoped URLs
 
 All workspace content lives under **`/dashboard/{ws}/…`** where `{ws}` is the
@@ -486,18 +600,20 @@ the global id — so the URL matches the number shown in the UI:
 /dashboard/{ws}/issues/{seq}        issue detail
 /dashboard/{ws}/tasks/{seq}         task detail
 /dashboard/{ws}/projects/{seq}      project detail
-/dashboard/{ws}/{labels|members|activity|analytics|trash}
+/dashboard/{ws}/{labels|activity|analytics|trash}
+/dashboard/{ws}/settings            workspace settings (every app — see above)
 ```
 
-Unscoped (user/platform) routes stay flat: `/dashboard/inbox`,
-`/dashboard/settings/*`, `/dashboard/workspaces`, `/dashboard/super-admin/*`.
+Unscoped (user/platform) routes stay flat — `/dashboard/settings/*` (your
+account) and `/dashboard/super-admin/*` in every app; anything else unscoped is
+an app's own and listed in its doc.
 
 **URL is the source of truth for the active workspace.** `useActiveWorkspace()`
 reads the `ws` route param (falling back to the user's remembered default on
 unscoped pages). The `app/dashboard/[ws]/layout.tsx` server layout gates
 membership (redirect to `/dashboard` if not a member) and `PersistActiveWorkspace`
-records it as the default. The bare `/dashboard` redirects to the default
-workspace.
+records it as the default. The bare `/dashboard` resolves as in the table
+under *Workspace management* above.
 
 **The `{seq}` IS the id.** The API addresses projects/tasks/issues by the
 workspace #number directly (the server resolves seq→internal id), so detail

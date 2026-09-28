@@ -1,65 +1,65 @@
 'use client'
 
-import { useState } from 'react'
+// Accept / Decline on `/invitations/{token}` — the shared `InvitationCard`
+// (since 2026-09-28), wired to this app's routes. Accepting also makes the new
+// workspace the active one and opens it.
+
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { InvitationCard } from '@blackcode/platform-ui/workspace/invitation-card'
 
-export function AcceptInvitationButton({ token }: { token: string }) {
+async function post(url: string, body: unknown) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const j = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    toast.error(j.error ?? 'Something went wrong')
+    throw new Error(j.error ?? 'failed')
+  }
+  return j
+}
+
+export function AcceptInvitationButton({
+  token,
+  workspaceName,
+  signedInAs,
+}: {
+  token: string
+  workspaceName: string
+  signedInAs: string
+}) {
   const router = useRouter()
-  const [loading, setLoading] = useState<'accept' | 'decline' | null>(null)
-
-  async function accept() {
-    setLoading('accept')
-    const res = await fetch('/api/invitations/accept', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    })
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}))
-      toast.error(j.error ?? 'Failed to accept')
-      setLoading(null)
-      return
-    }
-    const data = await res.json()
-    // Switch to the newly-joined workspace
-    await fetch('/api/me/active-workspace', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspace_id: data.workspace_id }),
-    })
-    toast.success('Joined workspace')
-    router.push('/dashboard')
-    router.refresh()
-  }
-
-  async function decline() {
-    setLoading('decline')
-    await fetch('/api/invitations/decline', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    })
-    toast.info('Invitation declined')
-    router.push('/dashboard')
-  }
-
   return (
-    <div className="mt-6 flex flex-col items-center gap-2">
-      <button
-        onClick={accept}
-        disabled={!!loading}
-        className="w-48 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-      >
-        {loading === 'accept' ? 'Joining…' : 'Accept invitation'}
-      </button>
-      <button
-        onClick={decline}
-        disabled={!!loading}
-        className="w-48 rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-secondary disabled:opacity-50"
-      >
-        {loading === 'decline' ? 'Declining…' : 'Decline'}
-      </button>
-    </div>
+    <InvitationCard
+      workspace={{ name: workspaceName }}
+      inviter=""
+      signedInAs={signedInAs}
+      labels={{ invitedYou: () => 'You have been invited to join this workspace in b/issues.' }}
+      footer={
+        <>
+          The same from a terminal:{' '}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono">bk issues invite accept &lt;token&gt;</code>
+        </>
+      }
+      onAccept={async () => {
+        const data = await post('/api/invitations/accept', { token })
+        await fetch('/api/me/active-workspace', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspace_id: data.workspace_id }),
+        })
+        toast.success('Joined workspace')
+        router.push('/dashboard')
+        router.refresh()
+      }}
+      onDecline={async () => {
+        await post('/api/invitations/decline', { token })
+        toast.info('Invitation declined')
+        router.push('/dashboard')
+      }}
+    />
   )
 }

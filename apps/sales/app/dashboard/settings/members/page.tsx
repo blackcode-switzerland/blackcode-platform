@@ -25,5 +25,5 @@ export default async function Page() {
 
   const mine = await listWorkspacesForUser(user.id)
   const ws = mine[0]?.slug
-  redirect(ws ? `/dashboard/${ws}/members` : '/dashboard')
+  redirect(ws ? `/dashboard/${ws}/settings` : '/dashboard')
 }

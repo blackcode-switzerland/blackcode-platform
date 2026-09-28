@@ -210,6 +210,23 @@ export function useUpdateProfile() {
   return useAccountWrite<MeRow>('PATCH', '/api/me')
 }
 
+/**
+ * Upload or remove your photo — `POST` / `DELETE /api/me/avatar`
+ * (`bk profile avatar`), since 2026-09-28. Until then the profile tab took a
+ * photo URL typed by hand; this app has no general upload route, and the narrow
+ * avatar route is what lets it offer an upload without growing one. Refused for
+ * a Google-connected account, whose photo is synced from Google.
+ *
+ * `run` takes the `FormData` itself: `client.ts` passes one through untouched.
+ */
+export function useSetAvatar() {
+  return useAccountWrite<Pick<MeRow, 'id' | 'avatar_url'>>('POST', '/api/me/avatar')
+}
+
+export function useRemoveAvatar() {
+  return useAccountWrite<Pick<MeRow, 'id' | 'avatar_url'>>('DELETE', '/api/me/avatar')
+}
+
 // Re-exported so a component never reaches into lib/client.ts for it.
 export { ApiRequestError }
 
