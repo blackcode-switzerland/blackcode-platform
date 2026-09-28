@@ -15,6 +15,45 @@ import { Building2, Check, ChevronDown } from 'lucide-react'
 import { useCompanies } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
+export interface CompanyLabelInput {
+  /** The `?company=` slug, or null when none is set ("All companies"). */
+  selected: string | null
+  /** The matching company from the loaded list, or undefined if not found / not loaded yet. */
+  current: { name: string } | undefined
+  isPending: boolean
+  isError: boolean
+}
+
+export interface CompanyLabel {
+  label: string
+  /** True when the URL names a company this workspace does not have. */
+  unknown: boolean
+}
+
+/**
+ * What the switcher shows for the current `?company=` slug.
+ *
+ * ── AN UNKNOWN SLUG IS KEPT, NEVER SILENTLY REPLACED (books' lib/scope.ts) ──
+ * Falling back to "All companies" would hide the fact that the URL named a
+ * company this workspace does not have — and a page reading the same param
+ * would go on to show it, with the switcher reading as if nothing were wrong.
+ * "No such company" is shown instead, so the reader sees the same refusal the
+ * server gives rather than another company's data under a name they didn't ask
+ * for.
+ *
+ * A slug still loading (`isPending`) or a failed company list (`isError`) is
+ * NOT "unknown" — there is nothing to compare against yet, and claiming
+ * "no such company" while the list is still in flight would be a false
+ * negative on every cold load. Exported and tested from `lib/company-switcher.test.ts`
+ * (a component has no test runner in this app; this is the pure part of it).
+ */
+export function resolveCompanyLabel({ selected, current, isPending, isError }: CompanyLabelInput): CompanyLabel {
+  if (!selected) return { label: 'All companies', unknown: false }
+  if (current) return { label: current.name, unknown: false }
+  if (isPending || isError) return { label: selected, unknown: false }
+  return { label: 'No such company', unknown: true }
+}
+
 /** The selected company slug, or null for all companies. */
 export function useCompanyParam(): string | null {
   const search = useSearchParams()
@@ -66,8 +105,14 @@ export function CompanySwitcher({ ws: wsProp, className }: { ws?: string; classN
   const list = companies.data ?? []
   const current = list.find((c) => c.slug === selected)
   // A slug in the URL that is not (or no longer) a company still filters the
-  // API — which answers with its own error. Show the slug rather than "All".
-  const label = selected ? (current?.name ?? selected) : 'All companies'
+  // API, which answers with its own 404/empty — the switcher says so instead
+  // of quietly falling back to "All companies" (`resolveCompanyLabel` above).
+  const { label, unknown } = resolveCompanyLabel({
+    selected,
+    current,
+    isPending: companies.isPending,
+    isError: !!companies.error,
+  })
 
   const pick = (slug: string | null) => {
     setOpen(false)
@@ -85,7 +130,12 @@ export function CompanySwitcher({ ws: wsProp, className }: { ws?: string; classN
         className="flex h-8 max-w-[14rem] items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[13px] transition-colors hover:bg-accent"
       >
         <Building2 size={14} className="shrink-0 text-muted-foreground" />
-        <span className="truncate">{label}</span>
+        <span
+          className={cn('truncate', unknown && 'text-destructive')}
+          data-testid={unknown ? 'company-switcher-unknown' : undefined}
+        >
+          {label}
+        </span>
         <ChevronDown size={13} className="shrink-0 text-muted-foreground" />
       </button>
 

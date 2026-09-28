@@ -27,6 +27,7 @@ import { useImportHistory, toastError } from '@/lib/mutations'
 import { HISTORY_SOURCE_OPTIONS, historySourceLabel } from '@/lib/ui-vocab'
 import type { HistoryEntry, ImportHistoryRow } from '@/types'
 import { ImportHistoryModal } from './import-history-modal'
+import { HistoryDriveLink } from './drive-link'
 
 const YEAR_OPTIONS = Array.from({ length: new Date().getFullYear() - 2015 + 1 }, (_, i) => String(new Date().getFullYear() - i))
 
@@ -140,25 +141,44 @@ export function HistoryPage({ ws }: { ws: string }) {
         <ErrorState error={rows.error} retry={rows.refetch} testId="load-error" />
 
         {rows.data && (
-          <Section padded={false} testId="history-section">
-            <DataTable<HistoryEntry>
-              testId="history"
-              columns={historyColumns()}
-              rows={rows.data.data}
-              rowKey={(h) => h.seq}
-              rowHref={(h) => `/dashboard/${ws}/history/${h.seq}`}
-              rowTestId={(h) => `history-row-${h.seq}`}
-              rowMuted={(h) => h.status === 'void'}
-              empty={
+          <div data-testid="history">
+            {rows.data.data.length === 0 ? (
+              <Section padded={false} testId="history-section">
                 <EmptyState
                   testId="history-empty"
                   icon={Archive}
                   title="Nothing imported"
-                  hint={rows.data.data.length === 0 && !source && !year && !currency && !flagged ? 'Import bills from Zoho Books or Invoicely to see them here.' : 'No row matches these filters.'}
+                  hint={!source && !year && !currency && !flagged ? 'Import bills from Zoho Books or Invoicely to see them here.' : 'No row matches these filters.'}
                 />
-              }
-            />
-          </Section>
+              </Section>
+            ) : (
+              <div className="space-y-4">
+                {groupByYear(rows.data.data).map((group) => (
+                  <Section
+                    key={group.year}
+                    testId={`history-year-${group.year}`}
+                    padded={false}
+                    title={group.year}
+                    actions={
+                      <span className="text-xs text-muted-foreground" data-testid={`history-year-count-${group.year}`}>
+                        {group.rows.length} row{group.rows.length === 1 ? '' : 's'}
+                      </span>
+                    }
+                  >
+                    <DataTable<HistoryEntry>
+                      testId={`history-table-${group.year}`}
+                      columns={historyColumns()}
+                      rows={group.rows}
+                      rowKey={(h) => h.seq}
+                      rowHref={(h) => `/dashboard/${ws}/history/${h.seq}`}
+                      rowTestId={(h) => `history-row-${h.seq}`}
+                      rowMuted={(h) => h.status === 'void'}
+                    />
+                  </Section>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </PageBody>
 
@@ -192,5 +212,29 @@ function historyColumns(): Column<HistoryEntry>[] {
       cell: (h) => <Money amount={h.total} currency={h.currency} className={h.status === 'void' ? 'line-through text-muted-foreground' : ''} />,
       mobile: 'subtitle',
     },
+    {
+      key: 'drive',
+      header: 'PDF',
+      cell: (h) => <HistoryDriveLink drivePath={h.drive_path} />,
+    },
   ]
+}
+
+/**
+ * Rows arrive newest-first (`issue_date`, then `#number` — `lib/db/queries/history.ts`),
+ * so the years already fall in descending order; the sort below is defensive
+ * rather than load-bearing. When a `year` filter narrows to one calendar year
+ * this naturally produces a single group.
+ */
+function groupByYear(rows: HistoryEntry[]): { year: string; rows: HistoryEntry[] }[] {
+  const byYear = new Map<string, HistoryEntry[]>()
+  for (const row of rows) {
+    const year = row.issue_date.slice(0, 4)
+    const bucket = byYear.get(year)
+    if (bucket) bucket.push(row)
+    else byYear.set(year, [row])
+  }
+  return Array.from(byYear.entries())
+    .sort(([a], [b]) => Number(b) - Number(a))
+    .map(([year, yearRows]) => ({ year, rows: yearRows }))
 }
