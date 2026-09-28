@@ -57,27 +57,22 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
-import { useTheme } from 'next-themes'
 import {
   BookOpen,
   Calculator,
   Landmark,
   LayoutDashboard,
-  LogOut,
   Menu,
   MessagesSquare,
-  Moon,
   Paperclip,
   ScanSearch,
   Scale,
   Settings as SettingsIcon,
-  Sun,
   TrendingUp,
   type LucideIcon,
 } from 'lucide-react'
-import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
+import { SidebarAccount, SidebarBrand, SidebarNavItem } from '@blackcode/platform-ui/ui/sidebar'
 import { PropertySelect, type PropertyOption } from '@blackcode/platform-ui/ui/property-select'
-import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
 import type { Locale } from '@blackcode/platform-i18n'
 import { useLocale, useT } from '@/lib/i18n'
 import { useSetLocale } from '@/lib/account'
@@ -270,23 +265,23 @@ function ShellBody({
 
   const sidebar = (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-      <Link
-        href={scopedHref(base, '', scope)}
-        className="flex h-11 shrink-0 items-center gap-2.5 border-b border-sidebar-border px-4"
-      >
+      {/* The platform's shared sidebar pieces since 2026-09-28
+          (`@blackcode/platform-ui/ui/sidebar`) — apps/issues' sizes, footer
+          and width, so the four apps' left menus are one design. */}
+      <SidebarBrand href={scopedHref(base, '', scope)} link={Link}>
         {/* The blackcode mark every app carries — `public/logo.png`, the same
             file, not a text badge drawn in this app's amber. The palette is
             where b/books differs; the logo is the family. */}
         <Image src="/logo.png" alt="" width={20} height={20} className="rounded-[14%]" />
         <span className="text-[15px] font-semibold tracking-tight">{wordmark(APP_NAME)}</span>
-      </Link>
+      </SidebarBrand>
 
       {/* The workspace — who this is shared with. The BOOK is in the header. */}
-      <div className="px-2.5 pt-2.5">
+      <div className="px-3 py-3">
         <BooksWorkspaceSwitcher workspaces={workspaces} current={ws} />
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2 py-3">
+      <nav className="flex-1 overflow-y-auto px-2 pb-4">
         <div className="space-y-0.5">
           {NAV.map((entry) => (
             <NavLink key={entry.seg} entry={entry} base={base} pathname={pathname} scope={scope} />
@@ -301,7 +296,7 @@ function ShellBody({
   return (
     <div className="min-h-screen bg-background">
       {/* Desktop rail */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 border-r border-sidebar-border lg:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-sidebar-border lg:block">
         {sidebar}
       </aside>
 
@@ -339,7 +334,7 @@ function ShellBody({
         </div>
       )}
 
-      <div className="lg:pl-56">
+      <div className="lg:pl-60">
         <header className="sticky top-0 z-20 flex h-11 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur">
           <button
             ref={triggerRef}
@@ -403,25 +398,17 @@ function NavLink({
   scope: ReturnType<typeof useScope>
 }) {
   const t = useT()
-  const active = isActive(pathname, base, entry.seg)
-  const Icon = ICONS[entry.icon]
+  // `scopedHref`, not `base + seg`. A bare href drops `?entity=` and sends the
+  // reader to the default book — real numbers, wrong company, no indication
+  // anything happened. Every internal link goes through it.
   return (
-    <Link
-      // `scopedHref`, not `base + seg`. A bare href drops `?entity=` and sends
-      // the reader to the default book — real numbers, wrong company, no
-      // indication anything happened. Every internal link goes through it.
+    <SidebarNavItem
       href={scopedHref(base, entry.seg, scope)}
-      aria-current={active ? 'page' : undefined}
-      className={
-        'flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors ' +
-        (active
-          ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
-          : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground')
-      }
-    >
-      <Icon size={15} className={active ? 'text-sidebar-primary' : ''} />
-      {t(entry.labelKey)}
-    </Link>
+      label={t(entry.labelKey)}
+      icon={ICONS[entry.icon]}
+      active={isActive(pathname, base, entry.seg)}
+      link={Link}
+    />
   )
 }
 
@@ -672,75 +659,25 @@ function Dot({ color, className = '' }: { color?: string | null; className?: str
 function AccountFooter() {
   const { data: session } = useSession()
   const me = useMe()
-  const { confirm } = useConfirm()
   const t = useT()
-  // The live row wins; the session is the fallback for the moment before it
-  // arrives. The session's copy is minted at sign-in and never refreshed, so
-  // drawing from it alone shows a photo — or an initial — that can be weeks old,
-  // including one set in another blackcode app. See `useMe`.
-  const user = {
-    name: me.data?.name ?? session?.user?.name,
-    email: me.data?.email ?? session?.user?.email,
-    image: me.data?.avatar_url ?? session?.user?.image,
-  }
   return (
-    <div className="shrink-0 border-t border-sidebar-border p-2">
-      <div className="flex items-center gap-2.5 rounded-md px-2.5 py-2">
-        <MemberAvatar name={user.name} email={user.email} avatarUrl={user.image} size={26} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium">
-            {user.name ?? t('chrome.signedIn')}
-          </span>
-          <span className="block truncate text-[11px] text-muted-foreground">{user.email}</span>
-        </span>
-      </div>
-      <div className="flex items-center justify-end gap-1">
-        <LocaleToggle />
-        <ThemeToggle />
-        <Link
-          href="/dashboard/settings"
-          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-          title={t('chrome.settings')}
-          aria-label={t('chrome.settings')}
-        >
-          <SettingsIcon size={15} />
-        </Link>
-        <button
-          onClick={async () => {
-            if (
-              !(await confirm({
-                title: t('chrome.signOutTitle'),
-                description: t('chrome.signOutBody'),
-                confirmLabel: t('chrome.signOut'),
-                // ── `cancelLabel` IS PASSED, AND IT WAS FOUND IN THE BROWSER ──
-                // `@blackcode/platform-ui`'s dialog defaults it to the literal
-                // 'Cancel'. Opening this on a French page printed
-                // "Se déconnecter ? … Cancel Se déconnecter" — one English word
-                // in the middle of a French confirmation, on the control that
-                // ends the session.
-                //
-                // The package is English-only and translating it is a PLATFORM
-                // change this phase is not making (it has three consumers and
-                // no locale of its own). Every option it takes is overridable,
-                // so a caller can be correct today; that is what this line is.
-                // The finding is in the phase-7 report — the next app to
-                // translate will hit the same default, and the fix is for the
-                // dialog to take its two defaults from `useTranslate` behind a
-                // provider it does not yet have.
-                cancelLabel: t('chrome.cancel'),
-              }))
-            )
-              return
-            signOut({ callbackUrl: '/login' })
-          }}
-          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-          title={t('chrome.signOut')}
-          aria-label={t('chrome.signOut')}
-        >
-          <LogOut size={15} />
-        </button>
-      </div>
-    </div>
+    <SidebarAccount
+      name={me.data?.name ?? session?.user?.name}
+      email={me.data?.email ?? session?.user?.email}
+      avatarUrl={me.data?.avatar_url ?? session?.user?.image}
+      settingsHref="/dashboard/settings"
+      onSignOut={() => signOut({ callbackUrl: '/login' })}
+      extra={<LocaleToggle />}
+      link={Link}
+      labels={{
+        theme: t('chrome.toggleTheme'),
+        settings: t('chrome.settings'),
+        signOut: t('chrome.signOut'),
+        signOutTitle: t('chrome.signOutTitle'),
+        signOutDescription: t('chrome.signOutBody'),
+        cancel: t('chrome.cancel'),
+      }}
+    />
   )
 }
 
@@ -772,31 +709,6 @@ function LocaleToggle() {
       aria-label={t('chrome.languageSwitchTo')}
     >
       {next}
-    </button>
-  )
-}
-
-function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme()
-  const t = useT()
-  // `next-themes` cannot know the resolved theme until it has read the DOM, so
-  // rendering the icon before mount produces a server/client mismatch and a
-  // hydration warning. A same-sized blank keeps the row from shifting.
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-
-  return (
-    <button
-      onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-      title={t('chrome.toggleTheme')}
-      aria-label={t('chrome.toggleTheme')}
-    >
-      {mounted ? (
-        resolvedTheme === 'dark' ? <Sun size={15} /> : <Moon size={15} />
-      ) : (
-        <span className="block h-[15px] w-[15px]" />
-      )}
     </button>
   )
 }

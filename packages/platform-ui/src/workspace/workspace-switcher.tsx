@@ -17,7 +17,7 @@
 // the ones that know its URLs and its error envelope.
 
 import { useEffect, useRef, useState } from 'react'
-import { Building2, Check, ChevronsUpDown, Loader2, Plus, Settings } from 'lucide-react'
+import { Building2, Check, ChevronsUpDown, Crown, Loader2, Plus, Settings } from 'lucide-react'
 import { cn } from '../utils'
 import { WorkspaceMark } from './workspace-mark'
 import { withDefaults, type WorkspaceLabels } from './labels'
@@ -118,10 +118,7 @@ export function WorkspaceSwitcher({
             <Building2 size={13} />
           </span>
         )}
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium">{active?.name ?? L.chooseWorkspace}</span>
-          {active && <span className="block truncate font-mono text-[10.5px] text-muted-foreground">{active.slug}</span>}
-        </span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{active?.name ?? L.chooseWorkspace}</span>
         <ChevronsUpDown size={14} className="shrink-0 text-muted-foreground" />
       </button>
 
@@ -153,12 +150,13 @@ export function WorkspaceSwitcher({
                       )}
                     >
                       <WorkspaceMark name={ws.name} logoUrl={ws.logo_url} size={20} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px]">{ws.name}</span>
-                        <span className="block truncate text-[11px] text-muted-foreground">
-                          {roleLine(ws, L)} · <span className="font-mono">{ws.slug}</span>
-                        </span>
-                      </span>
+                      {/* One row: the name, a crown when it is yours, a check when it is
+                          the one you are in. Role lines and slugs were noise here
+                          (2026-09-28); the settings page carries both. */}
+                      <span className="min-w-0 flex-1 truncate text-[13px]">{ws.name}</span>
+                      {ws.member_role === 'owner' && (
+                        <Crown size={13} className="shrink-0 text-amber-500" aria-label={L.owner} />
+                      )}
                       {pending === ws.slug ? (
                         <Loader2 size={14} className="shrink-0 animate-spin text-muted-foreground" />
                       ) : isCurrent ? (
@@ -197,7 +195,7 @@ export function WorkspaceSwitcher({
                   className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                 >
                   <Settings size={15} className="shrink-0" />
-                  <span className="truncate">{L.manage(active.name)}</span>
+                  <span className="truncate">{L.manage}</span>
                 </button>
               )}
             </div>

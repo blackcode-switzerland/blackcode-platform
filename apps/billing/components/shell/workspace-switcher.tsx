@@ -55,7 +55,7 @@ export function WorkspaceSwitcher({
   const open = useOpenWorkspace()
 
   return (
-    <div className="px-2.5 pt-2.5">
+    <>
       <SharedSwitcher
         workspaces={workspaces}
         current={current}
@@ -64,6 +64,6 @@ export function WorkspaceSwitcher({
         onManage={(ws) => router.push(`/dashboard/${encodeURIComponent(ws.slug)}/settings`)}
       />
       <WorkspaceCreateModal open={creating} onClose={() => setCreating(false)} />
-    </div>
+    </>
   )
 }

@@ -21,7 +21,7 @@ export const en = {
   'ws.member': 'Member',
   'ws.ownedBy': 'Owned by {who}',
   'ws.createWorkspace': 'Create workspace',
-  'ws.manage': 'Manage {name}',
+  'ws.manage': 'Workspace settings',
   'ws.createTitle': 'Create workspace',
   'ws.createDescription':
     'A separate space with its own people. It holds any number of books — a second company is usually a second book, not a second workspace.',
@@ -138,7 +138,7 @@ export const fr: Record<keyof typeof en, string> = {
   'ws.member': 'Membre',
   'ws.ownedBy': 'Appartient à {who}',
   'ws.createWorkspace': 'Créer un espace de travail',
-  'ws.manage': 'Gérer {name}',
+  'ws.manage': 'Réglages de l’espace',
   'ws.createTitle': 'Créer un espace de travail',
   'ws.createDescription':
     'Un espace séparé, avec ses propres personnes. Il contient autant de livres que nécessaire — une deuxième société est en général un deuxième livre, pas un deuxième espace.',

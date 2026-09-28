@@ -7,6 +7,17 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-09-28 — One left menu in every app
+
+Web only; no route or command changed. The signed-in sidebar is drawn from
+shared pieces (`@blackcode/platform-ui/ui/sidebar`) at b/issues' sizes in all
+four apps: the same width, row size and footer (theme · account settings · sign
+out, with b/books' language switch first). The workspace entry reads
+**Workspace settings** everywhere. The workspace dropdown lists one row per
+workspace — the name, a crown if it is yours, a check if it is the current one —
+and its link reads "Workspace settings". b/sales' workspace settings page now
+has the same width as the other apps'.
+
 ## 2026-09-28 — Workspace logos in every app: `bk <app> workspace logo`
 
 Not breaking; additive.

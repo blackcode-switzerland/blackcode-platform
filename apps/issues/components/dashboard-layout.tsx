@@ -7,10 +7,6 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Settings,
-  LogOut,
-  Moon,
-  Sun,
   LayoutGrid,
   List,
   Target,
@@ -25,13 +21,11 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from 'lucide-react'
-import { useTheme } from 'next-themes'
 import { useQuery } from '@tanstack/react-query'
 import { WorkspaceSwitcher } from './workspace-switcher'
 import { InboxBadge } from './inbox-badge'
 import { useActiveWorkspace } from './listings/use-active-workspace'
-import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
-import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
+import { SidebarAccount, SidebarNavItem, SidebarSectionLabel } from '@blackcode/platform-ui/ui/sidebar'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -56,17 +50,15 @@ const NAV_WORKSPACE: { seg: string; label: string; icon: LucideIcon; countKey?: 
   // Name, logo, members, invitations, storage and deletion — the settings page
   // every blackcode app shares (2026-09-28). It replaced a Members entry here;
   // `/members` redirects to it.
-  { seg: '/settings', label: 'Settings', icon: Settings2 },
+  { seg: '/settings', label: 'Workspace settings', icon: Settings2 },
 ]
 
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const { theme, setTheme } = useTheme()
   const pathname = usePathname()
   const { data: session } = useSession()
   const user = session?.user
   const [mobileOpen, setMobileOpen] = useState(false)
-  const { confirm } = useConfirm()
   const { data: ws } = useActiveWorkspace()
 
   // Close the mobile drawer on route change.
@@ -147,11 +139,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <nav className="flex-1 overflow-y-auto px-2 pb-4">
         <div className="space-y-0.5">
           {NAV_PRIMARY.map((item) => (
-            <NavItem key={item.href} item={item} active={item.match(pathname ?? '')} />
+            <SidebarNavItem key={item.href} href={item.href} label={item.label} icon={item.icon} active={item.match(pathname ?? '')} trailing={item.trailing ? <InboxBadge /> : undefined} link={Link} />
           ))}
         </div>
 
-        <SectionLabel>This workspace</SectionLabel>
+        <SidebarSectionLabel>This workspace</SidebarSectionLabel>
         <div className="space-y-0.5">
           {ws?.slug
             ? NAV_WORKSPACE.map((item) => {
@@ -162,7 +154,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   ? p === base
                   : p === href || p.startsWith(`${href}/`)
                 const count = item.countKey ? counts?.[item.countKey] : undefined
-                return <NavItem key={item.seg} item={{ href, label: item.label, icon: item.icon }} active={active} count={count} />
+                return <SidebarNavItem key={item.seg} href={href} label={item.label} icon={item.icon} active={active} count={count} link={Link} />
               })
             : null}
         </div>
@@ -184,50 +176,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         )}
       </nav>
 
-      {/* User */}
-      <div className="border-t border-sidebar-border p-2.5">
-        <div className="mb-1 flex items-center gap-2.5 px-1.5 py-1">
-          <MemberAvatar
-            name={displayName || null}
-            email={displayEmail || null}
-            avatarUrl={avatarUrl}
-            size={30}
-          />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium leading-tight">{displayName}</p>
-            <p className="truncate text-xs leading-tight text-muted-foreground">{displayEmail}</p>
-          </div>
-        </div>
-        <div className="flex items-center justify-end gap-1">
-          <IconButton title="Toggle theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-          </IconButton>
-          <Link
-            href="/dashboard/settings"
-            className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
-            title="Settings"
-          >
-            <Settings size={16} />
-          </Link>
-          <button
-            onClick={async () => {
-              if (
-                !(await confirm({
-                  title: 'Sign out?',
-                  description: 'You will be redirected to the login page.',
-                  confirmLabel: 'Sign out',
-                }))
-              )
-                return
-              signOut()
-            }}
-            className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            title="Sign out"
-          >
-            <LogOut size={16} />
-          </button>
-        </div>
-      </div>
+      <SidebarAccount
+        name={displayName || null}
+        email={displayEmail || null}
+        avatarUrl={avatarUrl}
+        settingsHref="/dashboard/settings"
+        onSignOut={() => signOut()}
+        link={Link}
+      />
     </div>
   )
 
@@ -286,62 +242,5 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         {children}
       </main>
     </div>
-  )
-}
-
-function SectionLabel({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <p className={`px-2.5 pb-1 pt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground/70 ${className ?? ''}`}>
-      {children}
-    </p>
-  )
-}
-
-function IconButton({
-  children,
-  title,
-  onClick,
-}: {
-  children: React.ReactNode
-  title: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
-    >
-      {children}
-    </button>
-  )
-}
-
-function NavItem({
-  item,
-  active,
-  count,
-}: {
-  item: { href: string; label: string; icon: LucideIcon; trailing?: boolean }
-  active: boolean
-  count?: number
-}) {
-  const Icon = item.icon
-  return (
-    <Link
-      href={item.href}
-      className={`relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium ${
-        active
-          ? 'bg-sidebar-accent text-foreground'
-          : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground'
-      }`}
-    >
-      <Icon size={17} />
-      <span className="flex-1 truncate">{item.label}</span>
-      {item.trailing ? <InboxBadge /> : null}
-      {count != null && !item.trailing ? (
-        <span className="text-xs tabular-nums text-muted-foreground/60">{count}</span>
-      ) : null}
-    </Link>
   )
 }

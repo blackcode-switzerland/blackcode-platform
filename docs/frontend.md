@@ -444,6 +444,19 @@ kanban, detail pages, modals) rendering work-item state identically.
     server sanitizes on write in `lib/rich-text.ts` — and it also covers rows
     written before server-side sanitization applied to the HTML path.
 
+## The left menu — one sidebar in every app
+
+Since 2026-09-28 every app's signed-in sidebar is built from
+`@blackcode/platform-ui/ui/sidebar`, at apps/issues' sizes: `SidebarBrand` (the
+mark and the app word, linking home), the workspace switcher in a `px-3 py-3`
+slot below it, `SidebarNavItem` rows (`text-sm`, `py-1.5`, 17px icons, optional
+count or trailing badge), `SidebarSectionLabel` for a group heading, and
+`SidebarAccount` as the footer — avatar, name and email, then an icon row: an
+optional app extra (books' EN/FR), theme, account settings, sign out
+(confirmed). Width is `w-60` everywhere (`lg:pl-60` / `lg:ml-60` on the
+content). The workspace's own settings entry is labelled **Workspace
+settings**. The package has no router: each app passes `next/link` as `link`.
+
 ## Workspace management — one experience in every app
 
 **Since 2026-09-28 every app manages workspaces with the same screens**, from

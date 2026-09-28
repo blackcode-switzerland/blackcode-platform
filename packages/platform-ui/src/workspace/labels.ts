@@ -20,7 +20,8 @@ export interface WorkspaceLabels {
   member: string
   ownedBy: (who: string) => string
   createWorkspace: string
-  manage: (name: string) => string
+  /** The dropdown's link to the current workspace's settings. */
+  manage: string
 
   // ── create ─────────────────────────────────────────────────────────────
   createTitle: string
@@ -109,7 +110,7 @@ export const DEFAULT_WORKSPACE_LABELS: WorkspaceLabels = {
   member: 'Member',
   ownedBy: (who) => `Owned by ${who}`,
   createWorkspace: 'Create workspace',
-  manage: (name) => `Manage ${name}`,
+  manage: 'Workspace settings',
 
   createTitle: 'Create workspace',
   createDescription: 'A separate space with its own people. You can invite others once it exists.',

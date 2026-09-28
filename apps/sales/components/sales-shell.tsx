@@ -37,7 +37,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { WorkspaceSwitcher, type SwitcherWorkspace } from './workspace-switcher'
 import { signOut, useSession } from 'next-auth/react'
-import { useTheme } from 'next-themes'
 import {
   BarChart3,
   Building2,
@@ -46,20 +45,16 @@ import {
   FolderOpen,
   History,
   Landmark,
-  LogOut,
   MessagesSquare,
-  Moon,
   Package,
   Target,
   Menu,
   Search,
-  Settings as SettingsIcon,
-  Sun,
   Sparkles,
   Trash2,
   type LucideIcon,
 } from 'lucide-react'
-import { MemberAvatar } from '@blackcode/platform-ui/ui/member-avatar'
+import { SidebarAccount, SidebarBrand, SidebarNavItem, SidebarSectionLabel } from '@blackcode/platform-ui/ui/sidebar'
 import { useMe } from '@/lib/hooks'
 import { CommandPalette } from './command-palette'
 
@@ -113,7 +108,7 @@ const NAV_CATALOG: NavEntry[] = [
 // workspace" row is the door most people actually use.
 const NAV_UTILITY: NavEntry[] = [
   { seg: '/trash', label: 'Trash', icon: Trash2 },
-  { seg: '/settings', label: 'Settings', icon: Landmark },
+  { seg: '/settings', label: 'Workspace settings', icon: Landmark },
 ]
 
 /**
@@ -189,43 +184,36 @@ export function SalesShell({
 
   const sidebar = (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-      <Link
-        href={base}
-        className="flex h-12 shrink-0 items-center gap-2.5 border-b border-sidebar-border px-4"
-      >
-        {/* The real mark, not a text `b/` badge — see the matching note in
-            apps/issues' `dashboard-layout.tsx`. The badge was drawn in
-            `--sidebar-primary`, which is this app's emerald; the file
-            (`public/logo.png`, arrived 2026-08-11) is the blackcode mark both
-            apps carry, and the app word beside it is where the difference
-            belongs. The palette stays sales' everywhere else — D-4 is about the
-            product's colour, not about its logo. */}
+      {/* The sidebar is the platform's shared one since 2026-09-28
+          (`@blackcode/platform-ui/ui/sidebar`) — apps/issues' sizes, footer and
+          width, so the four apps' left menus are one design. */}
+      <SidebarBrand href={base} link={Link}>
         <Image src="/logo.png" alt="b/" width={22} height={22} className="rounded-[14%]" />
         <span className="text-[15px] font-semibold tracking-tight">sales</span>
-      </Link>
+      </SidebarBrand>
 
       {/* Renders nothing for a single workspace — see workspace-switcher.tsx.
           Above the nav rather than in the footer because it scopes everything
           below it: every NavLink is `/dashboard/{ws}/…`. */}
-      <WorkspaceSwitcher workspaces={workspaces} current={ws} />
+      <div className="px-3 py-3">
+        <WorkspaceSwitcher workspaces={workspaces} current={ws} />
+      </div>
 
-      <nav className="flex-1 overflow-y-auto px-2.5 py-3">
+      <nav className="flex-1 overflow-y-auto px-2 pb-4">
         <div className="space-y-0.5">
           {NAV_MAIN.map((e) => (
             <NavLink key={e.seg} entry={e} base={base} pathname={pathname} />
           ))}
         </div>
 
-        <p className="px-2.5 pb-1.5 pt-5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Catalog
-        </p>
+        <SidebarSectionLabel>Catalog</SidebarSectionLabel>
         <div className="space-y-0.5">
           {NAV_CATALOG.map((e) => (
             <NavLink key={e.seg} entry={e} base={base} pathname={pathname} />
           ))}
         </div>
 
-        <div className="mt-5 space-y-0.5 border-t border-sidebar-border pt-3">
+        <div className="mt-4 space-y-0.5 border-t border-sidebar-border pt-3">
           {NAV_UTILITY.map((e) => (
             <NavLink key={e.seg} entry={e} base={base} pathname={pathname} />
           ))}
@@ -240,7 +228,7 @@ export function SalesShell({
     <PageTitleContext.Provider value={setOverride}>
       <div className="min-h-screen bg-background">
         {/* Desktop rail */}
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 border-r border-sidebar-border lg:block">
+        <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-sidebar-border lg:block">
           {sidebar}
         </aside>
 
@@ -258,7 +246,7 @@ export function SalesShell({
           </div>
         )}
 
-        <div className="lg:pl-56">
+        <div className="lg:pl-60">
           {/* h-12, the sales density (D-4). Sticky, so the section name stays
               visible down a long ledger. */}
           <header className="sticky top-0 z-20 flex h-12 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur">
@@ -281,7 +269,6 @@ export function SalesShell({
                   ⌘K
                 </kbd>
               </button>
-              <ThemeToggle />
             </div>
           </header>
 
@@ -309,23 +296,14 @@ function isActive(pathname: string, base: string, seg: string): boolean {
 }
 
 function NavLink({ entry, base, pathname }: { entry: NavEntry; base: string; pathname: string }) {
-  const active = isActive(pathname, base, entry.seg)
-  const Icon = entry.icon
   return (
-    <Link
+    <SidebarNavItem
       href={base + entry.seg}
-      aria-current={active ? 'page' : undefined}
-      className={
-        // py-2 rather than issues' py-1.5 — roomier is the point (D-4).
-        'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors ' +
-        (active
-          ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
-          : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground')
-      }
-    >
-      <Icon size={16} className={active ? 'text-sidebar-primary' : ''} />
-      {entry.label}
-    </Link>
+      label={entry.label}
+      icon={entry.icon}
+      active={isActive(pathname, base, entry.seg)}
+      link={Link}
+    />
   )
 }
 
@@ -340,77 +318,15 @@ function AccountFooter() {
   const { data: session } = useSession()
   const me = useMe()
   // The live row wins; the session is the fallback for the moment before it
-  // arrives. The session's copy is minted at sign-in and never refreshed (see
-  // `useMe`), so drawing from it alone showed a photo — or an initial — that
-  // could be weeks old, including one set in another blackcode app.
-  const user = {
-    name: me.data?.name ?? session?.user?.name,
-    email: me.data?.email ?? session?.user?.email,
-    image: me.data?.avatar_url ?? session?.user?.image,
-  }
+  // arrives (its copy is minted at sign-in and never refreshed — see `useMe`).
   return (
-    <div className="shrink-0 border-t border-sidebar-border p-2.5">
-      <div className="flex items-center gap-2.5 rounded-lg px-2.5 py-2">
-        {/* The signed-in person's PHOTO, since 2026-08-11. This was one grey
-            initial and no image — the account carries `avatar_url` (it is on the
-            session as `image`), and the sidebar simply never read it, so a
-            person who had uploaded a photo in either app saw a letter here.
-            `MemberAvatar` falls back to two initials on a colour derived from
-            the label, so the no-photo case is still distinguishable between two
-            teammates whose names start with the same letter. */}
-        <MemberAvatar
-          name={user?.name}
-          email={user?.email}
-          avatarUrl={user?.image}
-          size={28}
-        />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium">{user?.name ?? 'Signed in'}</span>
-          <span className="block truncate text-[11px] text-muted-foreground">{user?.email}</span>
-        </span>
-      </div>
-      <Link
-        href="/dashboard/settings/profile"
-        className="mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-      >
-        <SettingsIcon size={15} />
-        Settings
-      </Link>
-      <button
-        onClick={() => signOut({ callbackUrl: '/login' })}
-        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-      >
-        <LogOut size={15} />
-        Sign out
-      </button>
-    </div>
-  )
-}
-
-function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme()
-  // `next-themes` cannot know the resolved theme until it has read the DOM, so
-  // rendering the icon before mount produces a server/client mismatch and a
-  // hydration warning. Rendering a same-sized blank keeps the header from
-  // shifting when it arrives.
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-
-  return (
-    <button
-      onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      aria-label="Toggle theme"
-    >
-      {mounted ? (
-        resolvedTheme === 'dark' ? (
-          <Sun size={16} />
-        ) : (
-          <Moon size={16} />
-        )
-      ) : (
-        <span className="block h-4 w-4" />
-      )}
-    </button>
+    <SidebarAccount
+      name={me.data?.name ?? session?.user?.name}
+      email={me.data?.email ?? session?.user?.email}
+      avatarUrl={me.data?.avatar_url ?? session?.user?.image}
+      settingsHref="/dashboard/settings/profile"
+      onSignOut={() => signOut({ callbackUrl: '/login' })}
+      link={Link}
+    />
   )
 }
