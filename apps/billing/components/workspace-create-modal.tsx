@@ -1,45 +1,46 @@
 'use client'
 
-// The "create workspace" modal, opened from the sidebar's workspace switcher
-// (phase 2, 2026-09-21) — modelled on `apps/sales`' modal of the same name,
-// never imported from it.
+// "Create workspace", in place — the shared `CreateWorkspaceModal` (since
+// 2026-09-28), wired to this app's writes. Used by the sidebar switcher and the
+// `/dashboard` chooser; `components/create-workspace-form.tsx` still serves the
+// failure screen, which has no modal to open.
 //
-// It wraps the SAME `CreateWorkspaceForm` the `/dashboard?new=1` screen
-// renders, so the write is one component calling `POST /api/workspaces` (what
-// `bk billing workspace create` calls) — two forms for one route is two places
-// for the validation to drift. `?new=1` still works for a direct link.
-//
-// After creating: remember it as the active workspace (`POST
-// /api/me/active-workspace`, what `bk billing workspace use` writes), then land
-// there. `router.refresh()` because the switcher's list is loaded server-side.
+// Setting the new workspace active is best-effort: it exists either way, and
+// the URL is what the pages read. A failure there only means the NEXT bare
+// `/dashboard` opens somewhere else, so it is not worth an error on top of a
+// success.
 
 import { useRouter } from 'next/navigation'
-import { Modal } from '@blackcode/platform-ui/ui/modal'
-import { CreateWorkspaceForm } from '@/components/create-workspace-form'
-import { useSetActiveWorkspace } from '@/lib/mutations'
+import { toast } from 'sonner'
+import { CreateWorkspaceModal } from '@blackcode/platform-ui/workspace/create-workspace-modal'
+import { toastError, useCreateWorkspace, useSetActiveWorkspace } from '@/lib/mutations'
 
 export function WorkspaceCreateModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter()
+  const create = useCreateWorkspace()
   const setActive = useSetActiveWorkspace()
 
-  async function onCreated(slug: string) {
-    // Best-effort: the workspace exists either way, and the URL is what the
-    // pages read. A failure here only means the NEXT bare `/dashboard` opens
-    // somewhere else, so it is not worth an error on top of a success.
-    await setActive.mutateAsync({ slug }).catch(() => undefined)
-    onClose()
-    router.push(`/dashboard/${encodeURIComponent(slug)}`)
-    router.refresh()
-  }
-
   return (
-    <Modal
+    <CreateWorkspaceModal
       open={open}
       onClose={onClose}
-      title="Create workspace"
-      description="A separate tenant, with its own companies, invoices and team. Several issuing companies can live in one workspace."
-    >
-      <CreateWorkspaceForm onCreated={onCreated} />
-    </Modal>
+      labels={{
+        createDescription:
+          'A separate tenant, with its own companies, invoices and team. Several issuing companies can live in one workspace.',
+      }}
+      onCreate={async (name) => {
+        let ws
+        try {
+          ws = await create.mutateAsync({ name })
+        } catch (e) {
+          toastError(e)
+          throw e
+        }
+        await setActive.mutateAsync({ slug: ws.slug }).catch(() => undefined)
+        toast.success(`Created ${ws.name}`)
+        router.push(`/dashboard/${encodeURIComponent(ws.slug)}`)
+        router.refresh()
+      }}
+    />
   )
 }

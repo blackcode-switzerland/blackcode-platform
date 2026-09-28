@@ -57,6 +57,7 @@ import {
   prospectNotes,
   prospects,
   stageEntries,
+  salesWorkspaces,
   strategies,
   templates,
 } from '@/lib/db/schema'
@@ -113,6 +114,9 @@ export const SURFACES = [
   { type: 'strategy', columns: ['rationale', 'case_studies'], mode: 'scan' },
   // Migration 0011 (sales #29) — a product's own site, if it has one.
   { type: 'product_url', columns: ['external_url'], mode: 'exact' },
+  // Migration 0013 (2026-09-28): the workspace's own logo. Keyed by the
+  // workspace row's id — a workspace row IS the workspace.
+  { type: 'workspace_logo', columns: ['logo_url'], mode: 'exact' },
 ] as const satisfies ReadonlyArray<{
   type: string
   columns: readonly string[]
@@ -160,6 +164,7 @@ export const RETRIGGER_SQL: Record<string, (id: number) => SQL> = {
   product_url: (id) => sql`UPDATE ${products} SET external_url = external_url WHERE id = ${id}`,
   strategy: (id) =>
     sql`UPDATE ${strategies} SET rationale = rationale, case_studies = case_studies WHERE id = ${id}`,
+  workspace_logo: (id) => sql`UPDATE ${salesWorkspaces} SET logo_url = logo_url WHERE id = ${id}`,
 }
 
 export const salesReferenceScanner: ReferenceScanner = {
@@ -176,7 +181,7 @@ export const salesReferenceScanner: ReferenceScanner = {
       for (const url of extractUploadedUrls(text as string)) add(url, ref)
     }
 
-    const [prospectRows, contactRows, stageRows, meetingRows, commRows, objectionRows, productRows, templateRows, documentRows, matchRows, noteRows, strategyRows] =
+    const [prospectRows, contactRows, stageRows, meetingRows, commRows, objectionRows, productRows, templateRows, documentRows, matchRows, noteRows, strategyRows, workspaceRows] =
       await Promise.all([
         db.execute(sql`SELECT id, seq, name, summary, next_action_note, closed_reason, address, game_plan, website, deleted_at FROM ${prospects} WHERE workspace_id = ${workspaceId}`),
         db.execute(sql`SELECT id, name, notes, linkedin, deleted_at FROM ${contacts} WHERE workspace_id = ${workspaceId}`),
@@ -190,6 +195,7 @@ export const salesReferenceScanner: ReferenceScanner = {
         db.execute(sql`SELECT id, why FROM ${matches} WHERE workspace_id = ${workspaceId}`),
         db.execute(sql`SELECT id, kind, body FROM ${prospectNotes} WHERE workspace_id = ${workspaceId}`),
         db.execute(sql`SELECT id, seq, name, rationale, case_studies, deleted_at FROM ${strategies} WHERE workspace_id = ${workspaceId}`),
+        db.execute(sql`SELECT id, name, logo_url FROM ${salesWorkspaces} WHERE id = ${workspaceId}`),
       ])
 
     for (const r of prospectRows.rows as Row[]) {
@@ -288,6 +294,11 @@ export const salesReferenceScanner: ReferenceScanner = {
       scan(r.rationale, ref)
       scan(r.case_studies, ref)
     }
+    for (const r of workspaceRows.rows as Row[]) {
+      if (typeof r.logo_url === 'string' && r.logo_url && isUploadedAsset(r.logo_url)) {
+        add(r.logo_url, { type: 'workspace_logo', id: Number(r.id), seq: null, label: (r.name as string) ?? null, trashed: false })
+      }
+    }
 
     return map
   },
@@ -344,6 +355,8 @@ export const salesReferenceScanner: ReferenceScanner = {
         UNION ALL
         SELECT 1 FROM ${strategies}   WHERE strpos(coalesce(rationale, ''), ${url}) > 0
                                          OR strpos(coalesce(case_studies, ''), ${url}) > 0
+        UNION ALL
+        SELECT 1 FROM ${salesWorkspaces} WHERE logo_url = ${url}
       ) AS referenced
     `)
     return Boolean((res.rows[0] as Row | undefined)?.referenced)

@@ -133,9 +133,16 @@ function liveTriggers(): TriggerSpec[] {
   // is the argument for keeping BOTH directions: the parser is the part of a
   // text-matching guard most likely to be wrong, and only the "trigger exists,
   // SURFACES does not know" half looks at what the parser produced.
+  // `[\w."]+` for the table, and the quotes stripped from the key: until
+  // 2026-09-28 this was `[\w.]+`, so a trigger written against a QUOTED name
+  // (`ON "sales"."workspaces"`, the spelling drizzle-kit itself emits) did not
+  // match at all — the lazy `[\s\S]*?` ran on past it — and the trigger was
+  // invisible here. Found when migration 0013 added one and this suite stayed
+  // green without its surface in SURFACES. The granularity of a text scan is
+  // part of what it checks (CLAUDE.md finding #11).
   const CREATE =
-    /CREATE\s+TRIGGER\s+(\w+)[\s\S]*?\sON\s+([\w.]+)[\s\S]*?platform\.blob_refs_sync\s*\(([^)]*)\)/gi
-  const DROP = /DROP\s+TRIGGER\s+(?:IF\s+EXISTS\s+)?(\w+)\s+ON\s+([\w.]+)/gi
+    /CREATE\s+TRIGGER\s+(\w+)[\s\S]*?\sON\s+([\w."]+)[\s\S]*?platform\.blob_refs_sync\s*\(([^)]*)\)/gi
+  const DROP = /DROP\s+TRIGGER\s+(?:IF\s+EXISTS\s+)?(\w+)\s+ON\s+([\w."]+)/gi
 
   for (const file of migrationFiles()) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8')
@@ -144,11 +151,11 @@ function liveTriggers(): TriggerSpec[] {
     const events: Array<{ at: number; run: () => void }> = []
 
     for (const m of sql.matchAll(DROP)) {
-      const key = `${m[2].toLowerCase()}.${m[1]}`
+      const key = `${m[2].replace(/"/g, '').toLowerCase()}.${m[1]}`
       events.push({ at: m.index!, run: () => byName.set(key, null) })
     }
     for (const m of sql.matchAll(CREATE)) {
-      const key = `${m[2].toLowerCase()}.${m[1]}`
+      const key = `${m[2].replace(/"/g, '').toLowerCase()}.${m[1]}`
       const args = m[3]
         .split(',')
         .map((a) => a.trim().replace(/^'|'$/g, ''))

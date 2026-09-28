@@ -22,7 +22,7 @@ is being built:
   **third** app, and the first whose **web surface is read-only** — every write
   is a `bk books` command, so the CLI is not a convenience layer here, it is the
   product. Same stack plus `platform-i18n` (EN/FR); its own `books.*` schema,
-  nineteen migrations, CLI group, eight guide topics and docs.
+  twenty-one migrations, CLI group, eight guide topics and docs.
 - **`apps/billing`** — **b/billing**, Swiss invoicing: issuing companies,
   gapless invoice numbers, QR-bill payment parts, and an append-only audit log
   that IS the edit workflow. The **fourth** app, **in build** — phase 0
@@ -44,7 +44,7 @@ is being built:
   name, contact address and email accent read the environment while the slug
   never does. The plan is `docs/billing-app-plan/`, one doc per milestone.
 - **`apps/_scaffold`** — the scaffold. A real, minimal app: one entity, one
-  route, its own migrations and ledger, nine platform route factories, an entity
+  route, its own migrations and ledger, eight platform route factories, an entity
   projection and its reconciler, a CLI command group, a guide topic, a page.
   It builds, lints and passes every guardrail. **Copy it to add an app; do not
   edit it in place.** (Renamed from `apps/_template` on 2026-08-07 — D-38: the
@@ -719,7 +719,7 @@ never describe an app's internals, and an app's docs never describe another app.
 app internal).
 
 `/apps/books/docs` — that app only: `backend.md`, `frontend.md`. The statutory
-model, the nineteen migrations, the derivations and the i18n column live here
+model, the twenty-one migrations, the derivations and the i18n column live here
 and nowhere else — a root doc says *books exists, here is its schema and its
 command group*, never how a compte de résultat is derived (§7.5).
 

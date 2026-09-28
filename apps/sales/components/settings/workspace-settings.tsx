@@ -1,261 +1,249 @@
 'use client'
 
-// Workspace settings — `sales.workspaces`. New 2026-09-11 with the D-3
-// reversal: rename (name only), transfer ownership, delete.
+// Workspace settings — `/dashboard/{ws}/settings`: the workspace, its members
+// and invitations, and the danger zone (or, for a member, leave).
+//
+// ── THE SECTIONS ARE SHARED SINCE 2026-09-28 ────────────────────────────────
+// `@blackcode/platform-ui/workspace/workspace-settings` — the same sections all
+// four apps render. Members and invitations used to be a separate page
+// (`/dashboard/{ws}/members`, which now redirects here); they are sections of
+// this one, as in apps/billing and apps/books. What changed on the way:
+//
+//   - removing a member and revoking an invitation ASK FIRST (they did not);
+//   - a member can LEAVE (there was no way out short of asking the owner) —
+//     the route now accepts a member removing themselves, as apps/billing's does;
+//   - delete asks for the SLUG, typed, like every app (this page asked for the
+//     name);
+//   - the slug is shown, read-only, with why it is fixed.
 //
 // ---------------------------------------------------------------------------
-// THIS IS TENANCY ADMINISTRATION, NOT A SALES RECORD — SO IT BYPASSES
-// `lib/mutations.ts` ON PURPOSE
+// TWO KINDS OF WRITE LIVE HERE, AND THEY ARE GATED DIFFERENTLY — ON PURPOSE
 // ---------------------------------------------------------------------------
-// Every mutation in this file calls `apiSend` directly, the same way
-// `components/workspace-switcher.tsx` calls `POST /api/me/active-workspace`
-// directly. `lib/read-only.test.ts` gates this file the same way: it is
-// declared in `ACCOUNT_WRITERS` with `workspaceScoped` set, because renaming,
-// transferring or deleting the workspace itself is exactly the class of thing
-// `ui_mode` exists to gate for a sales RECORD (a prospect, a meeting) and
-// exactly the class of thing D-7 says it must NOT gate for the account/tenancy
-// layer. A read-only display preference that could stop an owner renaming or
-// deleting their own workspace would be a permission over the account, not a
-// preference about the pipeline.
+// TENANCY — rename, transfer, delete, leave — calls `apiSend` directly and is
+// NOT behind `useCanWrite()`. `lib/read-only.test.ts` declares this file in
+// `ACCOUNT_WRITERS` with `workspaceScoped` set: a read-only display preference
+// that could stop an owner renaming or deleting their own workspace, or a
+// member leaving one, would be a permission over the account (D-7).
 //
-// ---------------------------------------------------------------------------
-// NO LOGO, NO STORAGE LINK — UNLIKE `apps/issues/components/workspace-settings-view.tsx`
-// ---------------------------------------------------------------------------
-// `sales.workspaces` has no `logo_url` column (see the schema file) and this
-// app mounts no `/storage` route (`cli/internal/commands/sales/appverbs.go`'s
-// header explains why) — both sections are simply absent rather than disabled,
-// the same rule this app applies everywhere a capability does not exist.
+// MEMBERSHIP RECORDS — remove somebody else, invite, revoke — are
+// `sales.workspace_members` / `sales.invitations` rows and go through
+// `lib/mutations.ts` behind `useCanWrite()`. In read-only mode those
+// affordances are hidden and `READ_ONLY_NOTE` says why, the way every other
+// write affordance in this app behaves.
 //
-// ---------------------------------------------------------------------------
-// SLUG IS NOT SHOWN AS AN EDITABLE FIELD
-// ---------------------------------------------------------------------------
-// It is immutable server-side (`PATCH` 400s `slug_immutable`) — see
-// `app/api/workspaces/[ws]/route.ts` and `lib/db/queries/workspaces.ts`'s
-// `updateWorkspace` for the full reasoning (sales.events.subject_urn has no
-// rename cascade, unlike issues' platform.entities projection). Rendering a
-// disabled slug field here would invite a bug report about a field that was
-// never going to work; the slug simply is not offered.
+// LOGO — `sales.workspaces.logo_url` since migration 0013 (2026-09-28), set
+// through the logo-only route `POST/DELETE /api/workspaces/{ws}/logo`.
+//
+// NO `bk sales …` HINTS under the sections, unlike apps/billing and apps/books:
+// in this app ordinary UI copy names no CLI command (`lib/ui-commands.test.ts`).
 
-import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, Save, Trash2 } from 'lucide-react'
-import { useConfirm } from '@blackcode/platform-ui/ui/confirm-dialog'
+import {
+  SettingsSection,
+  WorkspaceDangerSection,
+  WorkspaceGeneralSection,
+  WorkspaceInvitationsSection,
+  WorkspaceLeaveSection,
+  WorkspaceMembersSection,
+} from '@blackcode/platform-ui/workspace/workspace-settings'
 import { apiGet, apiSend, wsPath } from '@/lib/client'
+import { useInviteMember, useRemoveMember, useRevokeInvitation } from '@/lib/mutations'
+import { useCanWrite, READ_ONLY_NOTE } from '@/lib/ui-mode'
 import { BlockSkeleton, ErrorState } from '@/components/states'
-
-// NOT imported from `@/lib/limits` — see the identical constant and comment in
-// `components/workspace-create-modal.tsx` for why: that file's barrel import of
-// `@blackcode/platform-api` pulls the `pg` driver into the client bundle, and
-// this is the other of the two client components in this app that hit it.
-// Server-side enforcement (`PATCH /api/workspaces/{ws}`) imports the real
-// constant; this is UX polish only.
-const WORKSPACE_NAME_MAX = 80
-import { Section } from './profile-settings'
-
-interface Workspace {
-  id: number
-  name: string
-  slug: string
-  owner_id: number
-}
 
 interface Member {
   user_id: number
   email: string
   name: string | null
+  avatar_url: string | null
   role: string
+  deleted_at: string | null
 }
 
 interface WorkspaceDetail {
-  workspace: Workspace
+  workspace: { id: number; name: string; slug: string; owner_id: number; logo_url: string | null }
   role: 'owner' | 'member'
   members: Member[]
 }
 
-export function WorkspaceSettings({ ws, isOwner }: { ws: string; isOwner: boolean }) {
+interface Invitation {
+  id: number
+  email: string
+  token: string
+  invited_by_name: string | null
+  invited_by_email: string | null
+  expires_at: string
+}
+
+interface InviteCandidate {
+  user_id: number
+  email: string
+  name: string | null
+  avatar_url: string | null
+  already_member: boolean
+  invited: boolean
+  from_platform: boolean
+}
+
+export function WorkspaceSettings({ ws, isOwner, meId }: { ws: string; isOwner: boolean; meId: number }) {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { confirm, prompt } = useConfirm()
+  const canWrite = useCanWrite(ws)
 
   const detail = useQuery({
     queryKey: ['workspace-detail', ws],
     queryFn: () => apiGet<WorkspaceDetail>(wsPath(ws, '')),
   })
-
-  const [name, setName] = useState('')
-  const [savedName, setSavedName] = useState('')
-  const [loaded, setLoaded] = useState(false)
-
-  // Seeded ONCE, same reason `ProfileSettings` seeds once: re-seeding on every
-  // render of fresh data would overwrite what somebody is typing the moment a
-  // background refetch lands.
-  useEffect(() => {
-    if (detail.data && !loaded) {
-      setName(detail.data.workspace.name)
-      setSavedName(detail.data.workspace.name)
-      setLoaded(true)
-    }
-  }, [detail.data, loaded])
-
-  const isDirty = name.trim() !== savedName
-
-  const save = useMutation({
-    mutationFn: async (newName: string) =>
-      apiSend<Workspace>('PATCH', wsPath(ws, ''), { name: newName }),
-    onSuccess: (updated) => {
-      toast.success('Workspace updated')
-      setSavedName(updated.name)
-      queryClient.invalidateQueries({ queryKey: ['workspace-detail', ws] })
-      queryClient.invalidateQueries()
-      router.refresh()
-    },
-    onError: (e: Error) => toast.error(e.message),
+  // Both lists answer `{ data, next_cursor }` — unwrap, never cast (see
+  // `workspace-settings-envelope.test.ts` for what casting it cost).
+  const invitations = useQuery({
+    queryKey: ['invitations', ws],
+    enabled: isOwner,
+    queryFn: async () => (await apiGet<{ data: Invitation[] }>(wsPath(ws, '/invitations'))).data,
+  })
+  const candidates = useQuery({
+    queryKey: ['invite-candidates', ws],
+    enabled: isOwner,
+    queryFn: async () => (await apiGet<{ data: InviteCandidate[] }>(wsPath(ws, '/invite-candidates'))).data,
   })
 
+  const invite = useInviteMember(ws)
+  const revoke = useRevokeInvitation(ws)
+  const removeMember = useRemoveMember(ws)
+
+  /** A tenancy write: toast the failure and rethrow, so the shared section knows. */
+  const tenancy = <T,>(fn: () => Promise<T>) =>
+    fn().catch((e: Error) => {
+      toast.error(e.message)
+      throw e
+    })
+
+  const rename = useMutation({ mutationFn: (name: string) => apiSend('PATCH', wsPath(ws, ''), { name }) })
   const transfer = useMutation({
-    mutationFn: async (newOwnerUserId: number) =>
-      apiSend('POST', wsPath(ws, '/transfer'), { new_owner_user_id: newOwnerUserId }),
-    onSuccess: () => {
-      toast.success('Ownership transferred')
-      queryClient.invalidateQueries()
-      router.refresh()
-    },
-    onError: (e: Error) => toast.error(e.message),
+    mutationFn: (userId: number) => apiSend('POST', wsPath(ws, '/transfer'), { new_owner_user_id: userId }),
   })
-
-  const remove = useMutation({
-    mutationFn: async () => apiSend('DELETE', wsPath(ws, '')),
-    onSuccess: () => {
-      toast.success('Workspace deleted')
-      queryClient.invalidateQueries()
-      // Same destination `/dashboard` resolves to with no active workspace —
-      // it re-derives where to go from the memberships that are left.
-      router.push('/dashboard')
-      router.refresh()
+  const del = useMutation({ mutationFn: () => apiSend('DELETE', wsPath(ws, '')) })
+  const leave = useMutation({ mutationFn: () => apiSend('DELETE', wsPath(ws, `/members/${meId}`)) })
+  // The workspace's logo — tenancy, like rename: POST/DELETE wsPath(ws, '/logo').
+  const logo = useMutation({
+    mutationFn: (file: File | null) => {
+      if (!file) return apiSend('DELETE', wsPath(ws, '/logo'))
+      const form = new FormData()
+      form.append('file', file)
+      return apiSend('POST', wsPath(ws, '/logo'), form)
     },
-    onError: (e: Error) => toast.error(e.message),
   })
 
   if (detail.isPending) return <BlockSkeleton rows={3} />
   if (detail.isError) return <ErrorState error={detail.error} />
   if (!detail.data) return null
 
-  const { workspace, members } = detail.data
-  const otherMembers = members.filter((m) => m.user_id !== workspace.owner_id)
-
-  if (!isOwner) {
-    return (
-      <div className="space-y-6">
-        <Section title={workspace.name} note={`You are a member of ${workspace.name}.`}>
-          <p className="text-sm text-muted-foreground">
-            Only the owner can rename this workspace, transfer ownership, or delete it.
-          </p>
-        </Section>
-      </div>
+  const { workspace: w, members } = detail.data
+  const copy = (text: string) =>
+    navigator.clipboard.writeText(text).then(
+      () => toast.success('Invite link copied'),
+      () => toast.error('Could not copy — select the link and copy it by hand')
     )
-  }
 
   return (
     <div className="space-y-6">
-      <Section title="Workspace" note={`You own ${workspace.name}.`}>
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium">Name</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={WORKSPACE_NAME_MAX}
-              className="w-full rounded-lg border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary"
-            />
-          </div>
-          {isDirty && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                disabled={save.isPending || !name.trim()}
-                onClick={() => save.mutate(name.trim())}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
-                <Save size={14} />
-                Save changes
-              </button>
-            </div>
-          )}
-        </div>
-      </Section>
+      <WorkspaceGeneralSection
+        workspace={w}
+        role={detail.data.role}
+        canEdit={isOwner}
+        onRename={async (name) => {
+          await tenancy(() => rename.mutateAsync(name))
+          toast.success('Workspace updated')
+          await queryClient.invalidateQueries()
+          router.refresh()
+        }}
+        logo={{
+          onUpload: async (file) => {
+            await tenancy(() => logo.mutateAsync(file))
+            toast.success('Logo updated')
+            await queryClient.invalidateQueries()
+            router.refresh()
+          },
+          onRemove: async () => {
+            await tenancy(() => logo.mutateAsync(null))
+            toast.success('Logo removed')
+            await queryClient.invalidateQueries()
+            router.refresh()
+          },
+        }}
+      />
 
-      {otherMembers.length > 0 && (
-        <Section
-          title="Transfer ownership"
-          note="The current owner becomes a regular member after the transfer."
-        >
-          <select
-            onChange={async (e) => {
-              const v = parseInt(e.target.value, 10)
-              e.currentTarget.value = ''
-              if (Number.isNaN(v)) return
-              const target = otherMembers.find((m) => m.user_id === v)
-              if (
-                !(await confirm({
-                  title: 'Transfer ownership?',
-                  description: `${target?.name ?? target?.email ?? 'This member'} becomes the owner. This cannot be undone without their cooperation.`,
-                  destructive: true,
-                  confirmLabel: 'Transfer',
-                }))
-              )
-                return
-              transfer.mutate(v)
+      <WorkspaceMembersSection
+        members={members}
+        currentUserId={meId}
+        ownerId={w.owner_id}
+        isOwner={isOwner && canWrite}
+        labels={{
+          removeDescription:
+            'They lose access to this pipeline immediately. Their account is shared across blackcode apps and stays open.',
+        }}
+        onTransfer={async (m) => {
+          await tenancy(() => transfer.mutateAsync(m.user_id))
+          toast.success(`${m.name ?? m.email} is now the owner`)
+          await queryClient.invalidateQueries()
+          router.refresh()
+        }}
+        onRemove={async (m) => {
+          await removeMember.mutateAsync({ userId: m.user_id, email: m.email })
+          await queryClient.invalidateQueries({ queryKey: ['workspace-detail', ws] })
+        }}
+      />
+
+      {isOwner &&
+        (canWrite ? (
+          <WorkspaceInvitationsSection
+            invitations={invitations.data}
+            error={invitations.isError ? <ErrorState error={invitations.error} /> : undefined}
+            candidates={candidates.data}
+            labels={{ colleagues: 'People you already work with in b/sales' }}
+            onCopy={copy}
+            // `useInviteMember` toasts whether the email actually went.
+            onInvite={async (email) => (await invite.mutateAsync({ email }))?.accept_url ?? null}
+            onRevoke={async (inv) => {
+              await revoke.mutateAsync({ id: inv.id })
             }}
-            defaultValue=""
-            className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
-          >
-            <option value="" disabled>
-              Pick a new owner…
-            </option>
-            {otherMembers.map((m) => (
-              <option key={m.user_id} value={m.user_id}>
-                {m.name ?? m.email}
-              </option>
-            ))}
-          </select>
-        </Section>
+          />
+        ) : (
+          <SettingsSection title="Invitations">
+            <p className="text-sm text-muted-foreground">{READ_ONLY_NOTE}</p>
+          </SettingsSection>
+        ))}
+
+      {isOwner ? (
+        <WorkspaceDangerSection
+          name={w.name}
+          slug={w.slug}
+          refusal={null}
+          detail="This permanently deletes the workspace and everything in it — prospects, meetings, communications and documents. It cannot be undone."
+          onDelete={async () => {
+            await tenancy(() => del.mutateAsync())
+            toast.success('Workspace deleted')
+            await queryClient.invalidateQueries()
+            // Same destination `/dashboard` resolves to with no active workspace
+            // — it re-derives where to go from the memberships that are left.
+            router.push('/dashboard')
+            router.refresh()
+          }}
+        />
+      ) : (
+        <WorkspaceLeaveSection
+          name={w.name}
+          detail="What you logged stays in the pipeline, attributed to you. The owner can invite you back."
+          onLeave={async () => {
+            await tenancy(() => leave.mutateAsync())
+            toast.success(`You left ${w.name}`)
+            router.push('/dashboard')
+            router.refresh()
+          }}
+        />
       )}
-
-      <Section title="Danger zone">
-        <div className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3">
-          <div>
-            <p className="flex items-center gap-1.5 text-sm font-medium text-destructive">
-              <AlertTriangle size={14} />
-              Delete workspace
-            </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Permanently deletes {workspace.name} and everything in it — prospects, meetings,
-              communications, products, templates, documents. This cannot be undone.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={async () => {
-              const typed = await prompt({
-                title: 'Delete workspace?',
-                description: 'This permanently deletes the workspace and all its data.',
-                inputLabel: `Type "${workspace.name}" to confirm`,
-                placeholder: workspace.name,
-                requireMatch: workspace.name,
-                destructive: true,
-                confirmLabel: 'Delete workspace',
-              })
-              if (typed === workspace.name) remove.mutate()
-            }}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-destructive/40 px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive hover:text-destructive-foreground"
-          >
-            <Trash2 size={14} />
-            Delete
-          </button>
-        </div>
-      </Section>
     </div>
   )
 }

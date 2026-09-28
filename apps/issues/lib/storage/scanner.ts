@@ -32,7 +32,7 @@ import {
   type ScannedReference,
 } from '@blackcode/platform-storage'
 import { APP_SLUG } from '@/lib/app'
-import { attachments, comments, issues, projectUpdates, projects, tasks } from '@/lib/db/schema'
+import { attachments, comments, issues, projectUpdates, projects, tasks, users, workspaces } from '@/lib/db/schema'
 
 interface Row {
   [k: string]: unknown
@@ -70,7 +70,16 @@ export const INDEX_APP_BY_TYPE: Record<string, string> = {
   project_image: APP_SLUG,
   project_update: APP_SLUG,
   attachment: APP_SLUG,
+  // The workspace's own logo (`platform.workspaces` is this app's table).
+  // Indexed since migration 0049, 2026-09-28 — before that NOTHING covered it:
+  // no trigger, and not the `isUrlReferenced` check below either.
+  workspace_logo: APP_SLUG,
   comment: 'platform',
+  // A person's uploaded photo on the shared `platform.users` row — 'platform',
+  // like comments: every app writes it (migration 0050, 2026-09-28; before that
+  // nothing indexed it). Not workspace-scoped, so `scanWorkspace` never emits
+  // it; `isUrlReferenced` below is what covers it.
+  user_avatar: 'platform',
 }
 
 /**
@@ -92,6 +101,8 @@ export const RETRIGGER_SQL: Record<string, (id: number) => SQL> = {
   project_update: (id) => sql`UPDATE ${projectUpdates} SET body = body WHERE id = ${id}`,
   attachment: (id) => sql`UPDATE ${attachments} SET file_url = file_url WHERE id = ${id}`,
   comment: (id) => sql`UPDATE ${comments} SET content = content WHERE id = ${id}`,
+  workspace_logo: (id) => sql`UPDATE ${workspaces} SET logo_url = logo_url WHERE id = ${id}`,
+  user_avatar: (id) => sql`UPDATE ${users} SET avatar_url = avatar_url WHERE id = ${id}`,
 }
 
 export const issuesReferenceScanner: ReferenceScanner = {
@@ -147,6 +158,10 @@ export const issuesReferenceScanner: ReferenceScanner = {
         add(url, { type: 'attachment', id: Number(r.id), seq: r.issue_id as number | null, label: (r.filename as string) ?? null, trashed: false })
       }
     }
+    const wsRow = (await db.execute(sql`SELECT id, name, logo_url FROM ${workspaces} WHERE id = ${workspaceId}`)).rows[0] as Row | undefined
+    if (wsRow && typeof wsRow.logo_url === 'string' && wsRow.logo_url && isUploadedAsset(wsRow.logo_url)) {
+      add(wsRow.logo_url, { type: 'workspace_logo', id: Number(wsRow.id), seq: null, label: (wsRow.name as string) ?? null, trashed: false })
+    }
 
     return map
   },
@@ -174,6 +189,10 @@ export const issuesReferenceScanner: ReferenceScanner = {
         SELECT 1 FROM ${projectUpdates} WHERE strpos(coalesce(body, ''), ${url}) > 0
         UNION ALL
         SELECT 1 FROM ${attachments}     WHERE file_url = ${url}
+        UNION ALL
+        SELECT 1 FROM ${workspaces}      WHERE logo_url = ${url}
+        UNION ALL
+        SELECT 1 FROM ${users}           WHERE avatar_url = ${url}
       ) AS referenced
     `)
     return Boolean((res.rows[0] as Row | undefined)?.referenced)

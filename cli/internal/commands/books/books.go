@@ -100,9 +100,9 @@ STARTING AND ENDING A BOOK:
 
 THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
-  bk books workspace  list, show, use, create
-  bk books member     list
-  bk books invite     send, list, revoke
+  bk books workspace  list, show, use, create, edit, transfer, delete, logo
+  bk books member     list, remove
+  bk books invite     send, list, revoke, candidates, pending, show, accept, decline
 
 "bk books workspace use x" sets THIS app's active workspace and no other's.
 
@@ -225,25 +225,38 @@ func nouns() []*cobra.Command {
 // pending. Accounting rows have a ten-year retention duty (art. 958f CO), so
 // there is no purge path to expose; see docs/books-app-plan/phase-5-compliance.md.
 //
-// `Invites` is the owner's half only — send, list, revoke — because that is what
-// this app serves. `InviteCandidates` and `InviteAccept` are off: there is no
-// `/invite-candidates`, no `/api/invitations/accept` and no
-// `/api/me/pending-invitations` here. Flipping a flag without its route claims
-// something that can only 404.
+// THE TENANCY SUBSET — apps/billing's, since 2026-09-28, when the web gained
+// workspace management (decision D-C reversed; apps/books/docs/frontend.md §4):
 //
-// `WorkspaceCreate`, not `WorkspaceAdmin`: this app serves GET and POST on
-// /api/workspaces and no other method. Create arrived for the person whose
-// second venture needs its own set of books; edit and transfer wait for
-// somebody to need them, and DELETE is permanently absent — a workspace holds
-// statutory records (art. 958f CO), the same doctrine that keeps `Trash` off.
-// `MemberLeave` is off because there is no /leave route.
+//	Workspace        yes — list, show, use
+//	WorkspaceAdmin   yes — create, edit, transfer, delete. Until 2026-09-28
+//	                 this was `WorkspaceCreate` alone, with "DELETE is
+//	                 permanently absent". The server now serves DELETE and
+//	                 REFUSES it (409 workspace_retained) for any workspace that
+//	                 has held anything at all — only an empty one can go. The
+//	                 shared `edit --slug` flag compiles and sends, and the server
+//	                 answers 400 slug_immutable, as in billing and sales.
+//	Members          yes — list
+//	MemberRemove     yes — DELETE …/members/{userId}. The owner removes anyone
+//	                 but themselves; a member may remove THEMSELVES, which is
+//	                 how you leave here
+//	MemberLeave      NO  — there is no POST …/leave route; see MemberRemove
+//	Invites          yes — send, list, revoke
+//	InviteCandidates yes — GET …/invite-candidates (owner only)
+//	InviteAccept     yes — show, accept, decline, pending: /api/invitations/*
+//	                 and /api/me/pending-invitations, plus the
+//	                 /invitations/{token} page the email links to
 func appOwnedVerbs() []*cobra.Command {
 	return appverbs.New(appverbs.Config{
-		App:             Slug,
-		Workspace:       true,
-		WorkspaceCreate: true,
-		Members:         true,
-		Invites:         true,
+		App:              Slug,
+		Workspace:        true,
+		WorkspaceAdmin:   true,
+		WorkspaceLogo:    true,
+		Members:          true,
+		MemberRemove:     true,
+		Invites:          true,
+		InviteCandidates: true,
+		InviteAccept:     true,
 	}).All()
 }
 

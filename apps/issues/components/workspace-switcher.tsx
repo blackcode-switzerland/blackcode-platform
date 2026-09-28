@@ -1,82 +1,78 @@
 'use client'
 
-import { usePathname } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
-import { Building2, ChevronRight } from 'lucide-react'
-import Link from 'next/link'
-import { avatarColor } from '@blackcode/platform-ui/ui/member-avatar'
+// The sidebar's workspace switcher — the shared one from
+// `@blackcode/platform-ui/workspace/workspace-switcher` since 2026-09-28, which
+// all four apps render.
+//
+// Until then this was a LINK to `/dashboard/workspaces`, a list page, where the
+// other three apps had a dropdown; the list page is now the shared chooser and
+// administration lives at `/dashboard/{ws}/settings`, as everywhere else.
+//
+// The current workspace is the one in the URL (`useActiveWorkspace`), and
+// switching remembers the choice through `POST /api/me/active-workspace` — the
+// route `bk issues workspace use` calls — before it navigates.
 
-interface WorkspaceItem {
-  id: number
-  name: string
-  slug: string
-  key: string
-  logo_url: string | null
-  member_role: 'owner' | 'member'
-}
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import {
+  WorkspaceSwitcher as SharedSwitcher,
+  type SwitcherWorkspace,
+} from '@blackcode/platform-ui/workspace/workspace-switcher'
+import { CreateWorkspaceModal } from '@/components/workspace-create-modal'
+import { useActiveWorkspace } from '@/components/listings/use-active-workspace'
 
-async function fetchWorkspaces(): Promise<WorkspaceItem[]> {
+export type { SwitcherWorkspace }
+
+async function fetchWorkspaces(): Promise<SwitcherWorkspace[]> {
   const res = await fetch('/api/workspaces')
-  if (!res.ok) throw new Error('failed')
-  const j = await res.json()
-  return j.data
+  if (!res.ok) throw new Error('Could not load your workspaces')
+  return (await res.json()).data
 }
 
-async function fetchMe(): Promise<{ active_workspace_id: number | null }> {
-  const res = await fetch('/api/me')
-  if (!res.ok) throw new Error('failed')
-  return res.json()
+/** The same list every caller of `['me-workspaces']` shares. */
+export function useMyWorkspaces() {
+  return useQuery({ queryKey: ['me-workspaces'], queryFn: fetchWorkspaces })
 }
 
-function WsAvatar({ ws, size }: { ws: WorkspaceItem; size: number }) {
-  if (ws.logo_url) {
-    return (
-      <div
-        className="shrink-0 overflow-hidden rounded-md bg-zinc-700 ring-1 ring-inset ring-border"
-        style={{ width: size, height: size }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={ws.logo_url} alt={ws.name} className="size-full object-cover" />
-      </div>
-    )
+/** Remember a workspace as active, then open it. Shared by the switcher and the chooser. */
+export function useOpenWorkspace() {
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  return async (ws: SwitcherWorkspace) => {
+    const res = await fetch('/api/me/active-workspace', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: ws.slug }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      toast.error(`Could not switch to ${ws.name}`, { description: body.error })
+      throw new Error(body.error ?? 'switch failed')
+    }
+    await queryClient.invalidateQueries()
+    router.push(`/dashboard/${encodeURIComponent(ws.slug)}`)
   }
-  return (
-    <div
-      className="flex shrink-0 items-center justify-center rounded-md font-semibold text-white"
-      style={{ width: size, height: size, backgroundColor: avatarColor(ws.name), fontSize: Math.round(size * 0.42) }}
-    >
-      {(ws.name.trim()[0] ?? 'W').toUpperCase()}
-    </div>
-  )
 }
 
-// Sidebar entry point for workspaces. Rather than a dropdown, this links to the
-// dedicated /dashboard/workspaces page where the user can switch or manage any
-// workspace.
 export function WorkspaceSwitcher() {
-  const pathname = usePathname()
-  const onWorkspacesPage = pathname?.startsWith('/dashboard/workspaces') ?? false
-
-  const { data: workspaces } = useQuery({ queryKey: ['me-workspaces'], queryFn: fetchWorkspaces })
-  const { data: me } = useQuery({ queryKey: ['me'], queryFn: fetchMe })
-  const active = workspaces?.find((w) => w.id === me?.active_workspace_id) ?? workspaces?.[0]
+  const router = useRouter()
+  const { data: workspaces } = useMyWorkspaces()
+  const { data: active } = useActiveWorkspace()
+  const [creating, setCreating] = useState(false)
+  const open = useOpenWorkspace()
 
   return (
-    <Link
-      href="/dashboard/workspaces"
-      className={`group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent ${
-        onWorkspacesPage ? 'bg-sidebar-accent' : ''
-      }`}
-    >
-      {active ? (
-        <WsAvatar ws={active} size={24} />
-      ) : (
-        <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-          <Building2 size={14} />
-        </div>
-      )}
-      <span className="min-w-0 flex-1 truncate text-sm font-medium">{active?.name ?? 'No workspace'}</span>
-      <ChevronRight size={14} className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-    </Link>
+    <>
+      <SharedSwitcher
+        workspaces={workspaces ?? []}
+        current={active?.slug ?? null}
+        onSelect={open}
+        onCreate={() => setCreating(true)}
+        onManage={(ws) => router.push(`/dashboard/${encodeURIComponent(ws.slug)}/settings`)}
+      />
+      <CreateWorkspaceModal open={creating} onClose={() => setCreating(false)} />
+    </>
   )
 }

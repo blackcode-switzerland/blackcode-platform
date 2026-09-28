@@ -31,7 +31,7 @@
 
 import { redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
-import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { getStoredActiveWorkspaceId, listWorkspacesForUser } from '@/lib/db/queries/workspaces'
 import { APP_NAME } from '@/lib/app'
 import { BillingShell } from '@/components/shell/billing-shell'
 
@@ -41,12 +41,17 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   const user = await getValidatedSessionUser()
   if (!user) redirect('/login')
 
-  const memberships = await listWorkspacesForUser(user.id)
+  const [memberships, storedId] = await Promise.all([
+    listWorkspacesForUser(user.id),
+    getStoredActiveWorkspaceId(user.id),
+  ])
   // The workspace the person last chose (the same rule /dashboard uses), so the
   // sidebar does not jump to another workspace just because settings opened.
-  const active = memberships.find((w) => w.id === user.active_workspace_id)
+  // `billing.user_settings`, not `platform.users.active_workspace_id` — which
+  // this app never writes (fixed 2026-09-28, as on `/dashboard`).
+  const active = memberships.find((w) => w.id === storedId)
   const ws = (active ?? memberships[memberships.length - 1])?.slug ?? null
-  const workspaces = memberships.map((w) => ({ id: w.id, name: w.name, slug: w.slug, member_role: w.member_role }))
+  const workspaces = memberships.map((w) => ({ id: w.id, name: w.name, slug: w.slug, member_role: w.member_role, logo_url: (w as { logo_url?: string | null }).logo_url ?? null }))
 
   return (
     <BillingShell ws={ws} workspaces={workspaces} appName={APP_NAME}>

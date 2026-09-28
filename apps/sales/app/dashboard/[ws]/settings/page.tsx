@@ -30,5 +30,10 @@ export default async function Page({ params }: { params: Promise<{ ws: string }>
   const here = mine.find((w) => w.slug === ws)
   if (!here) notFound()
 
-  return <WorkspaceSettings ws={here.slug} isOwner={here.member_role === 'owner'} />
+  // `max-w-3xl`, the settings column every app uses (2026-09-28).
+  return (
+    <div className="mx-auto max-w-3xl">
+      <WorkspaceSettings ws={here.slug} isOwner={here.member_role === 'owner'} meId={user.id} />
+    </div>
+  )
 }

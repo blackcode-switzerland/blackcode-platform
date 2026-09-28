@@ -11,6 +11,47 @@ complete usage guide, embedded in the binary, so it always describes the version
 you are running. For live values (vocabularies, limits, your books), run
 **`bk meta --app-server books`** and `bk books entity list`.
 
+## 2026-09-28 — Workspaces can carry a logo — the one file books stores
+
+Not breaking; additive. `books.workspaces.logo_url` (migration 0021), set with
+`bk books workspace logo <file>` / `--remove` (`POST` / `DELETE
+/api/workspaces/{ws}/logo`, owner only) or from workspace settings. Books still
+records no uploads: supporting documents remain Drive references, and this
+route accepts one image for one column. `bk meta` gained a `limits` block
+carrying `workspace_logo_max_bytes`.
+
+## 2026-09-28 — Workspaces: more than one, shared by invitation, administered by their owner
+
+Not breaking for existing calls; additive, with one refusal lifted.
+
+- **`bk books workspace create` no longer refuses a second workspace**
+  (`one_workspace_per_person` is gone). A workspace is a set of people; a
+  workspace still holds any number of books, so a second company is usually a
+  second book (`bk books entity create`), not a second workspace.
+- **Invitations can be accepted.** New: `bk books invite pending`, `invite show
+  <token>`, `invite accept <token>`, `invite decline <token>`, `invite
+  candidates` (owner). Before this, `invite send` created invitations nobody
+  could redeem, and the link in them 404'd. `invite send` now emails the
+  invitation when the deployment has email configured (`email_sent` says
+  whether it did) and returns `invitee_has_account`; the link is always in the
+  response.
+- **Owner administration.** New: `bk books workspace edit --name` (the slug
+  cannot change: `--slug` answers 400 `slug_immutable`), `workspace transfer
+  --to <user_id>`, `bk books member remove <user_id>`. A member leaves with
+  `member remove <your id>`; the owner cannot leave without transferring first
+  (`cannot_remove_owner`).
+- **`bk books workspace delete <slug> --confirm <slug>`** exists, and succeeds
+  ONLY for a workspace that has never held anything. One book, account, source
+  or piece and it answers 409 `workspace_retained`, naming what it holds:
+  accounting records are kept for ten years (art. 958f CO).
+- **The active workspace is remembered on the server** (`POST
+  /api/me/active-workspace` used to store nothing here). The CLI's own per-app
+  choice is unchanged.
+
+**How to adapt:** nothing is required. A script that relied on the
+one-workspace refusal to avoid creating a second workspace should check
+`bk books workspace list` first.
+
 ## 2026-09-23 — The product name, the contact address and the family name are environment-driven (ticket #756)
 
 Not breaking. No route changed shape; with nothing set, every screen, mail and

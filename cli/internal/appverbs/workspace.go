@@ -51,6 +51,62 @@ means something against the app it was resolved in.`, cfg.App, cfg.App),
 	} else if cfg.WorkspaceCreate {
 		cmd.AddCommand(newWorkspaceCreateCmd(cfg))
 	}
+	if cfg.WorkspaceLogo {
+		cmd.AddCommand(newWorkspaceLogoCmd(cfg))
+	}
+	return cmd
+}
+
+func newWorkspaceLogoCmd(acfg Config) *cobra.Command {
+	var remove bool
+	cmd := &cobra.Command{
+		Use: "logo [<image-file>]",
+		Annotations: map[string]string{
+			"routes": "POST /api/workspaces/{ws}/logo,DELETE /api/workspaces/{ws}/logo",
+		},
+		Short: "Set or remove the active workspace's logo (owner only)",
+		Long: fmt.Sprintf(`Upload an image as the active workspace's logo, or remove it with --remove.
+
+The logo is shown beside the workspace's name in the web app's switcher and
+settings. Which image types and how large are the server's to decide — run
+"bk meta" for the current limit. Only the owner can change it.
+
+  bk %s workspace logo ./logo.png
+  bk %s workspace logo --remove`, acfg.App, acfg.App),
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if remove == (len(args) == 1) {
+				return fmt.Errorf("give an image file, or --remove (not both)")
+			}
+			c, cfg, err := cmdutil.NewClientAndConfig()
+			if err != nil {
+				return err
+			}
+			ref, err := cmdutil.ResolveWorkspaceRef(cfg, nil)
+			if err != nil {
+				return err
+			}
+			if remove {
+				ws, err := c.RemoveWorkspaceLogo(ref)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "removed the logo of %q\n", ws.Name)
+				return nil
+			}
+			ws, err := c.SetWorkspaceLogo(ref, args[0])
+			if err != nil {
+				return err
+			}
+			url := ""
+			if ws.LogoURL != nil {
+				url = *ws.LogoURL
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "set the logo of %q: %s\n", ws.Name, url)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&remove, "remove", false, "Remove the logo instead of setting one")
 	return cmd
 }
 

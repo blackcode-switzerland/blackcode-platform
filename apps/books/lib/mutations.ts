@@ -168,7 +168,13 @@ export type WriteResult<T> =
   | { ok: false; error: ApiRequestError; message: string }
 
 export interface MutationState<T> {
-  run: (body?: unknown) => Promise<WriteResult<T>>
+  /**
+   * `at` replaces the hook's path for this one call — for a write whose path
+   * names a row chosen at click time (`…/members/{userId}`,
+   * `…/invitations/{id}`), which a hook created once per list cannot know.
+   * Same gate, same method; only the address differs.
+   */
+  run: (body?: unknown, at?: string) => Promise<WriteResult<T>>
   pending: boolean
   /**
    * The last failure, for anything that RENDERS it across a re-render.
@@ -215,7 +221,7 @@ function useRecordMutation<T>(
   const [error, setError] = useState<ApiRequestError | null>(null)
 
   const run = useCallback(
-    async (body?: unknown): Promise<WriteResult<T>> => {
+    async (body?: unknown, at?: string): Promise<WriteResult<T>> => {
       if (!canWrite) {
         throw new Error(
           'This session is read-only. A write affordance was rendered that should not have been — ' +
@@ -225,7 +231,7 @@ function useRecordMutation<T>(
       setPending(true)
       setError(null)
       try {
-        return { ok: true, data: await apiSend<T>(method, path, body) }
+        return { ok: true, data: await apiSend<T>(method, at ?? path, body) }
       } catch (e) {
         if (e instanceof ApiRequestError) {
           setError(e)
@@ -569,3 +575,93 @@ export function useReviewComplianceRule(ruleId: string) {
 
 // Re-exported so a component never reaches into lib/client.ts for it.
 export { ApiRequestError }
+
+// ---------------------------------------------------------------------------
+// Tenancy — the workspace, its people and its invitations (2026-09-28)
+// ---------------------------------------------------------------------------
+// NOT a sixth record write. The five above change the BOOKS; these change who
+// may see them, and none of them can move an amount, an account or a balance.
+// They live here, on the same gated primitive, because of the rule this app
+// uses to place a write — "does it touch `books.*`?" (docs/backend.md) — and
+// `books.workspaces`, `books.workspace_members` and `books.invitations` are in
+// that schema. Decision D-C kept all of this off screen until 2026-09-28; its
+// reversal is recorded in apps/books/docs/frontend.md §4.
+//
+// Every one has a `bk books` spelling: workspace create / use / edit / transfer
+// / delete, member remove, invite send / revoke / accept / decline.
+
+export interface CreatedWorkspace {
+  id: number
+  name: string
+  slug: string
+}
+
+/** `POST /api/workspaces` — `bk books workspace create`. */
+export function useCreateWorkspace() {
+  return useRecordMutation<CreatedWorkspace>('POST', '/api/workspaces')
+}
+
+/** `POST /api/me/active-workspace` — `bk books workspace use`; remembered in `books.user_settings`. */
+export function useSetActiveWorkspace() {
+  return useRecordMutation<{ active_workspace_id: number; slug: string }>('POST', '/api/me/active-workspace')
+}
+
+/** `PATCH /api/workspaces/{ws}` — name only; the slug is immutable. */
+export function useRenameWorkspace(ws: string) {
+  return useRecordMutation<CreatedWorkspace>('PATCH', `/api/workspaces/${ws}`)
+}
+
+/** `POST /api/workspaces/{ws}/logo` — multipart (a `FormData` body), owner only. */
+export function useSetWorkspaceLogo(ws: string) {
+  return useRecordMutation<CreatedWorkspace & { logo_url: string | null }>('POST', `/api/workspaces/${ws}/logo`)
+}
+
+/** `DELETE /api/workspaces/{ws}/logo`. */
+export function useRemoveWorkspaceLogo(ws: string) {
+  return useRecordMutation<CreatedWorkspace & { logo_url: string | null }>('DELETE', `/api/workspaces/${ws}/logo`)
+}
+
+/** `DELETE /api/workspaces/{ws}` — refused (409 workspace_retained) once anything was held. */
+export function useDeleteWorkspace(ws: string) {
+  return useRecordMutation<{ deleted: true }>('DELETE', `/api/workspaces/${ws}`)
+}
+
+/** `POST /api/workspaces/{ws}/transfer`. */
+export function useTransferWorkspace(ws: string) {
+  return useRecordMutation<{ ok: true; new_owner_user_id: number }>('POST', `/api/workspaces/${ws}/transfer`)
+}
+
+/** `DELETE /api/workspaces/{ws}/members/{userId}` — pass the member path as `at`. Yourself = leave. */
+export function useRemoveMember(ws: string) {
+  return useRecordMutation<{ removed: true; left: boolean }>('DELETE', `/api/workspaces/${ws}/members`)
+}
+
+export interface CreatedInvitation {
+  invitation: { id: number; email: string; token: string }
+  invitee_has_account: boolean
+  email_sent: boolean
+  accept_url: string
+}
+
+/** `POST /api/workspaces/{ws}/invitations` — `bk books invite send`. */
+export function useCreateInvitation(ws: string) {
+  return useRecordMutation<CreatedInvitation>('POST', `/api/workspaces/${ws}/invitations`)
+}
+
+/** `DELETE /api/workspaces/{ws}/invitations/{id}` — pass the invitation path as `at`. */
+export function useRevokeInvitation(ws: string) {
+  return useRecordMutation<{ deleted: true }>('DELETE', `/api/workspaces/${ws}/invitations`)
+}
+
+/** `POST /api/invitations/accept` — `bk books invite accept`. */
+export function useAcceptInvitation() {
+  return useRecordMutation<{ accepted: true; workspace_id: number; workspace_slug: string; already_member: boolean }>(
+    'POST',
+    '/api/invitations/accept'
+  )
+}
+
+/** `POST /api/invitations/decline` — `bk books invite decline`. */
+export function useDeclineInvitation() {
+  return useRecordMutation<{ declined: true }>('POST', '/api/invitations/decline')
+}

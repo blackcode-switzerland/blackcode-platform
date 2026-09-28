@@ -1,42 +1,45 @@
 'use client'
 
-// The sidebar's workspace switcher — modelled on apps/sales'.
+// The sidebar's workspace switcher.
+//
+// Since 2026-09-28 this is the shared component from
+// `@blackcode/platform-ui/workspace/workspace-switcher` — this app's own
+// dropdown was the model for it, and all four apps now draw the same one. What
+// stays here is the wiring: this app's writes and its router.
 //
 // A workspace is a TENANT; the issuing entities inside one are companies, and
 // those are the company switcher's job (company-switcher.tsx), not this one's.
 //
 // Switching writes through `POST /api/me/active-workspace` — the route
-// `bk billing workspace use` calls — so the web and the CLI agree about where
-// you are and the next `/dashboard` opens there. Navigating without it would
-// make the choice last one page load.
-//
-// "Create workspace" opens `WorkspaceCreateModal` in place (phase 2) rather than
-// navigating away; `/dashboard?new=1` still renders the same form for a link.
+// `bk billing workspace use` calls, stored in `billing.user_settings` since
+// migration 0014 (it stored nothing before) — so the web and the CLI agree
+// about where you are and the next `/dashboard` opens there.
 
-import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, Check, ChevronsUpDown, Loader2, Plus, Settings } from 'lucide-react'
+import {
+  WorkspaceSwitcher as SharedSwitcher,
+  type SwitcherWorkspace,
+} from '@blackcode/platform-ui/workspace/workspace-switcher'
 import { useSetActiveWorkspace, toastError } from '@/lib/mutations'
 import { WorkspaceCreateModal } from '@/components/workspace-create-modal'
-import { cn } from '@/lib/utils'
 
-export interface SwitcherWorkspace {
-  id: number
-  name: string
-  slug: string
-  member_role: 'owner' | 'member'
-}
+export type { SwitcherWorkspace }
 
-function Mark({ name, size }: { name: string; size: number }) {
-  return (
-    <span
-      className="flex shrink-0 items-center justify-center rounded-md bg-primary/15 font-semibold text-primary"
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.46) }}
-    >
-      {(name.trim()[0] ?? 'W').toUpperCase()}
-    </span>
-  )
+/** Remember a workspace as active, then open it. Shared by the switcher and the chooser. */
+export function useOpenWorkspace() {
+  const router = useRouter()
+  const setActive = useSetActiveWorkspace()
+  return async (ws: SwitcherWorkspace) => {
+    try {
+      await setActive.mutateAsync({ slug: ws.slug })
+    } catch (e) {
+      toastError(e)
+      throw e
+    }
+    router.push(`/dashboard/${encodeURIComponent(ws.slug)}`)
+    router.refresh()
+  }
 }
 
 export function WorkspaceSwitcher({
@@ -48,149 +51,19 @@ export function WorkspaceSwitcher({
   current: string | null
 }) {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const [pending, setPending] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const setActive = useSetActiveWorkspace()
-
-  // Close on an outside click or Escape.
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
-  const active = workspaces.find((w) => w.slug === current) ?? null
-
-  async function choose(ws: SwitcherWorkspace) {
-    if (ws.slug === current) {
-      setOpen(false)
-      return
-    }
-    setPending(ws.slug)
-    try {
-      await setActive.mutateAsync({ slug: ws.slug })
-      setOpen(false)
-      router.push(`/dashboard/${encodeURIComponent(ws.slug)}`)
-    } catch (e) {
-      // Visible, never silent: a switcher that leaves you where you were with
-      // no word reads as a dead button.
-      toastError(e)
-    } finally {
-      setPending(null)
-    }
-  }
+  const open = useOpenWorkspace()
 
   return (
-    <div ref={ref} className="relative px-2.5 pt-2.5">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        data-testid="nav-workspace"
-        data-slug={current ?? undefined}
-        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent/60"
-      >
-        {active ? (
-          <Mark name={active.name} size={22} />
-        ) : (
-          <span className="flex size-[22px] shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-            <Building2 size={13} />
-          </span>
-        )}
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium">{active?.name ?? 'Choose a workspace'}</span>
-          {active && (
-            <span className="block truncate font-mono text-[10.5px] text-muted-foreground">{active.slug}</span>
-          )}
-        </span>
-        <ChevronsUpDown size={14} className="shrink-0 text-muted-foreground" />
-      </button>
-
-      {open && (
-        <div
-          role="listbox"
-          className="absolute left-2.5 right-2.5 top-full z-50 mt-1 overflow-hidden rounded-lg border border-sidebar-border bg-popover text-popover-foreground shadow-lg"
-        >
-          {workspaces.length > 0 && (
-            <>
-              <p className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Workspaces
-              </p>
-              <div className="max-h-72 overflow-y-auto">
-                {workspaces.map((ws) => {
-                  const isCurrent = ws.slug === current
-                  return (
-                    <button
-                      key={ws.id}
-                      type="button"
-                      role="option"
-                      aria-selected={isCurrent}
-                      disabled={pending !== null}
-                      onClick={() => choose(ws)}
-                      data-testid={`workspace-option-${ws.slug}`}
-                      className={cn(
-                        'flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-accent disabled:opacity-60',
-                        isCurrent && 'bg-accent/60'
-                      )}
-                    >
-                      <Mark name={ws.name} size={20} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px]">{ws.name}</span>
-                        <span className="block truncate text-[11px] text-muted-foreground">
-                          {ws.member_role === 'owner' ? 'Owner' : 'Member'} · <span className="font-mono">{ws.slug}</span>
-                        </span>
-                      </span>
-                      {pending === ws.slug ? (
-                        <Loader2 size={14} className="shrink-0 animate-spin text-muted-foreground" />
-                      ) : isCurrent ? (
-                        <Check size={14} className="shrink-0 text-primary" />
-                      ) : null}
-                    </button>
-                  )
-                })}
-              </div>
-            </>
-          )}
-          <div className="border-t border-sidebar-border py-1">
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false)
-                setCreating(true)
-              }}
-              data-testid="workspace-create"
-              className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            >
-              <Plus size={15} className="shrink-0" />
-              Create workspace
-            </button>
-            {active && (
-              <Link
-                href={`/dashboard/${encodeURIComponent(active.slug)}/settings`}
-                onClick={() => setOpen(false)}
-                className="flex w-full items-center gap-2 px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              >
-                <Settings size={15} className="shrink-0" />
-                <span className="truncate">Manage {active.name}</span>
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
+    <>
+      <SharedSwitcher
+        workspaces={workspaces}
+        current={current}
+        onSelect={open}
+        onCreate={() => setCreating(true)}
+        onManage={(ws) => router.push(`/dashboard/${encodeURIComponent(ws.slug)}/settings`)}
+      />
       <WorkspaceCreateModal open={creating} onClose={() => setCreating(false)} />
-    </div>
+    </>
   )
 }

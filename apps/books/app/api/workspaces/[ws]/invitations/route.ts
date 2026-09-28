@@ -10,7 +10,7 @@
 // `createInvitation` / `listWorkspaceInvitations`, which read and write
 // `platform.workspace_invitations` — one app's table since 2026-08-10.
 //
-// The three that came before it, all removed from this app in Phase 4 and
+// The three that came before it, all removed from this scaffold in Phase 4 and
 // listed in `app/api/README.md`: `searchRoute` (served another app's titles to a
 // caller with no access), `usersRoute` (listed people from another app's
 // membership table), `linksRoute` (an index that no longer exists — the factory
@@ -26,8 +26,27 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { Errors, requireOwner } from '@blackcode/platform-api'
+import { getUserByEmail } from '@blackcode/platform-db'
 import { apiHandler, resolveWorkspace } from '@/lib/api'
-import { acceptUrl, createInvitation, listInvitations } from '@/lib/db/queries/invitations'
+import { getDb } from '@/lib/db/client'
+import {
+  acceptUrl,
+  createInvitation,
+  INVITATION_TTL_DAYS,
+  listInvitations,
+} from '@/lib/db/queries/invitations'
+import { sendInvitationEmail } from '@/lib/email/send'
+
+/**
+ * This deployment's public origin — `NEXTAUTH_URL` first, because behind a
+ * proxy the request URL can be an internal hostname nobody outside can open.
+ * The link lands on THIS app's `/invitations/{token}` page (2026-09-28).
+ */
+function baseUrl(req: NextRequest): string {
+  const fromEnv = process.env.NEXTAUTH_URL
+  if (fromEnv) return fromEnv.replace(/\/$/, '')
+  return new URL(req.url).origin
+}
 
 interface Params {
   params: Promise<{ ws: string }>
@@ -74,26 +93,29 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     )
   }
 
-  // THE LINK IS PART OF THE RESPONSE because THIS app sends no email. That is a
-  // property of the scaffold, not of the platform: `packages/platform-email`
-  // exists as of 2026-08-11 and `apps/sales` uses it — see
-  // `docs/adding-an-app.md` open item 8, which shows the four-line binding.
-  //
-  // The scaffold deliberately does NOT bind a sender, so a copied app starts
-  // with no dependency on a Resend key and `email_sent: false` stays honest.
-  // Add the binding when your app needs to send, and set the two environment
-  // variables at the same time — without them, production password resets
-  // refuse with 503 `email_not_configured` rather than silently not sending.
-  //
-  // A link nobody can copy is not a delivery mechanism, so it is returned
-  // either way — `apps/sales` still returns it now that it does send, because
-  // email is best-effort and a bounce must not strand a valid invitation.
-  const origin = new URL(req.url).origin
+  // ── IT SENDS EMAIL SINCE 2026-09-28 ─────────────────────────────────────────────
+  // Through `platform-email`, the way `apps/sales` does. `email_sent` is the
+  // REAL result, not a constant: a client that cannot tell "sent" from "not
+  // attempted" assumes the first. The link is still returned either way,
+  // because email is best-effort and a bounce — or a deployment with no Resend
+  // key, where this reports `email_sent: false` — must not strand a valid
+  // invitation. It points at THIS app's own accept page, `/invitations/{token}`.
+  const link = acceptUrl(baseUrl(req), invitation.token)
+  const inviteeHasAccount = (await getUserByEmail(getDb(), email)) != null
+  const emailResult = await sendInvitationEmail(email, {
+    workspaceName: ctx.workspace.name,
+    inviterName: ctx.user.name ?? ctx.user.email,
+    acceptUrl: link,
+    inviteeHasAccount,
+    expiresInDays: INVITATION_TTL_DAYS,
+  })
+
   return NextResponse.json(
     {
       invitation,
-      email_sent: false,
-      accept_url: acceptUrl(origin, invitation.token),
+      invitee_has_account: inviteeHasAccount,
+      email_sent: emailResult.sent,
+      accept_url: link,
     },
     { status: 201 }
   )

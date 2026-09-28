@@ -41,8 +41,16 @@ export const SEARCH_QUERY_MIN = 1
 export const SEARCH_RESULTS_MAX = 200
 
 /** The platform half of what GET /api/meta serves under `limits`. */
+/**
+ * A workspace logo — `POST /api/workspaces/{ws}/logo` (`workspaceLogoRoute`),
+ * every app, since 2026-09-28. Images only, and small: it is drawn at 20–40px.
+ */
+export const WORKSPACE_LOGO_MAX_BYTES = 2 * 1024 * 1024
+export const WORKSPACE_LOGO_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const
+
 export const PLATFORM_LENGTH_LIMITS = {
   workspace_name_max: WORKSPACE_NAME_MAX,
+  workspace_logo_max_bytes: WORKSPACE_LOGO_MAX_BYTES,
   token_name_max: TOKEN_NAME_MAX,
   profile_name_max: PROFILE_NAME_MAX,
   profile_tagline_max: PROFILE_TAGLINE_MAX,

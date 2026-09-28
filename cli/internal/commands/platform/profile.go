@@ -18,6 +18,7 @@ func newProfileCmd() *cobra.Command {
 	cmd.AddCommand(
 		newProfileViewCmd(),
 		newProfileEditCmd(),
+		newProfileAvatarCmd(),
 	)
 	return cmd
 }
@@ -99,5 +100,47 @@ func newProfileEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&name, "name", "", "Display name (pass empty string to clear)")
 	cmd.Flags().StringVar(&tagline, "tagline", "", "Short tagline, max 140 chars (pass empty string to clear)")
 	cmd.Flags().StringVar(&avatarURL, "avatar-url", "", "Avatar image URL")
+	return cmd
+}
+
+func newProfileAvatarCmd() *cobra.Command {
+	var remove bool
+	cmd := &cobra.Command{
+		Use:         "avatar [<image-file>]",
+		Annotations: map[string]string{"routes": "POST /api/me/avatar,DELETE /api/me/avatar"},
+		Short:       "Upload or remove your profile photo",
+		Long: `Upload an image as your profile photo, or remove it with --remove.
+
+The photo is on your blackcode account, so every app shows it. Which image types
+are accepted and how large they may be is the server's to decide. An account
+connected to Google gets its photo from Google and cannot set one here.
+
+  bk profile avatar ./me.png
+  bk profile avatar --remove`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if remove == (len(args) == 1) {
+				return fmt.Errorf("give an image file, or --remove (not both)")
+			}
+			c, err := cmdutil.NewClient()
+			if err != nil {
+				return err
+			}
+			if remove {
+				if _, err := c.RemoveAvatar(); err != nil {
+					return err
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "removed your profile photo")
+				return nil
+			}
+			me, err := c.SetAvatar(args[0])
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "set your profile photo: %s\n", cmdutil.DerefOr(me.AvatarURL, ""))
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&remove, "remove", false, "Remove your photo instead of setting one")
 	return cmd
 }

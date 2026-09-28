@@ -125,29 +125,10 @@ const EXCLUDED_PATHS = new Map<string, string>([
  * The scaffold's three entries are real — it mounts the workspace reads and not
  * the writes — and they are also the worked example to copy.
  */
-const UNSERVED_OPERATIONS = new Map<string, string>([
-  [
-    'POST /api/workspaces',
-    'a workspace is the COMPANY (D-3). You are granted access to one; you do not ' +
-      'open one from a new app. `bk workspace create` is answered by the issues ' +
-      'deployment. GET is mounted beside it because `bk workspace use` cannot ' +
-      'select a workspace without it — which is what made the sales north-star ' +
-      'script fail at its second command.',
-  ],
-  [
-    'PATCH /api/workspaces/{ws}',
-    'renaming a workspace is company-level administration and `updateWorkspace` ' +
-      'is still app-local to issues. This app READS the workspace it works in and ' +
-      'does not administer it. `bk workspace edit` is answered by issues.',
-  ],
-  [
-    'DELETE /api/workspaces/{ws}',
-    'destroying a workspace carries a cascade with exactly one implementation, on ' +
-      'purpose. Two deployments able to run it is two places for that cascade to ' +
-      'diverge, and the failure would be unrecoverable. `bk workspace delete` is ' +
-      'answered by issues.',
-  ],
-])
+// Empty since 2026-09-28: books serves the whole workspace-administration
+// surface (create, edit, delete, transfer). The three entries that were here
+// were the scaffold's worked example and had outlived their reasons.
+const UNSERVED_OPERATIONS = new Map<string, string>()
 
 describe('CLI ↔ routes parity', () => {
   // There is no `hostsPlatformRoutes` to set, and that is one less thing to get
@@ -247,8 +228,14 @@ describe('CLI ↔ routes parity', () => {
       if (!allPaths.has(path)) stale.push(`${path} — "${reason}"`)
     }
     for (const [op, reason] of UNSERVED_OPERATIONS) {
+      const method = op.slice(0, op.indexOf(' '))
       const path = op.slice(op.indexOf(' ') + 1)
       if (!allPaths.has(path)) stale.push(`${op} — "${reason}"`)
+      // An "unserved" operation this app now SERVES is the same failure one
+      // level down: the entry keeps skipping a drift check on a route that
+      // exists. Found 2026-09-28 — all three of this file's entries had been
+      // stale since POST arrived, with the suite green.
+      else if (real.get(path)?.has(method)) stale.push(`${op} — now served, but listed as unserved: "${reason}"`)
     }
     expect(
       stale,

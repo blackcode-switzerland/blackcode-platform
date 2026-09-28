@@ -1,12 +1,10 @@
-import { WorkspaceSettingsView } from '@/components/workspace-settings-view'
-
-export const dynamic = 'force-dynamic'
+// A REDIRECT since 2026-09-28: a workspace's settings live inside it, at
+// `/dashboard/{ws}/settings`, as in every blackcode app. This path was the
+// settings page, reached from the old workspaces list. Its `storage` sub-page
+// stays where it is.
+import { redirect } from 'next/navigation'
 
 export default async function WorkspaceManagePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
-      <WorkspaceSettingsView slug={slug} backHref="/dashboard/workspaces" />
-    </div>
-  )
+  redirect(`/dashboard/${slug}/settings`)
 }

@@ -42,7 +42,7 @@ app. An app serves only the ones it has routes for, so another app's list is a
 subset of this one, not a copy of it:
 
   bk issues workspace  this app's workspaces: list, show, use, create, edit,
-                       transfer, delete
+                       transfer, delete, logo
   bk issues member     list, remove, leave
   bk issues invite     send, list, revoke, candidates; show, accept, decline,
                        pending (redeeming one addressed to you)

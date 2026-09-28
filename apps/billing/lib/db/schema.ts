@@ -62,6 +62,8 @@ export const billingWorkspaces = billingSchema.table('workspaces', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 80 }).notNull(),
   slug: varchar('slug', { length: 40 }).notNull(),
+  /** Migration 0015 (2026-09-28). An uploaded image; indexed by `trg_blob_refs_logo`. */
+  logo_url: text('logo_url'),
   /**
    * `ON DELETE RESTRICT` stays, and it is INERT — know what it does not do.
    *
@@ -143,6 +145,21 @@ export const billingCounters = billingSchema.table('counters', {
     .references(() => billingWorkspaces.id, { onDelete: 'cascade' }),
   entity_type: varchar('entity_type', { length: 20 }).notNull(),
   last_value: integer('last_value').default(0).notNull(),
+})
+
+/**
+ * `billing.user_settings` — this app's memory of which workspace you were in
+ * (migration 0014). Not `platform.users.active_workspace_id`: that
+ * column is read by every deployment as one of ITS ids. Ported from apps/sales.
+ */
+export const billingUserSettings = billingSchema.table('user_settings', {
+  user_id: integer('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  active_workspace_id: integer('active_workspace_id').references(() => billingWorkspaces.id, {
+    onDelete: 'set null',
+  }),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
 export type BillingWorkspace = typeof billingWorkspaces.$inferSelect

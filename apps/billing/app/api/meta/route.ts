@@ -55,6 +55,7 @@
 // extra one: it is a customer's integration documentation, and requiring a
 // credential to read which routes are public would be a strange front door.
 // That block arrives with phase 1's `lib/integration.ts`.
+import { WORKSPACE_LOGO_MAX_BYTES } from '@blackcode/platform-api'
 import { NextRequest, NextResponse } from 'next/server'
 import { contractVersion, platformMetaBlock } from '@blackcode/platform-api'
 import { apiHandler, appContext } from '@/lib/api'
@@ -115,6 +116,7 @@ function currentApp() {
     },
     limits: {
       workspace_name_max: WORKSPACE_NAME_MAX,
+      workspace_logo_max_bytes: WORKSPACE_LOGO_MAX_BYTES,
       payment_message_max: PAYMENT_MESSAGE_MAX,
       external_ref_max: EXTERNAL_REF_MAX,
       page_size_default: LIST_LIMIT_DEFAULT,

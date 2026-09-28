@@ -51,6 +51,7 @@ import * as settings from './settings'
 import * as sources from './sources'
 import * as statements from './statements'
 import * as taxes from './taxes'
+import * as workspace from './workspace'
 
 /** Every area, in one list, so nothing below can name a subset by accident. */
 const AREAS = [
@@ -67,6 +68,7 @@ const AREAS = [
   sources,
   statements,
   taxes,
+  workspace,
 ] as const
 
 const EN = {
@@ -83,6 +85,7 @@ const EN = {
   ...sources.en,
   ...statements.en,
   ...taxes.en,
+  ...workspace.en,
 }
 
 /**
@@ -134,6 +137,7 @@ export const DICTIONARY: Dictionary<BooksKey> = {
     ...sources.fr,
     ...statements.fr,
     ...taxes.fr,
+    ...workspace.fr,
   }),
 }
 

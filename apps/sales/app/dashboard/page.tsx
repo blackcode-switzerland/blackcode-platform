@@ -1,8 +1,8 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
 import { getStoredActiveWorkspaceId, listWorkspacesForUser } from '@/lib/db/queries/workspaces'
 import { NoWorkspace } from '@/components/no-workspace'
+import { SalesWorkspaceChooser } from '@/components/workspace-chooser'
 
 /**
  * `/dashboard` → `/dashboard/{ws}` (D-3).
@@ -59,28 +59,8 @@ export default async function DashboardIndex() {
   if (reachable.length === 0) return <NoWorkspace email={user.email} />
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-8">
-      <div className="w-full max-w-sm space-y-4">
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">Choose a workspace</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            You can reach b/sales in more than one. This choice is remembered —
-            switch any time from the sidebar.
-          </p>
-        </div>
-        <div className="space-y-1.5">
-          {reachable.map((w) => (
-            <Link
-              key={w.id}
-              href={`/dashboard/${w.slug}`}
-              className="block rounded-xl border border-border bg-card px-4 py-3 text-sm transition-colors hover:bg-accent"
-            >
-              <span className="block font-medium text-foreground">{w.name}</span>
-              <span className="block text-xs text-muted-foreground">{w.slug}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
+    <div className="flex min-h-screen items-center justify-center">
+      <SalesWorkspaceChooser workspaces={reachable} />
     </div>
   )
 }

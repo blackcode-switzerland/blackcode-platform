@@ -289,6 +289,26 @@ export function useRenameWorkspace(ws: string) {
   )
 }
 
+/** `POST /api/workspaces/{ws}/logo` — multipart, owner only (2026-09-28). */
+export function useSetWorkspaceLogo(ws: string) {
+  return useWrite(
+    (file: File) => {
+      const form = new FormData()
+      form.append('file', file)
+      return call<WorkspaceSummary>(wsApi(ws, '/logo'), { method: 'POST', body: form })
+    },
+    () => [keys.workspaceShow(ws), keys.workspaces()]
+  )
+}
+
+/** `DELETE /api/workspaces/{ws}/logo`. */
+export function useRemoveWorkspaceLogo(ws: string) {
+  return useWrite(
+    () => call<WorkspaceSummary>(wsApi(ws, '/logo'), { method: 'DELETE' }),
+    () => [keys.workspaceShow(ws), keys.workspaces()]
+  )
+}
+
 /** `DELETE /api/workspaces/{ws}` — 409 `workspace_retained` when it holds any retained record. */
 export function useDeleteWorkspace(ws: string) {
   return useWrite(
@@ -355,6 +375,26 @@ export interface MePatch {
 export function usePatchMe() {
   return useWrite(
     (patch: MePatch) => call<Partial<Me>>('/api/me', { method: 'PATCH', body: patch }),
+    () => [keys.me()]
+  )
+}
+
+/** `POST /api/me/avatar` — multipart; the photo on your blackcode account (2026-09-28). */
+export function useSetAvatar() {
+  return useWrite(
+    (file: File) => {
+      const form = new FormData()
+      form.append('file', file)
+      return call<Partial<Me>>('/api/me/avatar', { method: 'POST', body: form })
+    },
+    () => [keys.me()]
+  )
+}
+
+/** `DELETE /api/me/avatar`. */
+export function useRemoveAvatar() {
+  return useWrite(
+    () => call<Partial<Me>>('/api/me/avatar', { method: 'DELETE' }),
     () => [keys.me()]
   )
 }

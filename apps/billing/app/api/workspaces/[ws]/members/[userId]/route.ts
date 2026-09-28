@@ -12,9 +12,9 @@
 // no `POST …/leave` here (so `bk billing member leave` is not built —
 // `MemberLeave` stays off in `cli/internal/commands/billing/billing.go`); the
 // CLI spelling of leaving is `bk billing member remove <your id>`, and the web's
-// "Leave workspace" button calls exactly this. `apps/sales` gates the route on
-// ownership alone, which leaves a sales member no way out short of asking; that
-// is the one deliberate difference from the port.
+// "Leave workspace" button calls exactly this. `apps/sales` gated the route on
+// ownership alone until 2026-09-28, leaving a sales member no way out short of
+// asking; it now accepts a member removing themselves too, as here.
 //
 // ---------------------------------------------------------------------------
 // THE OWNER CANNOT BE REMOVED — BY ANYONE, INCLUDING THEMSELVES

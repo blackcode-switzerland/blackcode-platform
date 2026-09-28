@@ -138,12 +138,19 @@ type Config struct {
 	WorkspaceAdmin bool
 
 	// WorkspaceCreate adds CREATE alone, for an app that serves POST
-	// /api/workspaces and none of the other admin methods. `apps/books` is why
-	// it exists: its workspaces can be made but never deleted (statutory
-	// records, art. 958f CO — the same doctrine that keeps Trash off there),
-	// so the four-verb bundle above would claim three routes that can only
-	// 404. Ignored unless Workspace is set; redundant when WorkspaceAdmin is.
+	// /api/workspaces and none of the other admin methods. `apps/books` was why
+	// it existed, until 2026-09-28 when books gained the whole admin surface
+	// (delete refused for any workspace that has held a record); no app sets it
+	// today, and it stays for the next app that serves create alone. Ignored
+	// unless Workspace is set; redundant when WorkspaceAdmin is.
 	WorkspaceCreate bool
+
+	// WorkspaceLogo adds `workspace logo <file>` / `--remove`: POST and DELETE
+	// /api/workspaces/{ws}/logo, the logo-only upload every app serves since
+	// 2026-09-28 (`workspaceLogoRoute`). A flag of its own because it is a
+	// route of its own — an app with WorkspaceAdmin and no logo route (the
+	// scaffold) must not claim it. Ignored unless Workspace is set.
+	WorkspaceLogo bool
 
 	// Members mounts `bk <app> member` — LIST only.
 	//

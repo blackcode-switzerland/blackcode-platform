@@ -26,6 +26,7 @@ export const en = {
   'nav.taxes': 'Taxes',
   'nav.patrimoine': 'Patrimoine',
   'nav.compliance': 'Compliance rules',
+  'nav.workspaceSettings': 'Workspace settings',
 } as const
 
 export const fr: Record<keyof typeof en, string> = {
@@ -44,4 +45,5 @@ export const fr: Record<keyof typeof en, string> = {
   // the same reasoning `legal()` applies to a statutory line label.
   'nav.patrimoine': 'Patrimoine',
   'nav.compliance': 'Règles de conformité',
+  'nav.workspaceSettings': 'Réglages de l’espace',
 }

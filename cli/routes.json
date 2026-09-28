@@ -15,6 +15,12 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}/logo",
+      "command": "bk billing workspace logo",
+      "app": "billing"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/members/{userId}",
       "command": "bk billing member remove",
       "app": "billing"
@@ -231,6 +237,12 @@
     },
     {
       "method": "POST",
+      "path": "/api/workspaces/{ws}/logo",
+      "command": "bk billing workspace logo",
+      "app": "billing"
+    },
+    {
+      "method": "POST",
       "path": "/api/workspaces/{ws}/recurrences",
       "command": "bk billing recurrence create",
       "app": "billing"
@@ -249,8 +261,26 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk books workspace delete",
+      "app": "books"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/workspaces/{ws}/invitations/{id}",
       "command": "bk books invite revoke",
+      "app": "books"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/logo",
+      "command": "bk books workspace logo",
+      "app": "books"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/members/{userId}",
+      "command": "bk books member remove",
       "app": "books"
     },
     {
@@ -263,6 +293,18 @@
       "method": "GET",
       "path": "/api/compliance-rules/{rule}",
       "command": "bk books compliance show",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/invitations/{token}",
+      "command": "bk books invite show",
+      "app": "books"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/pending-invitations",
+      "command": "bk books invite pending",
       "app": "books"
     },
     {
@@ -351,6 +393,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/invite-candidates",
+      "command": "bk books invite candidates",
+      "app": "books"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/members",
       "command": "bk books member list",
       "app": "books"
@@ -429,6 +477,12 @@
     },
     {
       "method": "PATCH",
+      "path": "/api/workspaces/{ws}",
+      "command": "bk books workspace edit",
+      "app": "books"
+    },
+    {
+      "method": "PATCH",
       "path": "/api/workspaces/{ws}/analytique/categories/{number}",
       "command": "bk books category retire",
       "app": "books"
@@ -449,6 +503,18 @@
       "method": "PATCH",
       "path": "/api/workspaces/{ws}/sources/{number}",
       "command": "bk books source edit, bk books source mapping-set",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/invitations/accept",
+      "command": "bk books invite accept",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/invitations/decline",
+      "command": "bk books invite decline",
       "app": "books"
     },
     {
@@ -531,6 +597,12 @@
     },
     {
       "method": "POST",
+      "path": "/api/workspaces/{ws}/logo",
+      "command": "bk books workspace logo",
+      "app": "books"
+    },
+    {
+      "method": "POST",
       "path": "/api/workspaces/{ws}/pieces/ingest",
       "command": "bk books piece ingest",
       "app": "books"
@@ -563,6 +635,12 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/sources/{number}/pulls",
       "command": "bk books source record-pull",
+      "app": "books"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/transfer",
+      "command": "bk books workspace transfer",
       "app": "books"
     },
     {
@@ -629,6 +707,12 @@
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/labels/{id}",
       "command": "bk issues label delete",
+      "app": "issues"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/logo",
+      "command": "bk issues workspace logo",
       "app": "issues"
     },
     {
@@ -1011,6 +1095,12 @@
     },
     {
       "method": "POST",
+      "path": "/api/workspaces/{ws}/logo",
+      "command": "bk issues workspace logo",
+      "app": "issues"
+    },
+    {
+      "method": "POST",
       "path": "/api/workspaces/{ws}/move",
       "command": "bk issues copy, bk issues move",
       "app": "issues"
@@ -1068,6 +1158,12 @@
       "path": "/api/workspaces/{ws}/trash/restore",
       "command": "bk issues trash restore",
       "app": "issues"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/me/avatar",
+      "command": "bk profile avatar",
+      "app": "platform"
     },
     {
       "method": "DELETE",
@@ -1167,6 +1263,12 @@
     },
     {
       "method": "POST",
+      "path": "/api/me/avatar",
+      "command": "bk profile avatar",
+      "app": "platform"
+    },
+    {
+      "method": "POST",
       "path": "/api/super-admin/blob-drift",
       "command": "bk super-admin blob-drift",
       "app": "platform"
@@ -1223,6 +1325,12 @@
       "method": "DELETE",
       "path": "/api/workspaces/{ws}/labels/{id}",
       "command": "bk sales label delete",
+      "app": "sales"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/workspaces/{ws}/logo",
+      "command": "bk sales workspace logo",
       "app": "sales"
     },
     {
@@ -1661,6 +1769,12 @@
       "method": "POST",
       "path": "/api/workspaces/{ws}/labels",
       "command": "bk sales label create",
+      "app": "sales"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspaces/{ws}/logo",
+      "command": "bk sales workspace logo",
       "app": "sales"
     },
     {

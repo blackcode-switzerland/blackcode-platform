@@ -2,15 +2,15 @@
 // POST /api/workspaces.
 //
 // `ensureWorkspaceForUser` mints a person's FIRST workspace at sign-in.
-// `createWorkspaceForUser` is the manual door — and since 2026-08-20 it refuses
-// a SECOND one: b/books gives one workspace per person for now. Three
-// properties matter:
+// `createWorkspaceForUser` is the manual door. From 2026-08-20 to 2026-09-28 it
+// refused a SECOND workspace (one per person); that was lifted when the
+// invitation-accept flow and the web switcher landed. Three properties matter:
 //
 //   1. The membership row lands WITH the workspace, one transaction — a
 //      workspace without it locks its own owner out (the seed shipped that
 //      exact bug once; `listWorkspacesForUser` joins membership).
-//   2. A person who already owns one is refused, in words, pointing at the
-//      workspace they have. This case REPLACED "it always creates".
+//   2. A person who already owns one can create another — the case that
+//      REPLACED the one-per-person refusal, so a revert of the lift goes red.
 //   3. Slug collisions get a typeable counter suffix, never a random string.
 //      Still reachable, and now only ACROSS people — two different Annas — so
 //      the case below uses a second user rather than the same one twice.
@@ -67,20 +67,15 @@ d('createWorkspaceForUser', () => {
     expect(mine.map((w: { id: number }) => w.id)).toContain(ws.id)
   })
 
-  it('refuses a second workspace, and names the one they already have', async () => {
-    const { createWorkspaceForUser } = await import('./queries/workspaces')
-    await expect(createWorkspaceForUser(userId, `Second ${stamp}`)).rejects.toMatchObject({
-      code: 'one_workspace_per_person',
-    })
-    // The refusal has to be actionable: it names the workspace to work in, and
-    // says what to do instead — a second company is a second BOOK.
-    await expect(createWorkspaceForUser(userId, `Second ${stamp}`)).rejects.toMatchObject({
-      suggestion: expect.stringContaining(`bk books workspace use venture-${stamp}`),
-    })
-
-    const rows = await db.execute(sql`
-      SELECT count(*) AS n FROM books.workspace_members WHERE user_id = ${userId}`)
-    expect(Number(rows.rows[0].n), 'nothing was minted').toBe(1)
+  it('creates a second workspace for somebody who already owns one', async () => {
+    const { createWorkspaceForUser, listWorkspacesForUser } = await import('./queries/workspaces')
+    const second = await createWorkspaceForUser(userId, `Second ${stamp}`)
+    expect(second.member_role).toBe('owner')
+    const mine = await listWorkspacesForUser(userId)
+    expect(
+      mine.filter((w: { member_role: string }) => w.member_role === 'owner').length,
+      'both workspaces are theirs'
+    ).toBe(2)
   })
 
   it('suffixes a colliding slug with a counter — across two people', async () => {
