@@ -710,6 +710,12 @@ segment because they are about the **blackcode account** rather than about this
 workspace — and the pages say so, because a Settings screen inside one app reads
 as that app's settings and this one is not.
 
+**Since 2026-09-28 the four tabs are the shared account kit** (`/docs/frontend.md`,
+*Account settings*) — the same frame, cards and words as every other app. The
+**Account** tab's own blocks keep this app's `Section`, which now delegates to
+the shared `SettingsSection`; the photo is an upload through
+`POST/DELETE /api/me/avatar`.
+
 **It renders inside `SalesShell` as of 2026-08-11, and it did not before.** The
 shell is mounted by `app/dashboard/[ws]/layout.tsx`, and settings is a *sibling*
 of `[ws]`, not a child — so every settings page lost the sidebar, the header and

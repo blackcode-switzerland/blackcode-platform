@@ -530,10 +530,12 @@ records is what is specific to this app.
 | `GET \| POST /api/upload`, `POST /api/upload/blob` | `bk sales upload` |
 | `GET \| PATCH …/preferences` | `bk sales preferences show \| set` |
 
-**Six of those are platform route factories**, mounted from
+**Several are platform route factories**, mounted from
 `@blackcode/platform-api/routes`: `/api/upload`, `/api/upload/blob`, and — since
 Phase 7 — `GET|PATCH /api/me`, `GET|POST /api/tokens`, `DELETE /api/tokens/{id}`,
-`GET …/activity` and `POST /api/cli/authorize`. Why each, and the two that are
+`GET …/activity` and `POST /api/cli/authorize` — and, since 2026-09-28,
+`POST|DELETE /api/me/avatar` (`bk profile avatar`) and
+`POST|DELETE /api/workspaces/{ws}/logo`. Why each, and the two that are
 deliberately NOT mounted (`DELETE /api/me`, `/api/me/password/*`), is a table in
 [`frontend.md` §10](./frontend.md) rather than repeated here — the decisions are
 about what the WEB surface offers. `/api/meta` is

@@ -765,6 +765,12 @@ you can make:
   has a reference scanner, add the `workspace_logo` surface to it too. Copy
   `apps/billing`'s `0015_billing_workspace_logo.sql`.
 
+  **Keep `app/api/me/avatar/route.ts`** (the scaffold has it). It mounts
+  `meAvatarRoute` — the profile photo, `bk profile avatar` — and every app
+  serves it, because `bk profile` answers from whichever app a person logged in
+  to. Nothing else to wire: the photo's blob-reference trigger is on
+  `platform.users` and already exists.
+
   **When you do add it, do not touch the `cookies:` line in `middleware.ts`.**
   `withAuth` defaults to looking for `next-auth.session-token`; D-16 renamed this
   platform's cookie. A gate that omits it sends every signed-in user back to

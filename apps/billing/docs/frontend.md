@@ -28,7 +28,7 @@ body text, and is a known open point.
 | `/dashboard/[ws]/companies` · `/[slug]` | issuing companies: list, create, edit, retire |
 | `/dashboard/[ws]/history` · `/[seq]` | the imported archive, read-only, with the JSON import |
 | `/dashboard/[ws]/settings` | the workspace: rename, members (make owner / remove, or leave), invitations (send, candidates, copy link, revoke), danger zone (delete — refused with the reason when it holds records) |
-| `/dashboard/settings/*` | the account: profile, password, API tokens |
+| `/dashboard/settings/*` | the account — Profile (with a photo upload), Account, API tokens, Preferences (theme). The shared account kit since 2026-09-28 (`/docs/frontend.md`, *Account settings*) |
 
 **The company switcher** in the header writes `?company=<slug>`; overview,
 invoices, recurrences and history pass it to their route. No param = all

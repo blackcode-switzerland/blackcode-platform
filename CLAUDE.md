@@ -44,7 +44,7 @@ is being built:
   name, contact address and email accent read the environment while the slug
   never does. The plan is `docs/billing-app-plan/`, one doc per milestone.
 - **`apps/_scaffold`** — the scaffold. A real, minimal app: one entity, one
-  route, its own migrations and ledger, nine platform route factories, an entity
+  route, its own migrations and ledger, eight platform route factories, an entity
   projection and its reconciler, a CLI command group, a guide topic, a page.
   It builds, lints and passes every guardrail. **Copy it to add an app; do not
   edit it in place.** (Renamed from `apps/_template` on 2026-08-07 — D-38: the

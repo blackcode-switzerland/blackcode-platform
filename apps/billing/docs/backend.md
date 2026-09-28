@@ -1262,6 +1262,7 @@ own (never a shared factory — they read `platform.workspace_*`):
 | `GET /api/invitations/{token}` | `invite show` | signed-in invitee; refusal order accepted → not-pending → expired → not-yours (names the caller, never the invitee) |
 | `POST /api/invitations/accept` · `decline` | `invite accept` · `decline` | signed-in invitee |
 | `GET /api/me/pending-invitations` | `invite pending` | anyone signed in |
+| `POST` / `DELETE /api/me/avatar` | `bk profile avatar <file>` / `--remove` | anyone signed in, not Google-connected. The shared `meAvatarRoute` (2026-09-28); `recordUpload: false`, this app keeps no ledger |
 
 ### The active workspace: `billing.user_settings` (migration 0014, 2026-09-28)
 

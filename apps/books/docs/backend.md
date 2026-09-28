@@ -396,6 +396,7 @@ for why that is a bug and not a shortcut).
 | `DELETE /api/workspaces/{ws}/members/{userId}` | `member remove <id>` | The owner removes anyone; a member removes **themselves**, which is leaving — there is no `…/leave` route, so `member leave` is not built. The owner cannot be removed by anyone, including themselves: transfer first |
 | `GET /api/workspaces/{ws}/invite-candidates` | `invite candidates` | Owner. People you share a **books** workspace with; a super admin also sees every live account, flagged `from_platform` |
 | `POST /api/workspaces/{ws}/invitations` | `invite send` | Now **emails** through `platform-email` (`email_sent` is real) and answers `invitee_has_account` |
+| `POST` / `DELETE /api/me/avatar` | `bk profile avatar <file>` / `--remove` | The shared `meAvatarRoute` (2026-09-28): the profile tab's photo upload. No upload ledger here, so `recordUpload: false` |
 | `GET /api/invitations/{token}`, `POST /api/invitations/{accept,decline}`, `GET /api/me/pending-invitations` | `invite show` / `accept` / `decline` / `pending` | The invitee's half — not workspace-scoped, because the person redeeming a link is not yet a member of anything |
 
 The CLI side is `appverbs.Config` in `cli/internal/commands/books/books.go`:
