@@ -11,6 +11,15 @@ complete usage guide, embedded in the binary, so it always describes the version
 you are running. For live values (vocabularies, limits, your books), run
 **`bk meta --app-server books`** and `bk books entity list`.
 
+## 2026-09-28 — Workspaces can carry a logo — the one file books stores
+
+Not breaking; additive. `books.workspaces.logo_url` (migration 0021), set with
+`bk books workspace logo <file>` / `--remove` (`POST` / `DELETE
+/api/workspaces/{ws}/logo`, owner only) or from workspace settings. Books still
+records no uploads: supporting documents remain Drive references, and this
+route accepts one image for one column. `bk meta` gained a `limits` block
+carrying `workspace_logo_max_bytes`.
+
 ## 2026-09-28 — Workspaces: more than one, shared by invitation, administered by their owner
 
 Not breaking for existing calls; additive, with one refusal lifted.

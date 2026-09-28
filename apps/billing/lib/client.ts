@@ -61,9 +61,13 @@ function envelopeError(status: number, method: string, path: string, body: unkno
 export async function call<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const method = init.method ?? 'GET'
   const headers: Record<string, string> = { accept: 'application/json' }
-  if (init.body !== undefined) headers['content-type'] = 'application/json'
+  // A `FormData` body (the workspace logo, 2026-09-28) passes through untouched
+  // and WITHOUT a content-type — the browser sets the multipart boundary.
+  const isForm = typeof FormData !== 'undefined' && init.body instanceof FormData
+  if (init.body !== undefined && !isForm) headers['content-type'] = 'application/json'
   if (method === 'POST') headers['idempotency-key'] = crypto.randomUUID()
-  const res = await fetch(path, { method, headers, body: init.body === undefined ? undefined : JSON.stringify(init.body) })
+  const body = init.body === undefined ? undefined : isForm ? (init.body as FormData) : JSON.stringify(init.body)
+  const res = await fetch(path, { method, headers, body })
   const raw = await res.text()
   // A 500 from a proxy is HTML; parse failure falls back to the status line.
   const json = raw ? (() => { try { return JSON.parse(raw) } catch { return null } })() : null

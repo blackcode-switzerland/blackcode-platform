@@ -44,6 +44,8 @@ export interface WorkspaceSummary {
   owner_id: number
   updated_at: string
   member_role: 'owner' | 'member'
+  /** Migration 0015 (2026-09-28). */
+  logo_url?: string | null
 }
 
 export interface Member {

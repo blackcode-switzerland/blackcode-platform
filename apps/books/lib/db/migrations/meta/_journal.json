@@ -141,6 +141,13 @@
       "when": 1790582400000,
       "tag": "0020_books_remembers_a_workspace",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790586000000,
+      "tag": "0021_books_workspace_logo",
+      "breakpoints": true
     }
   ]
 }

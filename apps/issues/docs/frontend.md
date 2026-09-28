@@ -33,22 +33,35 @@ URLs* in `/docs/frontend.md` for the model. Detail pages use the workspace
 | `/dashboard/[ws]/issues` · `/issues/[seq]` | Issues listing · issue detail |
 | `/dashboard/[ws]/tasks` · `/tasks/[seq]` | Tasks listing · detail |
 | `/dashboard/[ws]/labels` · `/labels/new` · `/labels/[id]` | Labels listing · create page (`LabelCreateView`) · detail (`LabelDetailView`, inline-editable name/color + associated issues) |
-| `/dashboard/[ws]/members` · `/members/invite` | Workspace members + invitations |
+| `/dashboard/[ws]/settings` | Workspace settings (`WorkspaceSettings`, `components/workspace-settings.tsx`) — the shared sections (`/docs/frontend.md`, *Workspace management*): General (name, read-only slug, role, logo), a **Storage** link section, Members, Invitations (owner), Leave (member) / Danger zone (owner, typed-slug delete). Since 2026-09-28 |
+| `/dashboard/[ws]/members` · `/members/invite` | **Redirects** to `/dashboard/[ws]/settings` (since 2026-09-28) |
 | `/dashboard/[ws]/activity` | Activity feed |
 | `/dashboard/[ws]/analytics` · `/analytics/print` | Analytics · print-to-PDF view |
 | `/dashboard/[ws]/trash` | Recycle bin |
 | `/dashboard/inbox` | Notifications (cross-workspace, unscoped) |
 | `/dashboard/settings/{profile,account,tokens,workspace}` | Settings (own sub-layout + nav, unscoped) |
 | `/dashboard/super-admin/*` | Super-admin pages (unscoped) |
-| `/dashboard/workspaces` | Workspace manager (`WorkspacesView`) — list + switch; **Manage** shown to owners only |
-| `/dashboard/workspaces/new` | Create-workspace page (`WorkspaceCreateView`) — replaces the old modal in this flow |
-| `/dashboard/workspaces/[slug]` | Per-workspace settings (`WorkspaceSettingsView`) — owners get a **Manage storage** link |
+| `/dashboard/workspaces` | Every workspace you belong to, as the shared chooser (`WorkspacesView`); choosing one remembers it. `?new=1` opens the create modal over it |
+| `/dashboard/workspaces/new` | **Redirects** to `/dashboard/workspaces?new=1` (since 2026-09-28; it was a create page) |
+| `/dashboard/workspaces/[slug]` | **Redirects** to `/dashboard/[slug]/settings` (since 2026-09-28; it was the settings page, outside the workspace) |
 | `/dashboard/workspaces/[slug]/storage` | Storage management (`StorageView`) — owner only; lists every uploaded file with its references + usage, deletes unused (0-reference) files. Removing a file from a body never deletes bytes; only an owner-confirmed delete here does (server re-checks references). |
 
 Legacy `/dashboard`, `/dashboard/issues/[id]`, `/dashboard/tasks/[id]`, and old
 `/dashboard/{projectId}` paths still resolve — they redirect to the canonical
-`/dashboard/{ws}/…` URLs. `WorkspaceCreateModal` is still used by
-`OnboardingCreateWorkspace` (the forced first-workspace screen).
+`/dashboard/{ws}/…` URLs. The bare `/dashboard` opens the remembered workspace
+(`platform.users.active_workspace_id`), else the first one
+(`lib/default-workspace.ts`) — unlike the other apps it does not stop at the
+chooser when several exist and none is remembered.
+
+**Workspace management since 2026-09-28** is the shared kit
+(`@blackcode/platform-ui/workspace/*`, described in `/docs/frontend.md`): the
+sidebar switcher is its dropdown (it was a link to `/dashboard/workspaces`),
+the sidebar's **Members** entry became **Settings**, and creating a workspace is
+its name-only modal (`WorkspaceCreateModal` re-exports it; the logo is set in
+Settings). The modal is also what `OnboardingCreateWorkspace` (the forced
+first-workspace screen) renders. `/invitations/[token]` renders the shared
+card, and its not-yours refusal names only the signed-in address — it used to
+print the invitee's, which told whoever held the link who it was sent to.
 
 `app/dashboard/layout.tsx` validates the session, shows
 `OnboardingCreateWorkspace` when the user has no workspace, and renders the
@@ -133,25 +146,23 @@ this app's own.
 - **Create / edit modals:** `issue-create-modal` (kanban flow only — all other
   "new" buttons POST immediately then redirect to the detail page with `?new=1`),
   `project-settings-modal`, `workspace-create-modal`.
-- **Management views:** `members-view`, `project-members-panel`, `labels-view`,
+- **Management views:** `project-members-panel`, `labels-view`,
   `activity-view` (full workspace feed page), `activity-feed` (reusable feed
   component used by the activity page and issue/project detail sidebars),
   `comment-section` (reusable polymorphic comment thread), `analytics-view`
   (see Analytics dashboard below), `print-analytics-view`, `inbox-view`,
   `trash-view` (recycle bin —
-  `/dashboard/trash`), `workspaces-view` (workspace manager at
+  `/dashboard/{ws}/trash`), `workspaces-view` (the shared chooser at
   `/dashboard/workspaces`).
 - **Settings:** `profile-settings-view`, `account-settings-view`,
-  `api-tokens-settings`, `workspace-settings-view`, `storage-view` (owner-only
-  workspace file management at `/dashboard/workspaces/[slug]/storage`),
-  `workspace-apps-panel` (the **Apps** section of workspace settings: which apps
-  the workspace runs, each one's `default_access`, and the per-member access list).
-  The panel is **readable by any member** — seeing that a colleague has access and
-  you do not is how a person works out what to ask for — while the controls are
-  owner-only. It never renders a Disable button for the app you are currently in,
-  matching the server's `cannot_disable_current_app` refusal. Its fetch helper
-  concatenates the API's `suggestion` into the toast message, so the web UI is not
-  the one surface that says "no" without saying what to do.
+  `api-tokens-settings`, `workspace-settings` (`/dashboard/{ws}/settings`: the
+  shared sections wired to this app's routes — logo is `POST/DELETE /api/workspaces/{ws}/logo`
+  (the shared logo-only route; `PATCH { logo_url }` still works for `bk`), leave is `POST …/leave`; it
+  replaced `workspace-settings-view`, `members-view` and `invite-members-view`
+  on 2026-09-28), `storage-view` (owner-only workspace file management at
+  `/dashboard/workspaces/[slug]/storage`, linked from Settings).
+  (`workspace-apps-panel`, the per-app access section, went with
+  `app_access` on 2026-08-10.)
 - **Super admin:** `super-admin-users-view` (platform-wide member table with workspace count),
   `super-admin-whitelist-view` (add/remove allowed domains and emails),
   `super-admin-errors-view` (error log with status/level/date filters, stat cards,

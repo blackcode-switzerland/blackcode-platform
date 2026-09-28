@@ -1758,7 +1758,7 @@ export interface WorkspaceMember {
 
 /** `GET /api/workspaces/{ws}` — the workspace, your role in it, its members. */
 export interface WorkspaceDetail {
-  workspace: { id: number; name: string; slug: string; owner_id: number; updated_at: IsoDate }
+  workspace: { id: number; name: string; slug: string; owner_id: number; updated_at: IsoDate; logo_url: string | null }
   role: WorkspaceRole
   members: WorkspaceMember[]
 }

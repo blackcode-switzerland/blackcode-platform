@@ -138,10 +138,13 @@ in `lib/wire-parity.test.ts`:**
   so no screen can state them; serving `entity` and `exercice` there is an open
   backend request. Until then the screen names no book, and says why.
 
-Everything else under `app/api/` is the platform surface, mounted from the shared
-factories: auth, `/api/me`, workspaces, members, invitations, and — since
-2026-08-19 — the whole account surface (passwords, tokens, CLI authorization).
-See **§10** for what that is and why none of it is a books write.
+Everything else under `app/api/` is the platform surface: auth, `/api/me`,
+workspaces, members, invitations, and — since 2026-08-19 — the whole account
+surface (passwords, tokens, CLI authorization), mostly from the shared
+factories. See **§10** for the account surface and why none of it is a books
+write. Workspace administration and invitations are this app's own routes over
+`books.*` tenancy since 2026-09-28 (`backend.md` §10) — the factories of those
+names write `platform.workspace_*`, which is another app's.
 
 `entities.source` is still the field to watch, and
 [`components/states.tsx`](../components/states.tsx)'s `<FixtureNotice>` renders
@@ -170,7 +173,7 @@ ask rather than adding one.
 ## 4. The data model you render against
 
 ```
-workspace      one account's container       in the URL as [ws]
+workspace      a set of people              in the URL as [ws]
    └── entity        one book, any number    ?entity=blackcode
         └── exercice     one fiscal year
              └── entry        one écriture
@@ -293,19 +296,42 @@ figure sat entirely underneath the year's — the wrong number in the month's
 place, not a missing one. Measured in review; the reasoning and both
 measurements are at the scroll wrapper in `components/monthly-cr-grid.tsx`.
 
-### The word "workspace" must never appear in the UI
+### A workspace is a set of PEOPLE; a book is a set of ACCOUNTS
 
-It is platform tenancy. It names nothing in this product. The mockup has no team,
-no members page, no sharing, and not one human-identity field across its 27 data
-structures. There is one user, many books, and a fiduciary who receives an export
-rather than a login.
+> **Reversed 2026-09-28.** This section was *"The word 'workspace' must never
+> appear in the UI"* — decision D-C: no switcher, no create-workspace flow, no
+> members page, no invite flow, `[ws]` in the URL and never explained. It was
+> reversed so that all four blackcode apps manage workspaces the same way, from
+> the shared kit (root [`docs/frontend.md`](../../../docs/frontend.md) →
+> *Workspace management*). The premise had also stopped holding: a person can
+> now create workspaces and accept invitations into other people's, so being in
+> several is ordinary, and landing in the wrong one with no way to the other was
+> the limitation D-C left.
 
-So: no workspace switcher, no create-workspace flow, no members page until
-somebody asks for one. `[ws]` stays in the URL because the platform's route
-factories require it. Never explain it to the reader.
+The workspace is on screen now, and the rule that replaced D-C is **never let
+the two be confused**. The workspace is in the **sidebar** (the switcher, above
+the nav); the book is in the **header** (the book and year switchers). The
+create modal says it outright: a second company is usually a second *book*, not
+a second workspace.
 
-`apps/sales` settled the same point: its team page says "your team" and the word
-workspace appears nowhere on it.
+| Where | What |
+|---|---|
+| Sidebar | The shared switcher — `components/workspace/workspace-switcher.tsx`. Switching and creating remember the choice in `books.user_settings` |
+| Nav, last | **Workspace settings** → `/dashboard/{ws}/settings`. Flagged `workspaceLevel` in `lib/nav.ts`, which hides **both** the book and the year switcher there — a control that changes nothing on the page teaches the reader they used it wrong |
+| `/dashboard/{ws}/settings` | General (name; the slug read-only), Members, Invitations (owner), Leave (member) or Danger zone (owner) — `components/workspace/workspace-settings.tsx`. The danger zone reads the book list and, for a workspace that has held books, shows **why it cannot be deleted instead of the button** (art. 958f CO; the route's `409 workspace_retained` is the authority — see `backend.md` §10) |
+| `/dashboard` | One workspace opens directly; several open the remembered one; several with nothing remembered — or a remembered one you have since left — shows the shared chooser, which remembers |
+| `/invitations/{token}` | The shared card (`components/workspace/invitation-actions.tsx`) |
+
+**Words and commands live apart.** Every string is in
+`lib/dictionary/workspace.ts` (EN/FR — *espace de travail*, which cannot be
+confused with *livre*), handed to the shared components through
+`components/workspace/labels.ts`. The `bk books` spellings printed beside the
+controls are in `lib/workspace-cli.ts`, because a command is not copy: it is
+never translated, and two `<user_id>` placeholders inside JSX read to
+`lib/hardcoded-strings.test.ts` as a sentence between two tags.
+
+**Every tenancy write goes through `lib/mutations.ts`** — see §5 for why that
+does not make them record writes.
 
 ## 4bis. Charts — the house pattern, set by one screen
 
@@ -378,6 +404,19 @@ Thirteen screens, **five** writes: resolve an entry, create a rule, post a
 staged entry, approve a compliance rule, **match a pièce to an entry**.
 Everything else reads.
 
+> **The tenancy writes are not a sixth (2026-09-28).** Since D-C was reversed
+> (§4) the web also creates, selects, renames, transfers and deletes
+> workspaces, removes members (or leaves), and sends, revokes, accepts and
+> declines invitations. Those live in `lib/mutations.ts` too — they touch
+> `books.workspaces`, `workspace_members` and `invitations`, and "does it touch
+> `books.*`?" is the rule that places a write — but in a separate **Tenancy**
+> section, on the same gated `useRecordMutation` primitive, and **the count
+> stays five**. The five change the books; these change who may see them, and
+> none can move an amount, an account or a balance. `run(body, at?)` gained an
+> optional path override for them: removing a member or revoking an invitation
+> addresses a row chosen at click time, which a hook created once per list
+> cannot know. Same gate, same method; only the address differs.
+
 > **It was four until 2026-08-18, and the fifth is a recorded decision.**
 > `POST /pieces/{n}/match` landed with phase 3's backend along with
 > `bk books piece match`, and this section and `lib/mutations.ts` both said
@@ -402,7 +441,8 @@ Everything else reads.
 
 ```
 lib/client.ts     the ONLY fetch(). Transport, consults nothing.
-lib/mutations.ts  the ONLY module that sends apiSend. One gated primitive.
+lib/mutations.ts  the ONLY module that sends apiSend. One gated primitive —
+                  the five record writes, and the tenancy writes apart.
 components/**     call the hooks. No fetch, no apiSend, no method strings.
 ```
 
@@ -695,6 +735,10 @@ not going to edit `lib/types.ts`.
 | Analyses, Analyse detail, Impôts | phase 4B / 5 | **yes, 2026-08-19** |
 | Compliance rules | phase 5 | **yes, 2026-08-19** |
 
+The workspace's own settings page (`/dashboard/{ws}/settings`, 2026-09-28) is
+not in this table: it is about people, not books, and it is the shared page
+every app has (§4).
+
 **Nothing in this app renders `<NotBuiltYet>` any more.** The component stays,
 because the next route this app grows will need it.
 
@@ -918,7 +962,9 @@ mint tokens. Use the browser, or `bk login`.
 Every one of these goes through **`lib/account.ts`**, never `apiSend` in a
 component and never `lib/mutations.ts`:
 
-- `lib/mutations.ts` — the five BOOKS writes, gated on `useCanWrite()`
+- `lib/mutations.ts` — the five BOOKS writes, gated on `useCanWrite()`, and
+  (since 2026-09-28, in their own section and not counted among the five) the
+  tenancy writes of §4
 - `lib/account.ts` — the **eight** ACCOUNT writes, gated on nothing (the server
   gates them; this module is transport plus a loading flag). The eighth is
   `useSetLocale`, added 2026-08-20: it writes `platform.users.locale` through

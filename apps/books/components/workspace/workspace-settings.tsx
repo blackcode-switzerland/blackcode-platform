@@ -39,8 +39,10 @@ import {
   useCreateInvitation,
   useDeleteWorkspace,
   useRemoveMember,
+  useRemoveWorkspaceLogo,
   useRenameWorkspace,
   useRevokeInvitation,
+  useSetWorkspaceLogo,
   useTransferWorkspace,
 } from '@/lib/mutations'
 import { booksCacheFilter } from '@/lib/query-keys'
@@ -85,6 +87,8 @@ export function BooksWorkspaceSettings({ ws, userId }: { ws: string; userId: num
   const invite = useCreateInvitation(ws)
   const revoke = useRevokeInvitation(ws)
   const del = useDeleteWorkspace(ws)
+  const setLogo = useSetWorkspaceLogo(ws)
+  const removeLogo = useRemoveWorkspaceLogo(ws)
 
   const refresh = async () => {
     await queryClient.invalidateQueries(booksCacheFilter())
@@ -124,6 +128,20 @@ export function BooksWorkspaceSettings({ ws, userId }: { ws: string; userId: num
           check(await rename.run({ name }))
           toast.success(t('ws.toastRenamed'))
           await refresh()
+        }}
+        logo={{
+          onUpload: async (file) => {
+            const form = new FormData()
+            form.append('file', file)
+            check(await setLogo.run(form))
+            toast.success(t('ws.toastLogoUpdated'))
+            await refresh()
+          },
+          onRemove: async () => {
+            check(await removeLogo.run())
+            toast.success(t('ws.toastLogoRemoved'))
+            await refresh()
+          },
         }}
       />
 

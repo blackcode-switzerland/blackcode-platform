@@ -289,6 +289,26 @@ export function useRenameWorkspace(ws: string) {
   )
 }
 
+/** `POST /api/workspaces/{ws}/logo` — multipart, owner only (2026-09-28). */
+export function useSetWorkspaceLogo(ws: string) {
+  return useWrite(
+    (file: File) => {
+      const form = new FormData()
+      form.append('file', file)
+      return call<WorkspaceSummary>(wsApi(ws, '/logo'), { method: 'POST', body: form })
+    },
+    () => [keys.workspaceShow(ws), keys.workspaces()]
+  )
+}
+
+/** `DELETE /api/workspaces/{ws}/logo`. */
+export function useRemoveWorkspaceLogo(ws: string) {
+  return useWrite(
+    () => call<WorkspaceSummary>(wsApi(ws, '/logo'), { method: 'DELETE' }),
+    () => [keys.workspaceShow(ws), keys.workspaces()]
+  )
+}
+
 /** `DELETE /api/workspaces/{ws}` — 409 `workspace_retained` when it holds any retained record. */
 export function useDeleteWorkspace(ws: string) {
   return useWrite(

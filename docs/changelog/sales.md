@@ -22,6 +22,14 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-09-28 — Workspaces can carry a logo
+
+Not breaking; additive. `sales.workspaces.logo_url` (migration 0013), set with
+`bk sales workspace logo <file>` / `--remove` (`POST` / `DELETE
+/api/workspaces/{ws}/logo`, owner only) or from Settings. Listed in
+`GET /api/workspaces` and `GET /api/workspaces/{ws}`. Recorded in this app's
+upload ledger like any upload, and indexed against storage clean-up.
+
 ## 2026-09-28 — A member can leave a workspace; members and invitations move into Settings
 
 **Behaviour change, not breaking:** `DELETE /api/workspaces/{ws}/members/{userId}`

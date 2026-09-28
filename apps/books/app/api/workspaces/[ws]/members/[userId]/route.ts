@@ -12,9 +12,8 @@
 // no `POST …/leave` here (so `bk books member leave` is not built —
 // `MemberLeave` stays off in `cli/internal/commands/books/books.go`); the
 // CLI spelling of leaving is `bk books member remove <your id>`, and the web's
-// "Leave workspace" button calls exactly this. `apps/sales` gates the route on
-// ownership alone, which leaves a sales member no way out short of asking; that
-// is the one deliberate difference from the port.
+// "Leave workspace" button calls exactly this. All three of billing,
+// books and (since 2026-09-28) sales accept a member removing themselves.
 //
 // ---------------------------------------------------------------------------
 // THE OWNER CANNOT BE REMOVED — BY ANYONE, INCLUDING THEMSELVES

@@ -22,7 +22,7 @@ is being built:
   **third** app, and the first whose **web surface is read-only** — every write
   is a `bk books` command, so the CLI is not a convenience layer here, it is the
   product. Same stack plus `platform-i18n` (EN/FR); its own `books.*` schema,
-  nineteen migrations, CLI group, eight guide topics and docs.
+  twenty-one migrations, CLI group, eight guide topics and docs.
 - **`apps/billing`** — **b/billing**, Swiss invoicing: issuing companies,
   gapless invoice numbers, QR-bill payment parts, and an append-only audit log
   that IS the edit workflow. The **fourth** app, **in build** — phase 0
@@ -719,7 +719,7 @@ never describe an app's internals, and an app's docs never describe another app.
 app internal).
 
 `/apps/books/docs` — that app only: `backend.md`, `frontend.md`. The statutory
-model, the nineteen migrations, the derivations and the i18n column live here
+model, the twenty-one migrations, the derivations and the i18n column live here
 and nowhere else — a root doc says *books exists, here is its schema and its
 command group*, never how a compte de résultat is derived (§7.5).
 

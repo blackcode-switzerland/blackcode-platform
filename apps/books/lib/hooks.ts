@@ -129,6 +129,8 @@ export interface MetaPayload {
     rule_confidence: Term[]
   }
   tva_rates: number[]
+  /** Platform limits this app enforces — the workspace logo's size (2026-09-28). */
+  limits: { workspace_logo_max_bytes: number }
   statements: {
     bilan: readonly BilanGroup[]
     cr: readonly CrLine[]

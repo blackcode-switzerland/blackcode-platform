@@ -77,7 +77,7 @@ export async function getWorkspaceForUser(
 ): Promise<WorkspaceMembershipRef | null> {
   const isNumeric = /^\d+$/.test(slugOrId)
   const rows = await getDb()
-    .select({ ...WS_COLUMNS, role: salesWorkspaceMembers.role })
+    .select({ ...WS_COLUMNS, logo_url: salesWorkspaces.logo_url, role: salesWorkspaceMembers.role })
     .from(salesWorkspaces)
     .innerJoin(
       salesWorkspaceMembers,
@@ -110,7 +110,7 @@ export async function getWorkspaceForUser(
  */
 export async function listWorkspacesForUser(userId: number): Promise<WorkspaceMembershipRef[]> {
   const rows = await getDb()
-    .select({ ...WS_COLUMNS, role: salesWorkspaceMembers.role })
+    .select({ ...WS_COLUMNS, logo_url: salesWorkspaces.logo_url, role: salesWorkspaceMembers.role })
     .from(salesWorkspaceMembers)
     .innerJoin(salesWorkspaces, eq(salesWorkspaces.id, salesWorkspaceMembers.workspace_id))
     .where(eq(salesWorkspaceMembers.user_id, userId))
@@ -958,4 +958,21 @@ export async function listInviteCandidates(input: {
     if (a.already_member !== b.already_member) return a.already_member ? 1 : -1
     return (a.name ?? a.email).localeCompare(b.name ?? b.email)
   })
+}
+
+/**
+ * Set or clear the workspace's logo — the one column `POST/DELETE
+ * /api/workspaces/{ws}/logo` (`workspaceLogoRoute`) may write. The file is
+ * kept alive by `trg_blob_refs_logo`, not by anything here.
+ */
+export async function setWorkspaceLogo(
+  workspaceId: number,
+  url: string | null
+): Promise<{ id: number; name: string; slug: string; logo_url: string | null } | null> {
+  const [row] = await getDb()
+    .update(salesWorkspaces)
+    .set({ logo_url: url, updated_at: new Date() })
+    .where(eq(salesWorkspaces.id, workspaceId))
+    .returning({ id: salesWorkspaces.id, name: salesWorkspaces.name, slug: salesWorkspaces.slug, logo_url: salesWorkspaces.logo_url })
+  return row ?? null
 }

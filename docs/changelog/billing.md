@@ -6,6 +6,14 @@ entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
 
+## 2026-09-28 — Workspaces can carry a logo
+
+Not breaking; additive. `billing.workspaces.logo_url` (migration 0015), set with
+`bk billing workspace logo <file>` / `--remove` (`POST` / `DELETE
+/api/workspaces/{ws}/logo`, owner only) or from Settings. This is a logo-only
+route: billing still serves no general upload. `limits.workspace_logo_max_bytes`
+is in `bk meta`.
+
 ## 2026-09-28 — The workspace screens are the shared ones; `/dashboard` remembers
 
 Web only. The switcher, create modal, `/dashboard` chooser, invitation page and

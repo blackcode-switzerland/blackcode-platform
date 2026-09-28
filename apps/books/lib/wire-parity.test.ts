@@ -260,6 +260,8 @@ const META_KEYS = [
   'links',
   'cli',
   'entities',
+  // 2026-09-28, with workspace logos.
+  'limits',
   'vocabularies',
   'tva_rates',
   'statements',

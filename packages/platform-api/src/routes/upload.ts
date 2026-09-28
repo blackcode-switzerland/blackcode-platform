@@ -48,7 +48,8 @@ const LOCAL_UPLOAD_DIR = 'public/uploads'
 
 // Store under public/uploads, mirroring the Blob layout (`<app>/<ws>/<file>`) so
 // local dev exercises the same paths production uses.
-async function saveLocally(file: File, relativePath: string): Promise<{ url: string }> {
+/** Exported for `./workspace-logo.ts`, the other write path that stores a file. */
+export async function saveLocally(file: File, relativePath: string): Promise<{ url: string }> {
   const uploadsDir = resolve(process.cwd(), LOCAL_UPLOAD_DIR)
 
   // Insert the random suffix BEFORE the extension so the URL keeps a real file

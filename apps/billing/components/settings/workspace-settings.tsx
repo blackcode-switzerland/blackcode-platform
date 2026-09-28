@@ -38,8 +38,10 @@ import {
   useCreateInvitation,
   useDeleteWorkspace,
   useRemoveMember,
+  useRemoveWorkspaceLogo,
   useRenameWorkspace,
   useRevokeInvitation,
+  useSetWorkspaceLogo,
   useTransferWorkspace,
 } from '@/lib/mutations'
 import { ErrorState, LoadingState } from '@/components/ui-kit'
@@ -72,6 +74,8 @@ export function WorkspaceSettings({ ws, isOwner, userId }: { ws: string; isOwner
   const createInvitation = useCreateInvitation(ws)
   const revokeInvitation = useRevokeInvitation(ws)
   const del = useDeleteWorkspace(ws)
+  const setLogo = useSetWorkspaceLogo(ws)
+  const removeLogo = useRemoveWorkspaceLogo(ws)
 
   if (workspace.isPending) return <LoadingState variant="detail" />
   if (workspace.error) return <ErrorState error={workspace.error} retry={workspace.refetch} />
@@ -107,6 +111,18 @@ export function WorkspaceSettings({ ws, isOwner, userId }: { ws: string; isOwner
           toast.success('Workspace renamed')
           // The sidebar's switcher is loaded server-side.
           router.refresh()
+        }}
+        logo={{
+          onUpload: async (file) => {
+            await attempt(() => setLogo.mutateAsync(file))
+            toast.success('Logo updated')
+            router.refresh()
+          },
+          onRemove: async () => {
+            await attempt(() => removeLogo.mutateAsync(undefined))
+            toast.success('Logo removed')
+            router.refresh()
+          },
         }}
       />
 

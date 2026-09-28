@@ -66,7 +66,7 @@ payment slips.
 > dashboard, which is the decision. The argument is in
 > `apps/billing/docs/frontend.md` and at `createWorkspaceForUser`.
 
-**No one-workspace-per-person cap, unlike b/books.** A second workspace here is
+**No one-workspace-per-person cap** (b/books had one until 2026-09-28). A second workspace here is
 a genuinely separate TENANT; a second issuing entity is a company inside one
 workspace. Phase 6 also needs two workspaces owned by one person to force every
 empty state.
@@ -1262,6 +1262,19 @@ own (never a shared factory — they read `platform.workspace_*`):
 | `GET /api/invitations/{token}` | `invite show` | signed-in invitee; refusal order accepted → not-pending → expired → not-yours (names the caller, never the invitee) |
 | `POST /api/invitations/accept` · `decline` | `invite accept` · `decline` | signed-in invitee |
 | `GET /api/me/pending-invitations` | `invite pending` | anyone signed in |
+
+### The active workspace: `billing.user_settings` (migration 0014, 2026-09-28)
+
+`lib/api.ts`' `setDefaultForUser` was a **no-op** until this date, so
+`POST /api/me/active-workspace` — the web switcher's call and
+`bk billing workspace use`'s — answered 200 and stored nothing; and
+`/dashboard` read `platform.users.active_workspace_id`, which this app never
+writes, so "the remembered one" never matched. The no-op had the right reason:
+that column is ONE per user across every deployment, and a billing id written
+there is read back by `apps/issues` as one of its own. The fix is apps/sales'
+answer, ported: `billing.user_settings(user_id, active_workspace_id)`, written by
+`setDefaultForUser` and read by `getDefaultForUser` and by `/dashboard`, which
+still re-checks membership before trusting the pointer.
 
 Plus the page `app/invitations/[token]/page.tsx`, which the invitation email and
 `accept_url` point at (`NEXTAUTH_URL` first, the request origin otherwise).

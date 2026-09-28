@@ -53,10 +53,15 @@ export class ApiRequestError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  // A `FormData` body (the workspace logo, 2026-09-28 — the one multipart write
+  // this app makes) passes through untouched and WITHOUT a content-type: the
+  // browser sets the multipart boundary itself, and serialising it would send
+  // the string "[object FormData]". apps/sales' client does the same.
+  const isForm = typeof FormData !== 'undefined' && body instanceof FormData
   const res = await fetch(path, {
     method,
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: body === undefined || isForm ? undefined : { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
     // Same-origin cookie. Every fetch the dashboard makes goes to this app's own
     // origin carrying a session and no Authorization header, which is the branch
     // `resolveUser` in lib/api.ts exists to serve.

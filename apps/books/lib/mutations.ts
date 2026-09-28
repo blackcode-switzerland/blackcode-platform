@@ -611,6 +611,16 @@ export function useRenameWorkspace(ws: string) {
   return useRecordMutation<CreatedWorkspace>('PATCH', `/api/workspaces/${ws}`)
 }
 
+/** `POST /api/workspaces/{ws}/logo` — multipart (a `FormData` body), owner only. */
+export function useSetWorkspaceLogo(ws: string) {
+  return useRecordMutation<CreatedWorkspace & { logo_url: string | null }>('POST', `/api/workspaces/${ws}/logo`)
+}
+
+/** `DELETE /api/workspaces/{ws}/logo`. */
+export function useRemoveWorkspaceLogo(ws: string) {
+  return useRecordMutation<CreatedWorkspace & { logo_url: string | null }>('DELETE', `/api/workspaces/${ws}/logo`)
+}
+
 /** `DELETE /api/workspaces/{ws}` — refused (409 workspace_retained) once anything was held. */
 export function useDeleteWorkspace(ws: string) {
   return useRecordMutation<{ deleted: true }>('DELETE', `/api/workspaces/${ws}`)

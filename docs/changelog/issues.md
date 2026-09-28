@@ -35,6 +35,18 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-09-28 — Workspace logos go through `…/logo`, and are finally protected from clean-up
+
+Not breaking. `POST` / `DELETE /api/workspaces/{ws}/logo` (`bk issues workspace
+logo <file>` / `--remove`) sets and clears the logo; the web's settings page
+uses it. `PATCH /api/workspaces/{ws}` still accepts `logo_url`.
+
+**Fix:** a workspace logo was referenced by nothing the storage clean-up
+consults across deployments — no blob-reference trigger on
+`platform.workspaces.logo_url`, and this app's own reference check skipped the
+column too — so an in-use logo could read as an orphan. Migration 0049 adds the
+trigger and indexes every existing logo; the scanner now includes it.
+
 ## 2026-09-28 — Workspaces: a dropdown switcher, and settings inside the workspace
 
 Web only; no route or `bk issues` command changed.

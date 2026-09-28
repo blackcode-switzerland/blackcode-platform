@@ -4,7 +4,7 @@
 // sections every blackcode app shares (`@blackcode/platform-ui/workspace/
 // workspace-settings`), wired to this app's routes:
 //
-//   logo              POST /api/upload, then PATCH /api/workspaces/{ws} { logo_url }
+//   logo              POST / DELETE /api/workspaces/{ws}/logo      workspace logo <file> | --remove
 //   rename            PATCH  /api/workspaces/{ws}                workspace edit --name
 //   make owner        POST   …/transfer                          workspace transfer --to <id>
 //   remove            DELETE …/members/{userId}                  member remove <id>
@@ -135,18 +135,17 @@ export function WorkspaceSettings({ slug }: { slug: string }) {
             }
             const fd = new FormData()
             fd.append('file', file)
-            const res = await fetch('/api/upload', { method: 'POST', body: fd })
+            const res = await fetch(`/api/workspaces/${slug}/logo`, { method: 'POST', body: fd })
             const j = await res.json().catch(() => ({}))
-            if (!res.ok || !j.url) {
-              toast.error(j.error ?? 'Upload failed')
+            if (!res.ok) {
+              toast.error(j.error ?? 'Upload failed', { description: j.suggestion })
               throw new Error('upload failed')
             }
-            await send('PATCH', `/api/workspaces/${slug}`, { logo_url: j.url })
             toast.success('Logo updated')
             await refreshAll()
           },
           onRemove: async () => {
-            await send('PATCH', `/api/workspaces/${slug}`, { logo_url: null })
+            await send('DELETE', `/api/workspaces/${slug}/logo`)
             toast.success('Logo removed')
             await refreshAll()
           },

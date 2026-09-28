@@ -165,6 +165,7 @@ bk issues workspace show [slug|id]
 bk issues workspace create --name "Growth"
 bk issues workspace edit [slug|id] --name "…"
 bk issues workspace transfer [slug|id] --to <user>    # hand over ownership
+bk issues workspace logo ./logo.png                   # owner only; --remove to clear
 bk issues member list
 bk issues member remove <user_id>                     # owner only
 bk issues member leave
@@ -176,6 +177,12 @@ belongs in one place. Run `bk <app> workspace --help` for that app's list; a ver
 that is absent is a decision, not an outage.
 
 Name length cap: see `limits.workspace_name_max` in `bk meta`.
+
+A workspace's **slug never changes** — it is part of every URN the app has
+printed — so `edit --slug` is refused. `workspace logo <image>` sets the picture
+the web app shows beside the name; which image types are accepted and how large
+they may be is the server's to decide (`limits.workspace_logo_max_bytes` in
+`bk meta`).
 
 ## Deleting a workspace
 

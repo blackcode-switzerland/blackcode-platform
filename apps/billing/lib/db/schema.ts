@@ -62,6 +62,8 @@ export const billingWorkspaces = billingSchema.table('workspaces', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 80 }).notNull(),
   slug: varchar('slug', { length: 40 }).notNull(),
+  /** Migration 0015 (2026-09-28). An uploaded image; indexed by `trg_blob_refs_logo`. */
+  logo_url: text('logo_url'),
   /**
    * `ON DELETE RESTRICT` stays, and it is INERT — know what it does not do.
    *

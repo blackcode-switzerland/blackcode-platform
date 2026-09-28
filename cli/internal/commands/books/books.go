@@ -100,7 +100,7 @@ STARTING AND ENDING A BOOK:
 
 THIS APP'S OWN TENANCY — the same verbs every app has, answering for THIS one:
 
-  bk books workspace  list, show, use, create, edit, transfer, delete
+  bk books workspace  list, show, use, create, edit, transfer, delete, logo
   bk books member     list, remove
   bk books invite     send, list, revoke, candidates, pending, show, accept, decline
 
@@ -251,6 +251,7 @@ func appOwnedVerbs() []*cobra.Command {
 		App:              Slug,
 		Workspace:        true,
 		WorkspaceAdmin:   true,
+		WorkspaceLogo:    true,
 		Members:          true,
 		MemberRemove:     true,
 		Invites:          true,

@@ -31,7 +31,8 @@
 // affordances are hidden and `READ_ONLY_NOTE` says why, the way every other
 // write affordance in this app behaves.
 //
-// NO LOGO — `sales.workspaces` has no `logo_url` column (yet).
+// LOGO — `sales.workspaces.logo_url` since migration 0013 (2026-09-28), set
+// through the logo-only route `POST/DELETE /api/workspaces/{ws}/logo`.
 //
 // NO `bk sales …` HINTS under the sections, unlike apps/billing and apps/books:
 // in this app ordinary UI copy names no CLI command (`lib/ui-commands.test.ts`).
@@ -62,7 +63,7 @@ interface Member {
 }
 
 interface WorkspaceDetail {
-  workspace: { id: number; name: string; slug: string; owner_id: number }
+  workspace: { id: number; name: string; slug: string; owner_id: number; logo_url: string | null }
   role: 'owner' | 'member'
   members: Member[]
 }
@@ -125,6 +126,15 @@ export function WorkspaceSettings({ ws, isOwner, meId }: { ws: string; isOwner: 
   })
   const del = useMutation({ mutationFn: () => apiSend('DELETE', wsPath(ws, '')) })
   const leave = useMutation({ mutationFn: () => apiSend('DELETE', wsPath(ws, `/members/${meId}`)) })
+  // The workspace's logo — tenancy, like rename: POST/DELETE wsPath(ws, '/logo').
+  const logo = useMutation({
+    mutationFn: (file: File | null) => {
+      if (!file) return apiSend('DELETE', wsPath(ws, '/logo'))
+      const form = new FormData()
+      form.append('file', file)
+      return apiSend('POST', wsPath(ws, '/logo'), form)
+    },
+  })
 
   if (detail.isPending) return <BlockSkeleton rows={3} />
   if (detail.isError) return <ErrorState error={detail.error} />
@@ -148,6 +158,20 @@ export function WorkspaceSettings({ ws, isOwner, meId }: { ws: string; isOwner: 
           toast.success('Workspace updated')
           await queryClient.invalidateQueries()
           router.refresh()
+        }}
+        logo={{
+          onUpload: async (file) => {
+            await tenancy(() => logo.mutateAsync(file))
+            toast.success('Logo updated')
+            await queryClient.invalidateQueries()
+            router.refresh()
+          },
+          onRemove: async () => {
+            await tenancy(() => logo.mutateAsync(null))
+            toast.success('Logo removed')
+            await queryClient.invalidateQueries()
+            router.refresh()
+          },
         }}
       />
 

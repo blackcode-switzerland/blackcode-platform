@@ -99,6 +99,13 @@
       "when": 1790582400000,
       "tag": "0014_billing_remembers_a_workspace",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790586000000,
+      "tag": "0015_billing_workspace_logo",
+      "breakpoints": true
     }
   ]
 }

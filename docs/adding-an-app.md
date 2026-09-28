@@ -88,7 +88,7 @@ import each other.**
 | `platform-db` | The Drizzle schema and client factory for the `platform.*` tables. **The ones that are still genuinely shared are identity**: `users`, `api_tokens`, `password_reset_otps`, `email_whitelist`, `apps`, `error_events`, `blob_references`. The rest (`workspaces`, `workspace_members`, `comments`, `labels`, `events`, `uploads`, `entities`, `links`, `inbox_messages`) are **`apps/issues`' data living under a shared name** — do not read or write them, and see the boundary rules below. Plus the four sign-in callbacks you must not reimplement: `getUserByEmail`, `touchLastLogin`, `upsertUserFromOAuth`, `materializePendingInvitationsForUser` |
 | `platform-api` | The HTTP plumbing: the shared `apiHandler` / `resolveWorkspace` behind an `AppContext`, **the platform route factories you can safely mount** (`@blackcode/platform-api/routes` — read `apps/_scaffold/app/api/README.md` first), the `Errors` envelope (`{ error, code, suggestion? }`), `jsonList()` → `{ data, next_cursor }`, cursor pagination, log sanitisation, platform-wide limits. **`AppContext.workspaces` is where you say whose workspaces you serve, and it is required** — as is **`AppContext.footprint`**, which is how the account close learns what your app holds and how to remove it (§11) |
 | `platform-auth` | Identity, and only identity: API tokens, password handling, the platform whitelist (`isEmailAllowed`), `sessionCookieConfig()`. No HTTP |
-| `platform-ui` | The design system: `components/ui/` primitives, the TipTap rich-text editor and its media companions. **Two lines, not one:** `transpilePackages` in `next.config.js` makes it compile, and `@source "…/packages/platform-ui/src"` in your Tailwind stylesheet makes its CSS exist. Neither implies the other and only the first fails loudly — see step 1 |
+| `platform-ui` | The design system: `components/ui/` primitives, the TipTap rich-text editor and its media companions, and **the workspace kit** (`@blackcode/platform-ui/workspace/*` — switcher, create modal, chooser, invitation card, settings sections; since 2026-09-28, see §11). **Two lines, not one:** `transpilePackages` in `next.config.js` makes it compile, and `@source "…/packages/platform-ui/src"` in your Tailwind stylesheet makes its CSS exist. Neither implies the other and only the first fails loudly — see step 1 |
 | `platform-storage` | The upload ledger, app-prefixed paths, the per-app reference-scanner registry, and the GC **that will not delete a file any app still references** |
 | `platform-agent` | The merged changelog feed and the advertised CLI version floor |
 | `platform-email` | Transactional email: the Resend client, the shared invitation/reset templates plus one parameterised document template (attachments, reply-to, a message id — 2026-09-17), and `createEmailSender()`. The app supplies an **identity** (name, url, accent, reply-to) and its own db handle — never a palette or its own templates. See open item 8 |
@@ -736,6 +736,34 @@ you can make:
   client, no toast library, no nav. A scaffold that shipped one is a design every
   copy has to undo. `@blackcode/platform-ui` and `docs/frontend.md` are where
   that lives when you want it.
+
+  **When you build your web UI, manage workspaces with the shared kit — do not
+  draw your own.** Since 2026-09-28 all four apps render the same switcher,
+  create modal, chooser, invitation card and settings sections from
+  `@blackcode/platform-ui/workspace/*`, in the same places: the switcher in
+  the sidebar, `/dashboard/{ws}/settings` holding General · Members ·
+  Invitations · Leave / Danger zone, `/dashboard` opening the one workspace or
+  the remembered one or the chooser, and `/invitations/{token}` on the shared
+  card. The components are presentational — you supply every action as a
+  promise-returning callback and every word through `labels` — so the wiring is
+  yours to write; model it on `apps/billing`'s, the thinnest of the four. The
+  contract is `docs/frontend.md` → *Workspace management*. Two things the kit
+  cannot do for you: **make `setDefaultForUser` real** (a `<app>.user_settings`
+  row — a no-op there makes the switcher and the chooser promise a memory that
+  does not exist, which two apps shipped), and **decide whether your workspace
+  can be deleted** (pass the `refusal` when it cannot, rather than letting the
+  owner discover it from a 409).
+
+  **Logos are three pieces, and the middle one is the one that matters.** A
+  `logo_url` column on your `workspaces` table; **its blob-reference trigger in
+  the same migration** (`blob_refs_sync('<app>', 'workspace_logo', 'id',
+  'exact', 'logo_url')` — without it another deployment's clean-up reads your
+  logo as an orphan and deletes it); and `app/api/workspaces/[ws]/logo/route.ts`
+  mounting `workspaceLogoRoute` from `@blackcode/platform-api/routes` with your
+  `setWorkspaceLogo` query (`recordUpload: false` if you keep no upload
+  ledger). Then turn on `WorkspaceLogo` in your `appverbs.Config`. If your app
+  has a reference scanner, add the `workspace_logo` surface to it too. Copy
+  `apps/billing`'s `0015_billing_workspace_logo.sql`.
 
   **When you do add it, do not touch the `cookies:` line in `middleware.ts`.**
   `withAuth` defaults to looking for `next-auth.session-token`; D-16 renamed this

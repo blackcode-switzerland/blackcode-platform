@@ -7,6 +7,25 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-09-28 — Workspace logos in every app: `bk <app> workspace logo`
+
+Not breaking; additive.
+
+- **New command:** `bk <app> workspace logo <image-file>` sets the active
+  workspace's logo, and `bk <app> workspace logo --remove` clears it. Owner
+  only. Served by all four apps through `POST` / `DELETE
+  /api/workspaces/{ws}/logo`, a logo-only upload — not a general upload
+  route, so apps that record no uploads (billing, books) still don't.
+- **New limit:** `limits.workspace_logo_max_bytes` in `bk meta` (books serves a
+  `limits` block for the first time to carry it). Accepted types are PNG,
+  JPEG, WebP and GIF; anything else is refused with `logo_type_not_allowed`.
+- `GET /api/workspaces` and `GET /api/workspaces/{ws}` now include `logo_url`
+  in every app (it was issues only).
+- Each app's logo column is protected from storage clean-up by a
+  blob-reference trigger added in the same migration.
+
+**How to adapt:** nothing is required.
+
 ## 2026-09-24 — Fix: every app now picks up a new `bk` release, not just the busy ones
 
 **Not breaking.** The same-day change below refreshed the npm lookup in the

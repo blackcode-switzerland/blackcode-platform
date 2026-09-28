@@ -64,7 +64,7 @@ export async function getWorkspaceForUser(
   const numeric = /^\d+$/.test(slugOrId) ? Number(slugOrId) : null
 
   const rows = await getDb()
-    .select({ ...WS_COLUMNS, member_role: booksWorkspaceMembers.role })
+    .select({ ...WS_COLUMNS, logo_url: booksWorkspaces.logo_url, member_role: booksWorkspaceMembers.role })
     .from(booksWorkspaces)
     .innerJoin(
       booksWorkspaceMembers,
@@ -92,7 +92,7 @@ export async function getWorkspaceForUser(
 /** Every workspace this person belongs to, oldest first. */
 export async function listWorkspacesForUser(userId: number): Promise<WorkspaceMembershipRef[]> {
   const rows = await getDb()
-    .select({ ...WS_COLUMNS, member_role: booksWorkspaceMembers.role })
+    .select({ ...WS_COLUMNS, logo_url: booksWorkspaces.logo_url, member_role: booksWorkspaceMembers.role })
     .from(booksWorkspaces)
     .innerJoin(
       booksWorkspaceMembers,
@@ -676,4 +676,21 @@ export function resolveActiveWorkspace(
 export async function getActiveWorkspaceForUser(userId: number): Promise<WorkspaceMembershipRef | null> {
   const [mine, storedId] = await Promise.all([listWorkspacesForUser(userId), getStoredActiveWorkspaceId(userId)])
   return resolveActiveWorkspace(mine, storedId)
+}
+
+/**
+ * Set or clear the workspace's logo — the one column `POST/DELETE
+ * /api/workspaces/{ws}/logo` (`workspaceLogoRoute`) may write. The file is
+ * kept alive by `trg_blob_refs_logo`, not by anything here.
+ */
+export async function setWorkspaceLogo(
+  workspaceId: number,
+  url: string | null
+): Promise<{ id: number; name: string; slug: string; logo_url: string | null } | null> {
+  const [row] = await getDb()
+    .update(booksWorkspaces)
+    .set({ logo_url: url, updated_at: new Date() })
+    .where(eq(booksWorkspaces.id, workspaceId))
+    .returning({ id: booksWorkspaces.id, name: booksWorkspaces.name, slug: booksWorkspaces.slug, logo_url: booksWorkspaces.logo_url })
+  return row ?? null
 }
