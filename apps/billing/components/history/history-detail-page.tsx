@@ -8,6 +8,7 @@ import { PageHeader, PageBody } from '@/components/shell'
 import { DateText, ErrorState, FieldList, LoadingState, Money, Section, StatusBadge } from '@/components/ui-kit'
 import { useHistoryEntry } from '@/lib/queries'
 import { historySourceLabel } from '@/lib/ui-vocab'
+import { HistoryDriveLink } from './drive-link'
 
 export function HistoryDetailPage({ ws, seq }: { ws: string; seq: string }) {
   const entry = useHistoryEntry(ws, seq)
@@ -43,7 +44,7 @@ export function HistoryDetailPage({ ws, seq }: { ws: string; seq: string }) {
                   { label: 'Issue date', value: <DateText value={h.issue_date} />, testId: 'field-issue-date' },
                   { label: 'Total', value: <Money amount={h.total} currency={h.currency} />, testId: 'field-total' },
                   { label: 'Status', value: <StatusBadge kind="history" status={h.status} />, testId: 'field-status' },
-                  { label: 'PDF', value: h.drive_path ?? 'none — the export had no PDF', testId: 'field-pdf' },
+                  { label: 'PDF', value: <HistoryDriveLink drivePath={h.drive_path} />, testId: 'field-pdf' },
                 ]}
               />
             </Section>

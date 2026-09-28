@@ -49,7 +49,7 @@ companies.
   `md+`, cards below), states, `Money`, `DateText`, form fields.
 - one folder per screen under `components/`.
 
-### Two decisions, 2026-09-28
+### Three decisions, 2026-09-28
 
 **The screens are English only, and that is settled.** The phase tickets asked
 for FR/EN chrome through `platform-i18n`. It is dropped: `apps/issues` and
@@ -66,6 +66,15 @@ Kept deliberately: a person looking at a due series should not have to open a
 terminal. The button sends the `next_period` the card displays, never one it
 computes, and renders `409 already_generated` as the existing invoice with a
 link — the rule the ticket was protecting.
+
+**Autosave is not being built on the invoice detail page.** #82 asked for
+per-field autosave (edit → `PATCH` → one audit row per changed path). An
+invoice is a legal document: a half-typed amount, client name or due date must
+not save itself mid-keystroke, so the editor keeps explicit Save buttons per
+block (message, due date, external reference, client, lines) rather than a
+debounced write. Each block still produces exactly one audit row per changed
+path, through the same `PATCH`/`items`-replace routes — only the trigger is a
+click, not a blur or a timer.
 
 ### The rules the screens keep
 

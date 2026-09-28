@@ -11,6 +11,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import {
   AlertTriangle,
   Ban,
@@ -41,6 +42,7 @@ import {
   LoadingState,
   Money,
   Section,
+  Select,
   StatusBadge,
   Textarea,
 } from '@/components/ui-kit'
@@ -49,6 +51,7 @@ import {
   useAudit,
   useInvoice,
   useInvoiceQr,
+  useMeta,
   useRecurrence,
 } from '@/lib/queries'
 import {
@@ -61,7 +64,7 @@ import {
 } from '@/lib/mutations'
 import { amountClassFor, frequencyLabel } from '@/lib/ui-vocab'
 import { cn } from '@/lib/utils'
-import type { CreateInvoiceLineBody, StructuredAddress } from '@/types'
+import type { CreateInvoiceLineBody, DocumentLanguage, Invoice, ReferenceType, StructuredAddress } from '@/types'
 import { LineItemsEditor } from './line-items-editor'
 import { SendInvoiceModal } from './send-invoice-modal'
 import { MakeRecurringModal } from './make-recurring-modal'
@@ -72,6 +75,37 @@ function addressLine(a: StructuredAddress): string {
 
 function toEditableLines(items: { description: string; qty: string; unit: string | null; unit_price: string; vat_rate: string | null }[]): CreateInvoiceLineBody[] {
   return items.map((l) => ({ description: l.description, qty: l.qty, unit: l.unit, unit_price: l.unit_price, vat_rate: l.vat_rate }))
+}
+
+/**
+ * The "Document" block — every field `DOCUMENT_FIELDS` in
+ * `lib/db/queries/invoices.ts` freezes once the invoice leaves `draft`, minus
+ * `client`, which has its own block. All seven round-trip through the same
+ * `PATCH …/invoices/{ref}` the other blocks use, in one request, as one audit
+ * row per changed path.
+ */
+interface DocumentDraft {
+  currency: string
+  language: DocumentLanguage
+  ref_type: ReferenceType
+  /** Optional even when `ref_type` needs one — omitted, it is derived (QRR, SCOR). */
+  ref_body: string
+  /** Empty string means null: no default VAT rate, new lines carry none. */
+  vat_rate: string
+  prices_include_vat: boolean
+  issue_date: string | null
+}
+
+function documentDraftFrom(i: Invoice): DocumentDraft {
+  return {
+    currency: i.currency,
+    language: i.language,
+    ref_type: i.ref_type,
+    ref_body: i.ref_body ?? '',
+    vat_rate: i.vat_rate ?? '',
+    prices_include_vat: i.prices_include_vat,
+    issue_date: i.issue_date,
+  }
 }
 
 /** `sm` and up shows the full action row; below it, a primary action + "More". One in the DOM at a time — never both (data-table.tsx's rule: two copies of one testid breaks a strict-mode locator). */
@@ -175,7 +209,18 @@ export function InvoiceDetailPage({ ws, ref }: { ws: string; ref: string }) {
   const inv = useInvoice(ws, ref)
   const audit = useAudit(ws, { subject: `invoice:${ref}`, limit: 100 })
   const qr = useInvoiceQr(ws, ref, { enabled: false })
+  const meta = useMeta()
   const desktopActions = useDesktopActions()
+
+  // Create-item UX pattern (CLAUDE.md): `?new=1` focuses the first editable
+  // field. A fresh draft's first real decision is the document itself —
+  // currency, language, reference type, VAT — not the payment message, so
+  // this opens the Document block's editor and focuses its first field
+  // (currency) rather than a field that is always on-screen. `focusedNewFieldRef`
+  // keeps it a one-time thing: cancelling that block must not reopen it.
+  const searchParams = useSearchParams()
+  const isNew = searchParams?.get('new') === '1'
+  const focusedNewFieldRef = useRef(false)
 
   const patch = usePatchInvoice(ws)
   const setLines = useSetInvoiceLines(ws)
@@ -192,9 +237,30 @@ export function InvoiceDetailPage({ ws, ref }: { ws: string; ref: string }) {
   const [externalRefDraft, setExternalRefDraft] = useState<string | null>(null)
   const [editingClient, setEditingClient] = useState<StructuredAddress | null>(null)
   const [editingLines, setEditingLines] = useState<CreateInvoiceLineBody[] | null>(null)
+  const [editingDocument, setEditingDocument] = useState<DocumentDraft | null>(null)
 
   const i = inv.data
   const recurrence = useRecurrence(ws, i?.recurrence ?? null, { enabled: !!i?.recurrence })
+
+  useEffect(() => {
+    if (isNew && i && i.status === 'draft' && !focusedNewFieldRef.current) {
+      setEditingDocument(documentDraftFrom(i))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, i?.seq])
+
+  useEffect(() => {
+    // `Input` (`@blackcode/platform-ui/ui/input`) is not `forwardRef`, so a
+    // `ref` prop on it warns and stays null under React 18 — its stable
+    // `id="input-currency"` is what's reachable here instead.
+    if (!isNew || !editingDocument || focusedNewFieldRef.current) return
+    const el = document.getElementById('input-currency')
+    if (el instanceof HTMLInputElement) {
+      el.focus()
+      el.select()
+      focusedNewFieldRef.current = true
+    }
+  })
 
   if (inv.error) {
     return (
@@ -308,6 +374,28 @@ export function InvoiceDetailPage({ ws, ref }: { ws: string; ref: string }) {
       await patch.mutateAsync({ ref: i.seq, patch: { external_ref: (externalRefDraft ?? '').trim() || null } })
       toast.success('External reference saved')
       setExternalRefDraft(null)
+    } catch (err) {
+      toastError(err)
+    }
+  }
+
+  const saveDocument = async () => {
+    if (!editingDocument) return
+    try {
+      await patch.mutateAsync({
+        ref: i.seq,
+        patch: {
+          currency: editingDocument.currency.trim().toUpperCase(),
+          language: editingDocument.language,
+          ref_type: editingDocument.ref_type,
+          ref_body: editingDocument.ref_type === 'NON' ? null : editingDocument.ref_body.trim() || null,
+          vat_rate: editingDocument.vat_rate.trim() || null,
+          prices_include_vat: editingDocument.prices_include_vat,
+          issue_date: editingDocument.issue_date,
+        },
+      })
+      toast.success('Document details saved')
+      setEditingDocument(null)
     } catch (err) {
       toastError(err)
     }
@@ -563,9 +651,21 @@ export function InvoiceDetailPage({ ws, ref }: { ws: string; ref: string }) {
                     <span className="text-muted-foreground">
                       Subtotal <Money amount={i.totals.subtotal} />
                     </span>
-                    <span className="text-muted-foreground">
-                      VAT <Money amount={i.totals.vat_total} />
-                    </span>
+                    {/* One line per distinct VAT rate (D-B7) — never one summed
+                        "VAT" line. `totals.vat` already carries the split; the
+                        amount is never re-derived here. Inclusive pricing changes
+                        only the wording: the rate was already in the price, not
+                        added on top. */}
+                    {i.totals.vat.map((v) => (
+                      <span key={v.rate} data-testid={`vat-line-${v.rate}`} className="text-muted-foreground">
+                        {i.prices_include_vat ? `Incl. VAT ${v.rate}%` : `VAT ${v.rate}%`} <Money amount={v.amount} />
+                      </span>
+                    ))}
+                    {i.totals.vat.length > 1 && (
+                      <span data-testid="vat-total" className="text-muted-foreground">
+                        VAT total <Money amount={i.totals.vat_total} />
+                      </span>
+                    )}
                     {i.totals.rounding !== '0.00' && (
                       <span className="text-muted-foreground">
                         Rounding <Money amount={i.totals.rounding} />
@@ -623,6 +723,121 @@ export function InvoiceDetailPage({ ws, ref }: { ws: string; ref: string }) {
                 </div>
               ) : (
                 <p className="text-sm">{addressLine(i.client)}</p>
+              )}
+            </Section>
+
+            <Section
+              title="Document"
+              description={draft ? undefined : 'Frozen after send (document_frozen) — void and reissue to change it.'}
+              actions={
+                draft && !editingDocument ? (
+                  <Button size="sm" variant="outline" onClick={() => setEditingDocument(documentDraftFrom(i))}>
+                    Edit
+                  </Button>
+                ) : undefined
+              }
+            >
+              {editingDocument ? (
+                <div className="space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <FormField label="Currency" htmlFor="input-currency">
+                      <Input
+                        id="input-currency"
+                        data-testid="input-currency"
+                        value={editingDocument.currency}
+                        maxLength={3}
+                        onChange={(e) => setEditingDocument({ ...editingDocument, currency: e.target.value.toUpperCase() })}
+                      />
+                    </FormField>
+                    <FormField label="Document language" htmlFor="input-language">
+                      <Select
+                        id="input-language"
+                        data-testid="input-language"
+                        value={editingDocument.language}
+                        onChange={(e) => setEditingDocument({ ...editingDocument, language: e.target.value as DocumentLanguage })}
+                      >
+                        {(meta.data?.vocabulary.document_languages ?? []).map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </FormField>
+                    <FormField label="Reference type" htmlFor="input-ref_type">
+                      <Select
+                        id="input-ref_type"
+                        data-testid="input-ref_type"
+                        value={editingDocument.ref_type}
+                        onChange={(e) => {
+                          const ref_type = e.target.value as ReferenceType
+                          setEditingDocument({ ...editingDocument, ref_type, ref_body: ref_type === 'NON' ? '' : editingDocument.ref_body })
+                        }}
+                      >
+                        {(meta.data?.vocabulary.reference_types ?? []).map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </FormField>
+                    {editingDocument.ref_type !== 'NON' && (
+                      <FormField label="Reference body" htmlFor="input-ref_body" hint="Leave blank to derive it automatically">
+                        <Input
+                          id="input-ref_body"
+                          data-testid="input-ref_body"
+                          value={editingDocument.ref_body}
+                          onChange={(e) => setEditingDocument({ ...editingDocument, ref_body: e.target.value })}
+                        />
+                      </FormField>
+                    )}
+                    <FormField label="Default VAT rate" htmlFor="input-vat_rate" hint="Blank means new lines carry no VAT">
+                      <Input
+                        id="input-vat_rate"
+                        data-testid="input-vat_rate"
+                        value={editingDocument.vat_rate}
+                        placeholder="8.1"
+                        onChange={(e) => setEditingDocument({ ...editingDocument, vat_rate: e.target.value })}
+                      />
+                    </FormField>
+                    <FormField label="Prices include VAT" htmlFor="input-prices_include_vat">
+                      <Select
+                        id="input-prices_include_vat"
+                        data-testid="input-prices_include_vat"
+                        value={editingDocument.prices_include_vat ? 'yes' : 'no'}
+                        onChange={(e) => setEditingDocument({ ...editingDocument, prices_include_vat: e.target.value === 'yes' })}
+                      >
+                        <option value="no">No — added on top</option>
+                        <option value="yes">Yes — already included</option>
+                      </Select>
+                    </FormField>
+                    <FormField label="Issue date" htmlFor="input-issue_date">
+                      <DatePicker
+                        value={editingDocument.issue_date}
+                        onChange={(v) => setEditingDocument({ ...editingDocument, issue_date: v })}
+                        placeholder="Today"
+                      />
+                    </FormField>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" data-testid="edit-document" disabled={patch.isPending} onClick={saveDocument}>
+                      Save document
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditingDocument(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <FieldList
+                  items={[
+                    { label: 'Currency', value: i.currency },
+                    { label: 'Document language', value: i.language },
+                    { label: 'Reference type', value: i.ref_type },
+                    { label: 'Default VAT rate', value: i.vat_rate ?? 'none' },
+                    { label: 'Prices include VAT', value: i.prices_include_vat ? 'Yes' : 'No' },
+                    { label: 'Issue date', value: i.issue_date },
+                  ]}
+                />
               )}
             </Section>
 

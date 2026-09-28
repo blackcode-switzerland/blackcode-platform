@@ -9,8 +9,18 @@
 // `PageHeader companySwitcher`) — every company-scoped page uses the same
 // control now, so there is no second, page-local company `<select>` (the old
 // `filter-company` testid). `CompanySwitcher` carries `data-testid="company-switcher"`.
+//
+// "New invoice" follows the platform create pattern (CLAUDE.md): POST a
+// minimal draft — `insertInvoice` requires only `company`, everything else
+// (client, lines, currency, dates) is optional and defaults from the company
+// or an empty value — then `router.push` to the detail page with `?new=1`.
+// The one thing the button cannot always do without asking is pick WHICH
+// company: with the header switcher set, or exactly one company in the
+// workspace, it creates immediately; otherwise `CreateInvoiceDialog` asks for
+// just the company, nothing else.
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Building2, Plus, Receipt } from 'lucide-react'
 import { Button } from '@blackcode/platform-ui/ui/button'
@@ -18,22 +28,25 @@ import { Input } from '@blackcode/platform-ui/ui/input'
 import { PageHeader, PageBody, useCompanyParam } from '@/components/shell'
 import { DataTable, EmptyState, ErrorState, LoadingState, Money, DateText, StatusBadge, Select, Toolbar } from '@/components/ui-kit'
 import { useCompanies, useInvoices } from '@/lib/queries'
+import { useCreateInvoice, toastError } from '@/lib/mutations'
 import { INVOICE_STATUS_OPTIONS, amountClassFor } from '@/lib/ui-vocab'
 import type { Invoice } from '@/types'
 import { CreateInvoiceDialog } from './create-invoice-dialog'
 
 export function InvoiceListPage({ ws }: { ws: string }) {
+  const router = useRouter()
   const company = useCompanyParam()
   const [status, setStatus] = useState('')
   const [currency, setCurrency] = useState('')
   const [externalRef, setExternalRef] = useState('')
   const [cursor, setCursor] = useState<string | number | null>(null)
   const [rows, setRows] = useState<Invoice[]>([])
-  const [createOpen, setCreateOpen] = useState(false)
-  // An invoice needs an issuing company. With none, "New invoice" would open a
-  // form with nothing to pick — send the person to create the company instead.
+  const [pickerOpen, setPickerOpen] = useState(false)
+  // An invoice needs an issuing company. With none, "New invoice" would have
+  // nothing to create with — send the person to create the company instead.
   const companies = useCompanies(ws)
   const noCompany = companies.data !== undefined && companies.data.length === 0
+  const create = useCreateInvoice(ws)
 
   // A cursor belongs to the previous filter set — starting over resets it.
   useEffect(() => setCursor(null), [status, currency, externalRef, company])
@@ -53,6 +66,27 @@ export function InvoiceListPage({ ws }: { ws: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q.data])
 
+  const createDraft = async (slug: string) => {
+    try {
+      const invoice = await create.mutateAsync({ company: slug })
+      router.push(`/dashboard/${ws}/invoices/${invoice.seq}?new=1`)
+    } catch (err) {
+      toastError(err)
+    }
+  }
+
+  // The header's company filter, or the workspace's one company, answers the
+  // question without asking. Otherwise the picker asks — and asks ONLY that.
+  const startCreate = () => {
+    const companyList = companies.data ?? []
+    const target = company ?? (companyList.length === 1 ? companyList[0].slug : null)
+    if (target) {
+      void createDraft(target)
+    } else {
+      setPickerOpen(true)
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -60,9 +94,9 @@ export function InvoiceListPage({ ws }: { ws: string }) {
         titleTestId="page-title"
         companySwitcher
         actions={
-          <Button size="sm" data-testid="invoice-create-open" onClick={() => setCreateOpen(true)} disabled={noCompany}>
+          <Button size="sm" data-testid="invoice-create-open" onClick={startCreate} disabled={noCompany || create.isPending}>
             <Plus size={14} />
-            New invoice
+            {create.isPending ? 'Creating…' : 'New invoice'}
           </Button>
         }
       />
@@ -128,9 +162,9 @@ export function InvoiceListPage({ ws }: { ws: string }) {
                     hint="Create the first one — it starts as a draft you can edit until it is sent."
                     icon={Receipt}
                     action={
-                      <Button size="sm" onClick={() => setCreateOpen(true)}>
+                      <Button size="sm" onClick={startCreate} disabled={create.isPending}>
                         <Plus size={14} />
-                        New invoice
+                        {create.isPending ? 'Creating…' : 'New invoice'}
                       </Button>
                     }
                   />
@@ -142,8 +176,19 @@ export function InvoiceListPage({ ws }: { ws: string }) {
                   header: 'Number',
                   mobile: 'title',
                   cell: (i) => (
-                    <span data-testid={`invoice-link-${i.number}`} className="font-mono tabular-nums">
-                      {i.number}
+                    <span className="inline-flex items-center gap-1.5">
+                      <span data-testid={`invoice-link-${i.number}`} className="font-mono tabular-nums">
+                        {i.number}
+                      </span>
+                      {i.external_ref && (
+                        <span
+                          data-testid={`invoice-external-${i.number}`}
+                          title={`External reference: ${i.external_ref}`}
+                          className="inline-flex items-center rounded-full border border-dashed border-border px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground"
+                        >
+                          ⇠ external
+                        </span>
+                      )}
                     </span>
                   ),
                 },
@@ -187,7 +232,7 @@ export function InvoiceListPage({ ws }: { ws: string }) {
         )}
       </PageBody>
 
-      <CreateInvoiceDialog ws={ws} open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreateInvoiceDialog ws={ws} open={pickerOpen} onClose={() => setPickerOpen(false)} />
     </>
   )
 }

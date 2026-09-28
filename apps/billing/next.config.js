@@ -46,6 +46,7 @@ const nextConfig = {
     '@blackcode/platform-ui',
     '@blackcode/platform-i18n',
     '@blackcode/platform-email',
+    '@blackcode/platform-file-providers',
   ],
 
   // The changelog API reads the authored Markdown in the ROOT docs/ at runtime.

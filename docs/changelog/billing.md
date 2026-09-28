@@ -6,7 +6,7 @@ entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
 
-## 2026-09-28 — The invoice email carries the app's own colour
+## 2026-09-28 — The screens close out: per-rate VAT, a document block, history by year
 
 Not breaking. `BILLING_EMAIL_ACCENT` now defaults to the violet the web UI
 ships (`#6d4aff`, white-on-it measured 5.15:1) instead of the green chosen
@@ -15,6 +15,36 @@ before the app had screens. A deployment that sets the variable is unaffected.
 The web UI also prefills a new recurring series with twelve occurrences (still
 required, still no open-ended series), and the company form states what the UID
 and VAT number must be checked against before a real invoice.
+
+The imported-history screen now groups rows by year and shows a "PDF · Drive"
+link for a row whose `drive_path` is an openable Drive id or link — shaped by
+`@blackcode/platform-file-providers`, so a Drive link reads the same here as in
+any other app. A `drive_path` that is a human folder path (several imported
+rows carry one) stays plain text rather than becoming a dead link (web-only,
+no route change).
+
+The invoice detail page's totals now render one VAT line per rate (from the
+existing `totals.vat`, still never computed in the browser), worded "incl. VAT
+x%" when the invoice's prices already include it; the summed `vat_total` line
+only shows when more than one rate is present. "New invoice" no longer opens a
+full form — it creates a minimal draft (`company` is the only required field)
+and routes to the detail page with `?new=1`, asking for the issuing company
+first only when it cannot be inferred from the header filter or a lone
+company. Rows carrying an `external_ref` show a "⇠ external" chip. No route
+change.
+
+The invoice detail page also gained a "Document" block — currency, document
+language, reference type (and its body), default VAT rate, prices-include-VAT
+and issue date, all previously collectible only in the now-removed create
+dialog. Draft-only, same explicit Save-button pattern as the rest of the page,
+same `PATCH …/invoices/{ref}` route; closes the gap where `bk billing invoice
+edit` could set these and the web UI could not. `?new=1` now opens this block
+and focuses currency, instead of the payment message.
+
+The company switcher no longer falls back silently when `?company=` names a
+company the workspace does not have — it keeps the slug and shows "No such
+company" instead, so a page reading the same param shows its own 404/empty
+rather than another company's data. Web-only, no route change.
 
 ## 2026-09-25 — The payment slip no longer prints the reference
 
