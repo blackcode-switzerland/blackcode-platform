@@ -26,14 +26,13 @@
 // for the standing reason — "if you have to add a parameter to make it generic,
 // leave it":
 //
-//   agent-manifest.ts + /llms.txt — the manifest is this app's identity (its
-//     name, its npm package, its funnel copy). A platform version would be a
-//     renderer taking a ten-field config object, which is the parameter case
-//     verbatim; and each app serves /llms.txt on its own domain with its own
-//     wording anyway.
+//   agent-manifest + /llms.txt — MOVED HERE 2026-09-28 (`./agent-manifest`),
+//     when sales, books and billing gained their own /llms.txt and
+//     /agent-updator. The app supplies the manifest (its name, its bk group, its
+//     rules); the renderer around those values had been identical all along.
 //
-//   /agent-updator — a React page built on this app's marketing layout and this
-//     app's copy. It is a page, not shared logic.
+//   /agent-updator — still a page per app. It is each app's copy on each app's
+//     chrome, not shared logic.
 //
 //   cli-parity.test.ts — genuinely reusable in shape, but "the parity test runs
 //     per app" is a Phase 8 guardrail deliverable, and extracting the harness
@@ -54,3 +53,6 @@ export type { ChangelogEntry, ChangelogPayload } from './changelog'
 
 export { CLI_NPM_PACKAGE, getCliVersions, createCliVersionSource } from './cli-version'
 export type { CliVersions, CliVersionSourceOptions } from './cli-version'
+
+export { renderAgentManifestNote, renderLlmsTxt, llmsTxtResponse } from './agent-manifest'
+export type { AgentManifest } from './agent-manifest'

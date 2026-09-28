@@ -11,7 +11,7 @@
 // with /llms.txt or the per-page manifest.
 
 import type { Metadata } from 'next'
-import { MarketingLayout } from '@/components/marketing/layout'
+import { SiteFrame } from '@/components/site-chrome'
 import { AGENT_MANIFEST as m } from '@/lib/agent-manifest'
 import { getCliVersions } from '@blackcode/platform-agent'
 
@@ -51,8 +51,8 @@ const MOVED: Array<[string, string, string]> = [
 export default async function AgentUpdatorPage() {
   const cli = await getCliVersions()
   return (
-    <MarketingLayout>
-      <article className="mx-auto max-w-3xl px-6 py-16 sm:py-24">
+    <SiteFrame>
+      <article className="mx-auto max-w-3xl px-5 py-16 sm:px-6 sm:py-24">
         <header className="mb-12">
           <div className="text-xs font-medium uppercase tracking-wider text-primary">For agents</div>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
@@ -94,7 +94,7 @@ export default async function AgentUpdatorPage() {
           <ul className="mt-4 space-y-2 text-sm leading-relaxed text-muted-foreground">
             <li>
               <code>bk skill install</code> writes a ~30-line skill file into{' '}
-              <code>./.claude/skills/blackcode-issues/</code> (or <code>~/.claude/</code>). It
+              <code>./.claude/skills/blackcode/</code> (or <code>~/.claude/</code>). It
               contains no facts that can rot &mdash; only pointers. Use{' '}
               <code>--format agents-md</code> to write into <code>AGENTS.md</code> instead.
             </li>
@@ -187,6 +187,6 @@ export default async function AgentUpdatorPage() {
           <Code>{`npm install -g ${m.package}@latest\nbk skill install\nbk guide`}</Code>
         </section>
       </article>
-    </MarketingLayout>
+    </SiteFrame>
   )
 }

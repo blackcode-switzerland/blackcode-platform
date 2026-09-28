@@ -49,6 +49,27 @@ invitations section is hidden, as before.
 
 **How to adapt:** nothing is required.
 
+## 2026-09-28 — An agent front door: `/agent-updator`, `/llms.txt`, and `X-BK-Help` on every response
+
+Not breaking. Additive for agents; no route or command changed.
+
+- **`X-BK-Help: /agent-updator`** and **`X-BK-Changelog: /api/changelog`** are now
+  set on every API response from this app. Until today only b/issues sent them;
+  this app omitted them on purpose, because there was no page for `X-BK-Help` to
+  point at.
+- **`/agent-updator`** is that page: what to install, where the answers live
+  (`bk guide`, `bk meta`), and what to do when something stops working, with the
+  current CLI versions read live. `/agent-updater` redirects to it.
+- **`/llms.txt`** is served, and every HTML page embeds the same pointer as a
+  comment plus a `<script type="application/json" id="agent-manifest">`. Both
+  name ``bk sales …`` as the way in.
+
+**How to adapt:** nothing is required. An agent that hits a wall can now follow
+`X-BK-Help` from this app the same way it could from b/issues.
+
+The signed-out pages also gained a light/dark switch and a "For agents" footer
+link (web only).
+
 ## 2026-09-11 — You can now create, rename, transfer, and delete b/sales workspaces
 
 **Not breaking**; every existing route, command and stored workspace keeps

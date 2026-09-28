@@ -73,7 +73,8 @@ app/
   globals.css         Tailwind v4 entry + design tokens + a little legacy CSS
   page.tsx            landing page
   login/              auth (sign-in / sign-up / password reset)
-  privacy, terms      marketing/legal
+  agent-updator/      "for agents" — where X-BK-Help points
+  llms.txt/           the llmstxt.org install funnel
   status/             public status + error pages
   invitations/[token] invitation accept/decline
   cli/authorize       CLI token grant screen
@@ -83,7 +84,8 @@ components/
   ui/                 primitives (buttons, modal, confirm dialog, date picker,
                       work-item icons, property select, member avatar, …)
   listings/           list/kanban/timeline views + filter bar + bulk actions + active-ws hook
-  marketing/          public site chrome
+  site-chrome.tsx     signed-out header + footer (every app has one; see below)
+  login-form.tsx      the front door, Google button only when configured
   *.tsx               feature components (detail views, create modals, settings)
 lib/                  shared client/server helpers (work-items.ts lives here)
 ```
@@ -223,16 +225,39 @@ tracker's.
 | Path | Renders |
 |------|---------|
 | `/` | Landing page (`LandingPage`). Signed-in visitors are redirected to `/dashboard` unless the URL has `?from=app` (set by the "blackcode" brand link in the dashboard sidebar), which lets them browse the landing page without being bounced back in. |
-| `/login` | Sign-in / sign-up tabs + password-reset flow |
+| `/login` | Sign-in / create-account tabs + password-reset flow (`components/login-form.tsx`). Redirects a signed-in visitor to `/dashboard` on the server. The Google button renders only when this deployment has Google configured. |
 | `/blocked` | Shown when a non-whitelisted email tries Google OAuth; professional "not on the list" page |
-| `/privacy`, `/terms` | Legal pages (marketing layout) |
 | ~~`/changelog`~~ | **Removed 2026-08-03.** The public changelog page had no human audience. The record itself is unchanged and still served to agents via `GET /api/changelog` and `bk changelog`, both rendering `docs/changelog/*.md` through `@blackcode/platform-agent`. **Since 2026-08-11 the path 307s to `/api/changelog`** (`next.config.js` `redirects()`) — it was a link shared with agents for self-diagnosis and a bare 404 does not say that the surface moved one segment. The redirect is not a reinstatement: do not add a page here. |
 | `/agent-updater` | **Not a page — a 307 to `/agent-updator`.** The real path has always carried the typo, and it is load-bearing (the `X-BK-Help` header, `/api/docs`, the changelog all name it), so the correctly-spelled guess is redirected rather than the page renamed. Added 2026-08-11 after both spellings were shared with agents and one 404'd. |
-| `/agent-updator` | Public "get an agent current" guide (`app/agent-updator/page.tsx`, marketing layout) — how an AI agent / stale agent skill should connect: recommended interface (`bk` CLI), install/update, auth, integration gotchas, OS-specific notes (Windows UTF-8 / `chcp 65001`, macOS, Linux), why an old CLI is version-floored (exit code 8), and links to discovery endpoints. Pulls its connection facts from `lib/agent-manifest.ts` + `@blackcode/platform-agent` so it can't drift. |
+| `/agent-updator` | Public "get an agent current" guide (`app/agent-updator/page.tsx`, site chrome) — how an AI agent / stale agent skill should connect: recommended interface (`bk` CLI), install/update, auth, integration gotchas, OS-specific notes (Windows UTF-8 / `chcp 65001`, macOS, Linux), why an old CLI is version-floored (exit code 8), and links to discovery endpoints. Pulls its connection facts from `lib/agent-manifest.ts` + `@blackcode/platform-agent` so it can't drift. |
 | `/status` | Public health page (DB / blob / app probes + recent errors) |
 | `/status/errors/[id]` | Error detail (owner-gated) |
 | `/invitations/[token]` | Accept/decline a workspace invite |
 | `/cli/authorize` | Grant a token to the `bk` CLI |
+
+## Signed-out pages — one design across every app
+
+Since 2026-09-28 the four apps' signed-out surfaces are one design, each in its
+own accent. Until then `apps/issues` had its own (`components/marketing/*`: a
+taller header, a "Get started" button, Privacy / Terms / For agents in the
+footer, a two-column login page) and read as a different product from the other
+three.
+
+| Piece | Where | Notes |
+|---|---|---|
+| Header + footer | `components/site-chrome.tsx` per app (billing: `components/landing/`) | `SiteFrame({ nav })`. The header's nav is the caller's; the brand and the theme switch are on every signed-out page. The footer carries "For agents" → `/agent-updator` and the contact address |
+| Theme switch | `@blackcode/platform-ui/ui/theme-toggle` | Shared. Everything theme-dependent — glyph AND `aria-label` — waits for mount; the issues copy it replaced gated only the glyph and raised a hydration mismatch on every landing load. Signed-in shells keep their own switches |
+| Landing | `components/landing-page.tsx` | Hero → "What you do with it" → the agent door (a `bk` quickstart) → closing call. No vocabulary, limit or command beyond the few needed to start |
+| Login | `components/login-form.tsx`, rendered by `app/login/page.tsx` | Tabs for sign in / create account, reset panel, and a Google button only when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are both set — read on the server, the same pair `lib/auth.ts` builds its provider list from |
+| For agents | `app/agent-updator/page.tsx`, `app/llms.txt/route.ts`, `components/agent-manifest.tsx` | Rendered from each app's `lib/agent-manifest.ts` by `@blackcode/platform-agent` |
+
+There are **no privacy or terms pages** in any app; `apps/issues` removed its
+two on 2026-09-28.
+
+**Locally, Google sign-in needs each port registered** as an authorised redirect
+URI on the OAuth client (`http://localhost:<port>/api/auth/callback/google`).
+An unregistered port shows the button and fails at Google with
+`redirect_uri_mismatch` — the button renders from the env, not from Google.
 
 ## App shell & providers
 

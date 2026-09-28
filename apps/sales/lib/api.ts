@@ -23,6 +23,7 @@ import {
 } from './db/queries/workspaces'
 import { salesUploadLedger } from './db/queries/uploads'
 import { salesFootprintSource } from './db/queries/footprint'
+import { AGENT_MANIFEST } from './agent-manifest'
 
 /**
  * The caller, from a `bk_live_…` bearer token **or** a browser session.
@@ -163,8 +164,14 @@ export const appContext: AppContext = {
   // packages/platform-api/src/handler.ts at `errorLogContext`.
   redactBody: true,
 
-  // No `manifest`: sales has no agent landing page yet, and an X-BK-Help header
-  // pointing at a 404 is worse than no header. It arrives with Phase 6.
+  // Where a stuck agent goes, advertised on every response as X-BK-Help /
+  // X-BK-Changelog. Added 2026-09-28 with `app/agent-updator/page.tsx` — the
+  // page this header had been waiting for, since a header pointing at a 404 is
+  // worse than no header.
+  manifest: {
+    help: AGENT_MANIFEST.help,
+    changelog: AGENT_MANIFEST.changelog,
+  },
 }
 
 export const apiHandler = createApiHandler(appContext)

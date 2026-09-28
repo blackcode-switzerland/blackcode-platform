@@ -1,6 +1,7 @@
 // The machine-readable "how to use this programmatically" note embedded on every
 // page by <AgentManifest/> (components/agent-manifest.tsx), and the source for
-// /llms.txt.
+// /llms.txt. The RENDERING lives in @blackcode/platform-agent since 2026-09-28,
+// shared with every other app; this file is only this app's values.
 //
 // This used to be 77 dense lines restating the auth header, every envelope
 // shape, the pagination rules, the upload flow, the encoding warning… all of it
@@ -17,14 +18,16 @@
 // tempted to document a route, an envelope or a limit, it belongs in a guide
 // topic or in /api/meta instead.
 
+import { CLI_NPM_PACKAGE, renderAgentManifestNote, type AgentManifest } from '@blackcode/platform-agent'
+
 export const AGENT_MANIFEST = {
   project: 'blackcode issues',
   summary: 'AI-native issue tracker. Agents operate it through the bk CLI.',
   interface: 'CLI only. There is no supported HTTP API.',
-  install: 'npm install -g @blackcode_sa/bc-issues',
+  install: `npm install -g ${CLI_NPM_PACKAGE}`,
   start: ['bk login', 'bk skill install', 'bk guide', 'bk meta'],
-  package: '@blackcode_sa/bc-issues',
-  // Where a stuck agent goes. Kept because lib/api/handler.ts advertises these
+  package: CLI_NPM_PACKAGE,
+  // Where a stuck agent goes. Kept because lib/api/context.ts advertises these
   // on every response as X-BK-Help / X-BK-Changelog.
   //
   // `changelog` points at the JSON route, not a page: the human /changelog page
@@ -32,19 +35,9 @@ export const AGENT_MANIFEST = {
   // agents anyway. `bk changelog` is the CLI-side equivalent.
   help: '/agent-updator',
   changelog: '/api/changelog',
-} as const
+  rules: ['Address projects/tasks/issues by their workspace #number.'],
+} as const satisfies AgentManifest
 
 // Human-readable prose for agents that scrape the raw HTML rather than parse the
 // JSON block. Rendered inside an HTML comment at the top of <body>.
-export const AGENT_MANIFEST_NOTE = `
-blackcode issues — programmatic access
-This product is operated through a CLI. There is no supported HTTP API.
-  npm install -g @blackcode_sa/bc-issues
-  bk login
-  bk skill install
-  bk guide
-\`bk guide\` is the complete usage guide for the binary you just installed, and works offline.
-\`bk meta\` returns your workspaces and the live status/priority vocabularies and limits.
-Out of date? /agent-updator · What changed: \`bk changelog\` (or /api/changelog)
-A structured version of this note is in the <script type="application/json" id="agent-manifest"> element on this page.
-`.trim()
+export const AGENT_MANIFEST_NOTE = renderAgentManifestNote(AGENT_MANIFEST)

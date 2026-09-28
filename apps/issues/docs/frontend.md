@@ -174,11 +174,12 @@ this app's own.
   `global-error-listener` (mounted in `Providers`; catches `window.onerror` +
   unhandled promise rejections, de-duped and capped per session) both POST to
   `/api/errors/client`, feeding the super-admin Errors tab.
-- **Auth & marketing:** `landing-page`, `cli-authorize-form`,
-  `password-reset-flow`, `onboarding-create-workspace`,
-  `accept-invitation-button`, `components/marketing/*` (the marketing site
-  footer, `components/marketing/site-footer.tsx`, links to
-  "For agents" link to `/agent-updator`).
+- **Auth & marketing:** `landing-page`, `login-form`, `site-chrome` (the
+  signed-out header and footer — the footer's "For agents" links to
+  `/agent-updator`), `cli-authorize-form`, `password-reset-flow`,
+  `onboarding-create-workspace`, `accept-invitation-button`. Same shape as the
+  other three apps since 2026-09-28 — root `docs/frontend.md` § Signed-out
+  pages. `components/marketing/*`, `/privacy` and `/terms` were removed then.
 - **Helpers:** `rich-text-editor`, `project-icon`, `icon-picker`,
   `image-upload-field`, `image-lightbox`.
 

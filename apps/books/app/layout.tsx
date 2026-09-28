@@ -8,6 +8,7 @@
 // found" and "CSS is correct" must not look the same.
 import type { Metadata } from 'next'
 import { Toaster } from 'sonner'
+import { AgentManifest } from '@/components/agent-manifest'
 import { getLocale } from '@blackcode/platform-i18n/server'
 import { APP_NAME } from '@/lib/app'
 import { getValidatedSessionUser } from '@/lib/auth/session'
@@ -97,6 +98,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body className="font-sans antialiased">
+        {/* Machine-readable access note for agents fetching any page. Renders nothing visible. */}
+        <AgentManifest />
         <Providers locale={locale}>
           {children}
           {/* Toasts are token-driven through the `--toast-*` bridge in

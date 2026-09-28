@@ -1,5 +1,11 @@
 # Marketing content
 
+> **2026-09-28 — the landing page this doc describes was replaced.** `/` now
+> uses the shape the other three apps share (hero → "What you do with it" → the
+> agent door → closing call; root `docs/frontend.md` § Signed-out pages), and
+> `/privacy` and `/terms` were removed. The section-by-section plan below is
+> history — read it for the copy rules, not the layout.
+
 Source-of-truth content for the **issues app's** landing page and other marketing surfaces.
 Paths below are relative to `apps/issues/`. Lists every feature, who it's for, what tone to write in, and which claims are real today vs. on the roadmap. The live page is `components/landing-page.tsx`; keep this brief and that page in agreement.
 

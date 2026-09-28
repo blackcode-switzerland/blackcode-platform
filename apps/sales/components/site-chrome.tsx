@@ -36,10 +36,11 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
+import { ThemeToggle } from '@blackcode/platform-ui/ui/theme-toggle'
 
 /**
- * The signed-out header. `children` is rendered right-aligned as the nav; pass
- * nothing for a brand-only bar.
+ * The signed-out header. `children` is rendered right-aligned as the nav, before
+ * the theme switch every signed-out page carries.
  *
  * h-12 is the sales density (D-4) — the same header height `sales-shell.tsx`
  * uses, so arriving in the product is not a jolt.
@@ -55,7 +56,12 @@ export function SiteHeader({ children }: { children?: React.ReactNode }) {
           <Image src="/logo.png" alt="b/" width={22} height={22} className="rounded-[14%]" />
           <span className="text-[15px] font-semibold tracking-tight">sales</span>
         </Link>
-        {children ? <nav className="ml-auto flex items-center gap-2">{children}</nav> : null}
+        {/* The theme switch is on every signed-out page, so it is not the
+            caller's: the login page passes no nav and still gets it. */}
+        <nav className="ml-auto flex items-center gap-2">
+          {children}
+          <ThemeToggle />
+        </nav>
       </div>
     </header>
   )
@@ -66,9 +72,14 @@ export function SiteFooter() {
     <footer className="border-t border-border">
       <div className="mx-auto flex max-w-5xl flex-col gap-2 px-5 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:px-6">
         <span>b/sales — a blackcode product.</span>
-        <a href="mailto:contact@blackcode.ch" className="hover:text-foreground sm:ml-auto">
-          contact@blackcode.ch
-        </a>
+        <span className="flex gap-4 sm:ml-auto">
+          <Link href="/agent-updator" className="hover:text-foreground">
+            For agents
+          </Link>
+          <a href="mailto:contact@blackcode.ch" className="hover:text-foreground">
+            contact@blackcode.ch
+          </a>
+        </span>
       </div>
     </footer>
   )

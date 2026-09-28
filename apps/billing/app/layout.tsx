@@ -8,6 +8,7 @@
 // found" and "CSS is correct" must not look the same.
 import type { Metadata } from 'next'
 import { Toaster } from 'sonner'
+import { AgentManifest } from '@/components/agent-manifest'
 import './globals.css'
 import { APP_NAME } from '@/lib/app'
 import { Providers } from './providers'
@@ -45,6 +46,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="font-sans antialiased">
+        {/* Machine-readable access note for agents fetching any page. Renders nothing visible. */}
+        <AgentManifest />
         <Providers>
           {children}
           {/* Token-driven through the `--toast-*` bridge in globals.css; no

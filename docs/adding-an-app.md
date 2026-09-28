@@ -225,6 +225,18 @@ Three entry points, and your app inherits all three:
 | `bk meta` | *What is the data right now?* — vocabularies, limits, workspaces | the server, `GET /api/meta` |
 | `bk changelog` | *What changed, and how do I adapt?* | `docs/changelog/*.md` |
 
+An agent that has not found `bk` yet arrives by the web instead, and since
+2026-09-28 every deployed app answers it the same three ways: **`/llms.txt`**,
+an **`<AgentManifest/>`** embedded in the root layout, and **`/agent-updator`**
+— the page the `X-BK-Help` header on every API response points at. The app
+supplies `lib/agent-manifest.ts` (its name, its `bk` group, its rules) and
+`@blackcode/platform-agent` renders it; copy the four files from `apps/billing`
+(`lib/agent-manifest.ts`, `components/agent-manifest.tsx`,
+`app/llms.txt/route.ts`, `app/agent-updator/page.tsx`) and set `manifest` in
+`lib/api.ts`. `platform-testing/test/agent-help-target.test.ts` enumerates
+`apps/*` and fails for any app without them — the scaffold is its only
+exemption.
+
 The rule that keeps them coherent: **a guide topic never restates a value that
 `bk meta` carries.** Static behaviour ships in the binary; dynamic data comes
 from the server. `guide_test.go` fails the build on a hardcoded vocabulary or
@@ -725,6 +737,16 @@ you can make:
   existed for — is gone. Your URNs are unaffected, because a URN is built from
   your own workspace slug and your own #number. The index was where a URN was
   looked up; it was never what made one true.
+- **Your signed-out front door.** The landing page, `/login`, `/agent-updator`
+  and `/llms.txt` are copy — your product's words — so the scaffold carries none
+  of them. The SHAPE is fixed, though, and the four apps share it: a
+  `components/site-chrome.tsx` (`SiteHeader` with the brand, the caller's nav and
+  `ThemeToggle` from `@blackcode/platform-ui/ui/theme-toggle`; `SiteFooter` with
+  "For agents" and the contact address), a landing page of hero → "what you do
+  with it" → the agent door → a closing call, and a `LoginForm` that draws the
+  Google button only when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are both
+  set. Copy them from `apps/billing` and change the words. No privacy or terms
+  pages — no app has them.
 - **A browser session — but the scaffold now ships the SHAPE of one.** As of
   2026-08-11 it carries `lib/auth.ts`, `lib/auth/session.ts`, the NextAuth
   handler, `POST /api/auth/register` with the whitelist gate, a `/login` page and
