@@ -1,13 +1,14 @@
-import { SettingsNav } from '@/components/settings-nav'
+import { SettingsFrame } from '@/components/settings-nav'
 
+// Account settings — the same sticky header as a workspace's settings page and
+// the shared tab frame every app renders (2026-09-28).
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto max-w-3xl p-8">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold">Settings</h1>
+    <div>
+      <header className="sticky top-0 z-10 flex h-12 items-center border-b border-border bg-background/80 px-4 backdrop-blur">
+        <h1 className="text-[15px] font-semibold">Account settings</h1>
       </header>
-      <SettingsNav />
-      <div className="mt-6">{children}</div>
+      <SettingsFrame>{children}</SettingsFrame>
     </div>
   )
 }

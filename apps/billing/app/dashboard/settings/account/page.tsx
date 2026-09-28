@@ -12,8 +12,8 @@ import { listAppRegistry } from '@blackcode/platform-db'
 import { getValidatedSessionUser } from '@/lib/auth/session'
 import { getDb } from '@/lib/db/client'
 import { APP_SLUG } from '@/lib/app'
-import { PageHeader, PageBody } from '@/components/shell'
-import { SettingsNav } from '@/components/settings/settings-nav'
+import { PageHeader } from '@/components/shell'
+import { SettingsFrame } from '@/components/settings/settings-nav'
 import { AccountSettings } from '@/components/settings/account-settings'
 
 export const dynamic = 'force-dynamic'
@@ -29,15 +29,10 @@ export default async function Page() {
 
   return (
     <>
-      <PageHeader title="Settings" titleTestId="page-title" />
-      <PageBody>
-        <div className="mx-auto max-w-3xl">
-          <SettingsNav />
-          <div className="mt-6">
-            <AccountSettings otherApps={otherApps} />
-          </div>
-        </div>
-      </PageBody>
+      <PageHeader title="Account settings" titleTestId="page-title" />
+      <SettingsFrame>
+        <AccountSettings otherApps={otherApps} />
+      </SettingsFrame>
     </>
   )
 }

@@ -20,65 +20,25 @@
 // its web surface is read-mostly by design, so there is no "read-only mode" to
 // choose — that is simply what the app is.
 
-import { useEffect, useState } from 'react'
-import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
-import { Globe, Monitor, Moon, Sun, type LucideIcon } from 'lucide-react'
+import { Globe } from 'lucide-react'
+import { AppearanceSection } from '@blackcode/platform-ui/account/account-settings'
 import { LOCALES, LOCALE_NAMES, type Locale } from '@blackcode/platform-i18n'
 import { useSetLocale } from '@/lib/account'
 import { useMe } from '@/lib/hooks'
 import { useLocale, useT } from '@/lib/i18n'
-import type { BooksKey } from '@/lib/dictionary'
 import { Section } from './section'
-
-const THEMES: ReadonlyArray<{ value: string; labelKey: BooksKey; icon: LucideIcon }> = [
-  { value: 'light', labelKey: 'settings.theme.light', icon: Sun },
-  { value: 'dark', labelKey: 'settings.theme.dark', icon: Moon },
-  { value: 'system', labelKey: 'settings.theme.system', icon: Monitor },
-]
+import { useAccountLabels } from './labels'
 
 export function PreferenceSettings() {
+  const labels = useAccountLabels()
   return (
-    <div className="space-y-4">
-      <AppearanceSection />
+    <>
+      {/* The shared section every app renders (2026-09-28) — same three
+          choices, same words, here in EN or FR. */}
+      <AppearanceSection labels={labels} />
       <LanguageSection />
-    </div>
-  )
-}
-
-function AppearanceSection() {
-  const { theme, setTheme } = useTheme()
-  const t = useT()
-  // `next-themes` cannot know the current choice until it has read the DOM, so
-  // rendering the selected state before mount produces a hydration mismatch.
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-
-  return (
-    <Section title={t('settings.appearance')} note={t('settings.appearanceNote')}>
-      <div className="grid max-w-md grid-cols-3 gap-2">
-        {THEMES.map((opt) => {
-          const active = mounted && theme === opt.value
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setTheme(opt.value)}
-              aria-pressed={active}
-              className={
-                'flex flex-col items-center gap-1.5 rounded-md border px-3 py-3 text-[13px] transition-colors ' +
-                (active
-                  ? 'border-primary bg-primary/10 text-foreground'
-                  : 'border-border text-muted-foreground hover:bg-accent')
-              }
-            >
-              <opt.icon size={16} />
-              {t(opt.labelKey)}
-            </button>
-          )
-        })}
-      </div>
-    </Section>
+    </>
   )
 }
 
@@ -132,7 +92,7 @@ function LanguageSection() {
 
   return (
     <Section title={t('settings.language')} note={t('settings.languageNote')}>
-      <div className="grid max-w-md grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-2 sm:max-w-md">
         {LOCALES.map((loc) => (
           <button
             key={loc}
@@ -178,9 +138,11 @@ function LanguageSection() {
 
 function optionClass(active: boolean): string {
   return (
-    'flex flex-col items-center justify-center gap-1 rounded-md border px-3 py-3 text-center transition-colors disabled:opacity-60 ' +
+    // The shared AppearanceSection's option, so the two pickers on this tab
+    // are one visual thing.
+    'flex flex-col items-center justify-center gap-1 rounded-lg border px-3 py-3 text-center transition-colors disabled:opacity-60 ' +
     (active
-      ? 'border-primary bg-primary/10 text-foreground'
+      ? 'border-primary bg-primary/5 text-foreground'
       : 'border-border text-muted-foreground hover:bg-accent')
   )
 }

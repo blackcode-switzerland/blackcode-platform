@@ -12,6 +12,7 @@
 import { redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
 import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { AppearanceSection } from '@blackcode/platform-ui/account/account-settings'
 import { PreferenceSettings } from '@/components/settings/preference-settings'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +22,13 @@ export default async function Page() {
   if (!user) redirect('/login')
 
   const reachable = await listWorkspacesForUser(user.id)
+  // Appearance first (every app's Preferences tab has it, 2026-09-28 — the
+  // theme moved out of this app's header into the sidebar footer and here),
+  // then this app's own: the editing mode per workspace.
   return (
-    <PreferenceSettings workspaces={reachable.map((w) => ({ slug: w.slug, name: w.name }))} />
+    <>
+      <AppearanceSection />
+      <PreferenceSettings workspaces={reachable.map((w) => ({ slug: w.slug, name: w.name }))} />
+    </>
   )
 }

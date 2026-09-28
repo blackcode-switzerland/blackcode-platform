@@ -8,7 +8,7 @@
 // does not move a tab.
 
 export const en = {
-  'settings.title': 'Settings',
+  'settings.title': 'Account settings',
   'settings.tab.profile': 'Profile',
   'settings.tab.account': 'Account',
   'settings.tab.tokens': 'API tokens',
@@ -20,7 +20,13 @@ export const en = {
     'This is your account, not a {app} one. The name here is the name every {platform} app shows.',
   'settings.profile.loading': 'Loading your account',
   'settings.profile.loadError': 'Your account could not be loaded',
-  'settings.profile.photoUrl': 'Photo URL',
+  'settings.profile.photo': 'Photo',
+  'settings.profile.uploadPhoto': 'Upload photo',
+  'settings.profile.removePhoto': 'Remove',
+  'settings.profile.photoHint':
+    'A square image reads best. Without one you get your initials, in a colour derived from your name.',
+  'settings.profile.photoUpdated': 'Photo updated.',
+  'settings.profile.photoRemoved': 'Photo removed.',
   'settings.profile.photoFromGoogle':
     'Your photo comes from Google and re-syncs each time you sign in with it.',
   'settings.profile.email': 'Email',
@@ -29,7 +35,7 @@ export const en = {
   'settings.profile.name': 'Name',
   'settings.profile.namePlaceholder': 'Your name',
   'settings.profile.tagline': 'Tagline',
-  'settings.profile.taglinePlaceholder': 'What you do here',
+  'settings.profile.taglineHint': 'A short line shown next to your name, in every {platform} app.',
   'settings.profile.save': 'Save',
   'settings.profile.saving': 'Saving…',
   'settings.profile.saved': 'Profile saved.',
@@ -78,11 +84,17 @@ export const en = {
   'settings.tokens.yours': 'Your tokens',
   'settings.tokens.loading': 'Loading your tokens',
   'settings.tokens.loadError': 'Your tokens could not be loaded',
-  'settings.tokens.none': 'No tokens yet. Create one above, or run {login} from a terminal.',
+  'settings.tokens.noneTitle': 'No tokens yet',
+  'settings.tokens.noneHint': 'Create one above, or run {login} from a terminal.',
+  'settings.tokens.created': 'Token created.',
+  'settings.tokens.createdOn': 'created {when}',
   'settings.tokens.lastUsed': 'last used {when}',
   'settings.tokens.neverUsed': 'never used',
   'settings.tokens.expires': 'expires {when}',
-  'settings.tokens.revokeNamed': 'Revoke “{name}”',
+  'settings.tokens.revoke': 'Revoke',
+  'settings.tokens.revokeTitle': 'Revoke “{name}”?',
+  'settings.tokens.revokeNote':
+    'Anything using it stops working immediately — in every {platform} app, not only this one.',
   'settings.tokens.revoked': 'Revoked “{name}”',
   'settings.tokens.cancel': 'Cancel',
 
@@ -108,7 +120,7 @@ export const en = {
 } as const
 
 export const fr: Record<keyof typeof en, string> = {
-  'settings.title': 'Réglages',
+  'settings.title': 'Réglages du compte',
   'settings.tab.profile': 'Profil',
   'settings.tab.account': 'Compte',
   'settings.tab.tokens': 'Jetons API',
@@ -119,7 +131,13 @@ export const fr: Record<keyof typeof en, string> = {
     'Il s’agit de votre compte, pas d’un compte {app}. Le nom saisi ici est celui qu’affiche chaque application {platform}.',
   'settings.profile.loading': 'Chargement de votre compte',
   'settings.profile.loadError': 'Impossible de charger votre compte',
-  'settings.profile.photoUrl': 'URL de la photo',
+  'settings.profile.photo': 'Photo',
+  'settings.profile.uploadPhoto': 'Téléverser une photo',
+  'settings.profile.removePhoto': 'Retirer',
+  'settings.profile.photoHint':
+    'Une image carrée rend le mieux. Sans photo, vos initiales s’affichent, dans une couleur dérivée de votre nom.',
+  'settings.profile.photoUpdated': 'Photo mise à jour.',
+  'settings.profile.photoRemoved': 'Photo retirée.',
   'settings.profile.photoFromGoogle':
     'Votre photo provient de Google et se resynchronise à chaque connexion avec Google.',
   'settings.profile.email': 'Adresse e-mail',
@@ -128,7 +146,7 @@ export const fr: Record<keyof typeof en, string> = {
   'settings.profile.name': 'Nom',
   'settings.profile.namePlaceholder': 'Votre nom',
   'settings.profile.tagline': 'Description',
-  'settings.profile.taglinePlaceholder': 'Ce que vous faites ici',
+  'settings.profile.taglineHint': 'Une courte ligne affichée à côté de votre nom, dans chaque application {platform}.',
   'settings.profile.save': 'Enregistrer',
   'settings.profile.saving': 'Enregistrement…',
   'settings.profile.saved': 'Profil enregistré.',
@@ -176,12 +194,17 @@ export const fr: Record<keyof typeof en, string> = {
   'settings.tokens.yours': 'Vos jetons',
   'settings.tokens.loading': 'Chargement de vos jetons',
   'settings.tokens.loadError': 'Impossible de charger vos jetons',
-  'settings.tokens.none':
-    'Aucun jeton pour l’instant. Créez-en un ci-dessus, ou lancez {login} depuis un terminal.',
+  'settings.tokens.noneTitle': 'Aucun jeton pour l’instant',
+  'settings.tokens.noneHint': 'Créez-en un ci-dessus, ou lancez {login} depuis un terminal.',
+  'settings.tokens.created': 'Jeton créé.',
+  'settings.tokens.createdOn': 'créé le {when}',
   'settings.tokens.lastUsed': 'dernier usage {when}',
   'settings.tokens.neverUsed': 'jamais utilisé',
   'settings.tokens.expires': 'expire le {when}',
-  'settings.tokens.revokeNamed': 'Révoquer « {name} »',
+  'settings.tokens.revoke': 'Révoquer',
+  'settings.tokens.revokeTitle': 'Révoquer « {name} » ?',
+  'settings.tokens.revokeNote':
+    'Tout ce qui l’utilise cesse de fonctionner immédiatement — dans chaque application {platform}, pas seulement celle-ci.',
   'settings.tokens.revoked': '« {name} » révoqué',
   'settings.tokens.cancel': 'Annuler',
 

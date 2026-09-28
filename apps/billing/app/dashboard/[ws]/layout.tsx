@@ -43,6 +43,7 @@ export default async function WorkspaceLayout({
     name: w.name,
     slug: w.slug,
     member_role: w.member_role,
+    logo_url: (w as { logo_url?: string | null }).logo_url ?? null,
   }))
 
   return (

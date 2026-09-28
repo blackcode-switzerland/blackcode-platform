@@ -16,7 +16,9 @@
     "./utils": "./src/utils.ts",
     "./media-lightbox": "./src/media-lightbox.tsx",
     "./workspace/*": "./src/workspace/*.tsx",
-    "./workspace/labels": "./src/workspace/labels.ts"
+    "./workspace/labels": "./src/workspace/labels.ts",
+    "./account/*": "./src/account/*.tsx",
+    "./account/labels": "./src/account/labels.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

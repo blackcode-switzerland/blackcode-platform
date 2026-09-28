@@ -159,6 +159,18 @@ Confirmation is also skipped automatically when stdin is not a TTY, and
 per-command with `--yes` / `-y`.
 
 
+## Your profile photo
+
+```bash
+bk profile avatar ./me.png     # PNG, JPEG, WebP or GIF
+bk profile avatar --remove     # back to initials
+```
+
+One photo for every blackcode app, served by whichever app you are signed in
+to. The size cap is a workspace logo's — `limits.workspace_logo_max_bytes` in
+`bk meta`. A Google-connected account is refused (exit 1, with a hint): its photo is
+synced from Google on each sign-in and is changed there.
+
 ## Your interface language is a WEB preference, and `bk` will not set it
 
 `platform.users.locale` holds the language a person reads the web apps in, and it

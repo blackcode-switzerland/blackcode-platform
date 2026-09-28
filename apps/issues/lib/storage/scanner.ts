@@ -32,7 +32,7 @@ import {
   type ScannedReference,
 } from '@blackcode/platform-storage'
 import { APP_SLUG } from '@/lib/app'
-import { attachments, comments, issues, projectUpdates, projects, tasks, workspaces } from '@/lib/db/schema'
+import { attachments, comments, issues, projectUpdates, projects, tasks, users, workspaces } from '@/lib/db/schema'
 
 interface Row {
   [k: string]: unknown
@@ -75,6 +75,11 @@ export const INDEX_APP_BY_TYPE: Record<string, string> = {
   // no trigger, and not the `isUrlReferenced` check below either.
   workspace_logo: APP_SLUG,
   comment: 'platform',
+  // A person's uploaded photo on the shared `platform.users` row — 'platform',
+  // like comments: every app writes it (migration 0050, 2026-09-28; before that
+  // nothing indexed it). Not workspace-scoped, so `scanWorkspace` never emits
+  // it; `isUrlReferenced` below is what covers it.
+  user_avatar: 'platform',
 }
 
 /**
@@ -97,6 +102,7 @@ export const RETRIGGER_SQL: Record<string, (id: number) => SQL> = {
   attachment: (id) => sql`UPDATE ${attachments} SET file_url = file_url WHERE id = ${id}`,
   comment: (id) => sql`UPDATE ${comments} SET content = content WHERE id = ${id}`,
   workspace_logo: (id) => sql`UPDATE ${workspaces} SET logo_url = logo_url WHERE id = ${id}`,
+  user_avatar: (id) => sql`UPDATE ${users} SET avatar_url = avatar_url WHERE id = ${id}`,
 }
 
 export const issuesReferenceScanner: ReferenceScanner = {
@@ -185,6 +191,8 @@ export const issuesReferenceScanner: ReferenceScanner = {
         SELECT 1 FROM ${attachments}     WHERE file_url = ${url}
         UNION ALL
         SELECT 1 FROM ${workspaces}      WHERE logo_url = ${url}
+        UNION ALL
+        SELECT 1 FROM ${users}           WHERE avatar_url = ${url}
       ) AS referenced
     `)
     return Boolean((res.rows[0] as Row | undefined)?.referenced)

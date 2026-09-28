@@ -7,6 +7,26 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-09-28 — Profile photos by upload in every app; one account-settings page
+
+Not breaking; additive.
+
+- **New: `bk profile avatar <file>` / `bk profile avatar --remove`** —
+  `POST` / `DELETE /api/me/avatar`, served by every app. PNG, JPEG, WebP or GIF,
+  at a workspace logo's size cap (`limits.workspace_logo_max_bytes` in
+  `bk meta`). A Google-connected account is refused with a hint — its photo is
+  synced from Google. `PATCH /api/me { avatar_url }` still works.
+- **Fixed: an uploaded profile photo could be deleted by storage clean-up while
+  in use.** Nothing indexed `platform.users.avatar_url` in
+  `platform.blob_references`; a trigger does now (`apps/issues` migration 0050,
+  attributed to `platform`), and existing photos were backfilled. No client
+  change needed.
+- **Web:** every app's account settings are the same four tabs — Profile,
+  Account, API tokens, Preferences — drawn from one shared kit. b/billing and
+  b/books gain a photo upload (b/books took a typed URL); b/issues gains the
+  Preferences tab (theme) and a Signed-in card; token lists show when each token
+  was created.
+
 ## 2026-09-28 — One left menu in every app
 
 Web only; no route or command changed. The signed-in sidebar is drawn from

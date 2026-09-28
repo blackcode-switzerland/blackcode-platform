@@ -49,7 +49,7 @@ import { redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
 import { getStoredActiveWorkspaceId, listWorkspacesWithOwnerForUser } from '@/lib/db/queries/workspaces'
 import { PageTitle, SalesShell } from '@/components/sales-shell'
-import { SettingsNav } from '@/components/settings/settings-nav'
+import { SettingsFrame } from '@/components/settings/settings-nav'
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
   const user = await getValidatedSessionUser()
@@ -64,24 +64,20 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   // pages the switcher read "No workspace" with nothing to choose from.
   const ws = (memberships.find((w) => w.id === storedId) ?? memberships[0])?.slug ?? null
 
-  const body = (
-    <div className="mx-auto max-w-3xl">
-      {/* No back-link and no `<h1>Settings</h1>` when the frame is there: the
-          sidebar is the way back, and the shell's sticky header carries the
-          title (`PageTitle` below). Both were here because neither existed. */}
-      {ws === null && (
-        <h1 className="mb-5 text-xl font-semibold text-foreground">Settings</h1>
-      )}
-      <SettingsNav />
-      <div className="mt-6">{children}</div>
-    </div>
-  )
-
-  if (ws === null) return <div className="px-6 py-8">{body}</div>
+  // The shared tab strip and column (`SettingsFrame`, 2026-09-28). No `<h1>`
+  // when the shell is there: its sticky header carries the title.
+  if (ws === null)
+    return (
+      <div className="px-6 py-8">
+        <h1 className="mx-auto mb-5 max-w-3xl text-xl font-semibold text-foreground">Account settings</h1>
+        <SettingsFrame>{children}</SettingsFrame>
+      </div>
+    )
+  const body = <SettingsFrame>{children}</SettingsFrame>
 
   return (
     <SalesShell ws={ws} workspaces={memberships}>
-      <PageTitle title="Settings" />
+      <PageTitle title="Account settings" />
       {body}
     </SalesShell>
   )

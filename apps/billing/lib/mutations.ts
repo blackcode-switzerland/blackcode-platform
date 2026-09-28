@@ -379,6 +379,26 @@ export function usePatchMe() {
   )
 }
 
+/** `POST /api/me/avatar` — multipart; the photo on your blackcode account (2026-09-28). */
+export function useSetAvatar() {
+  return useWrite(
+    (file: File) => {
+      const form = new FormData()
+      form.append('file', file)
+      return call<Partial<Me>>('/api/me/avatar', { method: 'POST', body: form })
+    },
+    () => [keys.me()]
+  )
+}
+
+/** `DELETE /api/me/avatar`. */
+export function useRemoveAvatar() {
+  return useWrite(
+    () => call<Partial<Me>>('/api/me/avatar', { method: 'DELETE' }),
+    () => [keys.me()]
+  )
+}
+
 export interface MintedToken {
   id: number
   /** Shown ONCE. Never stored, never recoverable. */

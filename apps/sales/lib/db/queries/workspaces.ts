@@ -174,6 +174,7 @@ export async function listWorkspacesWithOwnerForUser(
   const rows = await getDb()
     .select({
       ...WS_COLUMNS,
+      logo_url: salesWorkspaces.logo_url,
       role: salesWorkspaceMembers.role,
       owner_name: users.name,
       owner_email: users.email,

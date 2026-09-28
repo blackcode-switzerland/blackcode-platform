@@ -87,6 +87,7 @@ export { clientErrorsRoute, statusRoute } from './telemetry'
 export { tokensRoute, tokenRoute } from './tokens'
 export { uploadRoute, uploadBlobRoute } from './upload'
 export { workspaceLogoRoute } from './workspace-logo'
+export { meAvatarRoute } from './me-avatar'
 export type { WorkspaceLogoOptions, WorkspaceWithLogo } from './workspace-logo'
 export { usersRoute } from './users'
 export {

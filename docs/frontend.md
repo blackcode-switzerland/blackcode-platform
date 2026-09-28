@@ -529,6 +529,41 @@ Adding an app: wire these, modelled on `apps/billing` (its
 `accept-invitation.tsx` are the thinnest wiring of the four). See
 [`adding-an-app.md`](./adding-an-app.md).
 
+## Account settings — one set of tabs in every app
+
+Since 2026-09-28 every app's `/dashboard/settings/*` is drawn from
+`packages/platform-ui/src/account/` (`@blackcode/platform-ui/account/account-settings`
+and `…/account/labels`). The account is one `platform.users` row everywhere,
+so it is one page everywhere: **Profile · Account · API tokens · Preferences**,
+same order, same cards, same `max-w-3xl` column.
+
+| Export | What it draws |
+|---|---|
+| `AccountSettingsFrame` | The tab strip and column. `bare` when the shell already pads |
+| `ProfileSection` | Photo (upload / remove), email as text, name, tagline |
+| `SignedInSection` · `PasswordSection` | Sign-out; the app's own password flow behind a button (`children(close)`) |
+| `TokensSection` | Mint, copy once, list, revoke (confirmed, naming the token). Revoking the token still on screen takes its secret off |
+| `AppearanceSection` | Light / Dark / System via `next-themes` — the browser, never the account |
+
+Same contract as the workspace kit: presentational, callbacks resolve on success
+and **throw** on failure (the app shows its own toast), `link` is the app's
+`next/link`. Each app keeps its own **Account** tab body (deletion rules differ
+per app) inside `SettingsSection` cards.
+
+**Words.** `labels` is a partial over English defaults, and the defaults carry
+**no brand** — b/billing ships rebranded, and its brand-leak guard scans the
+app, not this package. An app that wants its name in a sentence passes the
+label. b/books builds the WHOLE `AccountLabels` from its EN/FR dictionary
+(`components/settings/labels.ts`), typed total rather than partial, so a key
+added to the kit and not translated is a `tsc` error instead of English on a
+French page.
+
+**The photo** goes through `POST/DELETE /api/me/avatar` (`meAvatarRoute` in
+`platform-api`, mounted by every app; `bk profile avatar`), so an app with no
+general upload route can still offer one. `platform.users.avatar_url` is in the
+blob index since `apps/issues` migration 0050 — before it, nothing protected
+an uploaded avatar from storage clean-up.
+
 ## Workspace-scoped URLs
 
 All workspace content lives under **`/dashboard/{ws}/…`** where `{ws}` is the

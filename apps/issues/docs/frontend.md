@@ -39,7 +39,7 @@ URLs* in `/docs/frontend.md` for the model. Detail pages use the workspace
 | `/dashboard/[ws]/analytics` · `/analytics/print` | Analytics · print-to-PDF view |
 | `/dashboard/[ws]/trash` | Recycle bin |
 | `/dashboard/inbox` | Notifications (cross-workspace, unscoped) |
-| `/dashboard/settings/{profile,account,tokens,workspace}` | Settings (own sub-layout + nav, unscoped) |
+| `/dashboard/settings/{profile,account,tokens,preferences}` | Account settings — the shared account kit (`/docs/frontend.md`, *Account settings*), unscoped. Preferences (the theme) since 2026-09-28; `/workspace` redirects to the chooser |
 | `/dashboard/super-admin/*` | Super-admin pages (unscoped) |
 | `/dashboard/workspaces` | Every workspace you belong to, as the shared chooser (`WorkspacesView`); choosing one remembers it. `?new=1` opens the create modal over it |
 | `/dashboard/workspaces/new` | **Redirects** to `/dashboard/workspaces?new=1` (since 2026-09-28; it was a create page) |

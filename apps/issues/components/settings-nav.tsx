@@ -1,35 +1,37 @@
 'use client'
 
+// Account settings' tab strip and column — the shared `AccountSettingsFrame`
+// (2026-09-28), which all four apps render, so the four apps' account settings
+// look alike. Preferences (the theme) joined the other three tabs the same day;
+// the other apps already had it.
+
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { AccountSettingsFrame } from '@blackcode/platform-ui/account/account-settings'
 
 const TABS = [
-  { href: '/dashboard/settings/profile', label: 'Profile' },
-  { href: '/dashboard/settings/account', label: 'Account' },
-  { href: '/dashboard/settings/tokens', label: 'API tokens' },
+  { seg: 'profile', label: 'Profile' },
+  { seg: 'account', label: 'Account' },
+  { seg: 'tokens', label: 'API tokens' },
+  { seg: 'preferences', label: 'Preferences' },
 ]
 
-export function SettingsNav() {
-  const pathname = usePathname()
+export function SettingsFrame({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname() ?? ''
   return (
-    <nav className="flex flex-wrap gap-1 border-b border-border">
-      {TABS.map((t) => {
-        const active = pathname === t.href || pathname?.startsWith(t.href + '/')
-        return (
-          <Link
-            key={t.href}
-            href={t.href}
-            prefetch={false}
-            className={`-mb-px border-b-2 px-4 py-2.5 text-[15px] ${
-              active
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {t.label}
-          </Link>
-        )
+    <AccountSettingsFrame
+      link={Link}
+      tabs={TABS.map((t) => {
+        const href = `/dashboard/settings/${t.seg}`
+        return {
+          href,
+          label: t.label,
+          active: pathname === href || pathname.startsWith(href + '/'),
+          testId: `settings-tab-${t.seg}`,
+        }
       })}
-    </nav>
+    >
+      {children}
+    </AccountSettingsFrame>
   )
 }

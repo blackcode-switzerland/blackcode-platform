@@ -1,44 +1,31 @@
 'use client'
 
-// The tab strip across the top of every account-settings page. Modelled on
-// apps/sales' `SettingsNav` — three tabs, not four: this app has no `ui_mode`
-// (a display preference per workspace), so there is no Preferences tab to carry
-// over. If one is ever added it belongs here, unstyled decisions aside.
+// Account settings' tab strip and column — the shared `AccountSettingsFrame`
+// (2026-09-28), which every app renders, so the four apps' settings look alike.
+// The tabs keep the `settings-tab-*` testids a Playwright walk uses.
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { cn } from '@/lib/utils'
+import { AccountSettingsFrame } from '@blackcode/platform-ui/account/account-settings'
 
 const TABS = [
   { seg: 'profile', label: 'Profile' },
   { seg: 'account', label: 'Account' },
   { seg: 'tokens', label: 'API tokens' },
+  { seg: 'preferences', label: 'Preferences' },
 ]
 
-export function SettingsNav() {
+export function SettingsFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? ''
   return (
-    <nav data-testid="settings-nav" className="flex gap-1 border-b border-border">
-      {TABS.map((t) => {
+    <AccountSettingsFrame
+      link={Link}
+      tabs={TABS.map((t) => {
         const href = `/dashboard/settings/${t.seg}`
-        const active = pathname === href
-        return (
-          <Link
-            key={t.seg}
-            href={href}
-            data-testid={`settings-tab-${t.seg}`}
-            aria-current={active ? 'page' : undefined}
-            className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-sm transition-colors',
-              active
-                ? 'border-primary font-medium text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t.label}
-          </Link>
-        )
+        return { href, label: t.label, active: pathname === href, testId: `settings-tab-${t.seg}` }
       })}
-    </nav>
+    >
+      {children}
+    </AccountSettingsFrame>
   )
 }

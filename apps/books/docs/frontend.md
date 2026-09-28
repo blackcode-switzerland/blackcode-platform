@@ -919,7 +919,13 @@ sentence instead of a button that fails after the click.
 **Account**, **API tokens**, **Preferences** — same order, same labels as
 b/sales.
 
-- **Profile** — name, tagline, photo. `PATCH /api/me`. The email is rendered as
+Since 2026-09-28 all four tabs are drawn by the shared account kit
+(`/docs/frontend.md`, *Account settings*), with every word from the dictionary
+via `components/settings/labels.ts`. Behaviour below is unchanged unless noted.
+
+- **Profile** — name, tagline, photo. `PATCH /api/me`; the photo is an
+  **upload** since 2026-09-28 (`POST/DELETE /api/me/avatar`), not a typed URL.
+  The email is rendered as
   text, not a disabled input: changing it is changing which account you are, in
   every app, and there is no route that does it. A disabled field would imply one
   exists.
@@ -930,8 +936,9 @@ b/sales.
   names the token, for the same reason the CLI's irreversible verbs make the
   caller repeat the target back: an agent losing its credential mid-run does not
   look like a bin icon being clicked, it looks like the API being down.
-- **Preferences** — the theme, and only the theme. b/sales' version holds
-  `ui_mode`, a per-workspace row this app does not have. The page says the choice
+- **Preferences** — the theme (the shared `AppearanceSection`) and the
+  language (this app's own). b/sales' version holds `ui_mode`, a per-workspace
+  row this app does not have. The page says the choice
   lives in the BROWSER; a settings page that does not distinguish "saved to your
   account" from "saved on this laptop" is how somebody concludes the app lost
   their preference.

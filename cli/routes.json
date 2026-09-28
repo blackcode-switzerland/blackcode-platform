@@ -1161,6 +1161,12 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/me/avatar",
+      "command": "bk profile avatar",
+      "app": "platform"
+    },
+    {
+      "method": "DELETE",
       "path": "/api/super-admin/errors",
       "command": "bk super-admin errors delete",
       "app": "platform"
@@ -1253,6 +1259,12 @@
       "method": "PATCH",
       "path": "/api/super-admin/errors/{id}",
       "command": "bk super-admin errors resolve, bk super-admin errors unresolve",
+      "app": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/avatar",
+      "command": "bk profile avatar",
       "app": "platform"
     },
     {
