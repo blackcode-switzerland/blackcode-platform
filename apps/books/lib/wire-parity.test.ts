@@ -1644,7 +1644,10 @@ describe('the wire shapes are what lib/types.ts says they are', () => {
     expect(listed.length + created.length + revoked.length, 'found no envelope keys at all').toBeGreaterThan(0)
 
     expect(listed.sort()).toEqual(['data', 'next_cursor'].sort())
-    expect(created.sort()).toEqual(['accept_url', 'email_sent', 'invitation'].sort())
+    // `invitee_has_account` since 2026-09-28, when the route started sending
+    // email (apps/billing's shape): the web says "they can sign in" or "they
+    // will create an account" from it.
+    expect(created.sort()).toEqual(['accept_url', 'email_sent', 'invitation', 'invitee_has_account'].sort())
     expect(revoked).toEqual(['deleted'])
 
     // ── WHAT THIS CASE CANNOT ASK ──────────────────────────────────────────

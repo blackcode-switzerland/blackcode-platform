@@ -172,6 +172,21 @@ export const booksInvitations = booksSchema.table('invitations', {
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
+/**
+ * `books.user_settings` — this app's memory of which workspace you were in
+ * (migration 0020). Not `platform.users.active_workspace_id`: that
+ * column is read by every deployment as one of ITS ids. Ported from apps/sales.
+ */
+export const booksUserSettings = booksSchema.table('user_settings', {
+  user_id: integer('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  active_workspace_id: integer('active_workspace_id').references(() => booksWorkspaces.id, {
+    onDelete: 'set null',
+  }),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 export type BooksWorkspace = typeof booksWorkspaces.$inferSelect
 export type BooksInvitation = typeof booksInvitations.$inferSelect
 

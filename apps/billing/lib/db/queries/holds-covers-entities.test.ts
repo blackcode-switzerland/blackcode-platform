@@ -99,6 +99,13 @@ const NOT_PERSON_FACING = new Map<string, string>([
       'workspace and nobody would describe losing one as losing their data',
   ],
   [
+    'user_settings',
+    'a bookmark — which workspace this person last had open (migration 0014). It is ' +
+      'keyed by the PERSON, not the workspace: deleting a workspace empties the pointer ' +
+      '(ON DELETE SET NULL) and closing the account removes the row (CASCADE). Nobody ' +
+      'would describe losing it as losing their data',
+  ],
+  [
     'counters',
     'the #number allocator: one row per (workspace, entity type) holding an integer. ' +
       'It has no meaning without the entities it numbers, and those are counted on ' +

@@ -34,9 +34,11 @@ import { getDb } from './db/client'
 import { getValidatedSessionUser } from './auth/session'
 import { APP_SLUG } from './app'
 import {
+  getActiveWorkspaceForUser,
   getWorkspaceForUser,
   listWorkspaceMembers,
   listWorkspacesForUser,
+  setActiveWorkspaceForUser,
 } from './db/queries/workspaces'
 import { booksFootprintSource } from './db/queries/footprint'
 
@@ -70,27 +72,25 @@ async function resolveUser(req: NextRequest) {
  * was right: an app copied from here would have been born unable to serve a
  * request until somebody granted it a workspace in ANOTHER app.
  *
- * ── THE NO-OP BELOW IS THE INTERESTING PART ─────────────────────────────────
- * `setDefaultForUser` does nothing, and that is not an omission.
- * `platform.users.active_workspace_id` is ONE column shared by every deployment.
- * After the split, a scaffold workspace id written into it is read back by
- * `apps/issues` as one of ITS ids — by `/api/meta`, by the dashboard's default
- * picker, and by upload attribution. Writing it would be the
- * `error_events.workspace_id` ambiguity all over again, in the identity table.
- *
- * Nothing is lost: `getDefaultForUser` answers from this app's own tenancy, and
- * `bk books workspace use` persists its choice in the CLI's own per-app
- * config (agent 5 keyed `ActiveWorkspaces` by app slug for exactly this reason).
+ * ── WHERE "YOUR WORKSPACE" IS REMEMBERED ─────────────────────────────────────
+ * Not `platform.users.active_workspace_id`: that is ONE column shared by every
+ * deployment, and a books workspace id written there is read back by
+ * `apps/issues` as one of ITS ids — by `/api/meta`, the dashboard's default
+ * picker and upload attribution. Until 2026-09-28 that reason made
+ * `setDefaultForUser` a no-op, so the web switcher's choice (and
+ * `POST /api/me/active-workspace`) stored nothing. It now writes
+ * `books.user_settings`, apps/sales' answer to the same question; `bk books
+ * workspace use` also keeps its own per-app choice in the CLI config.
  */
 const booksWorkspaceSource: WorkspaceSource = {
   getForUser: (slugOrId, userId) => getWorkspaceForUser(slugOrId, userId),
   listForUser: (userId) => listWorkspacesForUser(userId),
   listMembers: (workspaceId) => listWorkspaceMembers(workspaceId),
-  setDefaultForUser: async () => {},
-  getDefaultForUser: async (userId) => {
-    const mine = await listWorkspacesForUser(userId)
-    return mine.length > 0 ? mine[mine.length - 1] : null
-  },
+  // Remembered in `books.user_settings`, this app's own schema (migration
+  // 0020, 2026-09-28) — never `platform.users.active_workspace_id`, for
+  // the reason above. The shared route resolves membership before calling this.
+  setDefaultForUser: (userId, workspaceId) => setActiveWorkspaceForUser(userId, workspaceId),
+  getDefaultForUser: (userId) => getActiveWorkspaceForUser(userId),
 }
 
 /**

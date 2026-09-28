@@ -41,6 +41,7 @@ import {
   billingHistory,
   billingInvoice,
   billingRecurrence,
+  billingUserSettings,
   billingWorkspaceMembers,
   billingWorkspaces,
   users,
@@ -724,4 +725,66 @@ export async function listInviteCandidates(input: {
     if (a.already_member !== b.already_member) return a.already_member ? 1 : -1
     return (a.name ?? a.email).localeCompare(b.name ?? b.email)
   })
+}
+
+// ---------------------------------------------------------------------------
+// Which workspace you are in — `billing.user_settings` (2026-09-28)
+// ---------------------------------------------------------------------------
+// Ported from apps/sales (`setActiveWorkspaceForUser` and friends). Until this
+// existed, `setDefaultForUser` was a no-op and the switcher's choice was
+// forgotten on the next visit to `/dashboard`.
+
+/**
+ * Remember which workspace this person is working in. Upsert on the primary
+ * key. MEMBERSHIP IS CHECKED BY THE CALLER: the shared route resolves the
+ * target through `getWorkspaceForUser` before calling this.
+ */
+export async function setActiveWorkspaceForUser(userId: number, workspaceId: number): Promise<void> {
+  await getDb()
+    .insert(billingUserSettings)
+    .values({ user_id: userId, active_workspace_id: workspaceId })
+    .onConflictDoUpdate({
+      target: billingUserSettings.user_id,
+      set: { active_workspace_id: workspaceId, updated_at: new Date() },
+    })
+}
+
+/**
+ * The RAW stored pointer — null when nothing has been chosen. `/dashboard`
+ * needs to tell "they chose this" from "we picked one", so this does not fall
+ * back; callers that act on it resolve it against the membership list.
+ */
+export async function getStoredActiveWorkspaceId(userId: number): Promise<number | null> {
+  const [row] = await getDb()
+    .select({ id: billingUserSettings.active_workspace_id })
+    .from(billingUserSettings)
+    .where(eq(billingUserSettings.user_id, userId))
+    .limit(1)
+  return row?.id ?? null
+}
+
+/**
+ * The DECISION, pure so its test calls this rather than a copy. The pointer is
+ * honoured only while the person is still a member (a foreign key can say the
+ * workspace exists, never that you are still in it); otherwise the FIRST
+ * membership, which for most people is their own — minted at sign-in, before
+ * they could accept anyone else's invitation. `memberships` must be
+ * oldest-first, which is what `listWorkspacesForUser` returns.
+ */
+export function resolveActiveWorkspace(
+  memberships: WorkspaceMembershipRef[],
+  storedId: number | null
+): WorkspaceMembershipRef | null {
+  if (memberships.length === 0) return null
+  if (storedId != null) {
+    const remembered = memberships.find((w) => w.id === storedId)
+    if (remembered) return remembered
+  }
+  return memberships[0]
+}
+
+/** The workspace this person was last in — or their fallback. */
+export async function getActiveWorkspaceForUser(userId: number): Promise<WorkspaceMembershipRef | null> {
+  const [mine, storedId] = await Promise.all([listWorkspacesForUser(userId), getStoredActiveWorkspaceId(userId)])
+  return resolveActiveWorkspace(mine, storedId)
 }

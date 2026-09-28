@@ -24,15 +24,14 @@
 // exactly one app, and "is this person a member?" answers "may they use this
 // app?" completely.
 
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import type {
   WorkspaceMemberRef,
   WorkspaceMembershipRef,
   WorkspaceRef,
 } from '@blackcode/platform-api'
 import { getDb } from '../client'
-import { APP_NAME } from '@/lib/app'
-import { booksWorkspaceMembers, booksWorkspaces, users } from '../schema'
+import { booksUserSettings, booksWorkspaceMembers, booksWorkspaces, users } from '../schema'
 
 /**
  * The five columns shared code reads. Projected explicitly, never `SELECT *`.
@@ -269,55 +268,27 @@ export class WorkspaceRefused extends Error {
 }
 
 /**
- * ONE WORKSPACE PER PERSON, FOR NOW — the policy, in the one place that mints
- * a workspace on request.
+ * Create a workspace on request — `POST /api/workspaces`, `bk books workspace
+ * create`, and the web's "Create workspace".
  *
- * ── WHY, AND WHY IT IS A POLICY RATHER THAN A MODEL CHANGE ─────────────────
- * The tables are multi-workspace and stay that way: `books.workspaces` has
- * owners and members, invitations exist, and every read is already scoped. What
- * is NOT ready is the human half — there is no invitation-accept route mounted
- * (`invite send` reports success on an invitation nobody can accept), and a
- * second workspace is therefore a room only its creator can ever enter.
+ * ── ONE WORKSPACE PER PERSON WAS LIFTED ON 2026-09-28 ──────────────────────
+ * Until then this refused (`one_workspace_per_person`) anyone who already
+ * owned a workspace, because invitations could be sent but not accepted and a
+ * second workspace was a room only its creator could enter — and because the
+ * web had no switcher, so a browser and an agent could end up in different
+ * rooms with no sign saying which. Both reasons ended the same day: the
+ * invitee's half landed (`lib/db/queries/invitations.ts`), and the web gained a
+ * switcher that says which workspace you are in. The header of the previous
+ * version said lifting it would be "deleting this block", and it was.
  *
- * It also caused real confusion on 2026-08-20: an agent creating its own
- * workspace left the person's books in one workspace and their browser in
- * another, and the dashboard showed nothing while `bk books entity list` showed
- * everything. Nothing was wrong; there were simply two rooms and no sign
- * saying which you were in.
- *
- * So this is deliberately ONE `if`, in ONE function, refusing with the reason.
- * Lifting it when invitations land is deleting this block — not unpicking a
- * constraint, a trigger, or a column that assumed singularity. Nothing else in
- * this app was told that a person has one workspace, and nothing should be:
- * `getDefaultForUser` still answers "the newest one you belong to", and
- * `listForUser` still returns a list.
- *
- * ── WHAT IT DOES NOT TOUCH ─────────────────────────────────────────────────
- * `ensureWorkspaceForUser` — sign-in — is untouched and already idempotent:
- * it mints at most one, and returns the existing one forever after. That IS the
- * default workspace this restriction leaves in place, so a person who has never
- * created anything is unaffected and always has exactly one.
- *
- * `addMember` is untouched too. Somebody INVITED into another person's
- * workspace legitimately belongs to two, and the day that flow works this rule
- * must not have quietly become "one membership per person". The count below is
- * of workspaces this person OWNS, for that reason.
+ * A workspace still holds ANY number of books; a second company is still
+ * usually `bk books entity create`, not a second workspace. What a second
+ * workspace is FOR is a second set of people.
  */
 export async function createWorkspaceForUser(
   userId: number,
   name: string
 ): Promise<WorkspaceMembershipRef> {
-  const mine = await listWorkspacesForUser(userId)
-  const owned = mine.filter((w) => w.member_role === 'owner')
-  if (owned.length > 0) {
-    const first = owned[0]
-    throw new WorkspaceRefused(
-      'one_workspace_per_person',
-      `you already have a workspace ("${first.name}", slug ${first.slug}) and ${APP_NAME} gives one per person for now`,
-      `work in it: \`bk books workspace use ${first.slug}\`. A workspace holds ANY number of books, so a second company is \`bk books entity create\` — not a second workspace. Sharing a workspace with somebody else needs the invitation flow, which is not open yet`
-    )
-  }
-
   const trimmed = name.trim()
   return getDb().transaction((tx) => mintWorkspace(tx, userId, trimmed, slugify(trimmed)))
 }
@@ -356,4 +327,353 @@ export async function getMembership(
     )
     .limit(1)
   return rows[0] ?? null
+}
+
+// ---------------------------------------------------------------------------
+// Administration — rename, transfer, remove a member, delete (2026-09-28)
+// ---------------------------------------------------------------------------
+// Ported from apps/billing (which ported them from apps/sales; never imported —
+// apps do not import each other). Until this date books served create and
+// nothing else, and its web surface never named a workspace (decision D-C,
+// reversed the same day — apps/books/docs/frontend.md §4). No event row: this
+// app has no tenancy event log, and `books.entry`'s history is the record of the
+// books, not of who was let into the room.
+
+/** The whole-row projection a PATCH answers with — the bare entity. */
+export async function updateWorkspace(
+  workspaceId: number,
+  patch: { name: string }
+): Promise<WorkspaceRef | null> {
+  const [row] = await getDb()
+    .update(booksWorkspaces)
+    .set({ name: patch.name, updated_at: new Date() })
+    .where(eq(booksWorkspaces.id, workspaceId))
+    .returning(WS_COLUMNS)
+  return row ?? null
+}
+
+/**
+ * Every `books.*` table with a `workspace_id`, split by whether a row in it
+ * means the workspace has HELD something.
+ *
+ * ── WHY THE CHECK IS HERE AND NOT IN THE DATABASE ──────────────────────────
+ * apps/billing can lean on its triggers: every retained billing table has a
+ * `BEFORE DELETE` trigger, and a row-level trigger fires on an `ON DELETE
+ * CASCADE` too, so a workspace holding an invoice cannot be deleted by anybody.
+ * Books is not built that way. Measured 2026-09-28 against the catalog: only
+ * `books.entry` and `books.ri_entry` refuse a delete. A cascade from
+ * `books.workspaces` would take accounts, fiscal years, opening balances,
+ * sources, pieces and the books themselves, silently, provided nothing had been
+ * posted — and `REVOKE DELETE` does not stop it, because referential actions
+ * run as the table owner.
+ *
+ * So the rule is decided HERE, and it is the strict one the product chose: a
+ * workspace can be deleted only while it has never held anything at all.
+ *
+ * `lib/db/workspace-holdings.test.ts` reads `schema.ts` and fails when a table
+ * with a `workspace_id` is in neither list — a table added later must be
+ * classified, or it would be one a delete could empty without asking.
+ */
+export const HELD_TABLES = [
+  'entity',
+  'account',
+  'exercice',
+  'opening_balance',
+  'entry',
+  'ri_entry',
+  'patrimoine',
+  'source',
+  'source_pull',
+  'piece_inbox',
+  'drive_manifest',
+  'rule',
+  'runbook',
+  'analysis',
+  'analytique_category',
+  'tax_params',
+] as const
+
+/** Tenancy bookkeeping: rows that exist for every workspace and say nothing about its books. */
+export const TENANCY_TABLES = ['workspace_members', 'invitations', 'counters'] as const
+
+export type WorkspaceHoldings = Record<(typeof HELD_TABLES)[number], number>
+
+export async function workspaceHoldings(workspaceId: number): Promise<WorkspaceHoldings> {
+  const counts = HELD_TABLES.map(
+    (t) => sql`(SELECT COUNT(*)::int FROM ${sql.identifier('books')}.${sql.identifier(t)} WHERE workspace_id = ${workspaceId}) AS ${sql.identifier(t)}`
+  )
+  const r = await getDb().execute<Record<string, number>>(sql`SELECT ${sql.join(counts, sql`, `)}`)
+  const row = r.rows[0] ?? {}
+  return Object.fromEntries(HELD_TABLES.map((t) => [t, Number(row[t] ?? 0)])) as WorkspaceHoldings
+}
+
+export function holdsAnything(h: WorkspaceHoldings): boolean {
+  return Object.values(h).some((n) => n > 0)
+}
+
+/** "2 books, 140 entries" — the non-zero ones, in the words a person uses. */
+export function describeHoldings(h: WorkspaceHoldings): string {
+  const words: Partial<Record<keyof WorkspaceHoldings, [string, string]>> = {
+    entity: ['book', 'books'],
+    entry: ['entry', 'entries'],
+    ri_entry: ['entry', 'entries'],
+    account: ['account', 'accounts'],
+    exercice: ['fiscal year', 'fiscal years'],
+    source: ['source', 'sources'],
+    piece_inbox: ['piece', 'pieces'],
+    analysis: ['analysis', 'analyses'],
+  }
+  const parts: string[] = []
+  let other = 0
+  for (const t of HELD_TABLES) {
+    const n = h[t]
+    if (n === 0) continue
+    const w = words[t]
+    if (w) parts.push(`${n} ${n === 1 ? w[0] : w[1]}`)
+    else other += n
+  }
+  if (other > 0) parts.push(`${other} other record${other === 1 ? '' : 's'}`)
+  return parts.join(', ')
+}
+
+/** Why a delete was refused, with the counts that caused it. */
+export class WorkspaceRetained extends Error {
+  constructor(public holdings: WorkspaceHoldings) {
+    super(`this workspace holds ${describeHoldings(holdings)}`)
+  }
+}
+
+/**
+ * Delete a workspace — ONLY one that has never held anything. Checked, then
+ * deleted in one transaction with the workspace row locked, so a book created
+ * between the check and the delete is either seen by the check or blocked by
+ * the lock (every books row references the workspace, and inserting one takes
+ * a KEY SHARE lock on it that conflicts with this FOR UPDATE).
+ */
+export async function deleteWorkspace(workspaceId: number): Promise<boolean> {
+  return await getDb().transaction(async (tx) => {
+    const locked = await tx
+      .select({ id: booksWorkspaces.id })
+      .from(booksWorkspaces)
+      .where(eq(booksWorkspaces.id, workspaceId))
+      .for('update')
+      .limit(1)
+    if (!locked[0]) return false
+    const counts = HELD_TABLES.map(
+      (t) => sql`(SELECT COUNT(*)::int FROM ${sql.identifier('books')}.${sql.identifier(t)} WHERE workspace_id = ${workspaceId}) AS ${sql.identifier(t)}`
+    )
+    const r = await tx.execute<Record<string, number>>(sql`SELECT ${sql.join(counts, sql`, `)}`)
+    const row = r.rows[0] ?? {}
+    const holdings = Object.fromEntries(HELD_TABLES.map((t) => [t, Number(row[t] ?? 0)])) as WorkspaceHoldings
+    if (holdsAnything(holdings)) throw new WorkspaceRetained(holdings)
+    const rows = await tx
+      .delete(booksWorkspaces)
+      .where(eq(booksWorkspaces.id, workspaceId))
+      .returning({ id: booksWorkspaces.id })
+    return rows.length > 0
+  })
+}
+
+/**
+ * Hand the workspace to another MEMBER. The previous owner stays, as a member.
+ * One transaction: `owner_id` and the membership roles must never disagree.
+ */
+export async function transferOwnership(workspaceId: number, newOwnerUserId: number): Promise<void> {
+  await getDb().transaction(async (tx) => {
+    const wsRows = await tx
+      .select({ id: booksWorkspaces.id, owner_id: booksWorkspaces.owner_id })
+      .from(booksWorkspaces)
+      .where(eq(booksWorkspaces.id, workspaceId))
+      .for('update')
+      .limit(1)
+    if (!wsRows[0]) throw new Error('workspace_not_found')
+
+    const memberRow = await tx
+      .select({ id: booksWorkspaceMembers.id })
+      .from(booksWorkspaceMembers)
+      .where(
+        and(eq(booksWorkspaceMembers.workspace_id, workspaceId), eq(booksWorkspaceMembers.user_id, newOwnerUserId))
+      )
+      .limit(1)
+    if (!memberRow[0]) throw new Error('not_a_member')
+    if (wsRows[0].owner_id === newOwnerUserId) return
+
+    await tx
+      .update(booksWorkspaceMembers)
+      .set({ role: 'member' })
+      .where(
+        and(eq(booksWorkspaceMembers.workspace_id, workspaceId), eq(booksWorkspaceMembers.user_id, wsRows[0].owner_id))
+      )
+    await tx
+      .update(booksWorkspaceMembers)
+      .set({ role: 'owner' })
+      .where(
+        and(eq(booksWorkspaceMembers.workspace_id, workspaceId), eq(booksWorkspaceMembers.user_id, newOwnerUserId))
+      )
+    await tx
+      .update(booksWorkspaces)
+      .set({ owner_id: newOwnerUserId, updated_at: new Date() })
+      .where(eq(booksWorkspaces.id, workspaceId))
+  })
+}
+
+/**
+ * Remove somebody from a workspace. False when they were not in it. Refusing
+ * to remove the OWNER is the route's job. What they recorded stays, attributed:
+ * `created_by` columns reference `platform.users`, not the membership.
+ */
+export async function removeMember(workspaceId: number, userId: number): Promise<boolean> {
+  const rows = await getDb()
+    .delete(booksWorkspaceMembers)
+    .where(and(eq(booksWorkspaceMembers.workspace_id, workspaceId), eq(booksWorkspaceMembers.user_id, userId)))
+    .returning({ id: booksWorkspaceMembers.id })
+  return rows.length > 0
+}
+
+/**
+ * Who this owner could invite without retyping an address: everyone they share
+ * a BOOKS workspace with — plus, for a super admin, every live account
+ * (`from_platform: true`). The JOIN is the privacy guard for an ordinary owner:
+ * a person you share no books workspace with is not discoverable here.
+ */
+export interface InviteCandidate {
+  user_id: number
+  email: string
+  name: string | null
+  avatar_url: string | null
+  already_member: boolean
+  invited: boolean
+  shared_workspaces: string[]
+  from_platform: boolean
+}
+
+export async function listInviteCandidates(input: {
+  userId: number
+  currentWorkspaceId: number
+  includePlatform: boolean
+}): Promise<InviteCandidate[]> {
+  const db = getDb()
+  const [currentRows, pendingRows, sharedRows] = await Promise.all([
+    db
+      .select({ user_id: booksWorkspaceMembers.user_id })
+      .from(booksWorkspaceMembers)
+      .where(eq(booksWorkspaceMembers.workspace_id, input.currentWorkspaceId)),
+    db.execute<{ email: string }>(sql`
+      SELECT email FROM books.invitations
+      WHERE workspace_id = ${input.currentWorkspaceId} AND status = 'pending'
+    `),
+    db.execute<{ user_id: number; email: string; name: string | null; avatar_url: string | null; workspace_name: string }>(sql`
+      SELECT u.id AS user_id, u.email, u.name, u.avatar_url, w.name AS workspace_name
+      FROM books.workspace_members mine
+      JOIN books.workspace_members theirs ON theirs.workspace_id = mine.workspace_id
+      JOIN books.workspaces w ON w.id = mine.workspace_id
+      JOIN platform.users u ON u.id = theirs.user_id
+      WHERE mine.user_id = ${input.userId}
+        AND theirs.user_id <> ${input.userId}
+        AND u.deleted_at IS NULL
+    `),
+  ])
+
+  const memberIds = new Set(currentRows.map((r) => r.user_id))
+  const pendingEmails = new Set(pendingRows.rows.map((r) => r.email.toLowerCase()))
+
+  const byUser = new Map<number, InviteCandidate>()
+  for (const r of sharedRows.rows) {
+    const entry = byUser.get(r.user_id) ?? {
+      user_id: r.user_id,
+      email: r.email,
+      name: r.name,
+      avatar_url: r.avatar_url,
+      already_member: memberIds.has(r.user_id),
+      invited: pendingEmails.has(r.email.toLowerCase()),
+      shared_workspaces: [],
+      from_platform: false,
+    }
+    if (!entry.shared_workspaces.includes(r.workspace_name)) entry.shared_workspaces.push(r.workspace_name)
+    byUser.set(r.user_id, entry)
+  }
+
+  if (input.includePlatform) {
+    const platformRows = await db.execute<{ user_id: number; email: string; name: string | null; avatar_url: string | null }>(sql`
+      SELECT u.id AS user_id, u.email, u.name, u.avatar_url
+      FROM platform.users u
+      WHERE u.deleted_at IS NULL AND u.id <> ${input.userId}
+    `)
+    for (const r of platformRows.rows) {
+      if (byUser.has(r.user_id)) continue
+      byUser.set(r.user_id, {
+        ...r,
+        already_member: memberIds.has(r.user_id),
+        invited: pendingEmails.has(r.email.toLowerCase()),
+        shared_workspaces: [],
+        from_platform: true,
+      })
+    }
+  }
+
+  return [...byUser.values()].sort(
+    (a, b) => Number(a.from_platform) - Number(b.from_platform) || (a.name ?? a.email).localeCompare(b.name ?? b.email)
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Which workspace you are in — `books.user_settings` (2026-09-28)
+// ---------------------------------------------------------------------------
+// Ported from apps/sales (`setActiveWorkspaceForUser` and friends). Until this
+// existed, `setDefaultForUser` was a no-op and the switcher's choice was
+// forgotten on the next visit to `/dashboard`.
+
+/**
+ * Remember which workspace this person is working in. Upsert on the primary
+ * key. MEMBERSHIP IS CHECKED BY THE CALLER: the shared route resolves the
+ * target through `getWorkspaceForUser` before calling this.
+ */
+export async function setActiveWorkspaceForUser(userId: number, workspaceId: number): Promise<void> {
+  await getDb()
+    .insert(booksUserSettings)
+    .values({ user_id: userId, active_workspace_id: workspaceId })
+    .onConflictDoUpdate({
+      target: booksUserSettings.user_id,
+      set: { active_workspace_id: workspaceId, updated_at: new Date() },
+    })
+}
+
+/**
+ * The RAW stored pointer — null when nothing has been chosen. `/dashboard`
+ * needs to tell "they chose this" from "we picked one", so this does not fall
+ * back; callers that act on it resolve it against the membership list.
+ */
+export async function getStoredActiveWorkspaceId(userId: number): Promise<number | null> {
+  const [row] = await getDb()
+    .select({ id: booksUserSettings.active_workspace_id })
+    .from(booksUserSettings)
+    .where(eq(booksUserSettings.user_id, userId))
+    .limit(1)
+  return row?.id ?? null
+}
+
+/**
+ * The DECISION, pure so its test calls this rather than a copy. The pointer is
+ * honoured only while the person is still a member (a foreign key can say the
+ * workspace exists, never that you are still in it); otherwise the FIRST
+ * membership, which for most people is their own — minted at sign-in, before
+ * they could accept anyone else's invitation. `memberships` must be
+ * oldest-first, which is what `listWorkspacesForUser` returns.
+ */
+export function resolveActiveWorkspace(
+  memberships: WorkspaceMembershipRef[],
+  storedId: number | null
+): WorkspaceMembershipRef | null {
+  if (memberships.length === 0) return null
+  if (storedId != null) {
+    const remembered = memberships.find((w) => w.id === storedId)
+    if (remembered) return remembered
+  }
+  return memberships[0]
+}
+
+/** The workspace this person was last in — or their fallback. */
+export async function getActiveWorkspaceForUser(userId: number): Promise<WorkspaceMembershipRef | null> {
+  const [mine, storedId] = await Promise.all([listWorkspacesForUser(userId), getStoredActiveWorkspaceId(userId)])
+  return resolveActiveWorkspace(mine, storedId)
 }

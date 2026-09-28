@@ -6,6 +6,15 @@ entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
 
+## 2026-09-28 — Fix: the chosen workspace is actually remembered
+
+Not breaking. `POST /api/me/active-workspace` (the web switcher, and `bk billing
+workspace use`) answered 200 and stored nothing: the write was a deliberate
+no-op, because the shared `platform.users.active_workspace_id` column belongs to
+b/issues. The choice is now stored in this app's own `billing.user_settings`
+(migration 0014), so `/dashboard` reopens the workspace you last chose instead
+of guessing. The CLI's own per-app choice is unchanged.
+
 ## 2026-09-28 — The screens close out: per-rate VAT, a document block, history by year
 
 Not breaking. `BILLING_EMAIL_ACCENT` now defaults to the violet the web UI
