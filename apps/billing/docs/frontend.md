@@ -49,6 +49,24 @@ companies.
   `md+`, cards below), states, `Money`, `DateText`, form fields.
 - one folder per screen under `components/`.
 
+### Two decisions, 2026-09-28
+
+**The screens are English only, and that is settled.** The phase tickets asked
+for FR/EN chrome through `platform-i18n`. It is dropped: `apps/issues` and
+`apps/sales` are English too, and the artefact a client actually reads — the
+invoice — already carries its own document language (fr/de/it/en, chosen per
+invoice, rendered by `lib/pdf/copy.ts`). Interface language becomes one phase
+across every app the day a customer works in the app daily in French, not a
+billing-only detour. Nothing here restates a language: the document language is
+the invoice's field.
+
+**A series keeps its "Generate next" button.** The phase-4 ticket said
+generating is an agent's job and the screen should only show the due state.
+Kept deliberately: a person looking at a due series should not have to open a
+terminal. The button sends the `next_period` the card displays, never one it
+computes, and renders `409 already_generated` as the existing invoice with a
+link — the rule the ticket was protecting.
+
 ### The rules the screens keep
 
 - **Client components calling the routes `bk` calls.** No server actions. The

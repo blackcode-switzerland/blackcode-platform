@@ -6,6 +6,16 @@ entry first, so an agent can keep an integration current without reading the
 repo. Say what changed, whether it is breaking, and how a client should adapt.
 
 
+## 2026-09-28 — The invoice email carries the app's own colour
+
+Not breaking. `BILLING_EMAIL_ACCENT` now defaults to the violet the web UI
+ships (`#6d4aff`, white-on-it measured 5.15:1) instead of the green chosen
+before the app had screens. A deployment that sets the variable is unaffected.
+
+The web UI also prefills a new recurring series with twelve occurrences (still
+required, still no open-ended series), and the company form states what the UID
+and VAT number must be checked against before a real invoice.
+
 ## 2026-09-25 — The payment slip no longer prints the reference
 
 Not breaking for any client: no route, field or command changed shape.

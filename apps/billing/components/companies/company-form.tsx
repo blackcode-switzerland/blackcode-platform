@@ -308,10 +308,10 @@ export function CompanyFormFields({
               <option value="no">No</option>
             </Select>
           </FormField>
-          <FormField label="UID" htmlFor="input-uid">
+          <FormField label="UID" htmlFor="input-uid" hint="CHE-123.456.789. Prints on the bill — check it against the commercial register before the first real invoice.">
             <Input id="input-uid" data-testid="input-uid" value={form.uid} onChange={(e) => set('uid', e.target.value)} />
           </FormField>
-          <FormField label="VAT number" htmlFor="input-vat_number">
+          <FormField label="VAT number" htmlFor="input-vat_number" hint="CHE-123.456.789 TVA/MWST. Required once VAT registered is on; verify it with the ESTV.">
             <Input id="input-vat_number" data-testid="input-vat_number" value={form.vat_number} onChange={(e) => set('vat_number', e.target.value)} />
           </FormField>
         </FormGrid>

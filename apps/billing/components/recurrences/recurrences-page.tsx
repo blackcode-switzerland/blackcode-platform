@@ -139,7 +139,9 @@ function CreateRecurrenceDialog({ ws, open, onClose }: { ws: string; open: boole
     template: '',
     frequency: 'monthly' as RecurrenceFrequency,
     start_date: '',
-    occurrences_total: '',
+    // P13's default: twelve monthly occurrences. Required, never open-ended —
+    // the form prefills the common case instead of leaving it blank.
+    occurrences_total: '12',
     label_en: '',
     label_fr: '',
   })
