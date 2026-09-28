@@ -7,6 +7,21 @@ the `bk` CLI itself. Newest first.
 Each app has its own file beside this one. A change touching shared platform data
 goes here, **not** in the app that happened to prompt it.
 
+## 2026-09-28 — An API token's "last used" is now a day, not a moment
+
+Not breaking; no route or command changed, and every app picks it up.
+
+- `last_used_at` on `platform.api_tokens` is now written **at most once per UTC
+  day**. Every authenticated request used to `UPDATE` the row, so an agent loop
+  made one write per call and kept the database awake for a value nobody could
+  read at that precision. The token list (web and `bk token list`) already shows
+  a date, so what you see is unchanged.
+- **How to adapt:** if anything treated `last_used_at` as "when was this token
+  last active to the second", it no longer can — the value is the first request
+  of the most recent day the token was used. Nothing in this repo does.
+- Verification itself is unchanged: an unknown, expired or malformed token is
+  refused exactly as before.
+
 ## 2026-09-28 — Profile photos by upload in every app; one account-settings page
 
 Not breaking; additive.

@@ -35,6 +35,22 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-09-28 — The inbox and the project board no longer poll; the inbox has a refresh button
+
+Not breaking; web only — no route, no `bk` command and no response shape changed.
+
+- The project **kanban board** also re-fetched every 2 minutes and no longer
+  does. It refreshes on window focus and after a status change.
+
+- The sidebar's unread badge used to re-ask the server every 2 minutes for as
+  long as a tab was open, which kept the database awake all day (Neon bills
+  compute by awake time). It now refreshes when the window regains focus, when
+  you navigate, and after any inbox action (mark read, archive).
+- The inbox header has a **Refresh** button that reloads the list and the badge
+  now. It spins while the request is in flight.
+- **For agents:** nothing to adapt. `bk issues inbox list` was always a fresh
+  read; this only removes a background timer from the web page.
+
 ## 2026-09-28 — Workspace logos go through `…/logo`, and are finally protected from clean-up
 
 Not breaking. `POST` / `DELETE /api/workspaces/{ws}/logo` (`bk issues workspace

@@ -7,6 +7,7 @@ import {
   ArchiveX,
   Check,
   Inbox as InboxIcon,
+  RefreshCw,
   AtSign,
   UserPlus,
   Users,
@@ -141,7 +142,7 @@ export function InboxView() {
   const { data: workspaces } = useQuery({ queryKey: ['me-workspaces'], queryFn: fetchWorkspaces })
   const workspaceById = new Map((workspaces ?? []).map((w) => [w.id, w]))
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ['inbox', tab],
     queryFn: () => {
       const params = new URLSearchParams()
@@ -269,6 +270,19 @@ export function InboxView() {
                 {t === 'all' ? 'All' : t === 'unread' ? 'Unread' : 'Archived'}
               </button>
             ))}
+            <button
+              onClick={() => {
+                queryClient.invalidateQueries({ queryKey: ['inbox'] })
+                queryClient.invalidateQueries({ queryKey: ['inbox-unread'] })
+              }}
+              disabled={isFetching}
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary disabled:opacity-60"
+              title="Refresh"
+              aria-label="Refresh inbox"
+              data-testid="inbox-refresh"
+            >
+              <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+            </button>
             {(data?.unread_count ?? 0) > 0 && tab !== 'archived' ? (
               <button
                 onClick={() => markRead.mutate({ all: true })}

@@ -163,7 +163,8 @@ export function KanbanBoard({
     },
     refetchOnWindowFocus: true,
     staleTime: 10000, // Consider data stale after 10 seconds
-    refetchInterval: 120000, // Refetch every 2 minutes
+    // No refetchInterval: a timer kept the database awake for as long as a board
+    // was open. It refreshes on window focus and after any status change.
   })
 
   const updateIssueStatus = useMutation({
