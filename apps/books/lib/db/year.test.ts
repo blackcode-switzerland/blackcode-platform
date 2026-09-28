@@ -288,6 +288,66 @@ d('starting a book and ending a year', () => {
     expect(r.totalPassif).toBe('50000.00')
   })
 
+  // blackcode-issues #100. Replacing a set is the door's whole contract, and
+  // until 0022 it had never once succeeded in production: `books_app` had no
+  // DELETE, and on a role that did, `trg_opening_frozen` returned NULL on
+  // DELETE and silently kept the old rows. Replaced TWICE, ending on the set
+  // above, because the close below carries exactly those figures.
+  it('replaces the first year\'s set, twice, keeping only the latest', async () => {
+    const { setOpenings, listOpenings } = await import('./queries/openings')
+    const held = async () =>
+      (await listOpenings(entity.id, x2026.id))
+        .map((o) => `${o.account_no}=${Number(o.amount).toFixed(2)}`)
+        .sort()
+
+    const r1 = await setOpenings(ws, entity.id, x2026, [
+      { account: '1020', amount: '100.00' },
+      { account: '2800', amount: '100.00' },
+    ])
+    expect(r1.written).toBe(2)
+    expect(await held(), 'the old four rows are gone, not kept beside the new two').toEqual([
+      '1020=100.00',
+      '2800=100.00',
+    ])
+
+    const r2 = await setOpenings(ws, entity.id, x2026, [
+      { account: '1020', amount: '50000.00' },
+      { account: '2000', amount: '5000.00' },
+      { account: '2800', amount: '20000.00' },
+      { account: '2970', amount: '25000.00' },
+    ])
+    expect(r2.written).toBe(4)
+    expect(await held()).toEqual([
+      '1020=50000.00',
+      '2000=5000.00',
+      '2800=20000.00',
+      '2970=25000.00',
+    ])
+  })
+
+  // The half of #100 no test could see: every suite ran as a role that still
+  // held DELETE. Asked of the catalog, so it holds whichever role DATABASE_URL
+  // is. The positive checks come first — a books_app granted nothing would
+  // otherwise pass the negative one (CLAUDE.md finding #16).
+  it('0022: books_app may replace openings, and still may not delete an entry', async () => {
+    const role = await db.execute(sql`SELECT 1 FROM pg_roles WHERE rolname = 'books_app'`)
+    if (role.rows.length === 0) {
+      process.stderr.write(
+        '\n  year.test.ts: role books_app does not exist here, so its grants were NOT checked.\n'
+      )
+      return
+    }
+    const priv = async (table: string, action: string) =>
+      (
+        await db.execute(
+          sql`SELECT has_table_privilege('books_app', ${table}, ${action}) AS ok`
+        )
+      ).rows[0].ok
+    expect(await priv('books.opening_balance', 'INSERT')).toBe(true)
+    expect(await priv('books.opening_balance', 'DELETE'), 'setOpenings deletes before it inserts').toBe(true)
+    expect(await priv('books.entry', 'DELETE'), "0005's no-hard-delete still stands for entries").toBe(false)
+  })
+
   // -------------------------------------------------------------------------
   // the close
   // -------------------------------------------------------------------------
@@ -402,6 +462,34 @@ d('starting a book and ending a year', () => {
           AND exercice_id = (SELECT id FROM books.exercice WHERE entity_id = ${entity.id} AND year = 2026)`)
     )
     expect(said).toMatch(/part of what was filed/)
+  })
+
+  // 0022 changed this trigger's RETURN; a closed year must still refuse every
+  // verb, at the door and at the table.
+  it('a closed year still refuses a replacement, at the door and at the table', async () => {
+    const { setOpenings } = await import('./queries/openings')
+    const { listExercices } = await import('./queries/statutory')
+    const closed = (await listExercices(ws, entity.id)).find((x) => x.year === 2026)!
+    expect(closed.status).toBe('closed')
+    await expect(
+      setOpenings(ws, entity.id, closed, [
+        { account: '1020', amount: '1.00' },
+        { account: '2800', amount: '1.00' },
+      ])
+    ).rejects.toMatchObject({ code: 'exercice_closed' })
+
+    for (const stmt of [
+      sql`UPDATE books.opening_balance SET amount = amount
+          WHERE exercice_id = ${closed.id}`,
+      sql`INSERT INTO books.opening_balance (workspace_id, entity_id, exercice_id, account_no, amount)
+          VALUES (${ws}, ${entity.id}, ${closed.id}, '1000', '1.00')`,
+    ]) {
+      expect(await refusal(() => db.execute(stmt))).toMatch(/part of what was filed/)
+    }
+    const left = await db.execute(
+      sql`SELECT count(*)::int AS n FROM books.opening_balance WHERE exercice_id = ${closed.id}`
+    )
+    expect(left.rows[0].n, 'the filed openings are all still there').toBe(4)
   })
 })
 

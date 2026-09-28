@@ -148,6 +148,13 @@
       "when": 1790586000000,
       "tag": "0021_books_workspace_logo",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790668800000,
+      "tag": "0022_openings_can_be_replaced",
+      "breakpoints": true
     }
   ]
 }

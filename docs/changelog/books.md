@@ -11,6 +11,18 @@ complete usage guide, embedded in the binary, so it always describes the version
 you are running. For live values (vocabularies, limits, your books), run
 **`bk meta --app-server books`** and `bk books entity list`.
 
+## 2026-09-29 — `bk books opening set` works: it returned 500 for every payload
+
+Fix, not breaking. `PUT /api/workspaces/{ws}/openings` (`bk books opening set`)
+failed with `500 internal_error` on every call, including a balanced first set
+on a book's first year. The app role had no DELETE on opening balances, and the
+command replaces the whole set by deleting then inserting. Migration 0022 grants
+it back and fixes the table trigger that would otherwise have silently kept the
+old rows on a replacement. Nothing changes for a client: the same command, the
+same whole-set semantics, the same refusals — a closed year, or any year but a
+book's first, is still refused. If you gave up on typing openings, run the same
+`set` again.
+
 ## 2026-09-28 — Workspaces can carry a logo — the one file books stores
 
 Not breaking; additive. `books.workspaces.logo_url` (migration 0021), set with

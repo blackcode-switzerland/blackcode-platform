@@ -147,4 +147,7 @@ REVOKE ALL ON SCHEMA drizzle FROM books_app;
 --   WHERE grantee = 'books_app' AND table_schema = 'books'
 --     AND privilege_type = 'DELETE';
 --   -- must NOT list: entry, entry_line, ri_entry, patrimoine, account,
---   -- opening_balance, exercice, statement_position
+--   -- exercice, statement_position
+--   -- MUST list opening_balance: 0022 granted it back (blackcode-issues #100),
+--   -- because setOpenings replaces a first year's set with DELETE-then-INSERT;
+--   -- trg_opening_frozen is what keeps a closed year's openings fixed.
