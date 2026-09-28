@@ -97,10 +97,15 @@ export const EMAIL_PLACEHOLDER = `you@${CONTACT_EMAIL.slice(CONTACT_EMAIL.indexO
  * **0.4760**, so white on it is (1.0 + 0.05) / (0.4760 + 0.05) = **2.00:1**.
  * Unreadable: AA needs 4.5:1 for body text and 3:1 even for large text.
  *
- * `#0f6b44` has relative luminance **0.1103**, giving **6.55:1**. It passes AA
- * for body text with real margin, and it is still unmistakably this app's green
- * — the point of the field is that a b/billing message arrives in b/billing's
- * colour rather than in the issues blue.
+ * `#0f6b44` (green) was the value until 2026-09-28, chosen before the app had
+ * screens. The web UI shipped violet (`app/globals.css`, D-4), and an email in
+ * another colour than the product it comes from reads as a different sender —
+ * so the accent follows the UI now.
+ *
+ * `#6d4aff` — light mode's `--primary` — has relative luminance **0.1537**,
+ * giving white-on-it **5.15:1**. It passes AA for body text with margin. The
+ * dark-mode violet `#7c5cff` measures **4.35:1** and is NOT used here: an
+ * email has one palette, and it is the light one.
  *
  * ── HOW THOSE TWO NUMBERS WERE OBTAINED, WHICH MATTERS ──────────────────────
  * By running the formula, on 2026-09-16. The first draft of this comment
@@ -114,4 +119,4 @@ export const EMAIL_PLACEHOLDER = `you@${CONTACT_EMAIL.slice(CONTACT_EMAIL.indexO
  * script that reads the stylesheet rather than restating it. If you change this
  * hex, recompute and rewrite both ratios above.
  */
-export const EMAIL_ACCENT = process.env.BILLING_EMAIL_ACCENT ?? '#0f6b44'
+export const EMAIL_ACCENT = process.env.BILLING_EMAIL_ACCENT ?? '#6d4aff'
