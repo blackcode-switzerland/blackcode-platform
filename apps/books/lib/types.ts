@@ -1733,3 +1733,57 @@ export interface ComplianceRule {
   /** A full ISO timestamp, or null while the rule is still draft. */
   reviewed_at: string | null
 }
+
+// ===========================================================================
+// WORKSPACES — tenancy, on screen since 2026-09-28 (decision D-C reversed)
+// ===========================================================================
+// Until that date `lib/wire-parity.test.ts` asserted that this file declared no
+// `Invitation`, because D-C kept the word "workspace" off every screen. The
+// reversal is recorded in `apps/books/docs/frontend.md` §4; these shapes are the
+// ones the tenancy routes serve (`app/api/workspaces/**`, `app/api/invitations/**`).
+
+export type WorkspaceRole = 'owner' | 'member'
+
+export interface WorkspaceMember {
+  id: number
+  workspace_id: number
+  user_id: number
+  role: string
+  joined_at: IsoDate
+  email: string
+  name: string | null
+  avatar_url: string | null
+  deleted_at: IsoDate | null
+}
+
+/** `GET /api/workspaces/{ws}` — the workspace, your role in it, its members. */
+export interface WorkspaceDetail {
+  workspace: { id: number; name: string; slug: string; owner_id: number; updated_at: IsoDate }
+  role: WorkspaceRole
+  members: WorkspaceMember[]
+}
+
+/** A pending invitation, as `GET …/invitations` serves it (owner only). */
+export interface Invitation {
+  id: number
+  email: string
+  role: string
+  token: string
+  status: string
+  expires_at: IsoDate
+  created_at: IsoDate
+  invited_by_name: string | null
+  invited_by_email: string
+}
+
+/** `GET …/invite-candidates` (owner only). */
+export interface InviteCandidate {
+  user_id: number
+  email: string
+  name: string | null
+  avatar_url: string | null
+  already_member: boolean
+  invited: boolean
+  shared_workspaces: string[]
+  from_platform: boolean
+}

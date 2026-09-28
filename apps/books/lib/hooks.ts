@@ -31,6 +31,8 @@ import type {
   Entity,
   Entry,
   InboxPiece,
+  Invitation,
+  InviteCandidate,
   ManifestResult,
   OverviewBook,
   OverviewResult,
@@ -45,6 +47,7 @@ import type {
   Term,
   WorklistResult,
   WorklistRow,
+  WorkspaceDetail,
 } from './types'
 import type { BilanGroup, CrLine } from './statements'
 
@@ -1114,5 +1117,42 @@ export function useComplianceRules() {
     queryKey: booksGlobalKey('compliance-rules'),
     queryFn: () => apiList<ComplianceRule>('/api/compliance-rules').then((r) => r.data),
     staleTime: 30_000,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Workspaces — the settings page's reads (2026-09-28, decision D-C reversed)
+// ---------------------------------------------------------------------------
+// `booksKey` with an empty scope: a workspace's members and invitations belong
+// to that workspace and to no book. `staleTime: 0` on the two lists an owner
+// changes while looking at them, for the reason `useTokens` gives.
+
+/** `GET /api/workspaces/{ws}` — the workspace, your role, its members. */
+export function useWorkspaceDetail(ws: string | undefined) {
+  return useQuery({
+    queryKey: booksKey('workspace', { entity: null, exercice: null }, { ws }),
+    queryFn: () => apiGet<WorkspaceDetail>(`/api/workspaces/${ws}`),
+    enabled: !!ws,
+    staleTime: 0,
+  })
+}
+
+/** `GET /api/workspaces/{ws}/invitations` — pending, owner only. */
+export function useInvitations(ws: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: booksKey('invitations', { entity: null, exercice: null }, { ws }),
+    queryFn: () => apiList<Invitation>(`/api/workspaces/${ws}/invitations`).then((r) => r.data),
+    enabled: !!ws && enabled,
+    staleTime: 0,
+  })
+}
+
+/** `GET /api/workspaces/{ws}/invite-candidates` — owner only. */
+export function useInviteCandidates(ws: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: booksKey('invite-candidates', { entity: null, exercice: null }, { ws }),
+    queryFn: () => apiList<InviteCandidate>(`/api/workspaces/${ws}/invite-candidates`).then((r) => r.data),
+    enabled: !!ws && enabled,
+    staleTime: 60_000,
   })
 }

@@ -35,7 +35,7 @@
 
 import { redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
-import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { getStoredActiveWorkspaceId, listWorkspacesForUser, resolveActiveWorkspace } from '@/lib/db/queries/workspaces'
 import { BooksShell } from '@/components/books-shell'
 import { SettingsNav } from '@/components/settings/settings-nav'
 import { serverT } from '@/lib/i18n-server'
@@ -44,8 +44,13 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   const user = await getValidatedSessionUser()
   if (!user) redirect('/login')
 
-  const memberships = await listWorkspacesForUser(user.id)
-  const ws = memberships[0]?.slug ?? null
+  const [memberships, storedId] = await Promise.all([
+    listWorkspacesForUser(user.id),
+    getStoredActiveWorkspaceId(user.id),
+  ])
+  // The workspace you were last in, not merely the oldest: the sidebar's
+  // switcher names it, and it should be the one you would go back to.
+  const ws = resolveActiveWorkspace(memberships, storedId)?.slug ?? null
   // A SERVER translator, not `useT()`. This is the one heading in the app a
   // layout has to name for itself — `/dashboard/settings/*` is a sibling of
   // `[ws]`, so no nav entry matches its pathname — and a layout cannot call a
@@ -76,7 +81,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   if (ws === null) return <div className="py-3">{body}</div>
 
   return (
-    <BooksShell ws={ws} title={t('settings.title')}>
+    <BooksShell ws={ws} title={t('settings.title')} workspaces={memberships}>
       {body}
     </BooksShell>
   )

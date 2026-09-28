@@ -35,8 +35,13 @@ export default async function WorkspaceLayout({
   const memberships = await listWorkspacesForUser(user.id)
   if (!memberships.some((w) => w.slug === ws)) notFound()
 
-  // No workspace list is passed down, unlike `apps/sales`. There is no switcher
-  // to feed (D-C) and the shell has no use for one — what b/books switches
-  // between is BOOKS, which come from `/api/meta` on the client.
-  return <BooksShell ws={ws}>{children}</BooksShell>
+  // The list feeds the sidebar's workspace switcher (since 2026-09-28, when
+  // decision D-C was reversed). Loaded here, by the same query that decided the
+  // 404, so the switcher can never list a workspace the layout would refuse.
+  // What the header switches between is still BOOKS, from `/api/meta`.
+  return (
+    <BooksShell ws={ws} workspaces={memberships}>
+      {children}
+    </BooksShell>
+  )
 }

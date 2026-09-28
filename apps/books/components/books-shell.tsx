@@ -3,16 +3,21 @@
 // The frame every dashboard page sits in: fixed left sidebar, content right.
 //
 // ===========================================================================
-// WHAT IS NOT HERE, AND WHY — decision D-C
+// WORKSPACES ARE ON SCREEN SINCE 2026-09-28 — decision D-C, reversed
 // ===========================================================================
-// **No workspace switcher, no members page, no invite flow, and the word
-// "workspace" appears nowhere on screen.** It is platform tenancy and it names
-// nothing in this product. The mockup has no team, no members, no assignee and
-// not one human-identity field across its 27 data structures: there is one user,
-// many books, and a fiduciary who receives an export rather than a login.
-// `[ws]` stays in the URL because the platform route factories require it, and
-// it is never explained to the reader. `apps/sales` settled the same point one
-// app earlier — its team page says "your team".
+// D-C said: "no workspace switcher, no members page, no invite flow, and the
+// word 'workspace' appears nowhere on screen", because the mockup had one user
+// and many books. It was written to be reversible ("turning members on later is
+// UI work on tables that are already there") and it was reversed so that all
+// four blackcode apps manage workspaces the same way: the sidebar carries the
+// shared switcher (`components/workspace/workspace-switcher.tsx`), and
+// `/dashboard/{ws}/settings` the shared settings sections. The record is in
+// apps/books/docs/frontend.md §4.
+//
+// What did NOT change: a workspace is a set of PEOPLE, and what this app
+// switches between day to day is BOOKS — the top bar's book and year switchers
+// below. The two are never confused on screen: the workspace is in the sidebar,
+// the book is in the header.
 //
 // **No search.** Nothing in the mockup has one, and a ⌘K palette over data
 // nobody has yet is chrome pretending to be a product.
@@ -78,6 +83,7 @@ import { useLocale, useT } from '@/lib/i18n'
 import { useSetLocale } from '@/lib/account'
 import { ALL_NAV, NAV, isActive, scopedHref, type NavIconName, type NavItem } from '@/lib/nav'
 import { useScope, WorkspaceSlugProvider } from '@/lib/scope'
+import { BooksWorkspaceSwitcher, type SwitcherWorkspace } from '@/components/workspace/workspace-switcher'
 import { useMe } from '@/lib/hooks'
 import { APP_NAME, wordmark } from '@/lib/app'
 
@@ -129,6 +135,7 @@ const ICONS: Record<NavIconName, LucideIcon> = {
   'trending-up': TrendingUp,
   calculator: Calculator,
   'messages-square': MessagesSquare,
+  settings: SettingsIcon,
 }
 
 /**
@@ -143,10 +150,13 @@ const ICONS: Record<NavIconName, LucideIcon> = {
 export function BooksShell({
   ws,
   title,
+  workspaces = [],
   children,
 }: {
   ws: string
   title?: string
+  /** Every workspace this person belongs to, for the sidebar switcher — resolved on the server. */
+  workspaces?: SwitcherWorkspace[]
   children: React.ReactNode
 }) {
   const [pageTitle, setPageTitle] = React.useState<string | null>(null)
@@ -181,6 +191,7 @@ export function BooksShell({
           ws={ws}
           title={title ?? pageTitle ?? undefined}
           subtree={title !== undefined}
+          workspaces={workspaces}
         >
           {children}
         </ShellBody>
@@ -214,11 +225,13 @@ function ShellBody({
    * the call site.
    */
   subtree,
+  workspaces,
   children,
 }: {
   ws: string
   title?: string
   subtree: boolean
+  workspaces: SwitcherWorkspace[]
   children: React.ReactNode
 }) {
   const pathname = usePathname() ?? ''
@@ -267,6 +280,11 @@ function ShellBody({
         <Image src="/logo.png" alt="" width={20} height={20} className="rounded-[14%]" />
         <span className="text-[15px] font-semibold tracking-tight">{wordmark(APP_NAME)}</span>
       </Link>
+
+      {/* The workspace — who this is shared with. The BOOK is in the header. */}
+      <div className="px-2.5 pt-2.5">
+        <BooksWorkspaceSwitcher workspaces={workspaces} current={ws} />
+      </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3">
         <div className="space-y-0.5">
@@ -349,7 +367,7 @@ function ShellBody({
             {/* `subtree`, NOT `title`. A page that names its own document is
                 still a book page and still needs both controls; only the
                 settings subtree is the account. */}
-            {!subtree && (
+            {!subtree && !current?.workspaceLevel && (
               <>
                 {current?.scoped !== false && <EntitySwitcher scope={scope} />}
                 <ExerciceSwitcher scope={scope} />

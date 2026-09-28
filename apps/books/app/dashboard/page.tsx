@@ -1,32 +1,19 @@
 // `/dashboard` → `/dashboard/{ws}`.
 //
 // ===========================================================================
-// THERE IS NO PICKER HERE, AND THAT IS DECISION D-C READ THROUGH
+// ONE → OPEN IT. SEVERAL → THE ONE YOU CHOSE, OR ASK ONCE.
 // ===========================================================================
-// `apps/sales` renders a "Choose a workspace" screen when somebody belongs to
-// more than one. b/books must not: **the word "workspace" never appears on
-// screen**, and a picker is a screen made entirely of it. `[ws]` stays in the URL
-// because the platform route factories require it, and it is never explained to
-// the reader.
+// Until 2026-09-28 this resolved several memberships to the first one without
+// asking, because decision D-C kept the word "workspace" off every screen and a
+// picker is a screen made of it. D-C was reversed (apps/books/docs/frontend.md
+// §4): a person can now create workspaces and accept invitations into other
+// people's, so being in several is ordinary, and landing in the wrong one with
+// no way to the other was the limitation the old header recorded.
 //
-// So more-than-one resolves deterministically to the first membership rather
-// than asking. That is a guess, and it is worth being honest about what it costs
-// — but the shape of this product is what makes it cheap:
-//
-//   - A person gets ONE personal workspace, minted at sign-in
-//     (`ensureWorkspaceForUser`, on every sign-in, both providers).
-//   - There is no invite flow and no members page in this app (D-C), so a second
-//     membership cannot be created from the b/books UI at all.
-//   - The thing a reader actually chooses between is BOOKS, and that control is
-//     in the top bar on every page (`?entity=`). A workspace is not a book —
-//     that is D1 in the plan and the first sentence of
-//     `apps/books/docs/frontend.md` §4.
-//
-// If a person ever does end up in two, the cost is that they land in one of them
-// with no way to reach the other from the UI. That is a real limitation and it
-// is recorded rather than hidden — see the sprint-1 report. The fix, if it is
-// ever needed, is a switcher that talks about BOOKS and resolves quietly, not a
-// screen that teaches platform tenancy.
+// So: one membership opens directly; several open the one you last chose
+// (`books.user_settings`, written by the switcher, the chooser and `bk books
+// workspace use`); several with no choice yet — or a choice you have since left
+// — shows the chooser, and choosing is remembered, so it is asked once.
 //
 // ── ZERO MEMBERSHIPS IS A BOOTSTRAP FAILURE, NOT AN EMPTY STATE ────────────
 // It is not the zero-BOOKS screen, which is a normal state for a new employee
@@ -38,7 +25,8 @@
 
 import { redirect } from 'next/navigation'
 import { getValidatedSessionUser } from '@/lib/auth/session'
-import { listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { getStoredActiveWorkspaceId, listWorkspacesForUser } from '@/lib/db/queries/workspaces'
+import { BooksWorkspaceChooser } from '@/components/workspace/workspace-chooser'
 import { serverT } from '@/lib/i18n-server'
 
 export const dynamic = 'force-dynamic'
@@ -52,10 +40,16 @@ export default async function DashboardIndex() {
   // phases while every API route returned 200 — see the header of
   // `app/dashboard/[ws]/layout.tsx` in that app. `lib/app-isolation.test.ts`
   // fails the build if this file imports a platform tenancy reader.
-  const mine = await listWorkspacesForUser(user.id)
-  const first = mine[0]
+  const [mine, storedId] = await Promise.all([
+    listWorkspacesForUser(user.id),
+    getStoredActiveWorkspaceId(user.id),
+  ])
 
-  if (first) redirect(`/dashboard/${first.slug}`)
+  if (mine.length === 1) redirect(`/dashboard/${mine[0].slug}`)
+  // The stored pointer counts only while you are still a member of it.
+  const remembered = storedId == null ? undefined : mine.find((w) => w.id === storedId)
+  if (remembered) redirect(`/dashboard/${remembered.slug}`)
+  if (mine.length > 1) return <BooksWorkspaceChooser workspaces={mine} />
 
   // Resolved AFTER the redirect, so the ordinary path — everybody who has a
   // workspace — pays nothing for it.
