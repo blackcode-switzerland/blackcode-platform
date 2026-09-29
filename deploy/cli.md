@@ -30,7 +30,7 @@ doubt, unforced.
 ```bash
 git rev-parse --abbrev-ref HEAD          # must print: main
 git status --porcelain                   # must print nothing (clean tree)
-git fetch origin && git status -sb | head -1   # must NOT say behind/ahead
+git fetch origin && git status -sb | head -1   # must NOT say behind
 gh auth status                           # logged in
 npm whoami                               # logged in
 npm owner ls @blackcode_sa/bc-issues     # the npm whoami user must be listed
@@ -43,6 +43,9 @@ go version
   (Hit for real on v2.0.0.) Commit or stash, then continue.
 - Not on `main`, or behind `origin/main`: stop and tell the user. Do not release
   from a branch.
+- **Ahead of `origin/main`** is allowed: step 2's push sends those commits too.
+  List them (`git log origin/main..HEAD --oneline`) in your report so it is
+  visible what went out alongside the release.
 - If `npm whoami` fails or the user is not an owner of the package, stop and say
   which: the user must `npm login` as a member with publish access to the
   `@blackcode_sa` organisation.
