@@ -31,6 +31,7 @@ doubt, unforced.
 git rev-parse --abbrev-ref HEAD          # must print: main
 git status --porcelain                   # must print nothing (clean tree)
 git fetch origin && git status -sb | head -1   # must NOT say behind
+git push --dry-run origin main           # must succeed — catches a rejected push BEFORE any tag exists
 gh auth status                           # logged in
 npm whoami                               # logged in
 npm owner ls @blackcode_sa/bc-issues     # the npm whoami user must be listed
@@ -63,7 +64,8 @@ echo "$LATEST"
 Compute the next version by hand from `$LATEST` and the bump (`minor`: `vX.(Y+1).0`;
 `patch`: `vX.Y.(Z+1)`; `major`: `v(X+1).0.0`). Set it as `VERSION=vX.Y.Z` and
 `NUM=X.Y.Z`. It must not already exist: `git tag --list "$VERSION"` prints nothing
-and `npm view @blackcode_sa/bc-issues@$NUM version` errors.
+and `npm view @blackcode_sa/bc-issues@$NUM version` fails with E404 (that is the
+good answer).
 
 **2. Bump, commit, push.** `cli/npm/install.js` derives its version from
 `package.json`, so `package.json` is the only file:
@@ -75,6 +77,10 @@ git commit -m "chore: release CLI $VERSION"          # forced: "… $VERSION (fo
 git push origin main
 ```
 
+**Do not continue unless that push succeeded** (check its exit status; don't pipe
+it through `tail`, which hides a failure). If it was rejected, stop — see the
+recovery table.
+
 **3. Tag.**
 
 ```bash
@@ -85,7 +91,10 @@ git tag "$VERSION" && git push origin "$VERSION"
 
 ```bash
 (cd cli && make dist)
-ls cli/dist                     # six bk-$VERSION-* files + SHA256SUMS
+ls cli/dist | grep "$VERSION\|SHA256SUMS"   # six bk-$VERSION-* files + SHA256SUMS
+# cli/dist also keeps every older bk-v* binary; the release command below names
+# each file explicitly, so those are never uploaded. `make dist` also rewrites
+# cli/routes.json — it should show no diff.
 ```
 
 **5. GitHub Release.**
@@ -158,6 +167,7 @@ The release is not atomic. Find out how far it got before re-running anything:
 
 | It stopped after… | State | Recovery |
 |---|---|---|
+| step 2, push **rejected** | release commit exists locally only | fix the cause (e.g. GitHub push protection on a secret in an unpushed commit), push, then continue. If you cannot, `git reset --hard origin/main` and `git tag -d $VERSION` and start over |
 | step 2 | commit on `main`, no tag | continue from step 3 |
 | step 3 | tag pushed, no binaries | continue from step 4 |
 | step 5 | GitHub Release exists, npm unpublished | do step 6. Never re-create the release |
