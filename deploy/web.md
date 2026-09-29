@@ -44,7 +44,8 @@ git fetch origin && git status -sb | head -1     # not behind origin/main
 
 - **Uncommitted changes, or not on `main`, or behind `origin/main`** → stop and
   tell the user what would ship. Do not deploy code that is not on `main` unless
-  they explicitly asked to deploy the working tree / a branch.
+  they explicitly said to deploy that branch / the working tree — in which case
+  go ahead and name the branch and HEAD commit in your report.
 - You do **not** need to be logged in to Vercel, and it does not matter who
   authored HEAD. No `vercel login`, no fake or empty commit, no `git config`.
 - `npx vercel` downloads the CLI on demand. A warning that it is outdated is noise.
@@ -81,16 +82,21 @@ Why it looks like this:
   `MIGRATE_DATABASE_URL` and `RUN_MIGRATIONS=1` — both live only in Vercel's
   Production environment ([`docs/env.md`](../docs/env.md)). Do not use
   `--prebuilt`.
-- **Upload size should be about 66 MB.** Vercel ignores `.gitignore`; the
-  repo-root `.vercelignore` is what keeps `.turbo` (16 GB) and `cli/dist` out.
-  **If it says gigabytes, cancel it** and find out why.
+- **Upload size: only gigabytes is a problem.** A first deploy is about 66 MB;
+  repeat deploys upload only files Vercel has not cached and can be well under a
+  megabyte. Vercel ignores `.gitignore`; the repo-root `.vercelignore` is what
+  keeps `.turbo` (16 GB) and `cli/dist` out. **If it says gigabytes, cancel it**
+  and find out why.
 - Deploy **one app per command**. Several apps: run them one after another, not in
   parallel (they share the working tree and the same migrations). If one fails,
   say so and carry on with the rest.
 
-The command blocks until the build finishes and prints
-`Production: https://<deployment>.vercel.app`. Exit 0 = deployed **and** aliased to
-the custom domain.
+The command blocks until the build finishes (a few minutes). Its output is noisy
+(progress redraws, ANSI codes, a JSON block); the deployment URL is the line
+starting `Production`. Exit 0 = deployed and aliased. Redirect to a file
+(`… > /tmp/<app>.log 2>&1`) and read the tail rather than streaming it. A note
+that your local `vercel` is older than the one on Vercel's build machine is
+harmless.
 
 ## Verify — the check has to be able to fail
 
@@ -108,7 +114,9 @@ curl -sI https://<app>.blackcode.ch/api/meta | head -1
 
 - `state` must be **READY** and `created` must be *just now* (an old READY
   deployment would also pass — check the timestamp).
-- The site answers with an HTTP status (200/401 are both fine for `/api/meta`). A
+- The site answers with an HTTP status. `/api/meta` is **200 on `books` and
+  `billing` and 401 on `issues` and `sales`** (the latter require a session for it) —
+  both mean the app is up; a 5xx or no answer is the failure. A
   `307` to `vercel.com` means protected-not-broken on a `.vercel.app` URL; on the
   custom domain it is a problem.
 
@@ -123,6 +131,9 @@ the last lines of build output. If the build failed, read the log
 - **A deploy is not a rollback point.** Roll back by promoting the previous
   production deployment in the Vercel dashboard, or redeploying the previous
   commit.
+- **Confirm migrations ran** (only if the change added one) with
+  `npx vercel inspect <deployment-url> --logs` and look for
+  "applying Drizzle migrations".
 - **Migrations run during the build**, as `MIGRATE_DATABASE_URL`, gated on
   `RUN_MIGRATIONS`. A migration that must land *before* the code has to be applied
   by hand first — see "Who owns the migration" in
