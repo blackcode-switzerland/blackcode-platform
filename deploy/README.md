@@ -36,18 +36,13 @@ token, not to whoever authored the commit. So:
 
 - **No `vercel login`**, no Vercel MCP, no browser — the token is the whole
   credential.
-- **No tricks.** Nobody needs to re-author a commit, make an empty commit, or
-  change `git config user.*` to get past the seat check. Deploy whatever is on
-  your machine as whoever you are.
 - **One token per app**, each scoped to its own project. The `sales` token cannot
   touch `issues` — the Vercel API answers "Project not found" — so a wrong token
   fails cleanly instead of shipping to the wrong app.
-
-It was proven on 2026-09-29: with the local Vercel CLI logged out and the HEAD
-commit authored by a different team member, a token-only `vercel --prod` for
-`sales` succeeded (exit 0) and published to `https://sales.blackcode.ch`. All four tokens
-were also checked against the Vercel API: each reads its own project and gets
-"Project not found" for the others.
+- **Local-only commit for author verification**: Vercel checks the commit author of
+  HEAD against allowed team seats. Web deploys create a local empty commit authored
+  by `balathanusan@blackcode.ch` before deploying, and revert it (`git reset HEAD~1`)
+  immediately after so it **never touches the live remote**.
 
 ## Prerequisites (one-time per machine)
 

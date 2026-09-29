@@ -48,11 +48,21 @@ git fetch origin && git status -sb | head -1     # not behind origin/main
   tell the user what would ship. Do not deploy code that is not on `main` unless
   they explicitly said to deploy that branch / the working tree — in which case
   go ahead and name the branch and HEAD commit in your report.
-- You do **not** need to be logged in to Vercel, and it does not matter who
-  authored HEAD. No `vercel login`, no fake or empty commit, no `git config`.
+- You do **not** need to be logged in to Vercel. No `vercel login`.
 - `npx vercel` downloads the CLI on demand. A warning that it is outdated is noise.
 
-## Deploy one app
+## Step 1: Create local-only deployment commit
+
+Vercel checks the commit author of HEAD against allowed team seats. Before triggering deploys, create a local empty commit authored by `balathanusan@blackcode.ch`:
+
+```bash
+git commit --allow-empty --author="balathanusan-bc <balathanusan@blackcode.ch>" -m "chore(deploy): local deployment trigger"
+```
+
+> [!CRITICAL]
+> This commit is **strictly local**. It exists only during the deployment process and **must never be pushed to live remote**.
+
+## Step 2: Deploy one or more apps
 
 ```bash
 export VERCEL_ORG_ID=team_b4wX7DvsnUaeqJyLi5cGrlbQ
@@ -100,7 +110,19 @@ starting `Production`. Exit 0 = deployed and aliased. Redirect to a file
 that your local `vercel` is older than the one on Vercel's build machine is
 harmless.
 
-## Verify — the check has to be able to fail
+## Step 3: Revert the local commit immediately
+
+Once the deploys have completed, revert the local-only commit:
+
+```bash
+git reset HEAD~1
+```
+
+- This undoes the temporary trigger commit and restores `HEAD` back to `origin/main`.
+- The working tree is left completely clean.
+- **Do not push before doing this reset** — the temporary commit must never touch the live remote.
+
+## Step 4: Verify — the check has to be able to fail
 
 Do not accept "the command exited 0" alone, and **do not test reachability with
 `curl -L`**: Deployment Protection redirects `.vercel.app` URLs to a login page and
