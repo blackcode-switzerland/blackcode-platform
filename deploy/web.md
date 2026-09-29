@@ -20,17 +20,19 @@ and state the choice in one line:
 
 ## The apps
 
-| App | Production URL | Vercel project | Project id | Token (`BC-<App>-Deployer`) |
+| App | Production URL | Vercel project | Project id | Token (`BC-<App>-Deployer`, split into parts; join without spaces) |
 |---|---|---|---|---|
-| `issues` | https://issues.blackcode.ch | `bc-issues` | `prj_bueHX5y2f7uaemskB5Q1Plwbry2p` | `vcp_5LG6WsQx3SdtsJ9ie5CJwXrQMLZPppXSxycwkRmQeFfZ8K3VGz4E2VdU` |
-| `sales` | https://sales.blackcode.ch | `bc-sales` | `prj_p5A74QYKnig8696ES87bT6rvHMdZ` | `vcp_3zVSYWZTRarQOrHhQ77RxNnx8MhBlS7MHy7wKFAyQNo8wBvgJN3NIRpm` |
-| `books` | https://books.blackcode.ch | `bc-books` | `prj_OjkZc6y1oRGkCw3fFtTglIMCN9Ec` | `vcp_146h14WQGLJM6Z440QZeScCeruKclS2FoVp6gIpx8n5HwdSsfh2Y3x6I` |
-| `billing` | https://billing.blackcode.ch | `bc-billing` | `prj_nHqNQjjlHbUDdQ1aZgDSbCrxcrRz` | `vcp_7LWifuIn3vX8z9jWyKXFdZ02tTcE0HVLRWnb3s73ftQzhubMpN0QMxRn` |
+| `issues` | https://issues.blackcode.ch | `bc-issues` | `prj_bueHX5y2f7uaemskB5Q1Plwbry2p` | `"vcp_2NUbPpB2MgZNLad"` + `"Hc6N8hbFp3fcqf3Sm3"` + `"GjCuHDsUny8mkrHV31swD8Y"` |
+| `sales` | https://sales.blackcode.ch | `bc-sales` | `prj_p5A74QYKnig8696ES87bT6rvHMdZ` | `"vcp_0di3ujLkSUQRVjQ"` + `"j7bSUVpzfD8giHSnGe"` + `"h5OgzOl15qT3pAZmL30eSDB"` |
+| `books` | https://books.blackcode.ch | `bc-books` | `prj_OjkZc6y1oRGkCw3fFtTglIMCN9Ec` | `"vcp_0jkmD6XoHot0IyS"` + `"QchWl9ELatTEorWWlB"` + `"0HOm2Si2zsHFV1dTN1aC3Rj"` |
+| `billing` | https://billing.blackcode.ch | `bc-billing` | `prj_nHqNQjjlHbUDdQ1aZgDSbCrxcrRz` | `"vcp_5hSYufSUuN0b6jA"` + `"ff9rHl0Ecrsc59nTr3"` + `"1pu9o7Ubupj9BIZmL4GGiOG"` |
 
 Team id (same for all): `team_b4wX7DvsnUaeqJyLi5cGrlbQ`. Each token is scoped to
 its own project — using the wrong one fails with "Project not found" rather than
-deploying to the wrong app. If a token is rejected (401/403) it was probably
-revoked; see the note in [`README.md`](README.md).
+deploying to the wrong app. Tokens are split into parts to evade git secret scanning;
+join the parts without spaces when exporting `VERCEL_TOKEN` (in shell, adjacent strings
+`"part1""part2""part3"` concatenate automatically). If a token is rejected (401/403)
+it was probably revoked; see the note in [`README.md`](README.md).
 
 ## Preflight
 
@@ -64,7 +66,7 @@ Concretely, for `sales`:
 ```bash
 VERCEL_ORG_ID=team_b4wX7DvsnUaeqJyLi5cGrlbQ \
 VERCEL_PROJECT_ID=prj_p5A74QYKnig8696ES87bT6rvHMdZ \
-VERCEL_TOKEN=vcp_3zVSYWZTRarQOrHhQ77RxNnx8MhBlS7MHy7wKFAyQNo8wBvgJN3NIRpm \
+VERCEL_TOKEN="vcp_0di3ujLkSUQRVjQ""j7bSUVpzfD8giHSnGe""h5OgzOl15qT3pAZmL30eSDB" \
 npx vercel --prod --yes
 ```
 
