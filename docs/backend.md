@@ -1269,7 +1269,7 @@ response, success or error:
   8) below this. **Raise the floor whenever a server change breaks older CLIs**
   (e.g. the milestone→task / key-removal rename) so stale clients get a clear
   "please upgrade" instead of cryptic 404s — by moving the npm `min` dist-tag
-  (a forced `release.sh cli`, or `npm dist-tag add <pkg>@<version> min`).
+  (a forced CLI release per `deploy/cli.md`, or `npm dist-tag add <pkg>@<version> min`).
 - `X-BK-Help` — the get-current guide (`/agent-updator`).
 - `X-BK-Changelog` — the changelog (`/api/changelog`). Points at the JSON route, not a page: the human `/changelog` page was removed on 2026-08-03 and these headers are read by agents.
 

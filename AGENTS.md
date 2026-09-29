@@ -57,6 +57,11 @@ shapes the checks have been wrong in, and how to work here. Adding an app is
 **`docs/extracting-an-app.md`** (rehearsed). The database boundary is
 **`docs/platform-db.md`**.
 
+**Deploying or releasing** (web apps to Vercel, the `bk` CLI to GitHub + npm):
+follow **`deploy/`** — `deploy/web.md`, `deploy/cli.md`, `deploy/README.md` first.
+Defaults are set so you never need to ask: CLI = minor, unforced; web = token
+deploy of the apps that changed. There is no release script.
+
 Commands come in TWO tiers since 2026-08-10 and the spelling says which
 (`bk guide platform/apps`). **Bare** is your account and this binary — `login`,
 `logout`, `whoami`, `token`, `profile`, `meta`, `app`, `guide`, `skill`,

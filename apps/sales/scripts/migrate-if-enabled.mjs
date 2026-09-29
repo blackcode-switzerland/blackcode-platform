@@ -15,7 +15,7 @@
  *   Vercel Production  → RUN_MIGRATIONS=1   (migrations run on deploy, as before)
  *   Local / CI / preview → unset            (`npm run build` is a pure build)
  *
- * DO NOT "simplify" this away by deleting the postbuild hook. `devops/release.sh`
+ * DO NOT "simplify" this away by deleting the postbuild hook. A deploy (deploy/web.md)
  * does not run migrations, so postbuild is the only thing that applies them to
  * production. Removing it stops production migrations silently — which is far
  * worse than the problem this file solves.

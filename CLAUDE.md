@@ -60,6 +60,7 @@ is being built:
 | Current design rules | `docs/platform-architecture.md` |
 | Why the repo looks like this | `docs/2026-08-platform-migration.md` — and what is **still owed** |
 | Remove an app | `docs/extracting-an-app.md` |
+| **Deploy / release anything** | **`deploy/README.md`**, then `deploy/web.md` or `deploy/cli.md` |
 | The database boundary | `docs/platform-db.md` |
 
 What the migration bought:
@@ -178,7 +179,8 @@ packages/             shared libraries — apps import these, never each other
 docs/                 PLATFORM docs only (see the Docs sync rule)
 docs/changelog/       one file per app + platform.md — merged by `bk changelog`
 docs/sql/             role creation, boundary probe, rollback scripts
-devops/               release scripts
+deploy/               how to release: cli.md, web.md, README.md (procedures, no script)
+devops/               local migrate, db-ledger checks, CLI inventory
 turbo.json            task pipeline
 tsconfig.base.json    shared TS settings; apps extend it
 ```
@@ -630,10 +632,20 @@ See `AGENTS.md` for the short version.
 
 ### Releasing
 
-`./devops/release.sh cli minor` (GitHub + npm; needs `npm login` + an OTP) and
-`./devops/release.sh web <app>` (Vercel production — **a web release targets
-exactly one app**, so name it). Both interactive. `./devops/release.sh apps`
-lists what is deployable; `app_registry()` in that script is the authority.
+**Releases are documented procedures, not a script — `deploy/` (2026-09-29;
+`devops/release.sh` is gone).** Follow the doc; it is written to be executed by an
+agent with no other context and it does not ask blocking questions:
+
+- **[`deploy/cli.md`](deploy/cli.md)** — the `bk` CLI to GitHub + npm. Default
+  when the user just says "release": **minor, unforced**; `patch`/`major`/`forced`
+  only when the user says so or context makes it clearly right.
+- **[`deploy/web.md`](deploy/web.md)** — web apps to Vercel production, **by
+  per-app access token** (`VERCEL_TOKEN` + `VERCEL_PROJECT_ID` + `VERCEL_ORG_ID`,
+  then `npx vercel --prod --yes` from the repo root). No `vercel login`, no Vercel
+  MCP, no commit tricks — the token, not the commit author, is what Vercel checks.
+  Local, explicit deploys only: Git integration stays off, a push never deploys.
+- [`deploy/README.md`](deploy/README.md) — why, and **the tokens are committed in
+  `deploy/web.md` on purpose, in a public repo** (rotate them if a deploy 401s).
 
 **A CLI release is: deploy web ONLY if the new binary needs new routes, then
 publish to npm. That is all — no deploy follows it** (since 2026-09-24). Every

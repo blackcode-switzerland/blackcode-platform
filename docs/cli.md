@@ -208,26 +208,18 @@ silently reversing.
 
 ## Releasing & version management
 
-A release is cut with the repo's release script (from the repo root):
+A release is cut by following [`deploy/cli.md`](../deploy/cli.md) — a
+step-by-step procedure, not a script (`devops/release.sh` was retired
+2026-09-29). It takes no blocking questions: the defaults are **minor, unforced**,
+and a user can ask for `patch` / `major` / an exact `vX.Y.Z` / `forced`.
 
-```bash
-./devops/release.sh cli            # interactive — prompts for everything
-./devops/release.sh cli minor      # or pass the bump to skip the first prompt
-```
-
-It is **interactive** and asks two things up front, then shows a plan and a
-final "Proceed?" confirm before doing anything irreversible:
-
-1. **Bump** — patch / minor / major / explicit `vX.Y.Z` (skipped if passed as an arg).
-2. **Upgrade policy** — *normal* or *forced* (see below).
-
-On confirm it: preflights (gh/npm/git auth, clean tree, version unused); edits
-`cli/npm/package.json` + `install.js` (install.js derives its version from
-package.json, so they can't drift), then makes **one** commit + push; creates and
-pushes the `vX.Y.Z` tag; `make dist` cross-compiles (version stamped via
-`-ldflags`); publishes the GitHub Release + npm package; and, on a forced
-release, moves the npm `min` dist-tag. It never deploys web — and since
-2026-09-24 **nothing needs to be deployed after it**.
+It preflights (gh/npm/git auth, package ownership, clean tree on `main`, version
+unused); bumps `cli/npm/package.json` (`install.js` derives its version from it, so
+they can't drift) and makes **one** commit + push; creates and pushes the `vX.Y.Z`
+tag; `make dist` cross-compiles (version stamped via `-ldflags`); publishes the
+GitHub Release and the npm package; and, on a forced release, moves the npm `min`
+dist-tag. It never deploys web — and since 2026-09-24 **nothing needs to be
+deployed after it**.
 
 ### Upgrade policy: normal vs forced
 
@@ -238,7 +230,7 @@ minutes per server instance):
 
 - **normal** → `npm publish` moves the `latest` tag by itself; every app
   advertises it within ~5 minutes (soft "a new bk version is available" notice).
-- **forced** → the script also runs `npm dist-tag add <pkg>@<version> min`, so
+- **forced** → the procedure also runs `npm dist-tag add <pkg>@<version> min`, so
   clients below it are hard-blocked with "please upgrade" and exit code `8`.
   Choose this when a server change is incompatible with older CLIs (e.g. a
   breaking route/field rename).

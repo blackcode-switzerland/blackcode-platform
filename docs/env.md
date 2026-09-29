@@ -91,8 +91,7 @@ they are needed.
 vercel env ls production                          # list all
 vercel env add <NAME> production --value "..." --yes   # add
 vercel env rm <NAME> production --yes             # remove
-# then redeploy:
-./devops/release.sh web issues   # the project you changed
+# then redeploy the app you changed — deploy/web.md
 ```
 
 ---
@@ -118,7 +117,7 @@ Only needed if you migrate to a different database. Remove old value, add new:
 ```bash
 vercel env rm DATABASE_URL production --yes
 vercel env add DATABASE_URL production --value "<new-url>" --yes
-./devops/release.sh web issues   # the project you changed
+# redeploy the app you changed — deploy/web.md
 ```
 
 After changing, always run migrations against the new DB:
@@ -183,7 +182,7 @@ every app, and signs everyone out once):
 openssl rand -base64 32   # copy the output — ONE new value for all apps
 ```
 
-Then, **for every app in `devops/release.sh`'s `app_registry()`** — not just the
+Then, **for every app in the table in `deploy/web.md`** — not just the
 one you were thinking about:
 
 ```bash
@@ -194,13 +193,12 @@ vercel env add NEXTAUTH_SECRET production --value "<the same new secret>" --yes
 …and only then redeploy them, one per app:
 
 ```bash
-./devops/release.sh web issues
-./devops/release.sh web sales      # and every other registered app
+# redeploy each app in the table in deploy/web.md
 ```
 
 Rotating one app and not the others produces exactly the split-brain above,
 except now it is the app you *did* rotate that cannot read anyone's cookie.
-`./devops/release.sh apps` is the authoritative list.
+The table in [`deploy/web.md`](../deploy/web.md) is the authoritative list.
 
 **Setting the variable is not the change; the redeploy is.** A build that has
 already happened keeps serving the value it was built with, so between the
@@ -224,7 +222,7 @@ mistyped the value. Redeploy every app before testing sign-in-once behaviour.
 ```bash
 vercel env rm NEXTAUTH_URL production --yes
 vercel env add NEXTAUTH_URL production --value "https://yourdomain.com" --yes
-./devops/release.sh web issues   # the project you changed
+# redeploy the app you changed — deploy/web.md
 ```
 
 Also update Google OAuth (see `GOOGLE_CLIENT_ID` section below).
@@ -276,7 +274,7 @@ entry published first.
 ```bash
 vercel env rm SUPER_ADMINS production --yes
 vercel env add SUPER_ADMINS production --value "admin1@example.com,admin2@example.com" --yes
-./devops/release.sh web issues   # the project you changed
+# redeploy the app you changed — deploy/web.md
 ```
 
 ---
@@ -336,8 +334,7 @@ vercel env rm  GOOGLE_CLIENT_ID production --yes
 vercel env add GOOGLE_CLIENT_ID production --value "<id>" --yes
 vercel env rm  GOOGLE_CLIENT_SECRET production --yes
 vercel env add GOOGLE_CLIENT_SECRET production --value "<secret>" --yes
-./devops/release.sh web issues
-./devops/release.sh web sales
+# redeploy issues and sales — deploy/web.md
 ```
 
 **Verify what is actually live** — the env listing only proves a value was
@@ -382,7 +379,7 @@ Vercel dashboard → Storage → `blackcode-platform-blob` → Settings → Toke
 ```bash
 vercel env rm BLOB_READ_WRITE_TOKEN production --yes
 vercel env add BLOB_READ_WRITE_TOKEN production --value "<new-token>" --yes
-./devops/release.sh web issues   # the project you changed
+# redeploy the app you changed — deploy/web.md
 ```
 
 ---
@@ -414,7 +411,7 @@ appear in the Resend record for real delivered messages.
 ```bash
 vercel env add RESEND_API_KEY production --value "re_..." --yes
 vercel env add RESEND_FROM_EMAIL production --value "admin@blackcode.ch" --yes
-./devops/release.sh web issues   # the project you changed
+# redeploy the app you changed — deploy/web.md
 ```
 
 `RESEND_FROM_EMAIL` must be on a domain verified in Resend —
@@ -487,7 +484,7 @@ Unset locally: `apps/issues/scripts/migrate-if-enabled.mjs` falls back to
 
 Before 2026-08-04 `postbuild` was a bare `drizzle-kit migrate`, which made
 `npm run build` a database write and made it exit 1 whenever the local Postgres
-was not running. `devops/release.sh` does **not** run migrations, so `postbuild`
+was not running. A deploy (`deploy/web.md`) does **not** run migrations by itself, so `postbuild`
 remains the only thing applying them in production — hence the flag rather than
 deleting the hook.
 

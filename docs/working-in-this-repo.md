@@ -285,11 +285,14 @@ its own entity type — the counters decision (`docs/platform-architecture.md`
 
 ### Releasing
 
-`./devops/release.sh cli minor` and `./devops/release.sh web <app>` — a web
-release targets exactly **one** app, so name it. `./devops/release.sh apps` lists
-what is deployable.
+Follow the procedures in `deploy/` — `deploy/cli.md` and `deploy/web.md`
+(`deploy/README.md` explains both). There is no release script (retired
+2026-09-29). Web deploys go through a per-app Vercel token, not a login; a web
+deploy targets exactly **one** app per command, and the app table is in
+`deploy/web.md`.
 
-**A CLI release is one step: `./devops/release.sh cli <bump>`.** Deploy web
+**A CLI release is one step: publish it (`deploy/cli.md`; default minor,
+unforced).** Deploy web
 first only for the apps whose new routes the new binary calls. Nothing is
 deployed after it (since 2026-09-24): every app reads the versions it
 advertises live from the npm dist-tags `latest` and `min`

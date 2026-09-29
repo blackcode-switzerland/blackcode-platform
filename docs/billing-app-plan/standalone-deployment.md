@@ -54,7 +54,7 @@ planned.
 | **Git** | Their repository has no other app's source and no history before the extraction | `git log --oneline \| wc -l` in the artifact is 1; `ls apps/` is `billing` |
 | **Brand** | Their name, domain, logo, colour, binary name, npm package | the brand-leak guard (§4), which fails the artifact's own test run |
 | **Data** | Their users, their tokens, their invoices, from an empty database | no dump is ever taken; the database is bootstrapped, so the data-protection question in `extracting-an-app.md` does not arise |
-| **Release** | Their Vercel project, their npm package, their version numbers | their `release.sh` registry has one line and their npm scope is theirs |
+| **Release** | Their Vercel project, their npm package, their version numbers | their `deploy/web.md` table has one row and their npm scope is theirs |
 
 ## The one decision this doc does not make
 
@@ -319,8 +319,8 @@ into this repo's `docs/changelog/billing.md`.
   are byte-identical to ours, so their ledgers advance in step with ours; the
   brand touches no migration. A migration that would name another app cannot
   exist, by the isolation rule.
-- **Their release is theirs.** The artifact's `release.sh` has one registry
-  line and one npm package; who runs it is a contract question.
+- **Their release is theirs.** The artifact's `deploy/` docs have one app row
+  and one npm package; who runs it is a contract question.
 - **A brand change is a brand-file change** and the next extraction.
 - **If the decision above becomes "snapshot"**, this section is replaced by
   "they own it now, and this repo records the tag they left from."

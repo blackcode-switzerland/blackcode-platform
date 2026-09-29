@@ -1,200 +1,53 @@
-# DevOps & Release Guide
+# DevOps Guide
 
-All release operations are handled by a single script:
+**Shipping is documented in [`deploy/`](../deploy/README.md)**, not here — and
+there is no release script (`devops/release.sh` was retired 2026-09-29). This doc
+is about *operating* what gets shipped: environment variables, migrations, and the
+rules learned the hard way.
 
-```bash
-./devops/release.sh <command>
-```
+| To… | Follow |
+|---|---|
+| Deploy `issues` / `sales` / `books` / `billing` to production | [`deploy/web.md`](../deploy/web.md) — a per-app Vercel token, no `vercel login`, from the repo root |
+| Release the `bk` CLI (GitHub + npm) | [`deploy/cli.md`](../deploy/cli.md) — default minor, unforced |
+| Understand why it is shaped this way | [`deploy/README.md`](../deploy/README.md) |
 
-> **One release per invocation.** A CLI release never deploys an app, and a web
-> deploy targets exactly one app. The two are shared surfaces with independent
-> audiences — the binary serves every app, an app serves only itself — so
-> bundling them meant a CLI release quietly shipped whatever happened to be on
-> `main` for the web as well. The old `cli` flow ended with a "deploy web too?"
-> prompt; it was removed on 2026-08-06.
+What stays true from the old flow, and lives in those docs now: one release per
+invocation (a CLI release never deploys an app; a web deploy targets one app);
+deploy from the repo root; `VERCEL_PROJECT_ID` overrides the linked project; and
+**a CLI release is one step, publish** — every app reads `latest`/`min` live from
+npm dist-tags (`packages/platform-agent/src/cli-version.ts`), so nothing is
+redeployed afterwards.
 
----
+## Three deploy traps
 
-## Commands
-
-### List deployable apps
-
-```bash
-./devops/release.sh apps
-```
-
-Reads `app_registry()` in `devops/release.sh` — the single place an app's Vercel
-project is declared.
-
-### Deploy ONE app to production
-
-```bash
-./devops/release.sh web issues
-```
-
-The app slug is **required**. Without it the script lists the apps and exits 1;
-an unknown slug does the same. Preflight checks Vercel auth, the git branch and
-a clean tree, then asks to confirm before deploying.
-
-| App | Production URL | Vercel project | Project id |
-|---|---|---|---|
-| `issues` | https://issues.blackcode.ch | `bc-issues` | `prj_bueHX5y2f7uaemskB5Q1Plwbry2p` |
-| `sales` | https://sales.blackcode.ch | `bc-sales` | `prj_p5A74QYKnig8696ES87bT6rvHMdZ` |
-| `books` | https://books.blackcode.ch | `bc-books` | `prj_OjkZc6y1oRGkCw3fFtTglIMCN9Ec` |
-| `billing` | https://billing.blackcode.ch | `bc-billing` | **not created yet** — the registry line carries a placeholder and `release.sh` refuses to deploy it |
-
-Dashboard: `https://vercel.com/balathanusans-projects-f76f8a7b/<project>`.
-`app_registry()` in `devops/release.sh` is the authority; this table is a copy.
-
-Two things the script does deliberately:
-
-- **It deploys from the repo root.** Vercel applies each project's own Root
-  Directory. Running from inside `apps/<app>` uploads only that directory and
-  `npm install` then 404s on the workspace packages — found the hard way during
-  the migration.
-- **It sets `VERCEL_PROJECT_ID` explicitly**, overriding whatever
-  `.vercel/project.json` is linked. Without that, deploying a second app would
-  silently ship to whichever project the working copy was last linked to, and
-  you would only find out after it was live.
-
-> `apps/_scaffold` is **absent from the registry on purpose**. The scaffold must
-> never be deployed, and leaving it out is what makes that true rather than
-> merely documented — `release.sh web _scaffold` exits 1.
-
-> There is exactly **one** Vercel project per app. A stray second project named
-> `issues` existed during the migration window and was deleted on 2026-08-06 —
-> it never built successfully and never served anything.
-
-### Three deploy traps
-
-- **`--skip-domain` is partial.** It protects the *custom* domain
-  (`issues.blackcode.ch`) from being re-aliased. It does **not** protect the
-  project's default `.vercel.app` aliases, which still move to the new
-  deployment. Reach for it when you want the custom domain to stay put; do not
-  read it as "this deploy is invisible".
-- **Do not test reachability with `curl -L`.** Deployment Protection covers
-  preview *and* production-target `.vercel.app` aliases. `curl -L` follows the
-  SSO redirect and returns **200 for the login page**, which is
-  indistinguishable from a healthy app. Check the *unfollowed* status
-  (`curl -sI`, or `curl -o /dev/null -w '%{http_code}'` without `-L`) and treat
-  a 3xx to `vercel.com` as protected-not-broken. Verify the real surface on the
-  custom domain.
-
-- **Watch the upload size on the first deploy of a new app.** It should be about
-  **66 MB**. Vercel does **not** read `.gitignore` — it reads `.vercelignore`,
-  which lives at the repo root and is shared by every app. Before that file
-  existed the first production deploy of 2026-08-10 reported an **8.5 GB** upload
-  (`.turbo` is 16 GB on disk, `cli/dist` 1.1 GB) and was cancelled. If you ever
-  see gigabytes, stop: something is excluded that should not be, or the file is
-  not being applied.
+- **`--skip-domain` is partial.** It protects the *custom* domain from being
+  re-aliased. It does **not** protect the project's default `.vercel.app` aliases,
+  which still move to the new deployment.
+- **Do not test reachability with `curl -L`.** Deployment Protection covers preview
+  *and* production-target `.vercel.app` aliases. `curl -L` follows the SSO redirect
+  and returns **200 for the login page**, indistinguishable from a healthy app.
+  Check the *unfollowed* status and treat a 3xx to `vercel.com` as
+  protected-not-broken. Verify the real surface on the custom domain.
+- **Watch the upload size.** It should be about **66 MB**. Vercel does **not** read
+  `.gitignore` — it reads the repo-root `.vercelignore`, shared by every app.
+  Before that file existed the first production deploy of 2026-08-10 reported
+  **8.5 GB** (`.turbo` is 16 GB on disk, `cli/dist` 1.1 GB) and was cancelled. If
+  you ever see gigabytes, stop.
 
 > This is the deploy-side instance of the standing rule: a green reading that
 > cannot distinguish success from a login page is not a check.
 
-### Adding an app to the release script
-
-Add one line to `app_registry()` near the top of `devops/release.sh`:
-
-```
-slug|vercel-project-name|prj_xxxxxxxx|https://slug.blackcode.ch
-```
-
-Everything else in the script is app-agnostic. This is a step in
-[`adding-an-app.md`](adding-an-app.md).
-
-### Release CLI to GitHub + npm
-
-```bash
-./devops/release.sh cli patch    # bug fix:        v1.0.0 → v1.0.1
-./devops/release.sh cli minor    # new feature:    v1.0.0 → v1.1.0
-./devops/release.sh cli major    # breaking change: v1.0.0 → v2.0.0
-./devops/release.sh cli v1.2.3  # explicit version (optional)
-```
-
-The version is auto-resolved from the latest git tag — you never need to type a version number manually.
-
-> **A CLI release is one step: publish. No web deploy follows it.** (Since
-> 2026-09-24.) Every app reads the versions it advertises — `X-BK-CLI-Latest`,
-> `X-BK-CLI-Min`, `bk meta`'s `cli` block — **live from npm dist-tags**, cached
-> five minutes per server instance (`packages/platform-agent/src/cli-version.ts`):
->
-> | Advertised | npm dist-tag | Moved by |
-> |---|---|---|
-> | latest | `latest` | `npm publish` itself |
-> | minimum (exit 8 below it) | `min` | `release.sh cli` on a **forced** release |
->
-> Until then the versions were constants bumped in a commit the release script
-> made itself, so a release was *deploy every app → publish → deploy every app
-> AGAIN*, and the second round existed only to ship that string. It is gone.
->
-> Deploy web **before** a CLI release only when the new binary calls routes the
-> production servers do not have yet — and then only the apps that changed.
->
-> Confirm what production advertises (any app; they all read the same tags):
->
-> ```bash
-> curl -sI https://issues.blackcode.ch/api/meta | grep -i x-bk-cli
-> ```
->
-> **Move or roll back the floor with no deploy:**
->
-> ```bash
-> npm dist-tag add @blackcode_sa/bc-issues@<version> min
-> ```
->
-> npm refuses to tag a version that was never published, so the floor can no
-> longer be raised ahead of the release. `min` is also clamped to `latest` on
-> the server. `BK_CLI_LATEST` / `BK_CLI_MIN` env vars still exist as an
-> emergency pin for when npm itself is the problem — but on Vercel an env change
-> only applies on the next deploy, so they are not the day-to-day lever.
-
-Full CLI release pipeline:
-1. Preflight — checks gh auth, npm auth, git branch, clean tree, no duplicate tag/version
-2. Resolves the next version from the latest git tag + bump type
-3. Bumps version in `cli/npm/package.json` and `cli/npm/install.js`
-4. Commits + pushes the version bump to `main`
-5. Creates and pushes the git tag
-6. Builds binaries for all 6 platforms via `make dist`
-7. Creates a GitHub Release and uploads the binaries + `SHA256SUMS`
-8. Publishes `@blackcode_sa/bc-issues` to npm (prompts for OTP) — this moves
-   the `latest` dist-tag, and every app advertises it within ~5 minutes
-9. **Only if you answered `forced`**: `npm dist-tag add …@<version> min`
-   (prompts for a second OTP). Answer `normal` unless you have deliberately
-   decided to hard-block every older client
-
-**Have your authenticator app ready** — npm requires a 2FA code during publish.
-
----
+> `apps/_scaffold` has **no row in `deploy/web.md` on purpose**: the scaffold must
+> never be deployed. There is exactly **one** Vercel project per app.
 
 ## Prerequisites
 
-| Tool | Install | Auth command |
+| Tool | Install | Auth |
 |---|---|---|
-| `vercel` | `npm install -g vercel` | `vercel login` |
-| `gh` | `brew install gh` | `gh auth login` |
-| `npm` | bundled with Node.js | `npm login` |
-| `go` | https://go.dev/dl | — |
-
----
-
-## Typical bug-fix release workflow
-
-```bash
-# 1. Fix the bug, commit to main
-git add .
-git commit -m "fix: ..."
-git push origin main
-
-# 2. Deploy the web fix — name the app(s) whose code changed
-./devops/release.sh web issues
-
-# 3. If the CLI was also changed, cut a new CLI release. Done — no redeploy.
-./devops/release.sh cli patch
-```
-
-> Until 2026-09-24 there was a step 4 here — "deploy EVERY app again to make the
-> version gate live". It existed because the advertised version was a constant
-> in the web code. It is read from npm now, so step 3 is the end.
+| `gh` | `brew install gh` | `gh auth login` (CLI release) |
+| `npm` | bundled with Node.js | `npm login` as a `@blackcode_sa` member (CLI release) |
+| `go` | https://go.dev/dl | — (CLI release) |
+| `vercel` | **not needed** — `npx vercel` | **no login** — a token is passed per deploy (`deploy/web.md`) |
 
 ---
 
@@ -214,7 +67,7 @@ vercel env add <NAME> production
 vercel env ls production
 ```
 
-After changing env vars, redeploy the affected app: `./devops/release.sh web issues`
+After changing env vars, redeploy the affected app — [`deploy/web.md`](../deploy/web.md). The `vercel env` commands need no login either: set the same `VERCEL_TOKEN`, `VERCEL_PROJECT_ID` and `VERCEL_ORG_ID` that `web.md` sets.
 
 ### Production env vars
 
@@ -276,8 +129,8 @@ whatever `DATABASE_URL` happened to be exported.
 > `MIGRATE_DATABASE_URL` (the schema owner). Without it, deploys fail at
 > postbuild with 42501. See docs/env.md.
 >
-> **`RUN_MIGRATIONS=1` must exist in Vercel Production.** `devops/release.sh`
-> does not run migrations, so `postbuild` is the only thing that applies them in
+> **`RUN_MIGRATIONS=1` must exist in Vercel Production.** A deploy
+> (`deploy/web.md`) does not run migrations by itself, so `postbuild` is the only thing that applies them in
 > production. If that variable is ever removed, deploys will keep succeeding
 > while migrations silently stop. Do not delete the `postbuild` hook either — the
 > gate is inside the script, not in whether the hook exists.

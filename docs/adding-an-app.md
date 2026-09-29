@@ -569,7 +569,7 @@ routes attributed to `platform`, and its parity test will tell you so.
 > | Step | Status | What closes it — the observation, not the intent |
 > |---|---|---|
 > | **7** `docs/changelog/<app>.md` | ✅ **closed 2026-08-07**, `apps/sales` | `bk changelog` and `GET /api/changelog` return sales entries with no registry edit. The directory read is the discovery mechanism; adding the file was the whole step. |
-> | **8** Vercel project | ✅ **closed 2026-08-10**, `apps/sales` | (a) `./devops/release.sh apps` lists two apps ✓; (b) `release.sh web sales` deployed to `bc-sales` via `VERCEL_PROJECT_ID`, not to the linked project ✓; (c) **not observable, and that is fine** — `vercel.json` sets `git.deploymentEnabled.main = false`, so a push never builds and `turbo-ignore` has nothing to skip. Delete this proof or re-scope it to preview builds; (d) region ✓ — `vercel inspect` shows every lambda `[fra1]`. |
+> | **8** Vercel project | ✅ **closed 2026-08-10**, `apps/sales` | (a) the app had a registry line (the retired `release.sh`; today a row in `deploy/web.md`) ✓; (b) a deploy of `sales` reached `bc-sales` via `VERCEL_PROJECT_ID`, not the linked project ✓; (c) **not observable, and that is fine** — `vercel.json` sets `git.deploymentEnabled.main = false`, so a push never builds and `turbo-ignore` has nothing to skip. Delete this proof or re-scope it to preview builds; (d) region ✓ — `vercel inspect` shows every lambda `[fra1]`. |
 > | **9** Subdomain + cookie domain | ✅ **closed 2026-08-10**, `apps/sales` | Signed in at `issues.blackcode.ch`, opened `sales.blackcode.ch`, **already signed in** — the app rendered the user's identity and workspace list with no login. Note it proves the two apps hold the SAME `NEXTAUTH_SECRET`; it does not prove it was *copied* (here it was rotated onto both, because the value could not be read — see `docs/env.md`). |
 > | **10** `apps/<app>/docs/` | ✅ **closed 2026-08-07**, `apps/sales` | `apps/sales/docs/{backend,frontend}.md` exist and describe only sales; the split rule held under a real second app. |
 >
@@ -645,13 +645,19 @@ update — `bk changelog` and `GET /api/changelog` pick it up automatically.
   say "every cross-app query, `bk search`, `bk activity`"; those are per app now,
   and the blob index is the reason that survives.)
 - **Root Directory:** `apps/sales`.
+- **Mint a deploy token and add the app to `deploy/web.md`.** Create a Vercel
+  access token named `BC-<App>-Deployer` scoped to the new project, and add one
+  row (slug, URL, project, `prj_…` id, token) to the table in
+  [`deploy/web.md`](../deploy/web.md). That row is the whole "registry" — there is
+  no script to edit. Deploy the app once by the procedure there before anything
+  else depends on it.
 - **Copy `apps/issues/vercel.json` into `apps/<app>/` and change nothing.** It is
   four settings the dashboard will not give you by default, and three of them are
   invisible when wrong: `regions: ["fra1"]` (the database is in Europe — the
   default region puts every query across the Atlantic), `ignoreCommand:
   npx turbo-ignore` (or every commit anywhere in the monorepo rebuilds this app),
   `git.deploymentEnabled.main: false` (or pushing to main deploys outside
-  `release.sh`), and `no-store` on `/api/*`. `apps/sales` shipped without this
+  `deploy/web.md`), and `no-store` on `/api/*`. `apps/sales` shipped without this
   file until 2026-08-07; nothing in the checklist mentioned it, because
   `apps/issues` had had one since before the monorepo existed.
 - Environment: **the full list is in `docs/env.md`, with which values are

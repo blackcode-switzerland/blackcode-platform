@@ -25,7 +25,7 @@ node_modules
 **/.next
 
 # Compiled Go binaries for five platforms. The `bk` CLI is released through
-# GitHub + npm (devops/release.sh cli), never through a web deploy.
+# GitHub + npm (deploy/cli.md), never through a web deploy.
 cli/dist
 cli/bk
 

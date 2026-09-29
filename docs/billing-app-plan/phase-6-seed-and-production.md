@@ -129,11 +129,13 @@ two that wrote.
 **The order is: deploy web, then npm, then deploy web again — and "web" means
 every app, both times.**
 
-1. `./devops/release.sh web <app>` for **every** line in `app_registry()`,
-   including the new `billing` line.
-2. `./devops/release.sh cli minor` — GitHub and npm. Needs `npm login` and an
-   OTP. Answer `normal`, never `forced`.
-3. `./devops/release.sh web <app>` for **every** app again.
+> **Superseded.** Since 2026-09-24 there is no second web pass (apps read the
+> version from npm) and since 2026-09-29 there is no script: use `deploy/web.md`
+> and `deploy/cli.md`. Kept as the record of the original order.
+
+1. Deploy **every** app in the `deploy/web.md` table, including `billing`.
+2. Release the CLI (`deploy/cli.md`) — GitHub and npm; unforced, never forced.
+3. ~~Deploy every app again.~~ No longer needed.
 
 The second pass is not belt-and-braces. The release script bumps
 `CLI_LATEST_VERSION` in a commit it creates itself, so that commit lands *after*

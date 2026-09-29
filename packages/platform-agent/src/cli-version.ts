@@ -14,8 +14,8 @@
 // package:
 //
 //   latest  → the `latest` dist-tag, which `npm publish` moves by itself
-//   min     → the `min` dist-tag, which `./devops/release.sh cli` moves on a
-//             FORCED release (`npm dist-tag add <pkg>@<version> min`)
+//   min     → the `min` dist-tag, which a FORCED CLI release moves
+//             (deploy/cli.md) (`npm dist-tag add <pkg>@<version> min`)
 //
 // Until then the versions were constants in this file, bumped by the release
 // script in a commit it made itself — AFTER the first web deploy. So a CLI

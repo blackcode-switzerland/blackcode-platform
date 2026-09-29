@@ -324,16 +324,12 @@ recoverable, then investigate.
 
 ## Deploy order, every time
 
-Both apps, from the repo root, after every phase that ships code:
+Both apps, from the repo root, after every phase that ships code — the
+token-based procedure in [`deploy/web.md`](../deploy/web.md), once per app
+(`issues`, then `sales`).
 
-```bash
-./devops/release.sh web issues
-./devops/release.sh web sales
-```
-
-And after any CLI release, both again — each deployment answers the "current
-version?" question and `bk` asks whichever app the user is homed on. See
-`docs/devops.md`.
+A CLI release needs no redeploy afterwards: every app reads the advertised
+version from npm. See `deploy/cli.md`.
 
 ---
 

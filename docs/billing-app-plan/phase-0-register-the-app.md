@@ -308,7 +308,7 @@ The hand-maintained lists. Every one was verified on 2026-09-16.
 | `cli/internal/commands/root.go:231`, `:119` | register the group; extend the help tour |
 | **`cli/internal/guide/guide_test.go:163`** | add `"billing": "apps/billing/lib/vocabularies.ts"` to `vocabularySources`. **This is finding #22.** The map is what stops a guide topic hardcoding a status or a limit, and books went to production with no line here, so all eight of its topics had a free pass for their whole life while the section header read `--- PASS`. Add the line in the same commit as the first topic. |
 | `cli/internal/commands/help_flag_drift_test.go:85` | add `"billing"` to `helpAppPlaceholders` |
-| `devops/release.sh` `app_registry()` | add `billing\|bc-billing\|<prj_id>\|https://billing.blackcode.ch`. Re-read "releasing the CLI" in `usage()` afterwards: the version gate is served by every app, so step 3 of a CLI release is one `web <app>` per line here. |
+| `deploy/web.md` app table (was `devops/release.sh` `app_registry()`, retired 2026-09-29) | one row: slug, URL, `bc-billing`, its `prj_…` id and `BC-Billing-Deployer` token. Done. |
 | `devops/db-ledger/lib-db.sh:105` | `TRACKED_SCHEMAS` — add `'billing'` **and the missing `'books'`**, then re-run `capture-baseline.sh` |
 | `packages/platform-testing/test/retired-cli-spellings.test.ts:105` | `SCAN_ROOTS` is `['issues', 'sales', '_scaffold']` — add `billing` **and the missing `books`** |
 | the four sibling `lib/app-isolation.test.ts` | `OTHER_SCHEMAS`, see the table above |
