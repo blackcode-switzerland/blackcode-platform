@@ -126,10 +126,22 @@ export async function apiSend<T>(
   return (await res.json()) as T
 }
 
-/** `?a=1&b=2`, with null/undefined/empty dropped. Returns '' when nothing is set. */
-export function query(params: Record<string, string | number | boolean | null | undefined>): string {
+/**
+ * `?a=1&b=2`, with null/undefined/empty dropped. Returns '' when nothing is set.
+ *
+ * An ARRAY value becomes a REPEATED parameter — `{ city: ['a', 'b'] }` is
+ * `?city=a&city=b` — which is how the prospect listing takes several values of
+ * one filter (#98): each occurrence is one literal value, never comma-split.
+ */
+export function query(
+  params: Record<string, string | number | boolean | null | undefined | string[]>
+): string {
   const q = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) {
+    if (Array.isArray(v)) {
+      for (const item of v) if (item !== '') q.append(k, item)
+      continue
+    }
     if (v == null || v === '') continue
     q.set(k, String(v))
   }

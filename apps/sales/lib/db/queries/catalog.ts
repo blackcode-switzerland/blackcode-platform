@@ -200,41 +200,77 @@ export function parseVariables(body: string | null | undefined): string[] {
   return [...new Set([...body.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]!))]
 }
 
+/**
+ * A template, with the strategy that justified it (#62) by #NUMBER.
+ *
+ * `strategy_id` is a serial and never leaves this app (`lib/views.ts`'s first
+ * rule), so it is resolved HERE, where there is a database to do it — the same
+ * arrangement `ProspectRow` makes for `prospects.strategy_id`.
+ */
+export type TemplateRow = Template & {
+  strategy_seq: number | null
+  strategy_name: string | null
+}
+
+/** One query for the whole page, not one per row. */
+async function decorateTemplates(rows: Template[]): Promise<TemplateRow[]> {
+  if (rows.length === 0) return []
+  const ids = [...new Set(rows.map((r) => r.strategy_id).filter((v): v is number => v != null))]
+  const byId = new Map<number, { seq: number; name: string }>()
+  if (ids.length) {
+    const found = await getDb()
+      .select({ id: strategies.id, seq: strategies.seq, name: strategies.name })
+      .from(strategies)
+      .where(inArray(strategies.id, ids))
+    for (const g of found) byId.set(g.id, { seq: g.seq, name: g.name })
+  }
+  return rows.map((r) => {
+    const g = r.strategy_id != null ? byId.get(r.strategy_id) : undefined
+    return { ...r, strategy_seq: g?.seq ?? null, strategy_name: g?.name ?? null }
+  })
+}
+
 export async function listTemplates(opts: {
   workspaceId: number
   channel?: string
   category?: string
   stage?: string
+  /** Only templates tagged with this strategy, by `sales.strategies.id` — the
+   *  route resolves it from a #number. */
+  strategyId?: number
   q?: string
   includeDeleted?: boolean
   limit?: number
-}): Promise<Template[]> {
+}): Promise<TemplateRow[]> {
   const db = getDb()
   const where: SQL[] = [eq(templates.workspace_id, opts.workspaceId)]
   if (!opts.includeDeleted) where.push(isNull(templates.deleted_at))
   if (opts.channel) where.push(eq(templates.channel, opts.channel))
   if (opts.category) where.push(eq(templates.category, opts.category))
   if (opts.stage) where.push(eq(templates.stage, opts.stage))
+  if (opts.strategyId != null) where.push(eq(templates.strategy_id, opts.strategyId))
   if (opts.q?.trim()) where.push(ilike(templates.name, `%${opts.q.trim()}%`))
-  return await db
+  const rows = await db
     .select()
     .from(templates)
     .where(and(...where))
     .orderBy(asc(templates.category), asc(templates.name))
     .limit(clampLimit(opts.limit))
+  return await decorateTemplates(rows)
 }
 
 export async function getTemplateBySeq(
   workspaceId: number,
   seq: number
-): Promise<Template | null> {
+): Promise<TemplateRow | null> {
   const db = getDb()
   const [row] = await db
     .select()
     .from(templates)
     .where(and(eq(templates.workspace_id, workspaceId), eq(templates.seq, seq)))
     .limit(1)
-  return row ?? null
+  if (!row) return null
+  return (await decorateTemplates([row]))[0] ?? null
 }
 
 export interface TemplateInput {
@@ -244,15 +280,17 @@ export interface TemplateInput {
   name?: string
   subject?: string | null
   body?: string | null
+  /** `sales.strategies.id`. `null` unlinks; `undefined` leaves it alone. */
+  strategyId?: number | null
 }
 
 export async function createTemplate(
   workspaceId: number,
   input: TemplateInput & { channel: string; category: string; name: string },
   actor: Actor
-): Promise<Template> {
+): Promise<TemplateRow> {
   const db = getDb()
-  return await db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     const seq = await allocateSeq(tx, workspaceId, 'template')
     const [row] = await tx
       .insert(templates)
@@ -262,6 +300,7 @@ export async function createTemplate(
         channel: input.channel,
         category: input.category,
         stage: input.stage ?? null,
+        strategy_id: input.strategyId ?? null,
         name: input.name,
         subject: input.subject ?? null,
         body: input.body ?? null,
@@ -281,6 +320,7 @@ export async function createTemplate(
     })
     return row
   })
+  return (await decorateTemplates([created]))[0]!
 }
 
 export async function updateTemplate(
@@ -288,15 +328,16 @@ export async function updateTemplate(
   seq: number,
   input: TemplateInput,
   actor: Actor
-): Promise<Template | null> {
+): Promise<TemplateRow | null> {
   const db = getDb()
   const existing = await getTemplateBySeq(workspaceId, seq)
   if (!existing) return null
-  return await db.transaction(async (tx) => {
+  const updated = await db.transaction(async (tx) => {
     const values: Record<string, unknown> = { updated_at: new Date() }
     if (input.channel !== undefined) values.channel = input.channel
     if (input.category !== undefined) values.category = input.category
     if (input.stage !== undefined) values.stage = input.stage
+    if (input.strategyId !== undefined) values.strategy_id = input.strategyId
     if (input.name !== undefined) values.name = input.name
     if (input.subject !== undefined) values.subject = input.subject
     if (input.body !== undefined) {
@@ -324,6 +365,7 @@ export async function updateTemplate(
     })
     return row
   })
+  return updated ? ((await decorateTemplates([updated]))[0] ?? null) : null
 }
 
 export async function softDeleteTemplate(

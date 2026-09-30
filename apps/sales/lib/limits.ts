@@ -55,6 +55,10 @@ export const MEETING_URL_MAX = 2048
 export const CONTACT_URL_MAX = 1024
 /** Prospect `address` — one postal line. Matches the `varchar(200)` column. */
 export const PROSPECT_ADDRESS_MAX = 200
+/** Prospect `phone` — the company's main line. Matches the `varchar(40)` column. */
+export const PROSPECT_PHONE_MAX = 40
+/** Prospect `email` — the company's general address. Matches `varchar(255)`. */
+export const PROSPECT_EMAIL_MAX = 255
 /** Communication `subject` — an email subject line, mostly. */
 export const COMM_SUBJECT_MAX = 300
 /** Product `name`. */
@@ -101,6 +105,8 @@ export const LENGTH_LIMITS = {
   contact_name_max: CONTACT_NAME_MAX,
   contact_url_max: CONTACT_URL_MAX,
   prospect_address_max: PROSPECT_ADDRESS_MAX,
+  prospect_phone_max: PROSPECT_PHONE_MAX,
+  prospect_email_max: PROSPECT_EMAIL_MAX,
   meeting_title_max: MEETING_TITLE_MAX,
   meeting_url_max: MEETING_URL_MAX,
   comm_subject_max: COMM_SUBJECT_MAX,

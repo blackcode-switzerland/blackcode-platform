@@ -22,6 +22,46 @@ app. `bk changelog --app sales` filters to this file.
 
 ---
 
+## 2026-09-30 — Combinable prospect filters, company phone/email, strategy on templates
+
+Not breaking; additive (one migration, sales **0014**). Sales #98, #60, #62, #61.
+
+**Filter prospects by city, type, source, tags and owner — and combine them (#98).**
+`GET /api/workspaces/{ws}/prospects` and `bk sales prospect list` take `--city`,
+`--sector`, `--source`, `--label` and `--owner`, each **repeatable**: OR within one
+flag, AND across flags and with `--stage`/`--strategy`/`--q`.
+`bk sales prospect list --city Lausanne --city Genève --sector Watches` is
+(Lausanne OR Genève) AND Watches. Values match exactly, ignoring case. Use the
+repeated flag, not commas — a comma can be part of a city; only `--stage` takes a
+comma list. `--label` and `--owner` used to take one value and still do.
+`bk sales prospect facets` (new; `GET …/prospects/facets`) lists the distinct
+cities, sectors, sources, labels and owners in use, with counts — free-text values
+are filterable the moment somebody writes them. The web Prospects page has the
+same controls, and now says "No strategies yet" instead of hiding the strategy
+filter. **Adapt:** a new `bk` against an old server would silently ignore the new
+filters, so update the CLI after the web is deployed.
+
+**A company has its own phone and email (#60).** `bk sales prospect create|edit
+--phone --email` (`""` clears) — the reception line and info@ address, separate from
+a person's on a contact. Phone is digits with `+ ( ) . / -`; email is one address;
+anything URL-shaped is a 400 (`invalid_phone`, `invalid_email`). `phone`/`email`
+appear on every prospect. Shown as `tel:`/`mailto:` links on the prospect page.
+
+**Templates can be tagged with a strategy (#62).** `bk sales template create|edit
+--strategy <n>` (`--strategy ""` unlinks), `bk sales template list --strategy <n>`,
+and `strategy` / `strategy_name` on every template. `bk sales strategy show <n>` now
+lists the templates as well as the prospects, and strategies carry `template_count`.
+Deleting a strategy leaves its templates (untagged).
+
+**The prospect page shows its strategy (#61).** The link existed; the page now has a
+Strategy section with the segment's reasoning, products and the messages written for
+it, and the header shows the strategy's name. `prospect show` prints it too.
+
+Existing data is untouched: new columns are nullable, and the migration only adds
+columns and indexes.
+
+---
+
 ## 2026-09-28 — Workspaces can carry a logo
 
 Not breaking; additive. `sales.workspaces.logo_url` (migration 0013), set with

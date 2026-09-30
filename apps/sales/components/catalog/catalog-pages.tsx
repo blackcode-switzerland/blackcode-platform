@@ -15,6 +15,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { Check, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -35,7 +36,14 @@ import {
 } from '@/components/filters'
 import { AgentOnly } from '@/components/forms'
 import { DocumentList } from '@/components/prospects/prospect-detail'
-import { useDocuments, useProducts, useProspects, useTemplates, type Product } from '@/lib/hooks'
+import {
+  useDocuments,
+  useProducts,
+  useProspects,
+  useStrategies,
+  useTemplates,
+  type Product,
+} from '@/lib/hooks'
 import { money } from '@/lib/format'
 import {
   DOCUMENT_KINDS,
@@ -241,13 +249,22 @@ function CopyButton({ label, text, what }: { label: string; text: string; what: 
 export function TemplatesPage({ ws }: { ws: string }) {
   const [channel, setChannel] = useFilterParam('channel')
   const [category, setCategory] = useFilterParam('category')
+  const [strategy, setStrategy] = useFilterParam('strategy')
   const templates = useTemplates(ws, {
     channel: channel || undefined,
     category: category || undefined,
+    strategy: strategy || undefined,
   })
+  // The strategies to filter by (#62) — from the data, like the prospects
+  // page's. Hidden when there are none: an empty dropdown is worse than none.
+  const strategies = useStrategies(ws)
+  const strategyOptions = useMemo(
+    () => (strategies.data ?? []).map((s) => ({ value: String(s.number), label: s.name })),
+    [strategies.data]
+  )
   const focus = useFocus()
   const focusRef = useFocusRef<HTMLDivElement>(focus)
-  const filtered = Boolean(channel || category)
+  const filtered = Boolean(channel || category || strategy)
 
   const bar = (
     <FilterBar>
@@ -265,6 +282,15 @@ export function TemplatesPage({ ws }: { ws: string }) {
         options={TEMPLATE_CATEGORIES}
         allLabel="All categories"
       />
+      {strategyOptions.length > 0 && (
+        <FilterSelect
+          label="Strategy"
+          value={strategy}
+          onChange={setStrategy}
+          options={strategyOptions}
+          allLabel="All strategies"
+        />
+      )}
       <ClearFilters active={filtered} keep={['focus']} />
     </FilterBar>
   )
@@ -310,6 +336,18 @@ export function TemplatesPage({ ws }: { ws: string }) {
               {templateChannelLabel(t.channel)}
               {t.stage && ` · ${stageLabel(t.stage)}`}
             </span>
+            {/* The segment this message was written for (#62) — a LINK to it,
+                for the reason the prospect header's is: the reasoning lives on
+                the strategy and is not copied here. */}
+            {t.strategy != null && (
+              <Link
+                href={`/dashboard/${ws}/strategies?focus=${t.strategy}`}
+                className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <span className="font-mono tabular-nums">#{t.strategy}</span>
+                {t.strategy_name}
+              </Link>
+            )}
             {/*
               THE SUBJECT AND THE BODY COPY SEPARATELY, and they are not
               concatenated into one button. A subject line and a message body go

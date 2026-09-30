@@ -97,6 +97,8 @@ function ProspectFields({ ws, p, close }: { ws: string; p: ProspectDetail; close
     sector: p.sector,
     website: p.website,
     address: p.address,
+    phone: p.phone,
+    email: p.email,
     strategy: p.strategy,
     game_plan: p.game_plan,
     value: p.value,
@@ -145,6 +147,23 @@ function ProspectFields({ ws, p, close }: { ws: string; p: ProspectDetail; close
           <TextInput
             value={form.address ?? ''}
             onChange={(e) => set('address', e.target.value || null)}
+          />
+        </Field>
+        <Field
+          label="Phone"
+          hint="The company's main line — not a person's. Those go on a contact."
+        >
+          <TextInput
+            type="tel"
+            value={form.phone ?? ''}
+            onChange={(e) => set('phone', e.target.value || null)}
+          />
+        </Field>
+        <Field label="Email" hint="The company's general address, e.g. info@…">
+          <TextInput
+            type="email"
+            value={form.email ?? ''}
+            onChange={(e) => set('email', e.target.value || null)}
           />
         </Field>
         <Field

@@ -114,7 +114,7 @@ func newStrategyShowCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "show <n>",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/strategies/{n}"},
-		Short:       "One strategy, with the prospects running against it",
+		Short:       "One strategy, with the prospects and templates running against it",
 		Args:        cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -162,6 +162,16 @@ func newStrategyShowCmd() *cobra.Command {
 						fmt.Fprintf(pt, "  #%d\t%s\t%s\n", p.Number, cmdutil.Truncate(p.Name, 30), p.Stage)
 					}
 					if err := pt.Flush(); err != nil {
+						return err
+					}
+				}
+				if len(g.Templates) > 0 {
+					fmt.Fprintln(w, "\nTEMPLATES")
+					tt := output.Tabwriter(w)
+					for _, t := range g.Templates {
+						fmt.Fprintf(tt, "  #%d\t%s\t%s\t%s\n", t.Number, cmdutil.Truncate(t.Name, 30), t.Channel, t.Category)
+					}
+					if err := tt.Flush(); err != nil {
 						return err
 					}
 				}

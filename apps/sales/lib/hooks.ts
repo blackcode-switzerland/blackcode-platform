@@ -133,12 +133,24 @@ export function useUpcomingMeetings(ws: string, take = 5) {
   })
 }
 
-/** The filters every list page shares. Absent/empty means "no filter". */
+/**
+ * The filters every list page shares. Absent/empty means "no filter".
+ *
+ * The array-valued ones are the combinable filters (#98): OR within one list,
+ * AND across them. They go out as repeated parameters, matching the route and
+ * `bk sales prospect list --city a --city b`.
+ */
 export interface ProspectFilters {
+  /** Comma-joined, like `bk`'s `--stage a,b` — a stage never contains a comma. */
   stage?: string
   /** A strategy's #number (`sales.strategies.seq`), resolved server-side. */
   strategy?: string
-  label?: string
+  city?: string[]
+  sector?: string[]
+  source?: string[]
+  label?: string[]
+  /** Emails, or `me`. */
+  owner?: string[]
   q?: string
 }
 
@@ -152,6 +164,37 @@ export function useProspects(ws: string, filters: ProspectFilters = {}) {
       )
       return page
     },
+  })
+}
+
+/** One value a prospect filter can take, with how many live prospects carry it. */
+export interface Facet {
+  value: string
+  count: number
+  /** Owners only. */
+  name?: string | null
+}
+
+export interface ProspectFacets {
+  cities: Facet[]
+  sectors: Facet[]
+  sources: Facet[]
+  labels: Facet[]
+  owners: Facet[]
+}
+
+/**
+ * The values the prospect filters can take, from the data (#98).
+ *
+ * UNFILTERED, deliberately and by construction: it is its own route rather than
+ * a read of the filtered listing, because options derived from the current
+ * result shrink as you choose — pick one city and every other vanishes. The row
+ * of available filters must not be a function of the filter.
+ */
+export function useProspectFacets(ws: string) {
+  return useQuery({
+    queryKey: ['prospects', ws, 'facets'],
+    queryFn: () => apiGet<ProspectFacets>(wsPath(ws, '/prospects/facets')),
   })
 }
 
@@ -345,6 +388,9 @@ export interface Template {
   channel: string
   category: string
   stage: string | null
+  /** The segment strategy this message was written for (#62), by #number. */
+  strategy: number | null
+  strategy_name: string | null
   name: string
   subject: string | null
   body: string | null
@@ -446,6 +492,8 @@ export interface Strategy {
   /** Live deals pointing at this segment — the number you want before retiring
    *  one. Served rather than derived; see the route. */
   prospect_count: number
+  /** Live templates written for this segment (#62). */
+  template_count: number
   urn: string | null
   created_at: string
   updated_at: string
@@ -459,7 +507,10 @@ export function useStrategies(ws: string) {
   })
 }
 
-export function useTemplates(ws: string, opts: { channel?: string; category?: string } = {}) {
+export function useTemplates(
+  ws: string,
+  opts: { channel?: string; category?: string; strategy?: string } = {}
+) {
   return useQuery({
     queryKey: ['templates', ws, opts],
     queryFn: async () =>

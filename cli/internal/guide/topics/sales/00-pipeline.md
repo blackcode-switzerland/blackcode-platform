@@ -71,9 +71,25 @@ bk sales prospect list                      # everything, most recently touched 
 bk sales prospect list --q roches           # substring match on the COMPANY NAME
 bk sales prospect list --owner me           # what you are on the hook for
 bk sales prospect list --stage <stage>      # one stage; repeat or comma-separate for more
-bk sales prospect list --label <name>       # by label
+bk sales prospect list --label <name>       # by label; repeat for several
 bk sales prospect list --strategy <n>       # only the prospects linked to that segment strategy
+bk sales prospect list --city Lausanne --city Genève --sector "Watches"
+bk sales prospect facets                    # the values those filters can take, with counts
 ```
+
+**The filters combine: AND across them, OR within one.** The last `list` above is
+(Lausanne OR Genève) AND sector Watches. `--stage`, `--city`, `--sector`,
+`--source`, `--label` and `--owner` each repeat, and `--strategy` narrows on top.
+A value matches exactly but ignoring case — `lausanne` finds `Lausanne`, `Laus`
+finds nothing — so a partial name is the job of `--q`, not of these.
+
+City, sector and source are **free text**: what you can filter on is whatever has
+been written, by a person or by an agent. `bk sales prospect facets` reads it
+back — every distinct city, sector, source, label and deal owner in use, with how
+many live prospects carry each — so you pick a value that exists instead of
+guessing one and reading an empty list as a clean pipeline. Only `--stage` also
+takes a comma list; the others repeat the flag, because a comma can be part of a
+value ("Biel/Bienne, BE").
 
 `--q` matches the company name only — it is a substring filter on a listing, not
 a search. Finding a phrase *inside* a record is a different command, and so is

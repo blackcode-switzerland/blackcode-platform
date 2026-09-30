@@ -27,6 +27,7 @@
 // ends up in a script, and then it is a contract nobody agreed to.
 
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { getDb } from '../client'
 import {
   communications,
@@ -85,11 +86,25 @@ export interface ListProspectsFilter {
   stages?: string[]
   /** Deal owner, by `platform.users.id`. Resolved from an email by the route. */
   ownerUserId?: number
+  /** Several owners — OR within the dimension (#98). Combined with
+   *  `ownerUserId` when both are given. */
+  ownerUserIds?: number[]
   /** The linked strategy, by `sales.strategies.id`. Resolved from its #number
    *  by the route's `resolveStrategy()` — never a serial on the wire. */
   strategyId?: number
-  /** Label NAME, matched case-insensitively — an agent has the name, not the id. */
-  label?: string
+  /**
+   * The combinable filters (#98). **OR within one list, AND across them**:
+   * `cities: ['Lausanne','Genève'], sectors: ['Watches']` is
+   * (Lausanne OR Genève) AND Watches. Each value is matched CASE-INSENSITIVELY
+   * and EXACTLY — `lower(col) = lower(value)` — so "lausanne" finds "Lausanne"
+   * and "Laus" finds nothing; the facets (`prospectFacets`) are how a caller
+   * learns the values that exist. An empty list is no filter.
+   */
+  cities?: string[]
+  sectors?: string[]
+  sources?: string[]
+  /** Label NAMES, matched case-insensitively — an agent has the name, not the id. */
+  labels?: string[]
   /** Substring match over the company name. `bk sales search` is the full-text one. */
   q?: string
   /** Include soft-deleted rows. Off by default; the bin is `bk sales trash`. */
@@ -102,6 +117,11 @@ export interface ListProspectsFilter {
 export interface ProspectsPage {
   data: ProspectRow[]
   next_cursor: number | null
+}
+
+/** Trimmed, lowercased, de-duplicated, blanks dropped — the filter's match keys. */
+function lowerSet(values: string[] | undefined): string[] {
+  return [...new Set((values ?? []).map((v) => v.trim().toLowerCase()).filter(Boolean))]
 }
 
 /**
@@ -118,11 +138,25 @@ export async function listProspects(filter: ListProspectsFilter): Promise<Prospe
   const where: SQL[] = [eq(prospects.workspace_id, filter.workspaceId)]
   if (!filter.includeDeleted) where.push(isNull(prospects.deleted_at))
   if (filter.stages?.length) where.push(inArray(prospects.stage, filter.stages))
-  if (filter.ownerUserId != null) where.push(eq(prospects.owner_user_id, filter.ownerUserId))
   if (filter.strategyId != null) where.push(eq(prospects.strategy_id, filter.strategyId))
   if (filter.q?.trim()) where.push(ilike(prospects.name, `%${filter.q.trim()}%`))
   if (filter.cursor != null) where.push(sql`${prospects.seq} < ${filter.cursor}`)
-  if (filter.label?.trim()) {
+  const owners = [
+    ...new Set([
+      ...(filter.ownerUserIds ?? []),
+      ...(filter.ownerUserId != null ? [filter.ownerUserId] : []),
+    ]),
+  ]
+  if (owners.length) where.push(inArray(prospects.owner_user_id, owners))
+  const textIn = (col: SQL, values: string[] | undefined) => {
+    const v = lowerSet(values)
+    if (v.length) where.push(sql`lower(${col}) IN (${sql.join(v.map((x) => sql`${x}`), sql`, `)})`)
+  }
+  textIn(sql`${prospects.city}`, filter.cities)
+  textIn(sql`${prospects.sector}`, filter.sectors)
+  textIn(sql`${prospects.source}`, filter.sources)
+  const labelNames = lowerSet(filter.labels)
+  if (labelNames.length) {
     // No app scope in this predicate any more, and its absence is the Phase 3
     // change: `sales.prospect_labels.label_id` has a foreign key into
     // `sales.labels`, so there is no foreign row for a scope to exclude.
@@ -130,7 +164,7 @@ export async function listProspects(filter: ListProspectsFilter): Promise<Prospe
       SELECT 1 FROM ${prospectLabels} pl
       JOIN ${salesLabels} l ON l.id = pl.label_id
       WHERE pl.prospect_id = ${prospects.id}
-        AND lower(l.name) = lower(${filter.label.trim()})
+        AND lower(l.name) IN (${sql.join(labelNames.map((x) => sql`${x}`), sql`, `)})
     )`)
   }
 
@@ -147,6 +181,86 @@ export async function listProspects(filter: ListProspectsFilter): Promise<Prospe
   const next = rows.length > limit ? (page[page.length - 1]?.seq ?? null) : null
 
   return { data: await decorate(page), next_cursor: next }
+}
+
+/** One value a filter can take, and how many live prospects carry it. */
+export interface Facet {
+  value: string
+  count: number
+}
+
+/** The values the combinable filters (#98) can be given, from the data itself. */
+export interface ProspectFacets {
+  cities: Facet[]
+  sectors: Facet[]
+  sources: Facet[]
+  labels: Facet[]
+  /** Deal owners. `value` is the email — what `--owner` takes. */
+  owners: Array<Facet & { name: string | null }>
+}
+
+/**
+ * The distinct values that exist in this workspace, per filterable dimension.
+ *
+ * ── WHY THIS IS A QUERY AND NOT A LIST ──────────────────────────────────────
+ * City, sector and source are FREE TEXT — a closed list would refuse the first
+ * segment somebody discovered (`schema.ts`, at `sector`) — so what is
+ * filterable is exactly what somebody, or Companion, wrote. Reading the values
+ * back is what makes a new one filterable with no code change (#98), for the
+ * web's dropdowns and for an agent that has to know what to pass to `--city`.
+ *
+ * Grouped on the LOWERCASED value, the same key `listProspects` matches on, so
+ * `Lausanne` and `lausanne` are one facet and one filter; `min(col)` picks the
+ * spelling shown, deterministically. Live prospects only — a binned deal is not
+ * a reason for a filter option that matches nothing on the page.
+ *
+ * Ordered by count then name: the biggest segment first is what a person scans.
+ */
+export async function prospectFacets(workspaceId: number): Promise<ProspectFacets> {
+  const db = getDb()
+  const live = and(eq(prospects.workspace_id, workspaceId), isNull(prospects.deleted_at))
+
+  const textFacet = async (col: AnyPgColumn): Promise<Facet[]> => {
+    const rows = await db
+      .select({ value: sql<string>`min(${col})`, n: sql<number>`count(*)::int` })
+      .from(prospects)
+      .where(and(live, sql`${col} IS NOT NULL AND btrim(${col}) <> ''`))
+      .groupBy(sql`lower(${col})`)
+      .orderBy(sql`count(*) DESC`, sql`lower(${col})`)
+    return rows.map((r) => ({ value: r.value, count: Number(r.n) }))
+  }
+
+  const [cities, sectors, sources, labelRows, ownerRows] = await Promise.all([
+    textFacet(prospects.city),
+    textFacet(prospects.sector),
+    textFacet(prospects.source),
+    db
+      .select({
+        value: sql<string>`min(${salesLabels.name})`,
+        n: sql<number>`count(DISTINCT ${prospects.id})::int`,
+      })
+      .from(prospectLabels)
+      .innerJoin(salesLabels, eq(salesLabels.id, prospectLabels.label_id))
+      .innerJoin(prospects, eq(prospects.id, prospectLabels.prospect_id))
+      .where(live)
+      .groupBy(sql`lower(${salesLabels.name})`)
+      .orderBy(sql`count(DISTINCT ${prospects.id}) DESC`, sql`lower(${salesLabels.name})`),
+    db
+      .select({ email: users.email, name: users.name, n: sql<number>`count(*)::int` })
+      .from(prospects)
+      .innerJoin(users, eq(users.id, prospects.owner_user_id))
+      .where(live)
+      .groupBy(users.id, users.email, users.name)
+      .orderBy(sql`count(*) DESC`, users.email),
+  ])
+
+  return {
+    cities,
+    sectors,
+    sources,
+    labels: labelRows.map((r) => ({ value: r.value, count: Number(r.n) })),
+    owners: ownerRows.map((r) => ({ value: r.email, name: r.name, count: Number(r.n) })),
+  }
 }
 
 /** One prospect by #number, or null. Soft-deleted rows are returned. */
@@ -271,6 +385,9 @@ export interface CreateProspectInput {
   /** Migration 0008 — the identity card (#34). */
   website?: string | null
   address?: string | null
+  /** Migration 0014 — the COMPANY's own line and address (#60). */
+  phone?: string | null
+  email?: string | null
   /** Migration 0010 — the segment this belongs to (#37) and the per-prospect
    *  angle on top of it (#35). `strategyId: null` clears the link. */
   strategyId?: number | null
@@ -308,6 +425,8 @@ export async function createProspect(input: CreateProspectInput): Promise<Prospe
         summary: input.summary ?? null,
         website: input.website ?? null,
         address: input.address ?? null,
+        phone: input.phone ?? null,
+        email: input.email ?? null,
         strategy_id: input.strategyId ?? null,
         game_plan: input.gamePlan ?? null,
         created_by: input.actor.userId,
@@ -355,6 +474,9 @@ export interface UpdateProspectInput {
   /** Migration 0008 — the identity card (#34). */
   website?: string | null
   address?: string | null
+  /** Migration 0014 — the COMPANY's own line and address (#60). */
+  phone?: string | null
+  email?: string | null
   /** Migration 0010 — the segment this belongs to (#37) and the per-prospect
    *  angle on top of it (#35). `strategyId: null` clears the link. */
   strategyId?: number | null
@@ -399,6 +521,8 @@ export async function updateProspect(
     if (patch.summary !== undefined) set('summary', 'summary', patch.summary)
     if (patch.website !== undefined) set('website', 'website', patch.website)
     if (patch.address !== undefined) set('address', 'address', patch.address)
+    if (patch.phone !== undefined) set('phone', 'phone', patch.phone)
+    if (patch.email !== undefined) set('email', 'email', patch.email)
     if (patch.gamePlan !== undefined) set('game_plan', 'game_plan', patch.gamePlan)
     if (patch.strategyId !== undefined) set('strategy_id', 'strategy_id', patch.strategyId)
     if (patch.ownerUserId !== undefined) {

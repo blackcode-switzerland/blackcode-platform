@@ -3,6 +3,7 @@ package sales
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
@@ -303,12 +304,18 @@ func newTemplateCmd() *cobra.Command {
 
 func newTemplateListCmd() *cobra.Command {
 	var channel, category, stage, query string
-	var limit int
+	var strategy, limit int
 	cmd := &cobra.Command{
 		Use:         "list",
 		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/templates"},
 		Short:       "List templates",
-		Args:        cobra.NoArgs,
+		Long: `List message templates.
+
+--strategy takes a segment strategy's #number (bk sales strategy list) and
+narrows the list to the templates written for it — the same question
+"bk sales prospect list --strategy" asks of prospects, so a strategy's whole
+chain reads from either end.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -318,16 +325,16 @@ func newTemplateListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			rows, err := c.ListTemplates(ws, channel, category, stage, query, limit)
+			rows, err := c.ListTemplates(ws, channel, category, stage, query, strategy, limit)
 			if err != nil {
 				return err
 			}
 			return output.Render(format, rows, func(w io.Writer) error {
 				tw := output.Tabwriter(w)
-				fmt.Fprintln(tw, "#\tCHANNEL\tCATEGORY\tSTAGE\tNAME\tVARIABLES")
+				fmt.Fprintln(tw, "#\tCHANNEL\tCATEGORY\tSTAGE\tSTRATEGY\tNAME\tVARIABLES")
 				for _, r := range rows {
-					fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\n",
-						r.Number, r.Channel, r.Category, dashIf(r.Stage),
+					fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
+						r.Number, r.Channel, r.Category, dashIf(r.Stage), strategyCell(r.Strategy),
 						cmdutil.Truncate(r.Name, 30), dashIf(strings.Join(r.Variables, ", ")))
 				}
 				if err := tw.Flush(); err != nil {
@@ -343,6 +350,7 @@ func newTemplateListCmd() *cobra.Command {
 	cmd.Flags().StringVar(&channel, "channel", "", "Filter by channel — "+vocab("template_channels"))
 	cmd.Flags().StringVar(&category, "category", "", "Filter by category — "+vocab("template_categories"))
 	cmd.Flags().StringVar(&stage, "stage", "", "Filter by the stage it is for — "+vocab("stages"))
+	cmd.Flags().IntVar(&strategy, "strategy", 0, "Only templates written for this segment strategy's #number")
 	cmd.Flags().StringVar(&query, "q", "", "Substring match on the name")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Max templates to return")
 	return cmd
@@ -377,6 +385,10 @@ func newTemplateShowCmd() *cobra.Command {
 				fmt.Fprintf(tw, "channel\t%s\n", t.Channel)
 				fmt.Fprintf(tw, "category\t%s\n", t.Category)
 				fmt.Fprintf(tw, "stage\t%s\n", dashIf(t.Stage))
+				if t.Strategy > 0 {
+					fmt.Fprintf(tw, "strategy\t#%d %s (bk sales strategy show %d)\n",
+						t.Strategy, t.StrategyName, t.Strategy)
+				}
 				// Parsed from the body, so this is what `render` will demand.
 				fmt.Fprintf(tw, "variables\t%s\n", dashIf(strings.Join(t.Variables, ", ")))
 				if err := tw.Flush(); err != nil {
@@ -396,6 +408,7 @@ func newTemplateShowCmd() *cobra.Command {
 
 func newTemplateCreateCmd() *cobra.Command {
 	var req client.TemplateRequest
+	var strategy string
 	cmd := &cobra.Command{
 		Use:         "create --channel <c> --category <c> --name <name>",
 		Annotations: map[string]string{"routes": "POST /api/workspaces/{ws}/templates"},
@@ -405,13 +418,19 @@ func newTemplateCreateCmd() *cobra.Command {
 Placeholders are written {{like_this}} in --body and are PARSED OUT for you:
 there is no --variables flag, because a declared list that could disagree with
 the body would make "render" validate against something the template does not
-contain.`,
+contain.
+
+--strategy takes a segment strategy's #number (bk sales strategy list) and tags
+the template with the strategy that justified the message, so "strategy ->
+prospects + templates" is a chain you can read. It is optional: a generic recap
+belongs to no segment.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
 				return err
 			}
+			req.Strategy = patched(cmd, "strategy", strategy)
 			c, ws, err := clientAndWorkspace()
 			if err != nil {
 				return err
@@ -428,6 +447,7 @@ contain.`,
 		},
 	}
 	templateFlags(cmd, &req)
+	cmd.Flags().StringVar(&strategy, "strategy", "", "The segment strategy's #number this message was written for (bk sales strategy list)")
 	for _, f := range []string{"channel", "category", "name"} {
 		_ = cmd.MarkFlagRequired(f)
 	}
@@ -436,11 +456,16 @@ contain.`,
 
 func newTemplateEditCmd() *cobra.Command {
 	var req client.TemplateRequest
+	var strategy string
 	cmd := &cobra.Command{
 		Use:         "edit <n>",
 		Annotations: map[string]string{"routes": "PATCH /api/workspaces/{ws}/templates/{n}"},
 		Short:       "Edit a template",
-		Args:        cobra.ExactArgs(1),
+		Long: `Edit a template. Only the flags you pass are changed.
+
+--strategy "" UNLINKS the template from its strategy; not passing the flag
+leaves the link alone.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -450,6 +475,7 @@ func newTemplateEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			req.Strategy = patched(cmd, "strategy", strategy)
 			c, ws, err := clientAndWorkspace()
 			if err != nil {
 				return err
@@ -466,7 +492,16 @@ func newTemplateEditCmd() *cobra.Command {
 		},
 	}
 	templateFlags(cmd, &req)
+	cmd.Flags().StringVar(&strategy, "strategy", "", "The segment strategy's #number this message was written for (\"\" unlinks)")
 	return cmd
+}
+
+// strategyCell is a template row's strategy column: "#1", or "—" when untagged.
+func strategyCell(n int) string {
+	if n <= 0 {
+		return "—"
+	}
+	return "#" + strconv.Itoa(n)
 }
 
 func templateFlags(cmd *cobra.Command, req *client.TemplateRequest) {

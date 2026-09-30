@@ -306,6 +306,20 @@ export const prospects = salesSchema.table(
      *  it is split into five columns somebody has to decide what a Swiss
      *  `state` is. #34 asks for "company address", and this is that. */
     address: varchar('address', { length: 200 }),
+    /**
+     * The COMPANY's main line and general address — migration 0014, sales #60.
+     *
+     * NOT a contact's: a person's are `contacts.phone`/`contacts.email`. These
+     * belong to nobody in particular (a boutique's reception, an info@), which is
+     * why they are on the prospect and not a stand-in "general" contact.
+     *
+     * No `BLOB-REF` trigger, and deliberately: the routes refuse any value that
+     * is not a phone number / one email address (`requirePhone`/`requireEmail`
+     * in lib/http-input.ts), so no file URL can reach either — the same ground
+     * `contacts.decision_power` was excluded on in 0008.
+     */
+    phone: varchar('phone', { length: 40 }),
+    email: varchar('email', { length: 255 }),
 
     /** `lib/pipeline.ts` STAGES. Validated in the route, not by a CHECK — the
      *  vocabulary is served live by `bk meta` and a CHECK would need a migration
@@ -429,6 +443,11 @@ export const prospects = salesSchema.table(
     wsOwner: index('idx_prospects_ws_owner').on(t.workspace_id, t.owner_user_id),
     wsUpdated: index('idx_prospects_ws_updated').on(t.workspace_id, t.updated_at),
     wsDue: index('idx_prospects_ws_due').on(t.workspace_id, t.next_action_due),
+    // Expression indexes for the combinable filters and the facets (0014, #98):
+    // both match on the LOWERCASED value, so "Lausanne" and "lausanne" are one.
+    wsCity: index('idx_prospects_ws_city').on(t.workspace_id, sql`lower(${t.city})`),
+    wsSector: index('idx_prospects_ws_sector').on(t.workspace_id, sql`lower(${t.sector})`),
+    wsSource: index('idx_prospects_ws_source').on(t.workspace_id, sql`lower(${t.source})`),
     search: index('idx_prospects_search').using('gin', t.search),
   })
 )
@@ -931,6 +950,15 @@ export const templates = salesSchema.table(
     category: varchar('category', { length: 24 }).notNull(),
     /** The pipeline stage this template is FOR. Nullable — some are stageless. */
     stage: varchar('stage', { length: 24 }),
+    /**
+     * The segment strategy that justified this message — migration 0014, sales
+     * #62. The mirror of `prospects.strategy_id`, in the same shape: nullable
+     * (most templates are strategy-agnostic) and `ON DELETE SET NULL`, because
+     * retiring a segment must not take the messages written for it.
+     */
+    strategy_id: integer('strategy_id').references(() => strategies.id, {
+      onDelete: 'set null',
+    }),
     name: varchar('name', { length: 120 }).notNull(),
     /** BLOB-REF (scan). */
     subject: varchar('subject', { length: 300 }),
@@ -960,6 +988,7 @@ export const templates = salesSchema.table(
     wsSeq: uniqueIndex('uq_templates_ws_seq').on(t.workspace_id, t.seq),
     wsChannel: index('idx_templates_ws_channel').on(t.workspace_id, t.channel),
     wsStage: index('idx_templates_ws_stage').on(t.workspace_id, t.stage),
+    strategy: index('idx_templates_strategy').on(t.strategy_id),
     search: index('idx_templates_search').using('gin', t.search),
   })
 )

@@ -69,6 +69,8 @@ import {
   useObjections,
   useProspect,
   useProspectNotes,
+  useStrategies,
+  useTemplates,
   type Communication,
   type JourneyStep,
 } from '@/lib/hooks'
@@ -160,6 +162,30 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
               {p.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
             </a>
           )}
+          {/*
+            The COMPANY's own line and address (#60) — `tel:`/`mailto:` for the
+            reason a contact's are: a number you can ring from the page you are
+            already on is the whole difference from a record of one. A person's
+            are on the contacts below; these belong to the reception.
+          */}
+          {p.phone && (
+            <a
+              href={`tel:${p.phone.replace(/[^+\d]/g, '')}`}
+              className="flex items-center gap-1 text-primary hover:underline"
+            >
+              <Phone size={12} />
+              {p.phone}
+            </a>
+          )}
+          {p.email && (
+            <a
+              href={`mailto:${p.email}`}
+              className="flex items-center gap-1 text-primary hover:underline"
+            >
+              <Mail size={12} />
+              {p.email}
+            </a>
+          )}
           {/* The segment this deal belongs to (#37). A LINK, because the
               reasoning lives on the strategy and copying it here is how it goes
               stale nine times — the whole argument for a separate record. */}
@@ -169,7 +195,7 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
               className="flex items-center gap-1 text-primary hover:underline"
             >
               <Target size={12} />
-              Strategy #{p.strategy}
+              {p.strategy_name ? `Strategy #${p.strategy} · ${p.strategy_name}` : `Strategy #${p.strategy}`}
             </Link>
           )}
           <span>Owner: {p.owner?.name ?? p.owner?.email ?? '—'}</span>
@@ -296,7 +322,9 @@ export function ProspectDetail({ ws, n }: { ws: string; n: number }) {
         ))}
       </nav>
 
-      {tab === 'overview' && <Overview ws={ws} n={n} journey={p.journey} />}
+      {tab === 'overview' && (
+        <Overview ws={ws} n={n} journey={p.journey} strategy={p.strategy} />
+      )}
       {tab === 'research' && <ResearchTab ws={ws} n={n} />}
       {tab === 'communications' && <CommunicationsTab ws={ws} n={n} />}
       {tab === 'meetings' && <MeetingsTab ws={ws} n={n} />}
@@ -337,10 +365,12 @@ function Overview({
   ws,
   n,
   journey,
+  strategy,
 }: {
   ws: string
   n: number
   journey: JourneyStep[]
+  strategy: number | null
 }) {
   const contacts = useContacts(ws, n)
   const objections = useObjections(ws, n)
@@ -547,6 +577,8 @@ function Overview({
         )}
       </Section>
 
+      <StrategySection ws={ws} strategy={strategy} />
+
       {/*
         TRIANGULATION — the reason this app exists (§1.2 rule 2).
 
@@ -624,6 +656,125 @@ function Overview({
         can act on. If a dedicated field for it is wanted later, it is a sales
         column, not a shared table.
       */}
+    </div>
+  )
+}
+
+/**
+ * The segment strategy this deal belongs to, ON the prospect (sales #61).
+ *
+ * ── WHY THIS IS A SECTION AND NOT JUST THE HEADER LINK ──────────────────────
+ * The header has said "Strategy #1" since #37 — a link to a list you then have
+ * to open and cross-reference. #61 was filed by somebody looking at eleven
+ * prospects that all belong to one strategy and finding no way to SEE that from
+ * a record: "you have to know it exists". This mirrors the Triangulation block
+ * beside it: the reasoning that applies to this deal, in front of you.
+ *
+ * It READS the strategy and never copies it. The rationale lives on the
+ * strategy (0010's whole argument: a copy goes stale nine times), so this shows
+ * the strategy's own text with a link back, and the write is "Edit deal"
+ * above / `bk sales prospect edit <n> --strategy <n>` — a section with a second
+ * write path would be a second way to link one, and a chance to disagree.
+ *
+ * The chain is shown whole: the templates written FOR this strategy (#62) sit
+ * under it, because "which messages serve this segment" is the next thing a rep
+ * asks once they know which segment it is.
+ */
+function StrategySection({ ws, strategy }: { ws: string; strategy: number | null }) {
+  return (
+    <Section title="Strategy" action={<AgentOnly what="Strategy links" />}>
+      {strategy == null ? (
+        <EmptyState
+          title="No strategy linked"
+          hint="The agent links a deal to the segment it belongs to."
+        />
+      ) : (
+        <StrategyCard ws={ws} number={strategy} />
+      )}
+    </Section>
+  )
+}
+
+function StrategyCard({ ws, number }: { ws: string; number: number }) {
+  const strategies = useStrategies(ws)
+  const templates = useTemplates(ws, { strategy: String(number) })
+  const s = strategies.data?.find((g) => g.number === number)
+
+  if (strategies.isPending) return <BlockSkeleton rows={2} />
+  if (strategies.error) return <ErrorState error={strategies.error} />
+  // The link can outlive the listing: a BINNED strategy is not returned, and its
+  // prospects are deliberately not unlinked (so the bin can restore them). Say
+  // so rather than rendering an empty card that looks like a failed load.
+  if (!s) {
+    return (
+      <EmptyState
+        title={`Strategy #${number} is in the recycle bin`}
+        hint="This deal is still linked to it; restoring it from the bin brings it back."
+      />
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Link
+          href={`/dashboard/${ws}/strategies?focus=${s.number}`}
+          className="flex items-baseline gap-1.5 text-sm font-medium text-foreground hover:underline"
+        >
+          <RecordNumber n={s.number} />
+          {s.name}
+        </Link>
+        {[s.vertical, s.area].filter(Boolean).map((v) => (
+          <span key={v} className="text-xs text-muted-foreground">
+            {v}
+          </span>
+        ))}
+        <Link
+          href={`/dashboard/${ws}/prospects?strategy=${s.number}`}
+          className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline"
+        >
+          {s.prospect_count} prospect
+        </Link>
+      </div>
+      {s.rationale && (
+        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+          {s.rationale}
+        </p>
+      )}
+      {s.products.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {s.products.map((p) => (
+            <Link
+              key={p.number}
+              href={`/dashboard/${ws}/products?focus=${p.number}`}
+              className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <span className="font-mono tabular-nums">#{p.number}</span>
+              {p.name}
+            </Link>
+          ))}
+        </div>
+      )}
+      {templates.data && templates.data.length > 0 && (
+        <div className="mt-3 border-t border-border pt-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Messages for this segment
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {templates.data.map((t) => (
+              <li key={t.number}>
+                <Link
+                  href={`/dashboard/${ws}/templates?focus=${t.number}`}
+                  className="flex items-baseline gap-1.5 text-sm text-foreground hover:underline"
+                >
+                  <RecordNumber n={t.number} />
+                  {t.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }

@@ -35,9 +35,15 @@ export interface PublicProspect {
   /** Migration 0008 — the identity card (#34). */
   website: string | null
   address: string | null
+  /** Migration 0014 (#60) — the COMPANY's own main line and general address.
+   *  A person's are on the contact. */
+  phone: string | null
+  email: string | null
   /** Migration 0010. The reusable segment (#37), by #number, and the angle for
-   *  THIS prospect on top of it (#35). */
+   *  THIS prospect on top of it (#35). `strategy_name` is the same segment's
+   *  name, served so a caller need not make a second read to say what it is. */
   strategy: number | null
+  strategy_name: string | null
   game_plan: string | null
   stage: string
   value: string | null
@@ -70,9 +76,12 @@ export function publicProspect(row: ProspectRow, workspaceSlug: string): PublicP
     sector: row.sector,
     website: row.website,
     address: row.address,
+    phone: row.phone,
+    email: row.email,
     // The strategy's #number, never its row id — `lib/views.ts`'s first rule.
     // Resolved by the caller, which has it: `getProspectBySeq` joins it in.
     strategy: row.strategy_seq ?? null,
+    strategy_name: row.strategy_name ?? null,
     game_plan: row.game_plan,
     stage: row.stage,
     value: row.value,
@@ -169,6 +178,7 @@ export function publicStrategy(
     case_studies: string | null
     products: Array<{ number: number; name: string }>
     prospect_count: number
+    template_count: number
     created_at: Date
     updated_at: Date
     deleted_at: Date | null
@@ -187,6 +197,8 @@ export function publicStrategy(
     // because the one moment somebody needs it is before retiring a strategy —
     // and at that moment they are looking at this record, not at the prospects.
     prospect_count: s.prospect_count,
+    // The other half of the chain (#62): messages written for this segment.
+    template_count: s.template_count,
     urn: entityUrnOrNull(workspaceSlug, 'strategy', s.seq),
     created_at: iso(s.created_at)!,
     updated_at: iso(s.updated_at)!,
@@ -425,6 +437,9 @@ export function publicTemplate(
     subject: string | null
     body: string | null
     variables: string[] | null
+    /** Resolved from `strategy_id` by `catalog.ts` — never the serial (#62). */
+    strategy_seq: number | null
+    strategy_name: string | null
     deleted_at: Date | null
   },
   workspaceSlug: string
@@ -434,6 +449,10 @@ export function publicTemplate(
     channel: t.channel,
     category: t.category,
     stage: t.stage,
+    // The segment strategy this message was written for (#62), by #number, and
+    // its name so a caller need not make a second read to say what it is.
+    strategy: t.strategy_seq ?? null,
+    strategy_name: t.strategy_name ?? null,
     name: t.name,
     subject: t.subject,
     body: t.body,
