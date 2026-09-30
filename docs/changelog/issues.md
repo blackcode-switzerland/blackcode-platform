@@ -35,6 +35,42 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-09-30 — Workspace Overview page, and `bk issues analytics --view overview`
+
+Not breaking; additive. One new page, one new `view` value on an existing route,
+one new field on two existing arrays.
+
+- **New page `/dashboard/{ws}/overview`** (sidebar: above Analytics). Read-only,
+  one date-range switch (7D / 30D / 90D / All), no filters. A KPI row with change
+  vs the previous period, a **member leaderboard** (podium for the top three,
+  sortable columns, a leader marked per metric, and period chips for this week /
+  this month / last month / this year / last year / all time), created vs
+  completed over time, issues by status and priority, project health, an
+  attention list (overdue, urgent, old, unassigned), workload per member and a
+  recent-activity feed.
+- **`GET /api/workspaces/{ws}/analytics?view=overview`** returns the workspace
+  analytics payload plus an `overview` object (leaderboard, `kpi_trends`,
+  `projects`, `attention`, `workload`, `recent_activity`). It takes only
+  `from`/`to`; `id`, filters and `interval` are ignored for this view, and no
+  `from` means All. Every other `view` is unchanged.
+- **CLI:** `bk issues analytics --view overview` prints the same report as text;
+  `--json` / `--yaml` emit the full payload. New `--range 7d|30d|90d|all` sets
+  `--from`/`--to` for any view.
+- **Counting rules an agent should know.** *Completed* is per **assignee**, so an
+  issue with two assignees counts once for each of them and the members' sum can
+  exceed the workspace headline. *Created* is per reporter. *Comments* are
+  `commented` events; *activity* is every event by the member. Calendar periods
+  are UTC weeks starting Monday. The change-vs-previous figures for total, open,
+  overdue, unassigned and completion rate are reconstructed from timestamps, so
+  they cannot see an assignment or due date changed since.
+- **`avatar_url` added** to every `by_assignee[]` and `top_active_members[]` row
+  of the analytics payload (`null` when the user has none). Clients that ignore
+  unknown fields need no change.
+- **How to adapt:** nothing breaks. To reproduce the page, call
+  `bk issues analytics --view overview --range 30d --json`.
+
+---
+
 ## 2026-09-28 — The inbox and the project board no longer poll; the inbox has a refresh button
 
 Not breaking; web only — no route, no `bk` command and no response shape changed.

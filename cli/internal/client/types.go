@@ -563,12 +563,147 @@ type AnalyticsPayload struct {
 		Count    int `json:"count"`
 	} `json:"by_priority"`
 	ByAssignee []struct {
-		Name  *string `json:"name"`
-		Email string  `json:"email"`
-		Open  int     `json:"open"`
-		Done  int     `json:"done"`
+		Name      *string `json:"name"`
+		Email     string  `json:"email"`
+		AvatarURL *string `json:"avatar_url"`
+		Open      int     `json:"open"`
+		Done      int     `json:"done"`
 	} `json:"by_assignee"`
-	Message string `json:"message,omitempty"`
+	TopActiveMembers []struct {
+		UserID    int     `json:"user_id"`
+		Name      *string `json:"name"`
+		AvatarURL *string `json:"avatar_url"`
+		Events    int     `json:"events"`
+	} `json:"top_active_members"`
+	// Overview is present only for `view=overview`; nil for every other view.
+	Overview *AnalyticsOverview `json:"overview,omitempty"`
+	Message  string             `json:"message,omitempty"`
+}
+
+// AnalyticsTrend is one KPI with its change against the start of the range.
+type AnalyticsTrend struct {
+	Current  float64  `json:"current"`
+	Previous *float64 `json:"previous"`
+	Pct      *float64 `json:"pct"`
+}
+
+// OverviewPerson is a member reference inside the overview block.
+type OverviewPerson struct {
+	UserID    int     `json:"user_id"`
+	Name      *string `json:"name"`
+	Email     string  `json:"email"`
+	AvatarURL *string `json:"avatar_url"`
+}
+
+// OverviewPeriodStats is one member's figures for one leaderboard period.
+type OverviewPeriodStats struct {
+	Created           int      `json:"created"`
+	Completed         int      `json:"completed"`
+	Comments          int      `json:"comments"`
+	Activity          int      `json:"activity"`
+	AvgCycleTimeHours *float64 `json:"avg_cycle_time_hours"`
+	Rank              int      `json:"rank"`
+}
+
+// OverviewLeader is the top value for one metric; every tied member is listed.
+type OverviewLeader struct {
+	UserIDs []int   `json:"user_ids"`
+	Value   float64 `json:"value"`
+}
+
+// OverviewAttentionList is one attention group: its full total and first rows.
+type OverviewAttentionList struct {
+	Total int `json:"total"`
+	Items []struct {
+		Seq         *int             `json:"seq"`
+		ID          int              `json:"id"`
+		Title       string           `json:"title"`
+		Status      string           `json:"status"`
+		Priority    int              `json:"priority"`
+		DueDate     *string          `json:"due_date"`
+		CreatedAt   string           `json:"created_at"`
+		AgeDays     int              `json:"age_days"`
+		ProjectName *string          `json:"project_name"`
+		Assignees   []OverviewPerson `json:"assignees"`
+	} `json:"items"`
+}
+
+// AnalyticsOverview is the `overview` block of `view=overview`.
+type AnalyticsOverview struct {
+	GeneratedAt string `json:"generated_at"`
+	Range       struct {
+		From     *string `json:"from"`
+		To       string  `json:"to"`
+		Interval string  `json:"interval"`
+		Days     *int    `json:"days"`
+	} `json:"range"`
+	KPITrends struct {
+		Total          AnalyticsTrend `json:"total"`
+		Open           AnalyticsTrend `json:"open"`
+		Overdue        AnalyticsTrend `json:"overdue"`
+		Unassigned     AnalyticsTrend `json:"unassigned"`
+		CompletionRate AnalyticsTrend `json:"completion_rate"`
+	} `json:"kpi_trends"`
+	Leaderboard struct {
+		Periods []struct {
+			Key   string  `json:"key"`
+			Label string  `json:"label"`
+			From  *string `json:"from"`
+			To    *string `json:"to"`
+		} `json:"periods"`
+		Members []struct {
+			OverviewPerson
+			Role         string                         `json:"role"`
+			OpenAssigned int                            `json:"open_assigned"`
+			Periods      map[string]OverviewPeriodStats `json:"periods"`
+			Spark        []int                          `json:"spark"`
+		} `json:"members"`
+		// Leaders: period key -> metric (completed|created|fastest_cycle|
+		// comments|activity) -> the leader(s). A metric nobody leads is absent.
+		Leaders map[string]map[string]OverviewLeader `json:"leaders"`
+	} `json:"leaderboard"`
+	Projects []struct {
+		ProjectID   int     `json:"project_id"`
+		Seq         *int    `json:"seq"`
+		Name        string  `json:"name"`
+		Status      *string `json:"status"`
+		Total       int     `json:"total"`
+		Done        int     `json:"done"`
+		Cancelled   int     `json:"cancelled"`
+		Open        int     `json:"open"`
+		ProgressPct float64 `json:"progress_pct"`
+		DueDate     *string `json:"due_date"`
+		Health      *string `json:"health"`
+		HealthAt    *string `json:"health_at"`
+		HealthBy    *string `json:"health_author"`
+	} `json:"projects"`
+	Attention struct {
+		OldOpenDays int                   `json:"old_open_days"`
+		Overdue     OverviewAttentionList `json:"overdue"`
+		Urgent      OverviewAttentionList `json:"urgent"`
+		OldOpen     OverviewAttentionList `json:"old_open"`
+		Unassigned  OverviewAttentionList `json:"unassigned"`
+	} `json:"attention"`
+	Workload struct {
+		Statuses []string `json:"statuses"`
+		Members  []struct {
+			OverviewPerson
+			ByStatus map[string]int `json:"by_status"`
+			Total    int            `json:"total"`
+		} `json:"members"`
+		Unassigned int `json:"unassigned"`
+	} `json:"workload"`
+	RecentActivity []struct {
+		ID          int             `json:"id"`
+		OccurredAt  string          `json:"occurred_at"`
+		Action      string          `json:"action"`
+		EntityType  string          `json:"entity_type"`
+		EntitySeq   *int            `json:"entity_seq"`
+		EntityTitle *string         `json:"entity_title"`
+		Linkable    bool            `json:"linkable"`
+		To          any             `json:"to"`
+		Actor       *OverviewPerson `json:"actor"`
+	} `json:"recent_activity"`
 }
 
 // ProjectUpdate is a single health/status post on a project.

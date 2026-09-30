@@ -17,7 +17,7 @@ import { db } from '../client'
 import { comments, events, issueAssignees, issueLabels, issues, labels, projects, tasks, users, workspaceMembers, workspaces } from '../schema'
 import { visibleToThisApp } from './labels'
 
-export type AnalyticsView = 'workspace' | 'project' | 'task' | 'member'
+export type AnalyticsView = 'workspace' | 'project' | 'task' | 'member' | 'overview'
 export type AnalyticsInterval = 'day' | 'week'
 
 export interface AnalyticsFilters {
@@ -74,6 +74,7 @@ export interface AnalyticsPayload {
     user_id: number
     name: string | null
     email: string
+    avatar_url: string | null
     open: number
     done: number
     avg_cycle_time_hours: number | null
@@ -94,7 +95,7 @@ export interface AnalyticsPayload {
   activity_series: Array<{ bucket: string; count: number }>
   activity_by_action: Array<{ action: string; count: number }>
   burndown_series?: Array<{ date: string; remaining: number; ideal: number }>
-  top_active_members: Array<{ user_id: number; name: string | null; events: number }>
+  top_active_members: Array<{ user_id: number; name: string | null; avatar_url: string | null; events: number }>
 }
 
 export interface ComputeAnalyticsInput {
@@ -105,6 +106,11 @@ export interface ComputeAnalyticsInput {
   to?: Date | null
   interval?: AnalyticsInterval
   filters?: AnalyticsFilters
+  // Whether to also compute the equal-length window before [from, to] for the
+  // trend badges. Default: yes when both bounds are given. The overview passes
+  // false for "All", where it hands over a synthetic `from` (the first issue)
+  // and a "previous period" would be a window before anything existed.
+  comparePrevious?: boolean
 }
 
 // ---------- where-clause builders ----------
@@ -266,7 +272,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
   const span = to.getTime() - from.getTime()
   const prevTo = from
   const prevFrom = new Date(from.getTime() - span)
-  const hasComparable = !!(input.from && input.to)
+  const hasComparable = input.comparePrevious ?? !!(input.from && input.to)
 
   const [cur, prev] = await Promise.all([
     windowStats(where, from, to),
@@ -307,11 +313,12 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
     user_id: number
     name: string | null
     email: string
+    avatar_url: string | null
     open: number
     done: number
     cycle_avg: number | null
   }>(sql`
-    SELECT u.id AS user_id, u.name, u.email,
+    SELECT u.id AS user_id, u.name, u.email, u.avatar_url,
       COUNT(*) FILTER (WHERE i.status NOT IN ('done','cancelled'))::int AS open,
       COUNT(*) FILTER (WHERE i.status = 'done')::int AS done,
       AVG(EXTRACT(EPOCH FROM (i.completed_at - i.created_at)) / 3600)
@@ -320,7 +327,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
     INNER JOIN ${issueAssignees} ia ON ia.issue_id = i.id
     INNER JOIN ${users} u ON u.id = ia.user_id
     WHERE ${where}
-    GROUP BY u.id, u.name, u.email
+    GROUP BY u.id, u.name, u.email, u.avatar_url
     ORDER BY (COUNT(*) FILTER (WHERE i.status NOT IN ('done','cancelled'))) DESC, done DESC
     LIMIT 25
   `)
@@ -474,15 +481,16 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
   const topMembersRows = await db.execute<{
     user_id: number
     name: string | null
+    avatar_url: string | null
     events: number
   }>(sql`
-    SELECT e.actor_user_id AS user_id, u.name, COUNT(*)::int AS events
+    SELECT e.actor_user_id AS user_id, u.name, u.avatar_url, COUNT(*)::int AS events
     FROM ${events} e
     LEFT JOIN ${users} u ON u.id = e.actor_user_id
     WHERE e.workspace_id = ${input.workspaceId}
       AND e.actor_user_id IS NOT NULL ${memberActorFilter}
       AND e.occurred_at BETWEEN ${from} AND ${to}
-    GROUP BY e.actor_user_id, u.name
+    GROUP BY e.actor_user_id, u.name, u.avatar_url
     ORDER BY events DESC
     LIMIT 10
   `)
@@ -589,6 +597,7 @@ export async function computeAnalytics(input: ComputeAnalyticsInput): Promise<An
       user_id: a.user_id,
       name: a.name,
       email: a.email,
+      avatar_url: a.avatar_url,
       open: Number(a.open),
       done: Number(a.done),
       avg_cycle_time_hours: round1(a.cycle_avg == null ? null : Number(a.cycle_avg)),

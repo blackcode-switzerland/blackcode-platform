@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/client"
 	"github.com/blackcode-switzerland/bc-issues/cli/internal/cmdutil"
@@ -22,10 +23,10 @@ import (
 
 func newAnalyticsCmd() *cobra.Command {
 	var (
-		view, ws, from, to, interval string
-		id                           int
-		status, assignee             []string
-		priority, label              []int
+		view, ws, from, to, interval, rng string
+		id                                int
+		status, assignee                  []string
+		priority, label                   []int
 	)
 	cmd := &cobra.Command{
 		Use:         "analytics",
@@ -34,9 +35,17 @@ func newAnalyticsCmd() *cobra.Command {
 		Long: `Show analytics for the active workspace (or --ws <slug|id>).
 
 Mirrors the web dashboard: pick a scope with --view (workspace|project|
-task|member) and --id, narrow the window with --from/--to/--interval, and
-slice with the --status/--priority/--label/--assignee filters. The default
-output is a readable summary; --json / --yaml emit the full payload.`,
+task|member|overview) and --id, narrow the window with --from/--to/--interval,
+and slice with the --status/--priority/--label/--assignee filters. The default
+output is a readable summary; --json / --yaml emit the full payload.
+
+--view overview is the workspace overview page: KPIs with change vs the start
+of the range, a member leaderboard, project health, attention lists (overdue,
+urgent, old open, unassigned), workload and recent activity. It takes only the
+window — --id, --interval and the filters are rejected, not ignored.
+
+--range 7d|30d|90d|all is shorthand for --from/--to (now minus N days .. now,
+UTC). It works with every view and cannot be combined with --from/--to.`,
 		// `bk analytics …` until 2026-08-11 — the bare spelling was removed in
 		// the 1.10.0 rename (`deprecations.go`'s `analytics` row) and every one
 		// of these four exited 2. This group is `issues`-only, so the app name
@@ -44,7 +53,9 @@ output is a readable summary; --json / --yaml emit the full payload.`,
 		Example: `  bk issues analytics
   bk issues analytics --view project --id 12 --from 2026-01-01 --interval week
   bk issues analytics --status todo,in_progress --priority 1 --priority 2
-  bk issues analytics --view member --id 5 --json`,
+  bk issues analytics --view member --id 5 --json
+  bk issues analytics --view overview --range 30d
+  bk issues analytics --range 7d --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
 			if err != nil {
@@ -53,6 +64,18 @@ output is a readable summary; --json / --yaml emit the full payload.`,
 			c, err := cmdutil.NewClient()
 			if err != nil {
 				return err
+			}
+
+			rFrom, rTo, err := resolveRange(rng, from, to, time.Now())
+			if err != nil {
+				return err
+			}
+			overview := view == "overview"
+			if overview {
+				if err := checkOverviewFlags(id, interval,
+					len(status)+len(priority)+len(label)+len(assignee) > 0); err != nil {
+					return err
+				}
 			}
 
 			q := url.Values{}
@@ -65,11 +88,11 @@ output is a readable summary; --json / --yaml emit the full payload.`,
 			if ws != "" {
 				q.Set("ws", ws)
 			}
-			if from != "" {
-				q.Set("from", from)
+			if rFrom != "" {
+				q.Set("from", rFrom)
 			}
-			if to != "" {
-				q.Set("to", to)
+			if rTo != "" {
+				q.Set("to", rTo)
 			}
 			if interval != "" {
 				q.Set("interval", interval)
@@ -103,15 +126,19 @@ output is a readable summary; --json / --yaml emit the full payload.`,
 			}
 
 			return output.Render(format, generic, func(w io.Writer) error {
+				if overview {
+					return renderOverview(w, &p)
+				}
 				return renderAnalyticsSummary(w, &p)
 			})
 		},
 	}
-	cmd.Flags().StringVar(&view, "view", "", "Scope: workspace (default) | project | task | member")
+	cmd.Flags().StringVar(&view, "view", "", "Scope: workspace (default) | project | task | member | overview")
 	cmd.Flags().IntVar(&id, "id", 0, "Target id (required for project/task/member views)")
 	cmd.Flags().StringVar(&ws, "ws", "", "Workspace slug or id (defaults to the active workspace)")
 	cmd.Flags().StringVar(&from, "from", "", "Window start (YYYY-MM-DD or ISO timestamp)")
 	cmd.Flags().StringVar(&to, "to", "", "Window end (YYYY-MM-DD or ISO timestamp)")
+	cmd.Flags().StringVar(&rng, "range", "", "Shorthand for --from/--to: 7d | 30d | 90d | all (any view; not with --from/--to)")
 	cmd.Flags().StringVar(&interval, "interval", "", "Time-series bucket: day (default) | week")
 	cmd.Flags().StringSliceVar(&status, "status", nil, "Filter by status (repeatable or comma-separated)")
 	cmd.Flags().IntSliceVar(&priority, "priority", nil, "Filter by priority 1-5 (repeatable)")
