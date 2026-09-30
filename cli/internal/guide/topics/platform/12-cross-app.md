@@ -72,7 +72,7 @@ hold it:
 
 What it does not give you is a **reverse lookup**: nothing lists "every issue
 mentioning this prospect". Search the text instead — `bk issues search
-"prospect/8"` matches titles, and each app's own listing searches descriptions.
+"prospect/8"` matches titles and descriptions, and each app's own listing filters by status, assignee and label.
 
 ### There is no cross-app link command, and this is why
 

@@ -21,6 +21,7 @@
 // so `platformMetaBlock` (packages/platform-api/src/meta.ts) serves them.
 
 import { LENGTH_LIMITS } from './limits'
+import { SEARCH_PER_TYPE_MAX } from './search-types'
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, BLOCKED_UPLOAD_MIME_TYPES } from './upload'
 import { INLINE_MEDIA_PREFIXES } from './rich-text'
 
@@ -28,6 +29,9 @@ import { INLINE_MEDIA_PREFIXES } from './rich-text'
 export const META_LIMITS = {
   upload_max_bytes: MAX_UPLOAD_BYTES,
   upload_max_label: MAX_UPLOAD_LABEL,
+  // `bk issues search --per-type` — declared beside the route's other search
+  // constants (lib/search-types.ts), served here so no doc restates it.
+  search_per_type_max: SEARCH_PER_TYPE_MAX,
   ...LENGTH_LIMITS,
 } as const
 

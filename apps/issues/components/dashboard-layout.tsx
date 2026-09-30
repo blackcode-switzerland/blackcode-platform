@@ -20,11 +20,13 @@ import {
   Menu,
   X,
   ShieldCheck,
+  Search,
   type LucideIcon,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { WorkspaceSwitcher } from './workspace-switcher'
 import { InboxBadge } from './inbox-badge'
+import { GlobalSearch, useModKey } from './search/global-search'
 import { useActiveWorkspace } from './listings/use-active-workspace'
 import { SidebarAccount, SidebarNavItem, SidebarSectionLabel } from '@blackcode/platform-ui/ui/sidebar'
 
@@ -61,6 +63,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { data: session } = useSession()
   const user = session?.user
   const [mobileOpen, setMobileOpen] = useState(false)
+  // Workspace search. State lives here because three things open it — the
+  // floating button, the sidebar row and the mobile header — plus ⌘K.
+  const [searchOpen, setSearchOpen] = useState(false)
+  const mod = useModKey()
   const { data: ws } = useActiveWorkspace()
 
   // Close the mobile drawer on route change.
@@ -140,6 +146,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 pb-4">
         <div className="space-y-0.5">
+          {ws?.slug && (
+            <button
+              type="button"
+              onClick={() => {
+                setMobileOpen(false)
+                setSearchOpen(true)
+              }}
+              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-foreground"
+            >
+              <Search size={17} />
+              <span className="flex-1 truncate text-left">Search</span>
+              <kbd className="rounded border border-sidebar-border px-1 font-sans text-[10px] text-muted-foreground/70">{mod}K</kbd>
+            </button>
+          )}
           {NAV_PRIMARY.map((item) => (
             <SidebarNavItem key={item.href} href={item.href} label={item.label} icon={item.icon} active={item.match(pathname ?? '')} trailing={item.trailing ? <InboxBadge /> : undefined} link={Link} />
           ))}
@@ -211,6 +231,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             above it is `rounded-[14%]`. */}
         <Image src="/logo.png" alt="b/" width={18} height={18} className="rounded-[14%]" />
         <span className="text-sm font-semibold">issues</span>
+        {ws?.slug && (
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="ml-auto rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
+            aria-label="Search workspace"
+          >
+            <Search size={18} />
+          </button>
+        )}
       </header>
 
       {/* Mobile drawer */}
@@ -236,6 +265,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} workspaceSlug={ws?.slug} />
 
       {/* Main content — CSS-based page fade (avoids React 18 concurrent-mode flash) */}
       <main key={pathname} className="page-fade-in lg:ml-60">

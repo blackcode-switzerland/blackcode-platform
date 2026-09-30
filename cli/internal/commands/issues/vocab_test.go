@@ -39,6 +39,8 @@ func TestVocabularyFlagsNameTheirValues(t *testing.T) {
 
 		{"project updates add", "status", "project_update_health"},
 		{"project updates add", "health", "project_update_health"},
+
+		{"search", "type", "search_types"},
 	}
 
 	root := newIssuesGroupForTest(t)

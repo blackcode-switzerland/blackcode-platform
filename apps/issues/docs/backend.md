@@ -248,6 +248,7 @@ freely; nothing in `platform.*` may depend on them.
 | `tasks.ts` | task CRUD, project association |
 | `issues.ts` | issue CRUD, filters, assignees, watchers, labels |
 | `search.ts` | case-insensitive substring search over title/name/description, plus `#id` match when the query is numeric |
+| `workspace-search.ts` | `searchWorkspace` — the query behind `GET …/issues-search`: one arm per type (issue, task, project, label, member, comment), ranked, `ILIKE` over the source tables with HTML stripped in SQL (see *Workspace search*) |
 | `analytics.ts` | `computeAnalytics` — snapshot counts, throughput, cycle time, distributions, burndown |
 | `overview.ts` | `computeOverview` — `analytics?view=overview`: `computeAnalytics` for the workspace plus the leaderboard, project health, attention lists, workload and recent activity (see *Workspace overview*) |
 | `move.ts` | cross-workspace move/copy in one transaction |
@@ -322,9 +323,10 @@ asserted to exact figures (`TEST_DATABASE_URL=… npm test --workspace=issues`).
 
 Every issue, task and project is mirrored into `platform.entities` so it is
 addressable by URN — `bc:issues:<workspace-slug>/<type>/<number>`, using the
-`#number` like everything else here. That is what makes `bk issues search`, `bk link`
-and the merged `bk issues activity` possible without any app reading another app's
-schema.
+`#number` like everything else here. That is what makes URN resolution and the merged `bk issues activity` possible
+without any app reading another app's schema. (`bk issues search` used to read this
+index and no longer does: it needs labels, people, descriptions and comments, none
+of which are projected — see *Workspace search*.)
 
 Two rules, and both are the difference between an index and a liability:
 
@@ -370,3 +372,43 @@ The pre-1.10.0 bare spellings (`bk issue …`) still run as deprecated aliases a
 are removed in 1.12.0 — see `docs/changelog/platform.md`. Command code lives in
 `cli/internal/commands/issues/`, guide topics in
 `cli/internal/guide/topics/issues/`.
+
+## Workspace search
+
+`GET /api/workspaces/{ws}/issues-search` → `bk issues search` → the web popup.
+One query module (`lib/db/queries/workspace-search.ts`), one DB-free vocabulary
+module (`lib/search-types.ts`: the type list, term splitting, `SearchHit`), and
+the plan and its reasoning in [`workspace-search-plan.md`](./workspace-search-plan.md).
+
+**Why a second search route.** `GET …/search` is the platform factory over
+`platform.entities` — titles of issues, tasks and projects. Labels, people and
+comments are not projected, and a description is not a title. This route reads the
+source tables, on its own path for the reason `apps/sales` gave its `/sales-search`:
+one path answering two different questions depending on which deployment you hit is
+an invisible ambiguity. The old route stays mounted (and in `cli-parity`'s
+`EXCLUDED_PATHS`) for binaries that predate this one.
+
+**Matching.** `ILIKE`, no migration, no index. The query is split into words
+(`searchTerms`, ≤6); **every word must match**, each in any field of the row. HTML
+in rich-text columns is stripped in SQL (`plain()`), so `div` and `class` do not
+find markup, and the snippet is cut from the stripped text. `%`, `_` and `\` in a
+query are matched literally (`escapeLike`). A bare number also matches `seq`; an
+explicit `#N` matches **only** `seq`, and only for issue/task/project.
+
+**Ranking** (`rank()`), per type: `#N` exact 100 › title equals 95 › prefix 80 ›
+word start 60 › substring 40 › all words in the title 30 › matched only in the body
+10; ties by `updated_at`. Types are returned in `SEARCH_TYPES` order, each capped at
+`per_type`.
+
+**The predicates that must stay** (each one is a mutation in
+`workspace-search.integration.test.ts` that turns it red): the `workspace_id` scope;
+`visibleToThisApp('l')` on labels (`app IS NULL OR app = 'issues'`); `ownTypeIn`
+(both the qualified and the legacy bare `comments.parent_type`) plus the parent's
+own bin filter on comments; `u.deleted_at IS NULL` on members; the bin filter, lifted
+only by `include_deleted=1`.
+
+**To add a searchable type:** add it to `SEARCH_TYPES`, write its arm in
+`workspace-search.ts`, add it to `vocab.go`'s `search_types` (held to the TS list by
+`cli-vocabulary.test.ts`), give the popup an icon and a label
+(`components/search/global-search.tsx`), and add a fixture row *and a row it must
+exclude* to the integration test.

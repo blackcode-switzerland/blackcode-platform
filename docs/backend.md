@@ -518,7 +518,7 @@ transaction — the `entities` pattern above. The risk profiles are not the same
 
 | Projection | Drift costs |
 |---|---|
-| `entities` | a stale title in `bk issues search`. Cosmetic |
+| `entities` | a stale title in the legacy `GET …/search` route and in `subject_urn` resolution. Cosmetic (`bk issues search` no longer reads it — it reads the source tables) |
 | `blob_references`, **extra** row | a refused delete. Leaked bytes, never data |
 | `blob_references`, **missing** row | a file still in use is reported as an orphan and **deleted**. Vercel Blob `del()` has no undo |
 

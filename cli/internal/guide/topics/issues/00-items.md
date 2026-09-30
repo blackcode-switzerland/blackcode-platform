@@ -69,6 +69,37 @@ filtered listing that just said "no issues" reads as an empty project.
 `bk issues project issues <project>` offers exactly the same flags, scoped to
 one project.
 
+## Searching the workspace
+
+`bk issues search` looks across everything in the active workspace at once —
+issues, tasks and projects (titles **and** what is written inside them), labels,
+people, and comments — and ranks what it finds. It is the same search as the
+search button in the web app.
+
+```bash
+bk issues search "login timeout"        # every word must match, in any field
+bk issues search "#482"                 # the record numbered 482, and only that
+bk issues search login --type comment   # narrow to one kind (bk meta lists them)
+bk issues search old --include-deleted  # reach into the recycle bin
+```
+
+What is worth knowing before you trust a result:
+
+- **Every word must match**, though different words may match different fields
+  (the title for one, the description for another). Fewer words, wider net.
+- **The MATCH column says where it matched.** A title hit shows how it was found;
+  anything else shows the text around the match, so you can tell a record *named*
+  "login" from one that merely *mentions* it.
+- **A comment is reported on the record it lives on**, as `on issue #12`. Open
+  that record to read the thread — a comment has no number of its own.
+- **Results are capped per kind** (`--per-type`; run `bk meta` for the ceiling),
+  so a noisy kind cannot bury the rest. Narrowing with `--type` lifts the cap.
+- **`#482` is a jump, `482` is a search.** The bare number also matches text that
+  contains it; the `#` form finds the issue, task or project numbered 482 and
+  nothing else.
+- To *filter* — by status, assignee, label, date — use the listing commands
+  (`bk issues issue list …`); search finds, it does not sift.
+
 ## Moving an issue between projects
 
 `bk issues move` is **workspace → workspace**. To move an issue to a different

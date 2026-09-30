@@ -86,6 +86,16 @@ const EXCLUDED_PATHS = new Map<string, string>([
   ['/api/undo', 'retired 1.12.0: 410 Gone stub so a pre-1.12.0 binary that still has `bk undo` gets an actionable answer instead of an HTML 404'],
   ['/api/openapi.json', 'retired: 410 Gone deprecation stub'],
   ['/api/docs', 'retired: 410 Gone deprecation stub'],
+
+  // --- superseded, still served ---
+  [
+    '/api/workspaces/{ws}/search',
+    'the platform entity-index search (titles of issues/tasks/projects only). `bk issues search` ' +
+      'reads `/issues-search` since 2026-09-30, so no command in a current binary claims this; ' +
+      'it stays mounted for binaries that predate that, whose `bk issues search` calls it. ' +
+      'Delete this entry AND `app/api/workspaces/[ws]/search/route.ts` together once the npm ' +
+      '`min` dist-tag is past the release that moved the command',
+  ],
 ])
 
 // Individual METHOD+path pairs excluded where the rest of the path IS covered.
