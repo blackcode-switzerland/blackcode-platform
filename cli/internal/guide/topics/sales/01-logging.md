@@ -135,12 +135,21 @@ not written down which is which spends three meetings with somebody delighted
 and powerless. `--notes` stays the freeform half — background, negotiation
 history, how they behave in a room.
 
-The company's own details — its site and its postal address — are on the
-prospect, because a company has one of each and its people share them:
+The company's own details — its site, its postal address, its main phone line
+and its general email — are on the prospect, because a company has one of each
+and its people share them:
 
 ```bash
 bk sales prospect edit 12 --website https://acme.ch --address "Rue du Rhône 42, 1204 Genève"
+bk sales prospect edit 12 --phone "+41 21 312 80 91" --email info@acme.ch
 ```
+
+`--phone` and `--email` are the COMPANY's reception line and info@ address, not a
+person's — a person's go on a contact. Do not add a stand-in "general" contact for
+the company's own line: it then shows up in every list of decision makers. Both
+are checked: a phone number is digits with an optional `+` and `( ) . / -`, and an
+email is one address; a note that belongs beside a number ("ask for Daniel") goes
+in `--summary`. `--phone ""` clears.
 
 Contacts are listed with an **ID**, and that id is what `edit` and `rm` take. A
 contact has no #number because it is never addressed on its own — it is always

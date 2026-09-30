@@ -19,7 +19,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Users } from 'lucide-react'
+import { FileText, Users } from 'lucide-react'
 import { useStrategies, type Strategy } from '@/lib/hooks'
 import { BlockSkeleton, EmptyState, ErrorState } from '@/components/states'
 import { AgentOnly, WriteGate } from '@/components/forms'
@@ -123,6 +123,15 @@ function StrategyCard({
         >
           <Users size={12} />
           {s.prospect_count} prospect
+        </Link>
+        {/* The other half of the chain (#62): the messages written for this
+            segment, as a link into the templates page filtered to it. */}
+        <Link
+          href={`/dashboard/${ws}/templates?strategy=${s.number}`}
+          className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline"
+        >
+          <FileText size={12} />
+          {s.template_count} template
         </Link>
         {canWrite && <EditStrategyForm ws={ws} strategy={s} />}
       </div>

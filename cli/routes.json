@@ -1545,6 +1545,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/prospects/facets",
+      "command": "bk sales prospect facets",
+      "app": "sales"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/prospects/{n}",
       "command": "bk sales contact add, bk sales journey add, bk sales label attach, bk sales match set, bk sales objection raise, bk sales prospect delete, bk sales prospect show",
       "app": "sales"

@@ -9,7 +9,15 @@ import { resolveActor } from '@/lib/actor'
 import { getTemplateBySeq, softDeleteTemplate, updateTemplate } from '@/lib/db/queries/catalog'
 import { publicTemplate } from '@/lib/views'
 import { TEMPLATE_NAME_MAX } from '@/lib/limits'
-import { nullableStr, requireMaxLength, requireNumberParam, requireStage, str } from '@/lib/http-input'
+import { resolveStrategy } from '@/lib/api/strategy-ref'
+import {
+  bodyNumber,
+  nullableStr,
+  requireMaxLength,
+  requireNumberParam,
+  requireStage,
+  str,
+} from '@/lib/http-input'
 import { TEMPLATE_CATEGORY_VALUES, TEMPLATE_CHANNEL_VALUES } from '@/lib/pipeline'
 
 interface Params {
@@ -59,6 +67,16 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
   const stage = nullableStr(body?.stage)
   if (typeof stage === 'string') requireStage(stage)
 
+  // `strategy` is three-way like the rest: `null` unlinks, a #number links,
+  // absent leaves it alone (#62) — the exact contract `PATCH …/prospects/{n}`
+  // gives `strategy`, so the two read alike.
+  let strategyId: number | null | undefined
+  if (body?.strategy === null) {
+    strategyId = null
+  } else if (body?.strategy !== undefined) {
+    strategyId = await resolveStrategy(ctx.workspace.id, bodyNumber(body.strategy))
+  }
+
   const actor = await resolveActor(getDb(), req, ctx.user)
   const row = await updateTemplate(
     ctx.workspace.id,
@@ -68,6 +86,7 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
       channel,
       category,
       stage,
+      strategyId,
       subject: nullableStr(body?.subject),
       body: nullableStr(body?.body),
     },

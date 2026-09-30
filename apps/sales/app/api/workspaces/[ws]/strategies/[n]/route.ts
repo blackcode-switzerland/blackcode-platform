@@ -9,6 +9,7 @@ import { resolveActor } from '@/lib/actor'
 import {
   getStrategyBySeq,
   listStrategyProspects,
+  listStrategyTemplates,
   softDeleteStrategy,
   updateStrategy,
 } from '@/lib/db/queries/strategies'
@@ -42,8 +43,14 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   // this segment running against" is the question somebody opens a strategy to
   // ask, and there is no view that wants one without the other. Same call the
   // prospect route makes for its journey and contacts.
-  const prospects = await listStrategyProspects(ctx.workspace.id, row.id)
-  return NextResponse.json({ ...publicStrategy(row, ctx.workspace.slug), prospects })
+  //
+  // And the templates written for it (#62): "strategy -> prospects + templates"
+  // is one chain, and it reads the same from either end.
+  const [prospects, templates] = await Promise.all([
+    listStrategyProspects(ctx.workspace.id, row.id),
+    listStrategyTemplates(ctx.workspace.id, row.id),
+  ])
+  return NextResponse.json({ ...publicStrategy(row, ctx.workspace.slug), prospects, templates })
 })
 
 export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => {

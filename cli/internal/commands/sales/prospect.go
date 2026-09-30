@@ -33,6 +33,7 @@ func newProspectCmd() *cobra.Command {
 	}
 	cmd.AddCommand(
 		newProspectListCmd(),
+		newProspectFacetsCmd(),
 		newProspectShowCmd(),
 		newProspectCreateCmd(),
 		newProspectEditCmd(),
@@ -48,9 +49,12 @@ func newProspectCmd() *cobra.Command {
 func newProspectListCmd() *cobra.Command {
 	var (
 		stages         []string
-		owner          string
+		owners         []string
 		strategy       int
-		label          string
+		cities         []string
+		sectors        []string
+		sources        []string
+		labels         []string
 		query          string
 		limit          int
 		cursor         int
@@ -66,10 +70,21 @@ func newProspectListCmd() *cobra.Command {
 search. Finding a phrase INSIDE a record is a different thing: "bk sales search"
 reads the text columns and returns the snippet that matched.
 
+THE FILTERS COMBINE: they AND across each other and OR within one, so
+  bk sales prospect list --city Lausanne --city Genève --sector "Watches"
+is (Lausanne OR Genève) AND Watches. Every value is matched exactly but
+case-insensitively — "lausanne" finds "Lausanne", "Laus" finds nothing.
+
+--stage, --city, --sector, --source, --label and --owner may each be repeated.
+Only --stage also takes a comma list; the others are free text and a comma can
+belong to the value ("Biel/Bienne, BE"), so repeat the flag instead.
 --owner takes an email, or the literal "me".
---stage may be repeated or comma-separated; run "bk meta" for the current values.
 --strategy takes a segment strategy's #number (bk sales strategy list) and
-narrows the list to prospects linked to it.`,
+narrows the list to prospects linked to it.
+
+City, sector and source are free text, so what you can filter on is exactly what
+has been written: "bk sales prospect facets" lists those values, with counts, for
+this workspace. Run "bk meta" for the current stage values.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := output.Resolve(cmd)
@@ -82,9 +97,12 @@ narrows the list to prospects linked to it.`,
 			}
 			page, err := c.ListProspects(ws, client.ListProspectsOpts{
 				Stages:         splitAll(stages),
-				Owner:          owner,
+				Owners:         owners,
 				Strategy:       strategy,
-				Label:          label,
+				Cities:         cities,
+				Sectors:        sectors,
+				Sources:        sources,
+				Labels:         labels,
 				Query:          query,
 				Limit:          limit,
 				Cursor:         cursor,
@@ -122,13 +140,79 @@ narrows the list to prospects linked to it.`,
 		},
 	}
 	cmd.Flags().StringSliceVar(&stages, "stage", nil, "Filter by pipeline stage — "+vocab("stages", "repeatable"))
-	cmd.Flags().StringVar(&owner, "owner", "", "Filter by deal owner: an email, or \"me\"")
+	cmd.Flags().StringArrayVar(&owners, "owner", nil, "Filter by deal owner: an email, or \"me\" (repeatable)")
 	cmd.Flags().IntVar(&strategy, "strategy", 0, "Filter by segment strategy's #number (bk sales strategy list)")
-	cmd.Flags().StringVar(&label, "label", "", "Filter by label name")
+	cmd.Flags().StringArrayVar(&cities, "city", nil, "Filter by city, exact but case-insensitive (repeatable; bk sales prospect facets)")
+	cmd.Flags().StringArrayVar(&sectors, "sector", nil, "Filter by sector / type (repeatable; bk sales prospect facets)")
+	cmd.Flags().StringArrayVar(&sources, "source", nil, "Filter by source / provenance (repeatable; bk sales prospect facets)")
+	cmd.Flags().StringArrayVar(&labels, "label", nil, "Filter by label name (repeatable)")
 	cmd.Flags().StringVar(&query, "q", "", "Substring match on the company name")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Max prospects to return (bk meta for the cap)")
 	cmd.Flags().IntVar(&cursor, "cursor", 0, "Continue from the cursor printed by the previous page")
 	cmd.Flags().BoolVar(&includeDeleted, "include-deleted", false, "Include prospects that are in the recycle bin")
+	return cmd
+}
+
+// newProspectFacetsCmd lists the values the prospect filters can take.
+//
+// The read half of `prospect list`'s combinable filters (sales #98). City,
+// sector and source are free text, so an agent choosing `--city` has no way to
+// know what was written except by asking: this is that question, answered from
+// the data rather than from a list that could go stale.
+func newProspectFacetsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:         "facets",
+		Annotations: map[string]string{"routes": "GET /api/workspaces/{ws}/prospects/facets"},
+		Short:       "The values you can filter prospects by, with counts",
+		Long: `List the distinct cities, sectors, sources, labels and deal owners in use in
+this workspace, each with how many live prospects carry it.
+
+These are exactly the values the city, sector, source, label and owner filters of
+"bk sales prospect list" match, and they come from the data: whatever was written
+last week is here today. Spellings that differ only in case are one value.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			format, err := output.Resolve(cmd)
+			if err != nil {
+				return err
+			}
+			c, ws, err := clientAndWorkspace()
+			if err != nil {
+				return err
+			}
+			f, err := c.ProspectFacets(ws)
+			if err != nil {
+				return err
+			}
+			return output.Render(format, f, func(w io.Writer) error {
+				groups := []struct {
+					flag string
+					rows []client.ProspectFacet
+				}{
+					{"--city", f.Cities}, {"--sector", f.Sectors}, {"--source", f.Sources},
+					{"--label", f.Labels}, {"--owner", f.Owners},
+				}
+				for i, g := range groups {
+					if i > 0 {
+						fmt.Fprintln(w)
+					}
+					fmt.Fprintf(w, "%s\n", g.flag)
+					if len(g.rows) == 0 {
+						fmt.Fprintln(w, "  (none in use)")
+						continue
+					}
+					tw := output.Tabwriter(w)
+					for _, r := range g.rows {
+						fmt.Fprintf(tw, "  %s\t%d\n", r.Value, r.Count)
+					}
+					if err := tw.Flush(); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		},
+	}
 	return cmd
 }
 
@@ -208,6 +292,8 @@ The opening journey step is written for you, attributed to whoever ran this.`,
 	cmd.Flags().StringVar(&req.Sector, "sector", "", "Sector, free text (\"SaaS · staffing\")")
 	cmd.Flags().StringVar(&req.Website, "website", "", "The COMPANY's site, full url including https://")
 	cmd.Flags().StringVar(&req.Address, "address", "", "Postal address, one line")
+	cmd.Flags().StringVar(&req.Phone, "phone", "", "The COMPANY's main line — not a person's (that is on a contact)")
+	cmd.Flags().StringVar(&req.Email, "email", "", "The COMPANY's general address, e.g. info@acme.ch — not a person's")
 	cmd.Flags().IntVar(&req.Strategy, "strategy", 0, "The segment strategy's #number (bk sales strategy list)")
 	cmd.Flags().StringVar(&req.GamePlan, "game-plan", "", "The PRE-meeting angle for this prospect: talking points, upsell, objections to expect")
 	cmd.Flags().StringVar(&req.Stage, "stage", "", "Pipeline stage — "+vocab("stages", "default: the first"))
@@ -221,7 +307,7 @@ The opening journey step is written for you, attributed to whoever ran this.`,
 }
 
 func newProspectEditCmd() *cobra.Command {
-	var name, city, sector, website, address, value, currency, owner, source, summary string
+	var name, city, sector, website, address, phone, email, value, currency, owner, source, summary string
 	var strategy, gamePlan string
 	cmd := &cobra.Command{
 		Use:         "edit <n>",
@@ -233,6 +319,10 @@ PASSING AN EMPTY VALUE CLEARS THE FIELD: --city "" removes the city, and
 --owner "" unassigns the deal. Not passing the flag leaves it alone. The three
 states are distinct on the wire, so "did nothing" and "cleared it" cannot be
 confused.
+
+--phone and --email are the COMPANY's own main line and general address. A
+person's are on a contact ("bk sales contact edit"); do not add a stand-in
+"general" contact for the company's reception.
 
 --stage is NOT here. Moving a deal writes a journey entry and may close it, so it
 is its own command: "bk sales prospect stage <n> <stage>".`,
@@ -256,6 +346,8 @@ is its own command: "bk sales prospect stage <n> <stage>".`,
 				Sector:   patched(cmd, "sector", sector),
 				Website:  patched(cmd, "website", website),
 				Address:  patched(cmd, "address", address),
+				Phone:    patched(cmd, "phone", phone),
+				Email:    patched(cmd, "email", email),
 				Strategy: patched(cmd, "strategy", strategy),
 				GamePlan: patched(cmd, "game-plan", gamePlan),
 				Value:    patched(cmd, "value", value),
@@ -286,6 +378,8 @@ is its own command: "bk sales prospect stage <n> <stage>".`,
 	cmd.Flags().StringVar(&sector, "sector", "", "Sector (\"\" clears)")
 	cmd.Flags().StringVar(&website, "website", "", "The COMPANY's site, full url including https:// (\"\" clears)")
 	cmd.Flags().StringVar(&address, "address", "", "Postal address, one line (\"\" clears)")
+	cmd.Flags().StringVar(&phone, "phone", "", "The COMPANY's main line (\"\" clears)")
+	cmd.Flags().StringVar(&email, "email", "", "The COMPANY's general address (\"\" clears)")
 	cmd.Flags().StringVar(&strategy, "strategy", "", "The segment strategy's #number (\"\" unlinks)")
 	cmd.Flags().StringVar(&gamePlan, "game-plan", "", "The PRE-meeting angle for this prospect (\"\" clears)")
 	cmd.Flags().StringVar(&value, "value", "", "Deal value, a plain amount (\"\" clears)")
@@ -656,7 +750,8 @@ func patched(cmd *cobra.Command, flag, value string) *client.NullString {
 func isEmptyPatch(r client.UpdateProspectRequest) bool {
 	return r.Name == nil && r.City == nil && r.Sector == nil && r.Value == nil &&
 		r.Currency == nil && r.Owner == nil && r.Source == nil && r.Summary == nil &&
-		r.Website == nil && r.Address == nil && r.Strategy == nil && r.GamePlan == nil
+		r.Website == nil && r.Address == nil && r.Phone == nil && r.Email == nil &&
+		r.Strategy == nil && r.GamePlan == nil
 }
 
 // splitAll accepts both `--stage a --stage b` and `--stage a,b`. StringSliceVar
@@ -750,11 +845,18 @@ func renderProspect(w io.Writer, p *client.Prospect) error {
 	if p.Website != "" {
 		fmt.Fprintf(tw, "website\t%s\n", p.Website)
 	}
+	if p.Phone != "" {
+		fmt.Fprintf(tw, "phone\t%s\n", p.Phone)
+	}
+	if p.Email != "" {
+		fmt.Fprintf(tw, "email\t%s\n", p.Email)
+	}
 	if p.Source != "" {
 		fmt.Fprintf(tw, "source\t%s\n", p.Source)
 	}
 	if p.Strategy > 0 {
-		fmt.Fprintf(tw, "strategy\t#%d (bk sales strategy show %d)\n", p.Strategy, p.Strategy)
+		fmt.Fprintf(tw, "strategy\t#%d %s (bk sales strategy show %d)\n",
+			p.Strategy, p.StrategyName, p.Strategy)
 	}
 	fmt.Fprintf(tw, "next\t%s\n", nextActionCell(p.NextAction))
 	if p.ClosedAt != "" {

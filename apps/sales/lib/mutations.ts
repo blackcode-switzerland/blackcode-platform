@@ -147,6 +147,9 @@ export interface ProspectPatch {
   /** Migration 0008 — the identity card (#34). */
   website?: string | null
   address?: string | null
+  /** Migration 0014 (#60) — the COMPANY's own line and address. */
+  phone?: string | null
+  email?: string | null
   /** Migration 0010. The segment's #NUMBER (#37) and this prospect's own angle
    *  on top of it (#35). `null` unlinks the segment. */
   strategy?: number | null

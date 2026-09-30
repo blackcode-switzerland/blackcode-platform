@@ -13,7 +13,8 @@ import { resolveActor } from '@/lib/actor'
 import { createTemplate, listTemplates } from '@/lib/db/queries/catalog'
 import { publicTemplate } from '@/lib/views'
 import { TEMPLATE_NAME_MAX } from '@/lib/limits'
-import { numberOr, requireMaxLength, requireStage, str } from '@/lib/http-input'
+import { resolveStrategy } from '@/lib/api/strategy-ref'
+import { bodyNumber, numberOr, requireMaxLength, requireStage, str } from '@/lib/http-input'
 import { TEMPLATE_CATEGORY_VALUES, TEMPLATE_CHANNEL_VALUES } from '@/lib/pipeline'
 
 interface Params {
@@ -43,11 +44,17 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const stage = str(q.get('stage'))
   if (stage) requireStage(stage)
 
+  // `?strategy=<n>`: only the messages written for that segment (#62). An
+  // unknown #number is a 404, not an empty list — an empty list reads as "no
+  // templates for it yet" when the truth is "no such strategy".
+  const strategyId = await resolveStrategy(ctx.workspace.id, numberOr(q.get('strategy')))
+
   const rows = await listTemplates({
     workspaceId: ctx.workspace.id,
     channel,
     category,
     stage,
+    strategyId,
     q: str(q.get('q')),
     includeDeleted: q.get('include_deleted') === 'true',
     limit: numberOr(q.get('limit')),
@@ -83,6 +90,10 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   const stage = str(body?.stage)
   if (stage) requireStage(stage)
 
+  // The segment this message was written for (#62), by #number. Resolved to a
+  // row id here — `strategy_id` is a serial and never crosses the wire.
+  const strategyId = await resolveStrategy(ctx.workspace.id, bodyNumber(body?.strategy))
+
   const actor = await resolveActor(getDb(), req, ctx.user)
   const row = await createTemplate(
     ctx.workspace.id,
@@ -90,6 +101,7 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
       channel,
       category,
       stage: stage ?? null,
+      strategyId: strategyId ?? null,
       name,
       subject: str(body?.subject) ?? null,
       body: str(body?.body) ?? null,

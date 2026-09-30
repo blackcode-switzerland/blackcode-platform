@@ -29,11 +29,13 @@ import {
   ClearFilters,
   FilterBar,
   FilterInput,
+  FilterMultiSelect,
   FilterSelect,
   FilteredEmpty,
+  useFilterMulti,
   useFilterParam,
 } from '@/components/filters'
-import { useProspects, useStrategies } from '@/lib/hooks'
+import { useProspectFacets, useProspects, useStrategies } from '@/lib/hooks'
 import { money, relativeDay } from '@/lib/format'
 import type { PublicProspect } from '@/lib/views'
 
@@ -46,25 +48,55 @@ export function ProspectsPage({ ws }: { ws: string }) {
 
   const view = params?.get('view') === 'board' ? 'board' : 'table'
 
+  // The combinable filters (#98): AND across these, OR within one. Held in the
+  // URL as repeated parameters, the shape the route and `bk sales prospect list
+  // --city a --city b` both use.
+  const [cities, setCities] = useFilterMulti('city')
+  const [sectors, setSectors] = useFilterMulti('sector')
+  const [sources, setSources] = useFilterMulti('source')
+  const [labels, setLabels] = useFilterMulti('label')
+  const [owners, setOwners] = useFilterMulti('owner')
+
   const strategies = useStrategies(ws)
   const strategyOptions = (strategies.data ?? []).map((s) => ({
     value: String(s.number),
     label: s.name,
   }))
 
+  // THE OPTIONS COME FROM THE DATA, and from an UNFILTERED read (see
+  // `useProspectFacets`): whatever an agent wrote is filterable with no code
+  // change, and choosing one value does not make the rest disappear.
+  const facets = useProspectFacets(ws)
+  const opts = (rows: Array<{ value: string; count: number; name?: string | null }> | undefined) =>
+    (rows ?? []).map((r) => ({ value: r.value, label: r.name || r.value, count: r.count }))
+
   const list = useProspects(ws, {
     stage: stage || undefined,
     strategy: strategy || undefined,
+    city: cities,
+    sector: sectors,
+    source: sources,
+    label: labels,
+    owner: owners,
     q: q || undefined,
   })
   const rows = list.data?.data ?? []
-  const filtered = Boolean(q || stage || strategy)
+  const filtered = Boolean(
+    q ||
+      stage ||
+      strategy ||
+      cities.length ||
+      sectors.length ||
+      sources.length ||
+      labels.length ||
+      owners.length
+  )
 
   return (
     <div className="space-y-4">
-      {/* The filter bar. Stage, strategy and free text today; owner and date
-          range arrive with the ledgers, which are where a date range means
-          something. */}
+      {/* The filter bar. They COMBINE: AND across dimensions, OR within one
+          (Lausanne OR Genève) AND Watches — the same rule
+          `bk sales prospect list` documents. */}
       <FilterBar>
         <FilterInput
           label="Company name"
@@ -81,15 +113,75 @@ export function ProspectsPage({ ws }: { ws: string }) {
           options={STAGES}
           allLabel="All stages"
         />
-        {/* Segment strategy (#37/#41) — never displayed when there are none to
-            filter by: an empty dropdown is worse than no dropdown. */}
-        {strategyOptions.length > 0 && (
+        {/* Segment strategy (#37/#41). When there are none it is not hidden
+            silently — a bar with no strategy control reads as a product that
+            has none, and #98 was filed by somebody who could not tell why it
+            was missing. Say why, and where to make one. */}
+        {strategyOptions.length > 0 ? (
           <FilterSelect
             label="Strategy"
             value={strategy}
             onChange={setStrategy}
             options={strategyOptions}
             allLabel="All strategies"
+          />
+        ) : (
+          !strategies.isPending && (
+            <Link
+              href={`/dashboard/${ws}/strategies`}
+              className="flex h-9 items-center rounded-lg border border-dashed border-border px-2.5 text-sm text-muted-foreground hover:text-foreground"
+              title="Strategies group prospects by segment. None exist in this workspace yet."
+            >
+              No strategies yet
+            </Link>
+          )
+        )}
+        {/* Each control is shown only when there is something to choose from:
+            an empty dropdown is worse than none, and a workspace whose prospects
+            have no city has no city filter to offer. The values are the data's. */}
+        {(facets.data?.cities.length ?? 0) + cities.length > 0 && (
+          <FilterMultiSelect
+            label="City"
+            values={cities}
+            onChange={setCities}
+            options={opts(facets.data?.cities)}
+            allLabel="All cities"
+          />
+        )}
+        {(facets.data?.sectors.length ?? 0) + sectors.length > 0 && (
+          <FilterMultiSelect
+            label="Type"
+            values={sectors}
+            onChange={setSectors}
+            options={opts(facets.data?.sectors)}
+            allLabel="All types"
+          />
+        )}
+        {(facets.data?.sources.length ?? 0) + sources.length > 0 && (
+          <FilterMultiSelect
+            label="Source"
+            values={sources}
+            onChange={setSources}
+            options={opts(facets.data?.sources)}
+            allLabel="All sources"
+          />
+        )}
+        {(facets.data?.labels.length ?? 0) + labels.length > 0 && (
+          <FilterMultiSelect
+            label="Tags"
+            values={labels}
+            onChange={setLabels}
+            options={opts(facets.data?.labels)}
+            allLabel="All tags"
+          />
+        )}
+        {(facets.data?.owners.length ?? 0) + owners.length > 0 && (
+          <FilterMultiSelect
+            label="Owner"
+            values={owners}
+            onChange={setOwners}
+            options={opts(facets.data?.owners)}
+            allLabel="All owners"
           />
         )}
 

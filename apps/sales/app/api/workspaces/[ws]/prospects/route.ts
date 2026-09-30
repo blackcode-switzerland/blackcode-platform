@@ -22,16 +22,21 @@ import {
   CONTACT_URL_MAX,
   GAME_PLAN_MAX,
   PROSPECT_ADDRESS_MAX,
+  PROSPECT_EMAIL_MAX,
   PROSPECT_NAME_MAX,
+  PROSPECT_PHONE_MAX,
 } from '@/lib/limits'
 import { resolveStrategy } from '@/lib/api/strategy-ref'
 import {
   numberOr,
   parseList,
   bodyNumber,
+  repeated,
+  requireEmail,
   requireHttpUrl,
   requireMaxLength,
   requireMoney,
+  requirePhone,
   requireStage,
   str,
 } from '@/lib/http-input'
@@ -48,15 +53,25 @@ export const GET = apiHandler(async (req: NextRequest, { params }: Params) => {
   const stages = parseList(q.get('stage'))
   for (const s of stages) requireStage(s)
 
-  const ownerUserId = await resolveOwner(str(q.get('owner')), ctx.user.id)
+  // The combinable filters (#98): AND across dimensions, OR within one, so each
+  // of these is a REPEATED parameter. Owners are resolved to ids the way the
+  // single `--owner` always was — an unknown email is a 400, never an empty list
+  // that reads as a clean pipeline.
+  const ownerUserIds: number[] = []
+  for (const o of repeated(q, 'owner')) {
+    ownerUserIds.push((await resolveOwner(o, ctx.user.id))!)
+  }
   const strategyId = await resolveStrategy(ctx.workspace.id, numberOr(q.get('strategy')))
 
   const page = await listProspects({
     workspaceId: ctx.workspace.id,
     stages,
-    ownerUserId: ownerUserId ?? undefined,
+    ownerUserIds,
     strategyId,
-    label: str(q.get('label')),
+    cities: repeated(q, 'city'),
+    sectors: repeated(q, 'sector'),
+    sources: repeated(q, 'source'),
+    labels: repeated(q, 'label'),
     q: str(q.get('q')),
     includeDeleted: q.get('include_deleted') === 'true',
     limit: numberOr(q.get('limit')),
@@ -98,6 +113,19 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
   }
   const address = str(body?.address)
   if (address) requireMaxLength(address, PROSPECT_ADDRESS_MAX, 'address')
+  // The company's own line and address (#60) — NOT a contact's. Shape-checked
+  // rather than length-checked alone: no blob trigger guards these columns, so
+  // the validator is what keeps a file URL out (migration 0014).
+  const phone = str(body?.phone)
+  if (phone) {
+    requireMaxLength(phone, PROSPECT_PHONE_MAX, 'phone')
+    requirePhone(phone)
+  }
+  const email = str(body?.email)
+  if (email) {
+    requireMaxLength(email, PROSPECT_EMAIL_MAX, 'email')
+    requireEmail(email)
+  }
 
   // The segment this belongs to (#37), by its #number. Resolved to a row id
   // here, because `strategy_id` is a serial and must never cross the wire.
@@ -120,6 +148,8 @@ export const POST = apiHandler(async (req: NextRequest, { params }: Params) => {
     summary: str(body?.summary) ?? null,
     website: website ?? null,
     address: address ?? null,
+    phone: phone ?? null,
+    email: email ?? null,
     strategyId: strategyId ?? null,
     gamePlan: gamePlan ?? null,
   })

@@ -38,16 +38,20 @@ import {
   CONTACT_URL_MAX,
   GAME_PLAN_MAX,
   PROSPECT_ADDRESS_MAX,
+  PROSPECT_EMAIL_MAX,
   PROSPECT_NAME_MAX,
+  PROSPECT_PHONE_MAX,
 } from '@/lib/limits'
 import { resolveStrategy } from '@/lib/api/strategy-ref'
 import {
   nullableStr,
   bodyNumber,
+  requireEmail,
   requireHttpUrl,
   requireMaxLength,
   requireMoney,
   requireNumberParam,
+  requirePhone,
   str,
 } from '@/lib/http-input'
 
@@ -139,6 +143,18 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
   }
   const address = nullableStr(body?.address)
   if (address) requireMaxLength(address, PROSPECT_ADDRESS_MAX, 'address')
+  // The company's own line and address (#60). Three-way like the rest, so
+  // `--phone ""` clears one that turned out to be wrong.
+  const phone = nullableStr(body?.phone)
+  if (phone) {
+    requireMaxLength(phone, PROSPECT_PHONE_MAX, 'phone')
+    requirePhone(phone)
+  }
+  const email = nullableStr(body?.email)
+  if (email) {
+    requireMaxLength(email, PROSPECT_EMAIL_MAX, 'email')
+    requireEmail(email)
+  }
 
   // `strategy` is three-way like the rest: `null` unlinks the segment, a
   // #number links it, absent leaves it alone. Unlinking has to be expressible —
@@ -180,6 +196,8 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: Params) => 
       summary: nullableStr(body?.summary),
       website,
       address,
+      phone,
+      email,
       strategyId,
       gamePlan,
     },

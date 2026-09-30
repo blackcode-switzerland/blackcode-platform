@@ -276,8 +276,8 @@ not repeated here. Two things are this app's own:
 |---|---|
 | `/dashboard/{ws}` | **Today** — §7.1 |
 | `/dashboard/{ws}/metrics` | pipeline funnel + performance KPIs — §7.2 |
-| `/dashboard/{ws}/prospects` | table ⇄ board, filter bar in the URL |
-| `/dashboard/{ws}/prospects/{n}` | five tabs, journey, contacts, research log, objections, triangulation |
+| `/dashboard/{ws}/prospects` | table ⇄ board, filter bar in the URL — stage, strategy, and combinable city / type / tags / source / owner (OR within, AND across; options from `…/prospects/facets`). With no strategies the bar says so rather than dropping the control (#98) |
+| `/dashboard/{ws}/prospects/{n}` | five tabs, journey, contacts, research log, objections, **strategy** (the linked segment's own reasoning + the templates written for it, #61/#62), triangulation. The header carries the company's `tel:`/`mailto:` (#60) |
 | `/dashboard/{ws}/meetings` · `/communications` | the two cross-prospect ledgers |
 | `/dashboard/{ws}/products` · `/templates` · `/documents` | the catalog. Documents preview by type and badge their source — §7.9 |
 | `/dashboard/{ws}/strategies` | why a SEGMENT was chosen — §7.4, and reusable across prospects (2026-08-17) |
@@ -345,6 +345,8 @@ asks for to each would have produced a fourth and a fifth.
 |---|---|
 | `useFilterParam(key)` | one URL parameter, `[value, set]`. `router.replace`, `scroll: false` |
 | `useFilterList(key)` | a repeatable one, held as `?tag=a,b` — the encoding the route's `parseList` and `bk … --tag` both use |
+| `useFilterMulti(key)` | a repeated one, `?city=a&city=b` — for FREE-TEXT values (a comma can belong to one), the encoding the prospects route and `bk sales prospect list --city a --city b` use (#98) |
+| `FilterMultiSelect` | any-of-many checkboxes in a popover; options come from the data (`useProspectFacets`), selected-but-unknown values stay visible so a bookmarked URL is never filtered by something invisible |
 | `FilterSelect` | one dropdown. `PropertySelect` underneath, compact styling, `allLabel` as the empty option |
 | `FilterInput` | the free-text box |
 | `TagFilterChip` | a toggleable free-text tag, `aria-pressed` |

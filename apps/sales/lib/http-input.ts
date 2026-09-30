@@ -53,6 +53,22 @@ export function parseList(raw: string | null): string[] {
     .filter(Boolean)
 }
 
+/**
+ * A REPEATED query parameter, each occurrence one literal value:
+ * `?city=Lausanne&city=Genève`.
+ *
+ * Not comma-split, unlike `parseList`, and the difference is deliberate: city,
+ * sector and source are free text and "Biel/Bienne, BE" is a real value, so
+ * splitting on commas would turn one city into two filters that match nothing.
+ * `stage` keeps `parseList` because a stage can never contain a comma.
+ */
+export function repeated(params: URLSearchParams, key: string): string[] {
+  return params
+    .getAll(key)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
 /** A finite number from a query parameter, or undefined. */
 export function numberOr(raw: string | null): number | undefined {
   if (!raw) return undefined
@@ -188,6 +204,45 @@ export function requireHttpUrl(
       `invalid_${code}`,
       `${subject} must be http or https, got ${JSON.stringify(parsed.protocol)}`,
       hint
+    )
+  }
+}
+
+/**
+ * A company phone number: digits and `+ - ( ) . /` and spaces, nothing else.
+ *
+ * Strict on purpose, and the strictness is load-bearing rather than tidy:
+ * `prospects.phone` has NO `platform.blob_references` trigger (migration 0014
+ * says why), and this function is the reason that is safe — a blob URL carries
+ * letters and `:`, and neither can pass. Loosening it to "any short text" makes
+ * that migration's exclusion wrong. `lib/http-input.test.ts` watches it.
+ *
+ * Swiss numbers are written `021 312 80 91`, `+41 21 312 80 91` and
+ * `021/312 80 91`; all three pass. A note that belongs beside a number ("ask
+ * for Daniel") is what `summary` is for.
+ */
+export function requirePhone(value: string): void {
+  const digits = value.replace(/\D/g, '')
+  if (!/^[0-9+\-().\/ ]+$/.test(value) || digits.length < 5) {
+    throw Errors.badRequest(
+      'invalid_phone',
+      `${JSON.stringify(value)} is not a phone number`,
+      'pass digits with an optional leading + — e.g. --phone "+41 21 312 80 91"; notes go in --summary'
+    )
+  }
+}
+
+/**
+ * One company email address. No slashes or colons, no whitespace — which is
+ * also what keeps a file URL out of a column with no blob trigger (see
+ * `requirePhone`, and migration 0014).
+ */
+export function requireEmail(value: string): void {
+  if (!/^[^\s@/:]+@[^\s@/:]+\.[^\s@/:]+$/.test(value)) {
+    throw Errors.badRequest(
+      'invalid_email',
+      `${JSON.stringify(value)} is not an email address`,
+      'pass one address — e.g. --email info@acme.ch'
     )
   }
 }

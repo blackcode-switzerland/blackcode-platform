@@ -30,7 +30,7 @@
 
 import { and, asc, desc, eq, ilike, inArray, isNull, sql, type SQL } from 'drizzle-orm'
 import { getDb } from '../client'
-import { products, prospects, strategies, strategyProducts } from '../schema'
+import { products, prospects, strategies, strategyProducts, templates } from '../schema'
 import type { Product, Strategy } from '../schema'
 import { allocateSeq } from './counters'
 import { recordEvent } from './events'
@@ -44,6 +44,8 @@ export interface StrategyRow extends Strategy {
    *  number a reader needs before retiring a segment, and the delete route
    *  reports it back rather than silently orphaning ten deals. */
   prospect_count: number
+  /** Live templates tagged with this segment (#62). */
+  template_count: number
 }
 
 async function decorate(rows: Strategy[]): Promise<StrategyRow[]> {
@@ -51,7 +53,7 @@ async function decorate(rows: Strategy[]): Promise<StrategyRow[]> {
   const db = getDb()
   const ids = rows.map((r) => r.id)
 
-  const [links, counts] = await Promise.all([
+  const [links, counts, templateCounts] = await Promise.all([
     db
       .select({
         strategy_id: strategyProducts.strategy_id,
@@ -69,6 +71,11 @@ async function decorate(rows: Strategy[]): Promise<StrategyRow[]> {
       .from(prospects)
       .where(and(inArray(prospects.strategy_id, ids), isNull(prospects.deleted_at)))
       .groupBy(prospects.strategy_id),
+    db
+      .select({ strategy_id: templates.strategy_id, n: sql<number>`count(*)::int` })
+      .from(templates)
+      .where(and(inArray(templates.strategy_id, ids), isNull(templates.deleted_at)))
+      .groupBy(templates.strategy_id),
   ])
 
   const byStrategy = new Map<number, Array<{ number: number; name: string }>>()
@@ -79,11 +86,16 @@ async function decorate(rows: Strategy[]): Promise<StrategyRow[]> {
   }
   const countBy = new Map<number, number>()
   for (const c of counts) if (c.strategy_id != null) countBy.set(c.strategy_id, Number(c.n))
+  const templateCountBy = new Map<number, number>()
+  for (const c of templateCounts) {
+    if (c.strategy_id != null) templateCountBy.set(c.strategy_id, Number(c.n))
+  }
 
   return rows.map((r) => ({
     ...r,
     products: byStrategy.get(r.id) ?? [],
     prospect_count: countBy.get(r.id) ?? 0,
+    template_count: templateCountBy.get(r.id) ?? 0,
   }))
 }
 
@@ -329,6 +341,33 @@ export async function listStrategyProspects(
       )
     )
     .orderBy(asc(prospects.seq))
+}
+
+/**
+ * The templates written for this segment (#62) — the other half of the chain
+ * "strategy -> its prospects AND its templates".
+ */
+export async function listStrategyTemplates(
+  workspaceId: number,
+  strategyId: number
+): Promise<Array<{ number: number; name: string; channel: string; category: string }>> {
+  const db = getDb()
+  return await db
+    .select({
+      number: templates.seq,
+      name: templates.name,
+      channel: templates.channel,
+      category: templates.category,
+    })
+    .from(templates)
+    .where(
+      and(
+        eq(templates.workspace_id, workspaceId),
+        eq(templates.strategy_id, strategyId),
+        isNull(templates.deleted_at)
+      )
+    )
+    .orderBy(asc(templates.seq))
 }
 
 export type { Product }

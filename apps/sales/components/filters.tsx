@@ -46,9 +46,9 @@
 // dressed as consistency, so the roles, states and key handling were written
 // into the shared component first — see its header. Both apps get that.
 
-import { useMemo } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { X } from 'lucide-react'
+import { Check, ChevronDown, X } from 'lucide-react'
 import { PropertySelect } from '@blackcode/platform-ui/ui/property-select'
 import { EmptyState } from '@/components/states'
 import type { Option } from '@/lib/pipeline'
@@ -100,6 +100,34 @@ export function useFilterList(key: string) {
   return [values, toggle] as const
 }
 
+/**
+ * A REPEATED URL parameter: `?city=Lausanne&city=Genève`.
+ *
+ * The counterpart of `useFilterList` for FREE-TEXT dimensions. `useFilterList`
+ * joins with commas, which is right for tags and stages and wrong for a city —
+ * "Biel/Bienne, BE" is one value, and a comma-joined encoding turns it into two
+ * that match nothing. This is the shape the prospects route reads
+ * (`repeated()` in `lib/http-input.ts`) and `bk sales prospect list --city a
+ * --city b` sends, so the web, the CLI and the route cannot disagree about what
+ * two cities mean (#98).
+ */
+export function useFilterMulti(key: string) {
+  const params = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  const values = params?.getAll(key).filter(Boolean) ?? []
+  // Stable identity for effect/query keys: a fresh array every render would
+  // refetch the list on every render.
+  const stable = useMemo(() => values, [values.join('\u0000')]) // eslint-disable-line react-hooks/exhaustive-deps
+  const set = (next: string[]) => {
+    const q = new URLSearchParams(params?.toString() ?? '')
+    q.delete(key)
+    for (const v of next) q.append(key, v)
+    router.replace(`${pathname}?${q.toString()}`, { scroll: false })
+  }
+  return [stable, set] as const
+}
+
 /** The compact chip-button styling that makes a sidebar picker a filter control. */
 const FILTER_BUTTON =
   'flex h-9 items-center gap-1.5 rounded-lg border border-input bg-card px-2.5 text-sm ' +
@@ -149,6 +177,147 @@ export function FilterSelect({
       // longer lists — prospects, products — keep theirs.
       noSearch={opts.length <= 8}
     />
+  )
+}
+
+/**
+ * A filter that takes SEVERAL values — checkboxes in a popover (#98).
+ *
+ * `FilterSelect` is one-of-many and the prospects filters are any-of-many
+ * ("Lausanne OR Genève"), so it cannot serve. Native checkboxes rather than a
+ * bespoke listbox because they bring their own accessibility: each is announced
+ * with its label and state, and Space toggles it, with nothing written here.
+ *
+ * WHAT IT DOES NOT DO is build its own options. `options` come from the caller,
+ * from the data (`useProspectFacets`), so a value written by an agent tomorrow
+ * is a checkbox tomorrow with no code change — the point of #98.
+ *
+ * A value that is SELECTED but no longer in `options` (a bookmarked URL naming a
+ * city that has since been renamed) is still shown, ticked, so the reader can see
+ * what is filtering their list and untick it. Dropping it silently would leave a
+ * page filtered by something invisible.
+ */
+export function FilterMultiSelect({
+  label,
+  values,
+  onChange,
+  options,
+  allLabel,
+}: {
+  label: string
+  values: string[]
+  onChange: (next: string[]) => void
+  options: Array<{ value: string; label: string; count?: number }>
+  allLabel: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const root = useRef<HTMLDivElement>(null)
+  const panelId = useId()
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (root.current && !root.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const all = useMemo(() => {
+    const known = new Set(options.map((o) => o.value.toLowerCase()))
+    const orphans = values
+      .filter((v) => !known.has(v.toLowerCase()))
+      .map((v) => ({ value: v, label: v, count: undefined as number | undefined }))
+    return [...orphans, ...options]
+  }, [options, values])
+  const shown = search.trim()
+    ? all.filter((o) => o.label.toLowerCase().includes(search.trim().toLowerCase()))
+    : all
+  const selected = (v: string) => values.some((x) => x.toLowerCase() === v.toLowerCase())
+  const toggle = (v: string) =>
+    onChange(selected(v) ? values.filter((x) => x.toLowerCase() !== v.toLowerCase()) : [...values, v])
+
+  const summary =
+    values.length === 0 ? allLabel : values.length === 1 ? values[0]! : `${label} · ${values.length}`
+
+  return (
+    <div ref={root} className="relative">
+      <button
+        type="button"
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        aria-label={`${label}: ${values.length === 0 ? allLabel : values.join(', ')}`}
+        onClick={() => setOpen((o) => !o)}
+        className={FILTER_BUTTON + (values.length ? ' border-primary/50' : '')}
+      >
+        <span className="max-w-[10rem] truncate">{summary}</span>
+        <ChevronDown size={14} className="text-muted-foreground" aria-hidden />
+      </button>
+      {open && (
+        <div
+          id={panelId}
+          role="group"
+          aria-label={label}
+          className="absolute left-0 z-30 mt-1 w-64 rounded-xl border border-border bg-popover p-1.5 shadow-lg"
+        >
+          {all.length > 8 && (
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={`Filter ${label.toLowerCase()}…`}
+              aria-label={`Filter ${label.toLowerCase()} options`}
+              className="mb-1 h-8 w-full rounded-md border border-input bg-card px-2 text-sm outline-none focus:border-ring"
+            />
+          )}
+          <ul className="max-h-64 overflow-y-auto">
+            {shown.length === 0 && (
+              <li className="px-2 py-2 text-xs text-muted-foreground">Nothing to choose from.</li>
+            )}
+            {shown.map((o) => (
+              <li key={o.value}>
+                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground hover:bg-accent">
+                  <input
+                    type="checkbox"
+                    checked={selected(o.value)}
+                    onChange={() => toggle(o.value)}
+                    className="sr-only peer"
+                  />
+                  <span
+                    aria-hidden
+                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-input peer-checked:border-primary peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring"
+                  >
+                    {selected(o.value) && <Check size={12} className="text-primary-foreground" />}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                  {o.count != null && (
+                    <span className="text-xs tabular-nums text-muted-foreground">{o.count}</span>
+                  )}
+                </label>
+              </li>
+            ))}
+          </ul>
+          {values.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              Clear {label.toLowerCase()}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -83,7 +83,8 @@ prospects          the core object — company AND deal in one (D-5)
 contacts           decision makers at a prospect — and where a PERSON's identity
                    and intelligence live (0008: linkedin, decision_power)
 prospect_notes     the research log (0009) — APPEND-ONLY, no update route exists
-strategies         why a SEGMENT was chosen (0010) — reusable across prospects
+strategies         why a SEGMENT was chosen (0010) — reusable across prospects;
+                   prospects (0010) and templates (0014) point at one, ON DELETE SET NULL
 strategy_products  ⟩ which products a strategy leads with
 stage_entries      the deal journey — one row per stage, including the ones not reached
 meetings           the meetings LEDGER (not a calendar)
@@ -502,6 +503,7 @@ records is what is specific to this app.
 | Route | Command |
 |---|---|
 | `GET \| POST …/prospects` | `bk sales prospect list \| create` |
+| `GET …/prospects/facets` | `prospect facets` — the distinct city/sector/source/label/owner values, counted |
 | `GET \| PATCH \| DELETE …/prospects/{n}` | `prospect show \| edit \| assign \| delete` |
 | `POST …/prospects/{n}/stage` | `prospect stage` |
 | `PATCH …/prospects/{n}/next-action` | `prospect next` |
@@ -1136,3 +1138,38 @@ returns both links with resolved titles — and what is missing is a display in
 the issues app. Deliberately not built during a verification phase; logged as a
 Phase 13 item. `bk link` was removed on 2026-08-10; the URN goes in the
 record's own text now.)
+
+
+## Migration 0014 — company phone/email, template strategy, combinable filters (2026-09-30)
+
+Sales #60, #62, #98 (and #61, which needed no schema).
+
+- **`prospects.phone` / `prospects.email`** — the COMPANY's main line and general
+  address, distinct from `contacts.phone/email` (a person's). 0008 declined them
+  on "two homes for a phone number"; that was right for people and wrong for a
+  reception line, which forced a fake "general" contact. **No blob trigger**, the
+  one exclusion: `requirePhone`/`requireEmail` (`lib/http-input.ts`) refuse
+  anything URL-shaped, and `lib/http-input.test.ts` is what keeps that claim true.
+  Loosen either validator and the migration's exclusion is wrong.
+- **`templates.strategy_id`** — mirror of `prospects.strategy_id`: nullable,
+  `ON DELETE SET NULL`, resolved to a #number in `catalog.ts` (`TemplateRow`) so the
+  serial never leaves. `GET …/templates?strategy=<n>` filters; `GET
+  …/strategies/{n}` serves `templates` beside `prospects`; `template_count` rides on
+  every strategy.
+- **Combinable prospect filters** — `GET …/prospects` takes `city`, `sector`,
+  `source`, `label`, `owner` as **repeated** parameters: OR within one, AND across
+  (and with `stage`/`strategy`/`q`). Matching is exact and case-insensitive
+  (`lower(col) IN (…)`, on the expression indexes 0014 adds). Repeated rather than
+  comma-joined because these are free text and "Biel/Bienne, BE" is a value
+  (`repeated()`); `stage` keeps the comma list.
+- **`GET …/prospects/facets`** — the values those filters can take, from the data
+  (`prospectFacets`): case-folded, counted, live prospects only, NULL/blank skipped.
+  Unfiltered by design — options derived from the filtered result shrink as you
+  choose. This is what makes whatever Companion writes filterable with no code
+  change. `bk sales prospect facets`.
+- `PATCH` on prospects/templates keeps the three-way contract (`null` clears,
+  absent leaves alone) for `phone`, `email` and `strategy`.
+
+Tests: `lib/db/queries/prospects-filters.integration.test.ts` (needs
+`TEST_DATABASE_URL`; each case exists to fail one wrong implementation — see its
+header), `lib/http-input.test.ts`.

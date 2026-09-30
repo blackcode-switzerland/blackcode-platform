@@ -77,10 +77,15 @@ type Prospect struct {
 	// site; a PERSON's link is SalesContact.LinkedIn.
 	Website string `json:"website" yaml:"website"`
 	Address string `json:"address" yaml:"address"`
+	// The COMPANY's own main line and general address (sales #60, migration
+	// 0014) — not a person's; those are SalesContact.Phone / .Email.
+	Phone string `json:"phone" yaml:"phone"`
+	Email string `json:"email" yaml:"email"`
 	// The segment strategy this prospect belongs to (#37), by #NUMBER — never
 	// the row id. Zero means unlinked. `GamePlan` is the angle for THIS
 	// prospect on top of the shared one (#35).
 	Strategy     int             `json:"strategy" yaml:"strategy"`
+	StrategyName string          `json:"strategy_name" yaml:"strategy_name"`
 	GamePlan     string          `json:"game_plan" yaml:"game_plan"`
 	Stage        string          `json:"stage" yaml:"stage"`
 	Value        string          `json:"value" yaml:"value"`
@@ -127,10 +132,16 @@ type SalesDeleted struct {
 // ListProspectsOpts mirrors `bk sales prospect list`'s flags. Zero values mean
 // "no filter", so an empty struct is the whole workspace.
 type ListProspectsOpts struct {
-	Stages         []string
-	Owner          string // an email, or the literal "me"
-	Strategy       int    // the segment strategy's #number; 0 means "no filter"
-	Label          string
+	Stages []string
+	// The combinable filters (sales #98): AND across these, OR within one. Each
+	// is sent as a REPEATED query parameter, never comma-joined — city, sector
+	// and source are free text and "Biel/Bienne, BE" is a real value.
+	Owners         []string // emails, or the literal "me"
+	Strategy       int      // the segment strategy's #number; 0 means "no filter"
+	Cities         []string
+	Sectors        []string
+	Sources        []string
+	Labels         []string
 	Query          string
 	Limit          int
 	Cursor         int
@@ -148,14 +159,20 @@ func (c *Client) ListProspects(slugOrID string, opts ListProspectsOpts) (*Prospe
 	if len(opts.Stages) > 0 {
 		q.Set("stage", strings.Join(opts.Stages, ","))
 	}
-	if s := strings.TrimSpace(opts.Owner); s != "" {
-		q.Set("owner", s)
+	addAll := func(key string, values []string) {
+		for _, v := range values {
+			if v = strings.TrimSpace(v); v != "" {
+				q.Add(key, v)
+			}
+		}
 	}
+	addAll("owner", opts.Owners)
+	addAll("city", opts.Cities)
+	addAll("sector", opts.Sectors)
+	addAll("source", opts.Sources)
+	addAll("label", opts.Labels)
 	if opts.Strategy > 0 {
 		q.Set("strategy", strconv.Itoa(opts.Strategy))
-	}
-	if s := strings.TrimSpace(opts.Label); s != "" {
-		q.Set("label", s)
 	}
 	if s := strings.TrimSpace(opts.Query); s != "" {
 		q.Set("q", s)
@@ -181,6 +198,32 @@ func (c *Client) ListProspects(slugOrID string, opts ListProspectsOpts) (*Prospe
 	return &page, nil
 }
 
+// ProspectFacet is one value a prospect filter can take, and how many live
+// prospects carry it.
+type ProspectFacet struct {
+	Value string `json:"value" yaml:"value"`
+	Name  string `json:"name,omitempty" yaml:"name,omitempty"` // owners only
+	Count int    `json:"count" yaml:"count"`
+}
+
+// ProspectFacets is what `GET …/prospects/facets` serves: the distinct values
+// that exist in the workspace, per filterable dimension (sales #98).
+type ProspectFacets struct {
+	Cities  []ProspectFacet `json:"cities" yaml:"cities"`
+	Sectors []ProspectFacet `json:"sectors" yaml:"sectors"`
+	Sources []ProspectFacet `json:"sources" yaml:"sources"`
+	Labels  []ProspectFacet `json:"labels" yaml:"labels"`
+	Owners  []ProspectFacet `json:"owners" yaml:"owners"`
+}
+
+func (c *Client) ProspectFacets(slugOrID string) (*ProspectFacets, error) {
+	var f ProspectFacets
+	if err := c.get(salesPath(slugOrID, "prospects/facets"), &f); err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
 func (c *Client) GetProspect(slugOrID string, number int) (*Prospect, error) {
 	var p Prospect
 	if err := c.get(salesPath(slugOrID, fmt.Sprintf("prospects/%d", number)), &p); err != nil {
@@ -198,6 +241,8 @@ type CreateProspectRequest struct {
 	Sector   string `json:"sector,omitempty"`
 	Website  string `json:"website,omitempty"`
 	Address  string `json:"address,omitempty"`
+	Phone    string `json:"phone,omitempty"`
+	Email    string `json:"email,omitempty"`
 	Strategy int    `json:"strategy,omitempty"`
 	GamePlan string `json:"game_plan,omitempty"`
 	Stage    string `json:"stage,omitempty"`
@@ -251,6 +296,8 @@ type UpdateProspectRequest struct {
 	Sector  *NullString `json:"sector,omitempty"`
 	Website *NullString `json:"website,omitempty"`
 	Address *NullString `json:"address,omitempty"`
+	Phone   *NullString `json:"phone,omitempty"`
+	Email   *NullString `json:"email,omitempty"`
 	// `*NullString` rather than `*int` so `--strategy ""` can UNLINK: the same
 	// three states every other patchable field has. The route reads a JSON
 	// number, a numeric string or null.
@@ -547,7 +594,9 @@ type SalesStrategy struct {
 	Products    []SalesStrategyProduct `json:"products" yaml:"products"`
 	// How many live deals this segment covers. The number you want before
 	// retiring one — the server reports it rather than making the caller count.
-	ProspectCount int    `json:"prospect_count" yaml:"prospect_count"`
+	ProspectCount int `json:"prospect_count" yaml:"prospect_count"`
+	// Live templates written for this segment (sales #62).
+	TemplateCount int    `json:"template_count" yaml:"template_count"`
 	URN           string `json:"urn" yaml:"urn"`
 	CreatedAt     string `json:"created_at" yaml:"created_at"`
 	UpdatedAt     string `json:"updated_at" yaml:"updated_at"`
@@ -555,6 +604,16 @@ type SalesStrategy struct {
 
 	// Served by the single-strategy route only; empty on a listing.
 	Prospects []SalesStrategyProspect `json:"prospects,omitempty" yaml:"prospects,omitempty"`
+	// Likewise: the messages written for this segment (sales #62), so the chain
+	// strategy -> prospects + templates reads the same from this end.
+	Templates []SalesStrategyTemplate `json:"templates,omitempty" yaml:"templates,omitempty"`
+}
+
+type SalesStrategyTemplate struct {
+	Number   int    `json:"number" yaml:"number"`
+	Name     string `json:"name" yaml:"name"`
+	Channel  string `json:"channel" yaml:"channel"`
+	Category string `json:"category" yaml:"category"`
 }
 
 type SalesStrategyProduct struct {
@@ -1084,16 +1143,20 @@ func (c *Client) DeleteProduct(ws string, n int, confirm string) (*SalesDeleted,
 }
 
 type SalesTemplate struct {
-	Number    int      `json:"number" yaml:"number"`
-	Channel   string   `json:"channel" yaml:"channel"`
-	Category  string   `json:"category" yaml:"category"`
-	Stage     string   `json:"stage" yaml:"stage"`
-	Name      string   `json:"name" yaml:"name"`
-	Subject   string   `json:"subject" yaml:"subject"`
-	Body      string   `json:"body" yaml:"body"`
-	Variables []string `json:"variables" yaml:"variables"`
-	URN       string   `json:"urn" yaml:"urn"`
-	DeletedAt string   `json:"deleted_at" yaml:"deleted_at"`
+	Number   int    `json:"number" yaml:"number"`
+	Channel  string `json:"channel" yaml:"channel"`
+	Category string `json:"category" yaml:"category"`
+	Stage    string `json:"stage" yaml:"stage"`
+	// The segment strategy this message was written for (sales #62), by
+	// #NUMBER; zero means untagged.
+	Strategy     int      `json:"strategy" yaml:"strategy"`
+	StrategyName string   `json:"strategy_name" yaml:"strategy_name"`
+	Name         string   `json:"name" yaml:"name"`
+	Subject      string   `json:"subject" yaml:"subject"`
+	Body         string   `json:"body" yaml:"body"`
+	Variables    []string `json:"variables" yaml:"variables"`
+	URN          string   `json:"urn" yaml:"urn"`
+	DeletedAt    string   `json:"deleted_at" yaml:"deleted_at"`
 }
 
 type TemplateRequest struct {
@@ -1103,14 +1166,20 @@ type TemplateRequest struct {
 	Name     string `json:"name,omitempty"`
 	Subject  string `json:"subject,omitempty"`
 	Body     string `json:"body,omitempty"`
+	// `*NullString` so `--strategy ""` can UNLINK, the same three states
+	// UpdateProspectRequest.Strategy has (sales #62).
+	Strategy *NullString `json:"strategy,omitempty"`
 }
 
-func (c *Client) ListTemplates(ws, channel, category, stage, query string, limit int) ([]SalesTemplate, error) {
+func (c *Client) ListTemplates(ws, channel, category, stage, query string, strategy, limit int) ([]SalesTemplate, error) {
 	q := url.Values{}
 	for k, v := range map[string]string{"channel": channel, "category": category, "stage": stage, "q": query} {
 		if v != "" {
 			q.Set(k, v)
 		}
+	}
+	if strategy > 0 {
+		q.Set("strategy", strconv.Itoa(strategy))
 	}
 	if limit > 0 {
 		q.Set("limit", strconv.Itoa(limit))

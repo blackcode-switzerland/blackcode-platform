@@ -172,3 +172,18 @@ undone. The command tells you how many deals are affected.
 Going the other way — every prospect one strategy is running against —
 `bk sales strategy show <n>` lists them, and `bk sales prospect list --strategy
 <n>` is the filtered listing (`bk guide sales/pipeline`).
+
+**Templates are tagged the same way.** A message written to serve a segment
+records which one, so the chain reads from either end:
+
+```bash
+bk sales template create --channel <channel> --category <category> --name "Ask for a call — Lausanne boutiques" --strategy 1 --body "..."
+bk sales template edit 7 --strategy 1        # tag an existing one
+bk sales template edit 7 --strategy ""       # untag it
+bk sales template list --strategy 1          # every message written for that segment
+```
+
+`bk sales strategy show <n>` lists the prospects AND the templates. The tag is
+optional — a generic post-call recap belongs to no segment — and binning or
+deleting a strategy leaves its templates in place, untagged in effect: the words
+are still usable.
