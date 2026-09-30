@@ -101,3 +101,54 @@ func (c *Client) BlobDrift(ws string, repair bool) (*BlobDriftReport, error) {
 	}
 	return &out, nil
 }
+
+// WorkspaceSearchHit is one row of `bk issues search`: a record found INSIDE the
+// issues app, with the snippet it was found in. Numbers and URNs are pointers
+// because a label, a member and a comment's own row have neither.
+type WorkspaceSearchHit struct {
+	Type      string  `json:"type" yaml:"type"`
+	ID        int     `json:"id" yaml:"id"`
+	Number    *int    `json:"number" yaml:"number"`
+	Title     string  `json:"title" yaml:"title"`
+	Detail    *string `json:"detail" yaml:"detail"`
+	Snippet   *string `json:"snippet" yaml:"snippet"`
+	MatchedIn string  `json:"matched_in" yaml:"matched_in"`
+	Status    *string `json:"status" yaml:"status"`
+	Parent    *struct {
+		Type   string `json:"type" yaml:"type"`
+		Number int    `json:"number" yaml:"number"`
+	} `json:"parent" yaml:"parent"`
+	Path    string  `json:"path" yaml:"path"`
+	URN     *string `json:"urn" yaml:"urn"`
+	Deleted bool    `json:"deleted" yaml:"deleted"`
+}
+
+// IssuesSearch runs the issues app's own search over `…/issues-search`. It is a
+// different route from SearchEntities on purpose — see that route's header.
+func (c *Client) IssuesSearch(query string, types []string, perType, limit int, includeDeleted bool) ([]WorkspaceSearchHit, error) {
+	q := url.Values{}
+	q.Set("q", query)
+	if len(types) > 0 {
+		q.Set("type", strings.Join(types, ","))
+	}
+	if perType > 0 {
+		q.Set("per_type", fmt.Sprint(perType))
+	}
+	if limit > 0 {
+		q.Set("limit", fmt.Sprint(limit))
+	}
+	if includeDeleted {
+		q.Set("include_deleted", "1")
+	}
+	path, err := c.wsPath("issues-search")
+	if err != nil {
+		return nil, err
+	}
+	var env struct {
+		Data []WorkspaceSearchHit `json:"data"`
+	}
+	if err := c.get(path+"?"+q.Encode(), &env); err != nil {
+		return nil, err
+	}
+	return env.Data, nil
+}

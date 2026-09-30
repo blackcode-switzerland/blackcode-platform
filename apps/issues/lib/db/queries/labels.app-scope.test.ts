@@ -69,6 +69,10 @@ const ALLOWED = [
   'lib/db/queries/issues.ts',
   'lib/db/queries/analytics.ts',
   'lib/db/queries/move.ts',
+  // Workspace search (2026-09-30). One read, in `labelArm`, behind
+  // `visibleToThisApp('l')`; its integration test puts a label scoped to another
+  // app in the fixture and asserts it never comes back.
+  'lib/db/queries/workspace-search.ts',
 ]
 
 describe('platform.labels is only reached from the reviewed modules', () => {

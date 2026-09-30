@@ -837,6 +837,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/workspaces/{ws}/issues-search",
+      "command": "bk issues search",
+      "app": "issues"
+    },
+    {
+      "method": "GET",
       "path": "/api/workspaces/{ws}/issues/{id}",
       "command": "bk issues issue view, bk issues task attach, bk issues task detach",
       "app": "issues"
@@ -917,12 +923,6 @@
       "method": "GET",
       "path": "/api/workspaces/{ws}/projects/{id}/updates",
       "command": "bk issues project updates list",
-      "app": "issues"
-    },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{ws}/search",
-      "command": "bk issues search",
       "app": "issues"
     },
     {

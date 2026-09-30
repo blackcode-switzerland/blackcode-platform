@@ -39,7 +39,7 @@ func appOwnedVerbs() []*cobra.Command {
 		// This app serves the WHOLE shared surface, and it is the only one that
 		// does. Every flag below is the honest reading of `app/api/**`: issues
 		// has /workspaces (all four methods), /transfer, /leave, /invitations,
-		// /users, /search, /me/inbox and /storage. Its own
+		// /users, /me/inbox and /storage. Its own
 		// lib/cli-parity.test.ts checks that claim against the filesystem.
 		Workspace:        true,
 		WorkspaceAdmin:   true,
@@ -51,10 +51,14 @@ func appOwnedVerbs() []*cobra.Command {
 		InviteCandidates: true,
 		InviteAccept:     true,
 		Users:            true,
-		Search:           true,
-		Activity:         true,
-		Inbox:            true,
-		Storage:          true,
+		// Off, and NOT because search is gone: this app registers its own
+		// (`search.go`) over `/issues-search`, the way `apps/sales` does. The shared
+		// one reads `platform.entities` — titles of three types — and cannot see
+		// labels, people, descriptions or comments.
+		Search:   false,
+		Activity: true,
+		Inbox:    true,
+		Storage:  true,
 	})
 	set.Label.AddCommand(newLabelAttachCmd(), newLabelDetachCmd())
 	return set.All()

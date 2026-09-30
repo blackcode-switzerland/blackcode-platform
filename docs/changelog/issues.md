@@ -35,6 +35,50 @@ The `/changelog` web page was removed on 2026-08-03 — it had no human audience
 
 ---
 
+## 2026-09-30 — Workspace search: a floating search button in the web app, and `bk issues search` now searches everything
+
+Not breaking for a script that already runs `bk issues search <words>`; it now
+finds more. One new route, one command re-pointed, one new web surface.
+
+**Web.** A floating search button (bottom-right, and a **Search** row at the top of
+the sidebar, and **⌘K / Ctrl+K**, and `/`) opens a popup that searches the whole
+workspace as you type: issues, tasks and projects — by title *and* by what is
+written inside them — labels, people (by name or email) and comments. Results are
+ranked and grouped by kind with the matched text highlighted; type chips narrow to
+one kind, arrows and Enter open a hit, `#42` jumps to record 42, and your last
+searches are remembered in the browser.
+
+**Route.** New `GET /api/workspaces/{ws}/issues-search?q=&type=&per_type=&limit=&include_deleted=`
+→ `{ data, next_cursor: null }`. Each hit: `type`, `id`, `number` (null for labels,
+people, comments), `title`, `detail`, `snippet` (the text around the match, only
+when the match was not the title), `matched_in`, `status`, `color`, `icon`,
+`avatar_url`, `parent` (a comment's record), `path`, `urn` (issues, tasks and
+projects only) and `deleted`. `q` is required; `type` is a comma list — `bk meta`
+serves it as `apps.issues.vocabulary.search_types`; `per_type` is 1..`limits.search_per_type_max`
+(default 5, or 20 when exactly one `type` is asked for); `limit` caps the whole
+answer (1..`limits.search_results_max`). An unknown `type` is `400 unknown_type`
+with a suggestion.
+
+**Command.** `bk issues search <query…> [--type a,b] [--per-type N] [--limit N] [--include-deleted]`
+now reads that route instead of `GET …/search`. Same verb, same `--type`, `--limit`
+and `--include-deleted`; the table gained a MATCH column (the snippet) and a REF
+that reads `on issue #12` for a comment. Words need no quoting — all of them must
+match. `--app` never existed here and still does not.
+
+**What changed underneath, and how to adapt.**
+
+- `GET /api/workspaces/{ws}/search` (the platform entity-index search: titles of
+  issues, tasks and projects only) is **unchanged and still served**, for `bk`
+  binaries that predate this release. Nothing in a current binary calls it. New
+  integrations should use `bk issues search` / `issues-search`; the old route will
+  be removed once the npm `min` dist-tag has passed this release.
+- `#482` now means *the issue, task or project numbered 482* and nothing else;
+  before, it also matched titles containing `482`. A bare `482` still does both.
+- Labels are matched only among the labels this app can see (its own and shared
+  ones); another app's labels never appear.
+- Comments on a record in the recycle bin are not results, and neither is the
+  record — unless `--include-deleted`.
+
 ## 2026-09-30 — Workspace Overview page, and `bk issues analytics --view overview`
 
 Not breaking; additive. One new page, one new `view` value on an existing route,

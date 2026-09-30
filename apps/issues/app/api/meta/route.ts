@@ -46,6 +46,7 @@ import {
 } from '@/lib/work-items'
 import { META_LIMITS, META_MEDIA } from '@/lib/agent-meta'
 import { ENTITY_TYPES } from '@/lib/entity-address'
+import { SEARCH_TYPES } from '@/lib/search-types'
 
 // This app's enum vocabulary, straight from the module the routes validate
 // against. Named once and served twice — nested under `apps.issues` (current)
@@ -62,6 +63,9 @@ const APP_VOCABULARY = {
   // one back, and because `bk guide` may not restate a vocabulary. See
   // lib/work-items.ts → "tasks".
   task_progress_statuses: TASK_PROGRESS_STATUSES,
+  // What `bk issues search --type` accepts. Wider than `entity_types`: a label,
+  // a member and a comment are searchable and have no URN.
+  search_types: SEARCH_TYPES,
 } as const
 
 export const GET = apiHandler(async (request: NextRequest) => {

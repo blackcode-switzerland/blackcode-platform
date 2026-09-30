@@ -65,6 +65,7 @@ import {
   PROJECT_PRIORITIES,
   PROJECT_UPDATE_STATUSES,
 } from './work-items'
+import { SEARCH_TYPES } from './search-types'
 
 const APP_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const REPO_ROOT = join(APP_ROOT, '..', '..')
@@ -84,6 +85,7 @@ const SERVED: Record<string, string[]> = {
   project_statuses: PROJECT_STATUSES.map((o) => o.value),
   project_priorities: PROJECT_PRIORITIES.map((o) => o.value),
   project_update_health: PROJECT_UPDATE_STATUSES.map((o) => o.value),
+  search_types: [...SEARCH_TYPES],
 }
 
 /** Parse the `vocabularies` map out of vocab.go. Text, not a module. */

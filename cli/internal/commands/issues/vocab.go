@@ -41,6 +41,8 @@ var vocabularies = map[string][]string{
 	"project_statuses":      {"backlog", "planned", "in_progress", "completed", "cancelled"},
 	"project_priorities":    {"P4", "P0", "P1", "P2", "P3"},
 	"project_update_health": {"on_track", "at_risk", "off_track"},
+	// ── apps/issues/lib/search-types.ts ─────────────────────────────────────
+	"search_types": {"issue", "task", "project", "label", "member", "comment"},
 }
 
 // ---------------------------------------------------------------------------

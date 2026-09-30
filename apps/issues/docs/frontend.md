@@ -275,3 +275,30 @@ a hardcoded hex in a chart is a colour a second app cannot re-theme, and
   `AreaLineChart` (multi-series, gradient fill, hover crosshair + tooltip),
   `DonutChart`, `HorizontalBars`, `ColumnChart` (histograms), `BurndownChart`.
 
+## Workspace search (global search popup)
+
+`components/search/global-search.tsx`, mounted once by `DashboardLayout` (outside
+`<main key={pathname}>`, so it survives navigation). The layout owns the single
+`open` state because four things open it: the floating button (bottom-right), the
+sidebar's **Search** row, the mobile header's icon, and the shortcuts (**⌘K /
+Ctrl+K** toggles; `/` opens unless focus is in a text field or the rich-text editor).
+
+- **Data**: `use-workspace-search.ts` — TanStack Query over `GET …/issues-search`,
+  180 ms debounce, `keepPreviousData` (the list dims instead of flashing empty),
+  the request's `signal` aborts a superseded query. Choosing a type chip re-queries
+  with `type=` and the server lifts the per-type cap; a group that hit the cap shows
+  **See all →**, which is the same as selecting its chip.
+- **Keyboard**: focus never leaves the input (`role=combobox`,
+  `aria-activedescendant` → `role=option`). ↑/↓ wrap, Enter opens (⌘/Ctrl+Enter in a
+  new tab), Esc closes and returns focus to the button. Outside click closes.
+- **State survives closing**: query, type chip, cursor row and scroll are kept when the popup closes (including after opening a hit), so it reopens where you left it. It resets only on a workspace change or when the query is cleared (the ✕ or emptying the field), which also returns to the **All** chip.
+- **Layout**: chat-style panel anchored above the button (full-width on phones);
+  its height is **fixed while open** so the field does not jump as results arrive.
+- **Pure helpers** (unit-tested, DB-free, importable client-side): `lib/search-types.ts`
+  (types, `searchTerms` — the same word-splitting the server matches with),
+  `lib/search-highlight.ts` (marks the terms the query actually required),
+  `lib/recent-searches.ts` (per-workspace, `localStorage`, every access in
+  try/catch — a convenience, never state).
+- **Not the listings' search.** Each listing's `SearchInput` is still client-side over
+  what it already loaded (`lib/listing-search.ts`); the popup is the only surface that
+  asks the server, because it must reach records no listing has loaded.

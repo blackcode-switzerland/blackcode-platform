@@ -33,6 +33,8 @@ const long = `The issues app: projects, issues, tasks, their comments and their 
   bk issues project   list, view, create, edit, delete, issues, tasks, members,
                       add-member, remove-member, updates, comment(s)
   bk issues attachment  files attached to issues, workspace-wide
+  bk issues search    everything at once: issues, tasks, projects, labels,
+                      members, comments — ranked, with the text that matched
   bk issues move      move projects/tasks/issues to another workspace (--to)
   bk issues copy      the same, leaving the source in place
   bk issues analytics summary, throughput and distributions for this app
@@ -50,7 +52,6 @@ subset of this one, not a copy of it:
   bk issues upload     store a file against this app
   bk issues trash      this app's recycle bin: list, restore, purge, empty
   bk issues label      labels, and attaching them to this app's issues
-  bk issues search     find an issue, task or project by title (returns URNs)
   bk issues activity   this app's history (--since 24h, --subject <urn>)
   bk issues inbox      your notifications from this app
   bk issues storage    this app's uploaded files and the workspace's usage
@@ -114,6 +115,7 @@ func nouns() []*cobra.Command {
 		newTaskCmd(),
 		newProjectCmd(),
 		newAttachmentCmd(),
+		newSearchCmd(),
 		newMoveCmd(),
 		newCopyCmd(),
 		newAnalyticsCmd(),
