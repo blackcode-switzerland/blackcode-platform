@@ -11,6 +11,7 @@ import {
   List,
   Target,
   BarChart3,
+  LayoutDashboard,
   Clock,
   Inbox,
   Settings2,
@@ -45,6 +46,7 @@ const NAV_WORKSPACE: { seg: string; label: string; icon: LucideIcon; countKey?: 
   { seg: '/issues', label: 'Issues', icon: List, countKey: 'issues' },
   { seg: '/labels', label: 'Labels', icon: Tag, countKey: 'labels' },
   { seg: '/activity', label: 'Activity', icon: Clock },
+  { seg: '/overview', label: 'Overview', icon: LayoutDashboard },
   { seg: '/analytics', label: 'Analytics', icon: BarChart3 },
   { seg: '/trash', label: 'Trash', icon: Trash2 },
   // Name, logo, members, invitations, storage and deletion — the settings page

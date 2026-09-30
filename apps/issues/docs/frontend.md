@@ -17,6 +17,7 @@ Paths are relative to **`apps/issues/`**. Backend counterpart:
 - [Dashboard routes](#dashboard-routes)
 - [Feature components](#feature-components)
 - [Analytics dashboard](#analytics-dashboard-analytics-viewtsx)
+- [Overview page](#overview-page-componentsoverview)
 
 ## Dashboard routes
 
@@ -36,6 +37,7 @@ URLs* in `/docs/frontend.md` for the model. Detail pages use the workspace
 | `/dashboard/[ws]/settings` | Workspace settings (`WorkspaceSettings`, `components/workspace-settings.tsx`) — the shared sections (`/docs/frontend.md`, *Workspace management*): General (name, read-only slug, role, logo), a **Storage** link section, Members, Invitations (owner), Leave (member) / Danger zone (owner, typed-slug delete). Since 2026-09-28 |
 | `/dashboard/[ws]/members` · `/members/invite` | **Redirects** to `/dashboard/[ws]/settings` (since 2026-09-28) |
 | `/dashboard/[ws]/activity` | Activity feed |
+| `/dashboard/[ws]/overview` | Overview — the read-only at-a-glance dashboard with the member leaderboard (`OverviewView`, `components/overview/`). Sidebar entry sits above Analytics. Since 2026-09-30 |
 | `/dashboard/[ws]/analytics` · `/analytics/print` | Analytics · print-to-PDF view |
 | `/dashboard/[ws]/trash` | Recycle bin |
 | `/dashboard/inbox` | Notifications (cross-workspace, unscoped) |
@@ -189,6 +191,56 @@ this app's own.
 > `timeline-view.tsx`. These predate the listings rewrite. (`dashboard.tsx` is
 > **not** dead — it's a shared utility module imported widely.)
 
+
+## Overview page (`components/overview/`)
+
+`/dashboard/[ws]/overview` is where you **look**; Analytics is where you slice.
+It has exactly one control — the 7D / 30D / 90D / All switch — and no filter
+menus, scopes or tabs. The route is a thin server `page.tsx` rendering
+`OverviewView`, which makes one request, `GET …/analytics?view=overview` (see
+`docs/backend.md` → *Workspace overview*), under the TanStack key
+`['ws-overview', slug, range]`. There is **no polling**; the only refetch is the
+refresh button. `keepPreviousData` keeps the page on screen (dimmed) while a new
+range loads, and the window is minute-rounded so a refetch in the same minute
+asks the same question. Nothing on the page reads the database itself, and it
+adds no chart library — every chart is `@blackcode/platform-ui/charts`.
+
+| File | What it holds |
+|---|---|
+| `overview-view.tsx` | header + range switch, the query, loading skeleton, error/retry, KPI row, created-vs-completed, status/priority donuts |
+| `leaderboard.tsx` | podium, leaders strip, period chips, sortable table |
+| `sections.tsx` | project health, attention needed, workload, recent activity |
+| `helpers.ts` | pure sort / podium / format / activity-text functions (unit tested) |
+| `ui.tsx` | `Panel`, `Empty`, `SkeletonBlock`, `focusRing` |
+
+**The leaderboard is the page.** It ranks by issues completed in a period and
+shows created, completed, open assigned, average cycle time, comments, activity
+and a 12-week sparkline per member.
+
+- The period chips (page range, this week, this month, last month, this year,
+  last year, all time) switch **the whole table** — the server ships every
+  period's figures in one payload, so switching is instant and makes no request.
+  The page-range chip is hidden for **All**, where it would equal *All time*.
+- Every column header is a real button that re-sorts (`aria-sort` follows). The
+  rank number is the true rank for the period and does not move when you sort;
+  members with no cycle time sort last in either direction.
+- The top three with at least one completion get the podium (2-1-3, with
+  fewer than three handled). The leader of each metric — ties included — is
+  marked by a trophy in the table and named in the strip above it; a metric
+  nobody leads (best value 0) shows no leader rather than a leader at zero.
+- Changing the page range remounts the leaderboard (`key={range}`), so its chip
+  and sort reset with it.
+- The sparkline is a fixed **12 weeks** of completions whatever the period, so it
+  never implies something the period does not say. Its column sorts by the sum.
+- When the table is wider than its card (phones) it scrolls inside its own
+  rounded container with the rank and member columns pinned; the page itself
+  never scrolls sideways.
+
+Colours: status and priority come from `lib/work-items.ts` (`issueStatusColor`,
+`issuePriorityColor`, `projectUpdateStatusColor`) — nothing here hardcodes a
+status or priority colour. The podium/trophy tones carry a `dark:` variant.
+Activity text is rendered as plain text; the server never sends comment bodies
+because they are unsanitised HTML.
 
 ## Analytics dashboard (`analytics-view.tsx`)
 

@@ -249,8 +249,74 @@ freely; nothing in `platform.*` may depend on them.
 | `issues.ts` | issue CRUD, filters, assignees, watchers, labels |
 | `search.ts` | case-insensitive substring search over title/name/description, plus `#id` match when the query is numeric |
 | `analytics.ts` | `computeAnalytics` — snapshot counts, throughput, cycle time, distributions, burndown |
+| `overview.ts` | `computeOverview` — `analytics?view=overview`: `computeAnalytics` for the workspace plus the leaderboard, project health, attention lists, workload and recent activity (see *Workspace overview*) |
 | `move.ts` | cross-workspace move/copy in one transaction |
 | `entities.ts` | this app's half of the cross-app projection: project/mark-deleted/purge into `platform.entities`, plus `reconcileEntities` |
+
+### Workspace overview (`view=overview`)
+
+`/dashboard/[ws]/overview` reads `GET /api/workspaces/{ws}/analytics?view=overview`
+and `bk issues analytics --view overview` prints the same payload. It is a
+**view of the analytics route, not a route of its own**: the parity test already
+covers `GET …/analytics`, and a new route would have needed its own command,
+claim and exclusion. The response is the ordinary workspace `AnalyticsPayload`
+(so KPIs, trends, `by_status`, `by_priority` and the velocity series are the very
+numbers Analytics shows) plus one `overview` block. `lib/db/queries/overview.ts`
+owns the block; its header comment is the authority on the counting rules.
+
+Input is `from`/`to` only (absent = **All**). `id`, the faceted filters and
+`interval` do not apply — the server buckets by day up to 60 days and by week
+beyond. For All it draws the series from the first issue and disables the
+previous-period comparison (`comparePrevious: false` in `computeAnalytics`, so
+`period.from` is reported as `null`, not the synthetic start).
+
+What `overview` holds, and the rules that are not obvious:
+
+- **Leaderboard** — every workspace member, once per period in `range`,
+  `this_week`, `this_month`, `last_month`, `this_year`, `last_year`, `all_time`
+  (UTC calendar, Monday-based weeks; the arithmetic is `lib/overview-periods.ts`,
+  db-free and unit tested). Per member and period: `created`, `completed`,
+  `comments`, `activity`, `avg_cycle_time_hours` and a `rank`; plus
+  `open_assigned` (a snapshot) and a 12-week `spark`.
+  - **completed** is per *assignee*: `status = 'done'`, `completed_at` inside the
+    period. An issue with three assignees is one completion for each of them and
+    never two for one person, so the per-member sum can exceed the headline
+    `completed_in_period` — by design, and pinned by the integration test.
+  - **created** is per `reporter_id`. **comments** counts `commented` events (a
+    comment records two events, `created` on the comment and `commented` on its
+    parent; counting all events would double it). **activity** is every event
+    the member is the actor of. Soft-deleted issues count nowhere.
+  - **rank** orders by completed, then created, then name — positional and
+    unique, never a tie. **leaders** names, per period and metric, every member
+    tied on the best value, and nobody when the best is 0 (`fastest_cycle` needs
+    at least one completion; lower wins).
+- **`kpi_trends`** — change vs the previous period for the snapshot figures
+  (total, open, overdue, unassigned, completion rate). They are stock figures, so
+  the previous value is *reconstructed* at `from` from timestamps
+  (`snapshotAt`): created/completed/cancelled times and `assigned_at`. It cannot
+  see an assignment removed since, a due date moved since, or a deleted issue —
+  say so if a number looks off by a few. Flow figures (created, completed, cycle
+  time) keep using `trends`.
+- **`projects`** — non-deleted projects that are not completed/cancelled, with
+  progress (`done / (total − cancelled)`) and the *latest* `project_updates` row
+  as health (`null` = never posted). Risk first. Capped at 24.
+- **`attention`** — overdue, urgent (priority 1), older than `old_open_days` (30)
+  and unassigned; open issues only; each list has its full `total` and the first
+  5 rows.
+- **`workload`** — open issues per member by open status (`statuses` is derived
+  from `lib/work-items.ts`, so it follows the vocabulary), plus the unassigned
+  count.
+- **`recent_activity`** — the newest 15 events (comment-`created` rows skipped).
+  Carries the new status/priority for `status_changed`/`priority_changed` and
+  **never** free text: `meta.excerpt` is unsanitised HTML and stays out of the
+  payload. `linkable` is false when the subject is deleted.
+
+`by_assignee` and `top_active_members` now also carry `avatar_url`.
+
+Tests: `lib/overview-periods.test.ts` (calendar bounds) and
+`lib/db/queries/overview.integration.test.ts` — a hand-counted fixture with a
+two-assignee issue, a soft-deleted issue, a comment's double event and a tie,
+asserted to exact figures (`TEST_DATABASE_URL=… npm test --workspace=issues`).
 
 ### The entity projection (Phase 6)
 
@@ -297,7 +363,7 @@ bk issues task      list view create edit delete comment(s)
 bk issues project   list view create edit delete members updates comment(s)
 bk issues move      move items to another workspace (--to)
 bk issues copy      the same, leaving the source in place
-bk issues analytics summary, throughput, distributions
+bk issues analytics summary, throughput, distributions (--view workspace|project|task|member|overview)
 ```
 
 The pre-1.10.0 bare spellings (`bk issue …`) still run as deprecated aliases and

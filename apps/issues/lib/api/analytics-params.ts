@@ -10,7 +10,7 @@ import type {
   AnalyticsView,
 } from '@/lib/db/queries/analytics'
 
-const ALLOWED_VIEWS = new Set<AnalyticsView>(['workspace', 'project', 'task', 'member'])
+const ALLOWED_VIEWS = new Set<AnalyticsView>(['workspace', 'project', 'task', 'member', 'overview'])
 
 export interface ParsedAnalyticsParams {
   view: AnalyticsView
@@ -63,12 +63,13 @@ export function parseAnalyticsParams(sp: URLSearchParams): ParsedAnalyticsParams
   if (!ALLOWED_VIEWS.has(view)) {
     throw Errors.badRequest(
       'invalid_view',
-      'view must be one of: workspace, project, task, member'
+      'view must be one of: workspace, project, task, member, overview',
+      'Use view=overview for the workspace overview (leaderboard, project health, attention lists)'
     )
   }
 
   let id: number | null = null
-  if (view !== 'workspace') {
+  if (view !== 'workspace' && view !== 'overview') {
     const raw = sp.get('id')
     if (!raw) {
       throw Errors.badRequest('missing_id', `view=${view} requires id`)
